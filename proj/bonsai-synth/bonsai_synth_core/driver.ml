@@ -167,7 +167,10 @@ let render_to_wav_file ?(sample_rate_hz = 44_100) ~filename computation =
       Bonsai.Time_source.create ~start:(mock_time ~sample_rate_hz ~num_samples:0)
     in
     let driver =
-      Bonsai_driver.create ~clock (map_wav_computation ~wav ~computation ~sample_rate_hz)
+      Bonsai_driver.create
+        ~time_source:clock
+        ~instrumentation:(Bonsai_driver.Instrumentation.default_for_test_handles ())
+        (map_wav_computation ~wav ~computation ~sample_rate_hz)
     in
     Deferred.repeat_until_finished 0 (fun num_samples ->
       Bonsai_driver.flush driver;

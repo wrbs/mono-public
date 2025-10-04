@@ -94,10 +94,13 @@ let command =
   Command.group
     ~summary:"bonsai synth example"
     [ example_command "middle-c" (fun graph ->
-        mono_time
-          ~length_sec:2
-          (Osc.sin ~freq:(Bonsai.return (Note.middle_c |> Note.frequency)) graph)
-          graph)
+        let channels =
+          mono_time
+            ~length_sec:2
+            (Osc.sin ~freq:(Bonsai.return (Note.middle_c |> Note.frequency)) graph)
+            graph
+        in
+        channels)
     ; example_command "big-ben" (fun graph ->
         sin_sequence
           [ (* change 2 *)

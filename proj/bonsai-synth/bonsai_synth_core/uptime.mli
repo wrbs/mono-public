@@ -12,19 +12,32 @@ val secs_since_start : t -> float
 val sub : t -> t -> Time_ns.Span.t
 val add : t -> Time_ns.Span.t -> t
 
-(** Gets the current time, updated every main loop (i.e. every block_size
-    samples) *)
-val current : Bonsai.graph -> t Bonsai.t
+(** Gets the current time, updated every main loop (i.e. every block_size samples) *)
+val current : here:[%call_pos] -> local_ Bonsai.graph -> t Bonsai.t
 
 (** Gets the current time, updated approximately every [tick_every] *)
-val approximate : tick_every:Time_ns.Span.t -> Bonsai.graph -> t Bonsai.t
+val approximate
+  :  here:[%call_pos]
+  -> tick_every:Time_ns.Span.t
+  -> local_ Bonsai.graph
+  -> t Bonsai.t
 
 (** Wrappers of bonsai clock operations in terms of [t] *)
 
-val at : t Bonsai.t -> Bonsai.graph -> Bonsai.Clock.Before_or_after.t Bonsai.t
-val get_current : Bonsai.graph -> t Effect.t Bonsai.t
-val sleep : Bonsai.graph -> (Time_ns.Span.t -> unit Effect.t) Bonsai.t
-val until : Bonsai.graph -> (t -> unit Effect.t) Bonsai.t
+val at
+  :  here:[%call_pos]
+  -> t Bonsai.t
+  -> local_ Bonsai.graph
+  -> Bonsai.Clock.Before_or_after.t Bonsai.t
+
+val get_current : here:[%call_pos] -> local_ Bonsai.graph -> t Effect.t Bonsai.t
+
+val sleep
+  :  here:[%call_pos]
+  -> local_ Bonsai.graph
+  -> (Time_ns.Span.t -> unit Effect.t) Bonsai.t
+
+val until : here:[%call_pos] -> local_ Bonsai.graph -> (t -> unit Effect.t) Bonsai.t
 
 module Expert : sig
   (** Internally represented as ns since epoch. These functions convert *)
