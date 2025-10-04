@@ -1,0 +1,50 @@
+{
+	"jane-style library": {
+		"prefix": "lib",
+		"body": [
+			"(library",
+			" (name ${1:library_name})",
+			" (libraries core ${2: })",
+			" (inline_tests)",
+			" (preprocess (pps ppx_jane)))"
+		],
+		"description": "jane-style library"
+	},
+	"jane-style executable": {
+		"prefix": "exe",
+		"body": [
+			"(executable",
+			" (name main)",
+			" (libraries core_unix.command_unix ${1:your_app})",
+			" (preprocess",
+			"  (pps ppx_jane)))",
+			""
+		],
+		"description": "jane-style executable"
+	},
+	"javascript jane-style library": {
+		"prefix": "js-lib",
+		"body": [
+			"(library",
+			" (name ${1:library_name})",
+			" (libraries core bonsai.bonsai_web ${2: })",
+			" (inline_tests",
+			"  (modes js))",
+			" (preprocess (pps ppx_jane bonsai.ppx_bonsai ppx_css js_of_ocaml-ppx)))"
+		],
+		"description": "jane-style library"
+	},
+	"javascript jane-style executable": {
+		"prefix": "js-exe",
+		"body": [
+			"(executable",
+			" (name main)",
+			" (modes js)",
+			" (libraries core async_js ${1:your_app})",
+			" (preprocess",
+			"  (pps ppx_jane bonsai.ppx_bonsai ppx_css js_of_ocaml-ppx)))",
+			""
+		],
+		"description": "jane-style executable"
+	}
+}

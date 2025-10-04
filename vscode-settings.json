@@ -1,0 +1,62 @@
+{
+    "telemetry.telemetryLevel": "off",
+    "editor.formatOnSave": true,
+    "vim.leader": ",",
+    "vim.normalModeKeyBindingsNonRecursive": [
+        {
+            "before": [ "leader", "g", "g" ],
+            "commands": [ "editor.action.revealDefinition" ]
+        },
+        {
+            "before": [ "leader", "g", "i" ],
+            "commands": [ "editor.action.revealDeclaration" ]
+        },
+        {
+            "before": [ "leader", "t", "h" ],
+            "commands": [{
+                "command": "toggle",
+                "args": {
+                    "id": "inlayHints",
+                    "value": [
+                        { "editor.inlayHints.enabled": true },
+                        { "editor.inlayHints.enabled": false }
+                    ]
+                }
+            }]
+        },
+        {
+            "before": [ "leader", "t", "l" ],
+            "commands": [{
+                "command": "toggle",
+                "args": {
+                    "id": "inlayHints",
+                    "value": [
+                        { "editor.lineNumbers": "on" },
+                        { "editor.lineNumbers": "off" }
+                    ]
+                }
+            }]
+        },
+        {
+            "before": [ "leader", "g", "a" ],
+            "commands": [ "ocaml.switch-impl-intf" ]
+        },
+        {
+            "before": [ "leader", "j", "t", "a" ],
+            "commands": [
+                {
+                    "command": "terminalCommandKeys.run",
+                    "args": {
+                        "cmd": "dune promote",
+                        "showTerminal": false
+                    }
+                }
+            ]
+        }
+    ],
+    "rust-analyzer.rustfmt.extraArgs": [
+        "+nightly"
+    ],
+    "editor.accessibilitySupport": "off",
+    "editor.inlayHints.enabled": true
+}
