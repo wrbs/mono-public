@@ -1,4 +1,4 @@
-version: "6.2.3"
+version: "8.0.0"
 opam-version: "2.0"
 maintainer: "anil@recoil.org"
 authors: [
@@ -9,13 +9,13 @@ tags: "org:mirage"
 homepage: "https://github.com/mirage/ocaml-conduit"
 bug-reports: "https://github.com/mirage/ocaml-conduit/issues"
 depends: [
-  "ocaml" {>= "4.08.0"}
+  "ocaml" {>= "4.13.0"}
   "dune" {>= "2.0"}
   "base-unix"
   "logs"
   "ppx_sexp_conv" {>="v0.13.0"}
   "conduit-lwt" {=version}
-  "lwt" {>= "3.0.0"}
+  "lwt" {>= "5.7.0"}
   "uri" {>= "1.9.4"}
   "ipaddr" {>= "4.0.0"}
   "ipaddr-sexp"
@@ -26,7 +26,7 @@ depends: [
 ]
 depopts: ["tls-lwt" "lwt_ssl" "launchd"]
 conflicts: [
-  "tls-lwt" {< "0.16.0"}
+  "tls-lwt" {< "1.0.0"}
   "ssl" {< "0.5.12"}
 ]
 build: [
@@ -35,3 +35,4 @@ build: [
 ]
 dev-repo: "git+https://github.com/mirage/ocaml-conduit.git"
 synopsis: "A network connection establishment library for Lwt_unix"
+x-maintenance-intent: [ "(latest)" ]

@@ -1,11 +1,11 @@
 module Thread = Caml_threads.Thread
 
-(**
+(** {v
    This test reproduces a segfault in stdlib implementation of [getgrgid] in OCaml 4.07.
    Usually it segfaults in several seconds, but sometimes it can takes tens of seconds.
 
    getent group | cut -d ':' -f 3 | ./getgrgid_thread_safety.exe
-*)
+    v} *)
 
 module List = struct
   include List
@@ -41,11 +41,11 @@ let alloc n = ignore (List.init (exp2 n) ~f:(fun x -> x))
 let add_finaliser n =
   Gc.finalise
     (function
-     | None -> assert false
-     | Some n ->
-       Printf.printf "finalising %d\n%!" n;
-       alloc n;
-       ())
+      | None -> assert false
+      | Some n ->
+        Printf.printf "finalising %d\n%!" n;
+        alloc n;
+        ())
     (Some n)
 ;;
 
@@ -90,8 +90,8 @@ let () =
     List.concat
       (List.map
          (function
-          | None -> []
-          | Some x -> [ x ])
+           | None -> []
+           | Some x -> [ x ])
          all_groups)
   in
   let group_min, group_min_size = List.fold_left mn (0, 1000000) all_groups in

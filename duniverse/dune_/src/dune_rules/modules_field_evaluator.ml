@@ -1,4 +1,5 @@
 open Import
+open Memo.O
 
 module Virtual = struct
   type t = { virtual_modules : Ordered_set_lang.Unexpanded.t }
@@ -51,7 +52,6 @@ let eval0 =
       Error name
   in
   fun ~expander ~loc ~all_modules ~standard osl ->
-    let open Memo.O in
     let parse = parse ~all_modules in
     let standard = Module_trie.map standard ~f:(fun m -> loc, Ok m) in
     let+ (modules, fake_modules), _ =
@@ -100,12 +100,12 @@ type errors =
   }
 
 let find_errors
-  ~modules
-  ~intf_only
-  ~virtual_modules
-  ~private_modules
-  ~existing_virtual_modules
-  ~allow_new_public_modules
+      ~modules
+      ~intf_only
+      ~virtual_modules
+      ~private_modules
+      ~existing_virtual_modules
+      ~allow_new_public_modules
   =
   let all =
     (* We expect that [modules] is big and all the other ones are small, that's
@@ -171,16 +171,16 @@ let find_errors
 ;;
 
 let check_invalid_module_listing
-  ~stanza_loc
-  ~modules_without_implementation
-  ~intf_only
-  ~modules
-  ~virtual_modules
-  ~private_modules
-  ~existing_virtual_modules
-  ~allow_new_public_modules
-  ~is_vendored
-  ~version
+      ~stanza_loc
+      ~modules_without_implementation
+      ~intf_only
+      ~modules
+      ~virtual_modules
+      ~private_modules
+      ~existing_virtual_modules
+      ~allow_new_public_modules
+      ~is_vendored
+      ~version
   =
   let { errors; unimplemented_virt_modules } =
     find_errors
@@ -191,8 +191,9 @@ let check_invalid_module_listing
       ~existing_virtual_modules
       ~allow_new_public_modules
   in
-  if List.is_non_empty errors
-     || not (Module_name.Path.Set.is_empty unimplemented_virt_modules)
+  if
+    List.is_non_empty errors
+    || not (Module_name.Path.Set.is_empty unimplemented_virt_modules)
   then (
     let get kind =
       List.filter_map errors ~f:(fun (k, loc, m) -> Option.some_if (kind = k) (loc, m))
@@ -326,21 +327,20 @@ let check_invalid_module_listing
 ;;
 
 let eval
-  ~expander
-  ~modules:(all_modules : Module.Source.t Module_trie.t)
-  ~stanza_loc
-  ~private_modules
-  ~kind
-  ~src_dir
-  ~is_vendored
-  ~version
-  { Stanza_common.Modules_settings.modules = _
-  ; root_module
-  ; modules_without_implementation
-  }
-  modules
+      ~expander
+      ~modules:(all_modules : Module.Source.t Module_trie.t)
+      ~stanza_loc
+      ~private_modules
+      ~kind
+      ~src_dir
+      ~is_vendored
+      ~version
+      { Stanza_common.Modules_settings.modules = _
+      ; root_module
+      ; modules_without_implementation
+      }
+      modules
   =
-  let open Memo.O in
   (* Fake modules are modules that do not exist but it doesn't matter because
      they are only removed from a set (for jbuild file compatibility) *)
   let eval = eval0 ~expander ~loc:stanza_loc ~all_modules in
@@ -399,16 +399,15 @@ let eval
 ;;
 
 let eval
-  ~expander
-  ~modules:(all_modules : Module.Source.t Module_trie.t)
-  ~stanza_loc
-  ~private_modules
-  ~kind
-  ~src_dir
-  ~version
-  (settings : Stanza_common.Modules_settings.t)
+      ~expander
+      ~modules:(all_modules : Module.Source.t Module_trie.t)
+      ~stanza_loc
+      ~private_modules
+      ~kind
+      ~src_dir
+      ~version
+      (settings : Stanza_common.Modules_settings.t)
   =
-  let open Memo.O in
   Memo.push_stack_frame ~human_readable_description:(fun () ->
     Pp.textf "(modules) field at %s" (Loc.to_file_colon_line stanza_loc))
   @@ fun () ->

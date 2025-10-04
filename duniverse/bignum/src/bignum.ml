@@ -11,21 +11,31 @@ module Z = struct
        this seems like a reasonable guess for the upper bound for computations where
        performance may matter.  Add 17% tip, and you end up with 1200.  On the other
        hand, 1200 words sounds like a sane enough amount of memory for a library to
-       preallocate statically.  If this table fills up, it will take 0.3 MB, which is
+       allocate for memoization.  If this table fills up, it will take 0.3 MB, which is
        also not crazy for something actually being used. *)
     let max_memoized_pow = 1200 in
-    let tbl = Array.create ~len:Int.(max_memoized_pow + 1) None in
     let pow_10 n = pow z_ten n in
-    fun n ->
-      if n > max_memoized_pow
-      then pow_10 n
-      else (
-        match tbl.(n) with
-        | Some x -> x
+    let memoized_pow_10_unchecked : (int -> t) @ portable =
+      let tbl =
+        Portable_lazy.from_fun (fun () : t option array ->
+          Array.create ~len:Int.(max_memoized_pow + 1) None)
+      in
+      fun [@inline] n ->
+        (* We are okay with a data race here to avoid extra indirection and allocation.
+           The value read by [Array.get] will either be [Some result] or [None]. In the
+           former case, the [result] came from an earlier computation of [pow_10 n], and
+           so is correct. In the [None] case, some other domain may have already computed
+           the result, but at worst we would be duplicating the work and both setting the
+           array to the same [Some result]. *)
+        let tbl = Basement.Stdlib_shim.Obj.magic_uncontended (Portable_lazy.force tbl) in
+        match Array.get tbl n with
+        | Some result -> result
         | None ->
-          let x = pow_10 n in
-          tbl.(n) <- Some (pow_10 n);
-          x)
+          let result = pow_10 n in
+          Array.set tbl n (Some result);
+          result
+    in
+    fun n -> if n > max_memoized_pow then pow_10 n else memoized_pow_10_unchecked n
   ;;
 end
 
@@ -35,12 +45,12 @@ module Q = struct
   open (Int : Interfaces.Infix_comparators with type t := int)
 
   type t = Zarith.Q.t =
-    { num : Z.t
-    ; den : Z.t
+    { global_ num : Z.t
+    ; global_ den : Z.t
     }
-  [@@deriving hash]
+  [@@deriving hash, globalize]
 
-  let globalize x = x
+  let globalize x = globalize x
 
   (** Unlike [%compare.equal], which is what actually gets exposed as [equal] due to the
       later [Comparable.Make_binable], this [equal] follows IEEE float semantics: [undef]
@@ -50,6 +60,13 @@ module Q = struct
   let[@warning "-unused-value-declaration"] equal =
     `This_gets_redefined_later_in_an_incompatible_way
   ;;
+
+  let compare__local = compare__local
+
+  (* [equal__local] is defined this way to ensure it agrees with the [equal] in scope from
+     [Comparable.Make_binable], rather than the IEEE-float-style [equal] from [Zarith.Q].
+  *)
+  let equal__local = [%compare_local.equal: t]
 
   let t_sexp_grammar : t Sexplib.Sexp_grammar.t =
     let plus_character : Sexplib.Sexp_grammar.grammar =
@@ -103,6 +120,7 @@ module Q = struct
     let decimal_mover = of_bigint (Z.pow_10 shift_len) in
     let ( - ) = Int.( - ) in
     let ( + ) = Int.( + ) in
+    let open Int.Replace_polymorphic_compare in
     let neg = lt t zero in
     let shifted = mul (abs t) decimal_mover in
     let num, den = shifted.num, shifted.den in
@@ -148,9 +166,11 @@ module Q = struct
     | Equal -> "nan"
   ;;
 
-  module Of_string_internal : sig
+  module Of_string_internal : sig @@ portable
     val of_string_internal : string -> t
   end = struct
+    open Int.Replace_polymorphic_compare
+
     let fail s = failwithf "unable to parse %S as Bignum.t" s ()
 
     let rec all_zeroes s ~pos ~len =
@@ -190,7 +210,7 @@ module Q = struct
     let of_scientific_string_components ~coefficient ~power =
       let power = Int.of_string power in
       let power' = Z.pow_10 (Int.abs power) in
-      let power' = if Int.( > ) power 0 then make power' Z.one else make Z.one power' in
+      let power' = if power > 0 then make power' Z.one else make Z.one power' in
       mul coefficient power'
     ;;
 
@@ -369,10 +389,15 @@ module Stable = struct
       type target = string
 
       let to_binable = Q.to_rational_string
+
+      let%template to_binable q = q |> Q.globalize |> Q.to_rational_string
+      [@@mode m = local]
+      ;;
+
       let of_binable = Q.of_rational_string
     end
 
-    type t = Q.t [@@deriving compare, sexp_grammar]
+    type t = Q.t [@@deriving compare ~localize, equal ~localize, sexp_grammar]
 
     let hash (t : t) = Hashtbl.hash t
     let hash_fold_t state t = hash_fold_int state (Hashtbl.hash t)
@@ -397,7 +422,10 @@ module Stable = struct
       | Sexp.List _ -> of_sexp_error {|expected Atom or List [float; "+"; remainder]|} s
     ;;
 
-    include Binable.Of_binable.V1 [@alert "-legacy"] (String.V1) (Bin_rep_conversion)
+    include%template
+      Binable.Of_binable.V1 [@modality portable] [@mode local] [@alert "-legacy"]
+        (String.V1)
+        (Bin_rep_conversion)
 
     let stable_witness =
       let (_bin_io : t Stable_witness.t) =
@@ -442,7 +470,7 @@ module Stable = struct
         | Over_100_000_000
         | Over_int
         | Other
-      [@@deriving bin_io, variants]
+      [@@deriving bin_io ~localize, variants]
     end
 
     module Bin_rep = struct
@@ -469,7 +497,7 @@ module Stable = struct
         | Over_100_000_000 of Int63.t
         | Over_int of Int63.t * Int63.t
         | Other of V1.t
-      [@@deriving bin_io, stable_witness, variants]
+      [@@deriving bin_io ~localize, stable_witness, variants]
     end
 
     let z_of_int63 =
@@ -558,6 +586,8 @@ module Stable = struct
             else Bin_rep.Over_int (Int63.of_int n, Int63.of_int d)))
       ;;
 
+      let%template to_binable q = q |> Q.globalize |> to_binable [@@mode m = local]
+
       let of_binable =
         let open Q in
         function
@@ -576,13 +606,17 @@ module Stable = struct
       ;;
     end
 
-    type t = Q.t [@@deriving compare, sexp_grammar]
+    type t = Q.t [@@deriving compare ~localize, equal ~localize, sexp_grammar]
 
     let hash (t : t) = Hashtbl.hash t
     let hash_fold_t state t = hash_fold_int state (Hashtbl.hash t)
     let equal = Q.equal_which_treats_nan_differently_from_the_exposed_equal
 
-    include Binable.Of_binable.V1 [@alert "-legacy"] (Bin_rep) (Bin_rep_conversion)
+    include%template
+      Binable.Of_binable.V1 [@modality portable] [@mode local] [@alert "-legacy"]
+        (Bin_rep)
+        (Bin_rep_conversion)
+
     module For_testing = Bin_rep_conversion
 
     let t_of_sexp = V1.t_of_sexp
@@ -672,7 +706,7 @@ module Stable = struct
         | Over_100_000_000
         | Over_int
         | Other
-      [@@deriving bin_io, variants]
+      [@@deriving bin_io ~localize, variants]
     end
 
     module Bin_rep = struct
@@ -692,7 +726,7 @@ module Stable = struct
             { num : Bigint.Stable.V2.t
             ; den : Bigint.Stable.V2.t
             }
-      [@@deriving bin_io, stable_witness, variants]
+      [@@deriving bin_io ~localize, stable_witness, variants]
     end
 
     module Bin_rep_conversion = struct
@@ -797,6 +831,8 @@ module Stable = struct
             else Bin_rep.Over_int (n, d)))
       ;;
 
+      let%template to_binable q = q |> Q.globalize |> to_binable [@@mode m = local]
+
       let of_binable =
         let open Q in
         function
@@ -816,13 +852,17 @@ module Stable = struct
       ;;
     end
 
-    type t = Q.t [@@deriving compare, sexp_grammar]
+    type t = Q.t [@@deriving compare ~localize, equal ~localize, sexp_grammar]
 
     let hash (t : t) = Hashtbl.hash t
     let hash_fold_t state t = hash_fold_int state (Hashtbl.hash t)
     let equal = Q.equal_which_treats_nan_differently_from_the_exposed_equal
 
-    include Binable.Of_binable.V1 [@alert "-legacy"] (Bin_rep) (Bin_rep_conversion)
+    include%template
+      Binable.Of_binable.V1 [@modality portable] [@mode local] [@alert "-legacy"]
+        (Bin_rep)
+        (Bin_rep_conversion)
+
     module For_testing = Bin_rep_conversion
 
     let t_of_sexp = V1.t_of_sexp
@@ -899,19 +939,38 @@ end
 
 open! Core
 
+let is_nan (t : Q.t) = Z.equal t.den Z.zero && Z.equal t.num Z.zero
+
 module Unstable = struct
   include Stable.Current
-  include (Q : Ppx_hash_lib.Hashable.S with type t := t)
+
+  include (
+    Q :
+    sig
+    @@ portable
+      include Ppx_hash_lib.Hashable.S with type t := t
+    end)
+
+  (* All implementations rely on the fact that in default [Q] comparison functions (apart
+     from those exposed here), [nan] is the most negative element of the universe, beyond
+     even negative infinity. *)
+
+  let ( >= ) x y = Q.(x >= y) && not (is_nan y)
+  let ( <= ) x y = Q.(x <= y) && not (is_nan x)
+  let ( = ) x y = Q.(x = y) && not (is_nan x)
+  let ( > ) x y = Q.(x > y) && not (is_nan y)
+  let ( < ) x y = Q.(x < y) && not (is_nan x)
+  let ( <> ) x y = Q.(x <> y) || is_nan x || is_nan y
+
+  (* These are copy pasted from float.ml. *)
+  let min x y = if x < y || is_nan x then x else y
+  let max x y = if x > y || is_nan x then x else y
 end
 
 include Q
-include Comparable.Make_binable (Unstable)
 
-let compare__local = compare
+include%template Comparable.Make_binable [@modality portable] (Unstable)
 
-(* [equal__local] is defined this way to ensure it agrees with the [equal] in scope from
-   [Comparable.Make_binable], rather than the IEEE-float-style [equal] from [Zarith.Q]. *)
-let equal__local = [%compare_local.equal: t]
 let t_of_sexp = Unstable.t_of_sexp
 let sexp_of_t = Unstable.sexp_of_t
 
@@ -921,7 +980,6 @@ let is_representable_as_decimal t =
   | Decimal { max_decimal_digits = _ } -> true
 ;;
 
-let is_nan t = Z.equal t.den Z.zero && Z.equal t.num Z.zero
 let is_integer t = Z.equal t.den Z.one
 let is_infinite t = Z.equal t.den Z.zero && not (Z.equal t.num Z.zero)
 let is_positive_infinity t = equal t infinity
@@ -1127,10 +1185,10 @@ let to_string_hum ?delimiter ?(decimals = 9) ?(strip_zero = true) t =
 let pp_hum ppf t = Format.fprintf ppf "%s" (to_string_hum t)
 let pp_accurate ppf t = Format.fprintf ppf "%s" (to_string_accurate t)
 
-include (Hashable.Make_binable (Unstable) : Hashable.S_binable with type t := t)
+include%template Hashable.Make_binable [@modality portable] (Unstable)
 
 let of_float_decimal f = of_string (Float.to_string f)
-let arg_type = Command.Arg_type.create of_string
+let arg_type = (Command.Arg_type.create [@mode portable]) of_string
 
 module O = struct
   let ( + ) = ( + )
@@ -1140,7 +1198,12 @@ module O = struct
   let ( * ) = ( * )
   let ( ** ) = ( ** )
 
-  include (Replace_polymorphic_compare : Core.Comparisons.Infix with type t := t)
+  include (
+    Replace_polymorphic_compare :
+    sig
+    @@ portable
+      include Core.Comparisons.Infix with type t := t
+    end)
 
   let abs = abs
   let neg = neg
@@ -1165,8 +1228,8 @@ module O = struct
 end
 
 module For_quickcheck = struct
-  module Generator = Quickcheck.Generator
-  open Generator.Let_syntax
+  module Generator = Base_quickcheck.Generator
+  open Generator.Portable.Let_syntax
 
   let split_weighted_in_favor_of_right_side size =
     let%map first_half = Int.gen_log_uniform_incl 0 size in
@@ -1251,7 +1314,7 @@ module For_quickcheck = struct
   ;;
 
   let quickcheck_generator =
-    Generator.weighted_union
+    (Generator.weighted_union [@mode portable])
       [ 0.05, return infinity
       ; 0.05, return neg_infinity
       ; 0.05, return nan
@@ -1260,7 +1323,8 @@ module For_quickcheck = struct
   ;;
 
   let quickcheck_observer =
-    Quickcheck.Observer.create (fun t ~size:_ ~hash -> hash_fold_t hash t)
+    (Base_quickcheck.Observer.create [@mode portable]) (fun t ~size:_ ~hash ->
+      hash_fold_t hash t)
   ;;
 
   let quickcheck_shrinker = Quickcheck.Shrinker.empty ()
@@ -1275,11 +1339,11 @@ let quickcheck_shrinker = For_quickcheck.quickcheck_shrinker
 
 module _ : sig end = struct
   include Pretty_printer.Register (struct
-    include Unstable
+      include Unstable
 
-    let module_name = "Bignum"
-    let to_string t = Sexp.to_string (sexp_of_t t)
-  end)
+      let module_name = "Bignum"
+      let to_string t = Sexp.to_string (sexp_of_t t)
+    end)
 end
 
 let of_float = of_float_dyadic
@@ -1302,4 +1366,9 @@ module For_testing = struct
 end
 
 (* bin_io functions at toplevel are deprecated but we need to export them anyway *)
-include (Unstable : Binable.S with type t := t)
+include (
+  Unstable :
+  sig
+  @@ portable
+    include Binable.S with type t := t
+  end)

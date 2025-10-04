@@ -5,8 +5,7 @@ open! Binary_searchable
 
 module type For_test = sig
   (** To implement the tests, we need two different [elt] values [small < big], to be able
-      to compare those values, and to be able to construct a [t] containing those
-      values. *)
+      to compare those values, and to be able to construct a [t] containing those values. *)
 
   type t
   type elt
@@ -51,8 +50,9 @@ module type Test_binary_searchable = sig
   module Test1 (M : Binary_searchable1_and_for_test) : sig end
 
   (** [Make_and_test] does [Binary_searchable.Make] and [Test]. *)
-  module Make_and_test (T : Indexable_and_for_test) :
+  module%template.portable Make_and_test (T : Indexable_and_for_test) :
     S with type t := T.t with type elt := T.elt
 
-  module Make1_and_test (T : Indexable1_and_for_test) : S1 with type 'a t := 'a T.t
+  module%template.portable Make1_and_test (T : Indexable1_and_for_test) :
+    S1 with type 'a t := 'a T.t
 end

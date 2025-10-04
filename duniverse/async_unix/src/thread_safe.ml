@@ -27,8 +27,6 @@ let run_holding_async_lock
 ;;
 
 let ensure_in_a_thread t function_ =
-  if is_main_thread ()
-  then raise_s [%message "cannot call from the main thread" (function_ : string)];
   if am_holding_lock t
   then raise_s [%message "cannot call while holding the async lock" (function_ : string)]
 ;;
@@ -93,7 +91,7 @@ let ensure_the_scheduler_is_started t =
                  lock t;
                  never_returns (be_the_scheduler t)))
              ()
-            : Core_thread.t);
+           : Core_thread.t);
         (* Block until the scheduler has run the above job. *)
         Thread_safe_ivar.read scheduler_ran_a_job))
 ;;

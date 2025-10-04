@@ -1,16 +1,16 @@
 open! Import
 open! Signal
 
-let ( <--. ) dst src = dst := Bits.of_int ~width:(Bits.width !dst) src
+let ( <--. ) dst src = dst := Bits.of_int_trunc ~width:(Bits.width !dst) src
 
 let assign_reg dst src =
-  Cyclesim.Reg.of_bits dst (Bits.of_int ~width:(Cyclesim.Reg.width_in_bits dst) src)
+  Cyclesim.Reg.of_bits dst (Bits.of_int_trunc ~width:(Cyclesim.Reg.width_in_bits dst) src)
 ;;
 
 let%expect_test "Cyclesim.internal_port can peek at combinational node" =
   let create_sim () =
     let acc, a, b = input "acc" 8, input "a" 8, input "b" 8 in
-    let foo = uresize (a *: b) 8 -- "foo" in
+    let foo = uresize (a *: b) ~width:8 -- "foo" in
     let summed = acc +: foo -- "summed" in
     let c = output "c" summed in
     Circuit.create_exn ~name:"sim" [ c ]
@@ -32,7 +32,8 @@ let%expect_test "Cyclesim.internal_port can peek at combinational node" =
   in
   Stdio.print_endline [%string "Foo = %{foo#Int}"];
   Stdio.print_endline [%string "Summed = %{summed#Int}"];
-  [%expect {|
+  [%expect
+    {|
     Foo = 60
     Summed = 70
     |}]
@@ -51,7 +52,7 @@ let%expect_test "lookup_reg can peek and poke internal registers" =
   let x = Cyclesim.in_port sim "x" in
   let x1 = Option.value_exn (Cyclesim.lookup_reg_by_name sim "x1") in
   let x2 = Option.value_exn (Cyclesim.lookup_reg_by_name sim "x2") in
-  Expect_test_helpers_base.require_does_raise [%here] (fun () ->
+  Expect_test_helpers_base.require_does_raise (fun () ->
     Option.value_exn
       ~message:"Cannot lookup reg as memory"
       (Cyclesim.lookup_mem_by_name sim "x1"));
@@ -85,7 +86,7 @@ let assign_mem dst ~address src =
   Cyclesim.Memory.of_bits
     dst
     ~address
-    (Bits.of_int ~width:(Cyclesim.Memory.width_in_bits dst) src)
+    (Bits.of_int_trunc ~width:(Cyclesim.Memory.width_in_bits dst) src)
 ;;
 
 let%expect_test "lookup_mem can read and write internal memory" =
@@ -112,7 +113,7 @@ let%expect_test "lookup_mem can read and write internal memory" =
   let write_enable = Cyclesim.in_port sim "write_enable" in
   let read_data = Cyclesim.out_port sim "read_data" in
   (* Cannot lookup a memory as a reg. *)
-  Expect_test_helpers_base.require_does_raise [%here] (fun () ->
+  Expect_test_helpers_base.require_does_raise (fun () ->
     Option.value_exn
       ~message:"Cannot lookup memory as reg"
       (Cyclesim.lookup_reg_by_name sim "bar"));
@@ -132,7 +133,7 @@ let%expect_test "lookup_mem can read and write internal memory" =
   assign_mem mem ~address:42 123;
   read_address <--. 42;
   Cyclesim.cycle sim;
-  printf "Read_data = %d" (Bits.to_int !read_data);
+  printf "Read_data = %d" (Bits.to_int_trunc !read_data);
   [%expect {| Read_data = 123 |}];
   (* Write a value via hardcaml, and make sure that the value is written after
      calling Cyclesim.cycle

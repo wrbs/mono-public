@@ -10,25 +10,26 @@ module type S = sig
   val pp : Formatter.t -> t -> unit
 end
 
-module Register_pp (M : sig
-  include S
+module%template.portable Register_pp (M : sig
+    include S
 
-  val module_name : string
-end) =
+    val module_name : string
+  end) =
 struct
   include M
 
   let () = register (M.module_name ^ ".pp")
 end
 
-module Register (M : sig
-  type t
+module%template.portable
+  [@modality m] Register (M : sig
+    type t
 
-  val module_name : string
-  val to_string : t -> string
-end) =
-Register_pp (struct
-  include M
+    val module_name : string
+    val to_string : t -> string
+  end) =
+Register_pp [@modality m] (struct
+    include M
 
-  let pp formatter t = Stdlib.Format.pp_print_string formatter (M.to_string t)
-end)
+    let pp formatter t = Stdlib.Format.pp_print_string formatter (M.to_string t)
+  end)

@@ -2,12 +2,13 @@ open! Import
 
 include (
   Int :
-    sig
-      type t = int [@@deriving bin_io]
+  sig
+    type t = int [@@deriving bin_io]
 
-      include Comparable.S with type t := t
-      include Hashable.S with type t := t
-    end)
+    include%template Comparable.S [@mode local] with type t := t
+
+    include Hashable.S with type t := t
+  end)
 
 let of_caml_int t = t
 let to_caml_int t = t
@@ -19,7 +20,7 @@ type sys_behavior =
   | `Stop (** Stop the process *)
   | `Terminate (** Terminate the process *)
   ]
-[@@deriving sexp]
+[@@deriving sexp, sexp_grammar]
 
 let equal (t : t) t' = t = t'
 
@@ -60,7 +61,7 @@ end
 
 exception Invalid_signal_mnemonic_or_number of string [@@deriving sexp]
 
-let to_string_with_version, of_string, default_sys_behavior =
+let to_string_with_version, of_string, default_sys_behavior, all_posix =
   let known =
     [ "sigabrt", abrt, `Dump_core, 1
     ; "sigalrm", alrm, `Terminate, 1
@@ -127,7 +128,8 @@ let to_string_with_version, of_string, default_sys_behavior =
            ("Signal.default_sys_behavior: unknown signal " ^ Int.to_string t))
     | Some behavior -> behavior
   in
-  to_string_with_version, of_string, default_sys_behavior
+  let all_posix = List.map known ~f:(fun (_, t, _, _) -> t) in
+  to_string_with_version, of_string, default_sys_behavior, all_posix
 ;;
 
 exception Expected_atom of Sexp.t [@@deriving sexp]
@@ -179,7 +181,10 @@ module Expert = struct
   end
 
   let signal t behavior =
-    Behavior.of_caml (Stdlib.Sys.signal t (Behavior.to_caml behavior))
+    Behavior.of_caml
+      ((Stdlib.Sys.signal [@ocaml.alert "-unsafe_multidomain"])
+         t
+         (Behavior.to_caml behavior))
   ;;
 
   let set t behavior = ignore (signal t behavior : behavior)
@@ -193,14 +198,14 @@ let ignore t = set t `Ignore
 
 module Stable = struct
   module V2 = struct
-    type nonrec t = t [@@deriving bin_io, compare]
+    type nonrec t = t [@@deriving bin_io, compare ~localize]
 
     let t_of_sexp = t_of_sexp
     let sexp_of_t t = sexp_of_t_with_version t ~version:2
   end
 
   module V1 = struct
-    type nonrec t = t [@@deriving bin_io, compare]
+    type nonrec t = t [@@deriving bin_io, compare ~localize]
 
     let t_of_sexp = t_of_sexp
     let sexp_of_t t = sexp_of_t_with_version t ~version:1

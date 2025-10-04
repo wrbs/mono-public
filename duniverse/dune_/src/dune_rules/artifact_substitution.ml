@@ -1,4 +1,5 @@
 open Import
+open Memo.O
 
 (* Artifact substitutions works as follow: the substitution is encoded as a
    string of the form:
@@ -94,7 +95,6 @@ module Conf = struct
   ;;
 
   let sign_hook_of_context (context : Context.t) =
-    let open Memo.O in
     let+ config =
       let+ ocaml = Context.ocaml context in
       ocaml.ocaml_config
@@ -116,7 +116,6 @@ module Conf = struct
   ;;
 
   let of_context (context : Context.t) =
-    let open Memo.O in
     let get_vcs = Source_tree.nearest_vcs in
     let name = Context.name context in
     let get_location = Install.Paths.get_local_location name in
@@ -139,7 +138,6 @@ module Conf = struct
   ;;
 
   let of_install ~relocatable ~roots ~(context : Context.t) =
-    let open Memo.O in
     let get_vcs = Source_tree.nearest_vcs in
     let hardcoded_ocaml_path =
       match relocatable with
@@ -194,7 +192,6 @@ let eval t ~(conf : Conf.t) =
   let relocatable path =
     (* return a relative path to the install directory in case of relocatable
        instead of absolute path *)
-    let open Memo.O in
     conf.hardcoded_ocaml_path
     >>| function
     | Hardcoded _ -> Path.to_absolute_filename path
@@ -205,8 +202,7 @@ let eval t ~(conf : Conf.t) =
     Fiber.return (Array.make n s |> Array.to_list |> String.concat ~sep:"")
   | Vcs_describe p ->
     Memo.run
-      (let open Memo.O in
-       conf.get_vcs p
+      (conf.get_vcs p
        >>= function
        | None -> Memo.return ""
        | Some vcs ->
@@ -215,7 +211,6 @@ let eval t ~(conf : Conf.t) =
   | Location (name, lib_name) ->
     conf.get_location name lib_name |> relocatable |> Memo.run
   | Configpath d ->
-    let open Memo.O in
     (let* dir = conf.get_config_path d in
      match dir with
      | None -> Memo.return None
@@ -223,9 +218,8 @@ let eval t ~(conf : Conf.t) =
     >>| Option.value ~default:""
     |> Memo.run
   | Hardcoded_ocaml_path ->
-    (let open Memo.O in
-     conf.hardcoded_ocaml_path
-     >>| function
+    conf.hardcoded_ocaml_path
+    >>| (function
      | Relocatable _ -> "relocatable"
      | Hardcoded l ->
        let l = List.map l ~f:Path.to_absolute_filename in
@@ -294,12 +288,13 @@ let decode s =
   in
   let len = String.length s in
   match
-    if len > max_len
-       || len < 4
-       || s.[0] <> '%'
-       || s.[1] <> '%'
-       || s.[len - 2] <> '%'
-       || s.[len - 1] <> '%'
+    if
+      len > max_len
+      || len < 4
+      || s.[0] <> '%'
+      || s.[1] <> '%'
+      || s.[len - 2] <> '%'
+      || s.[len - 1] <> '%'
     then fail ();
     let dune_placeholder, len', rest =
       match String.split (String.sub s ~pos:2 ~len:(len - 4)) ~on:':' with
@@ -646,7 +641,7 @@ let copy ~conf ~input_file ~input ~output =
 ;;
 
 let copy_file_non_atomic ~conf ?chmod ~src ~dst () =
-  (* CR-rgrinberg: our copying here is slow. If we scan the file and detect no
+  (* CR-someday rgrinberg: our copying here is slow. If we scan the file and detect no
      substitutions, we should go directly to [Io.copy_file] *)
   let open Fiber.O in
   let* ic, oc = Fiber.return (Io.setup_copy ?chmod ~src ~dst ()) in
@@ -695,11 +690,11 @@ let copy_file ~conf ?chmod ?(delete_dst_if_it_is_a_directory = false) ~src ~dst 
   in
   Fiber.finalize
     (fun () ->
-      let open Fiber.O in
-      Path.parent dst |> Option.iter ~f:Path.mkdir_p;
-      let* has_subst = copy_file_non_atomic ~conf ?chmod ~src ~dst:temp_file () in
-      let+ () = Conf.run_sign_hook conf ~has_subst temp_file in
-      replace_if_different ~delete_dst_if_it_is_a_directory ~src:temp_file ~dst)
+       let open Fiber.O in
+       Path.parent dst |> Option.iter ~f:Path.mkdir_p;
+       let* has_subst = copy_file_non_atomic ~conf ?chmod ~src ~dst:temp_file () in
+       let+ () = Conf.run_sign_hook conf ~has_subst temp_file in
+       replace_if_different ~delete_dst_if_it_is_a_directory ~src:temp_file ~dst)
     ~finally:(fun () ->
       Path.unlink_no_err temp_file;
       Fiber.return ())

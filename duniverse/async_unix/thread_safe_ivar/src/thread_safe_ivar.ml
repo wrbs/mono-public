@@ -19,7 +19,7 @@ let create () =
   { value = None; num_waiting = 0; mutex = Mutex.create (); full = Condition.create () }
 ;;
 
-let critical_section t ~f = Mutex.critical_section t.mutex ~f
+let critical_section t ~(local_ f) = Mutex.critical_section t.mutex ~f
 
 let fill t v =
   critical_section t ~f:(fun () ->
@@ -44,5 +44,8 @@ let read t =
            | Some v -> v
            | None -> loop ())
       in
-      loop () [@nontail]) [@nontail]
+      loop () [@nontail])
+    [@nontail]
 ;;
+
+let peek t = t.value

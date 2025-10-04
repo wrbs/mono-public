@@ -35,14 +35,13 @@ module Projects_and_dune_files =
       type t = status * Dune_project.t
     end))
     (Monoid.Appendable_list (struct
-         type t = Path.Source.t * Dune_project.t * Dune_file0.t
+         type t = Path.Source.t * Dune_project.t * Source.Dune_file.t
        end))
 
 module Source_tree_map_reduce =
   Source_tree.Make_map_reduce_with_progress (Memo) (Projects_and_dune_files)
 
 let load () =
-  let open Memo.O in
   let status dir =
     match Source_tree.Dir.status dir with
     | Vendored -> `Vendored
@@ -64,7 +63,10 @@ let load () =
       in
       Memo.return (projects, dune_files)
     in
-    Source_tree_map_reduce.map_reduce ~traverse:Source_dir_status.Set.all ~f
+    Source_tree_map_reduce.map_reduce
+      ~traverse:Source_dir_status.Set.all
+      ~trace_event_name:"Dune load"
+      ~f
   in
   let projects = Appendable_list.to_list_rev projects in
   let packages, vendored_packages =

@@ -1,15 +1,17 @@
+open! Base
+
 module Definitions = struct
-  type 'a writer =
+  type ('a : any) writer =
     { size : 'a Size.sizer
     ; write : 'a Write.writer
     }
 
-  type 'a reader =
+  type ('a : any) reader =
     { read : 'a Read.reader
-    ; vtag_read : (int -> 'a) Read.reader
+    ; vtag_read : 'a Read.vtag_reader
     }
 
-  type 'a t =
+  type ('a : any) t =
     { shape : Shape.t
     ; writer : 'a writer
     ; reader : 'a reader
@@ -38,7 +40,7 @@ module Definitions = struct
   end
 end
 
-module type Type_class = sig
+module type Type_class = sig @@ portable
   (** Sizers, writers, and readers in records *)
 
   open Common
@@ -152,11 +154,11 @@ module type Type_class = sig
   val bin_shape_array : Shape.t -> Shape.t
   val bin_array : ('a, 'a array) S1.t
 
-  (*$ mk_base2_tp "hashtbl" "Hashtbl.t" *)
-  val bin_writer_hashtbl : ('a, 'b, ('a, 'b) Hashtbl.t) S2.writer
-  val bin_reader_hashtbl : ('a, 'b, ('a, 'b) Hashtbl.t) S2.reader
-  val bin_shape_hashtbl : Shape.t -> Shape.t -> Shape.t
-  val bin_hashtbl : ('a, 'b, ('a, 'b) Hashtbl.t) S2.t
+  (*$ mk_base1 "iarray" *)
+  val bin_writer_iarray : ('a, 'a iarray) S1.writer
+  val bin_reader_iarray : ('a, 'a iarray) S1.reader
+  val bin_shape_iarray : Shape.t -> Shape.t
+  val bin_iarray : ('a, 'a iarray) S1.t
 
   (*$ mk_base_tp "float32_vec" "vec32" *)
   val bin_writer_float32_vec : vec32 writer
@@ -235,6 +237,12 @@ module type Type_class = sig
   val bin_reader_int_64bit : int reader
   val bin_shape_int_64bit : Shape.t
   val bin_int_64bit : int t
+
+  (*$ mk_base_tp "int32_bits" "int32" *)
+  val bin_writer_int32_bits : int32 writer
+  val bin_reader_int32_bits : int32 reader
+  val bin_shape_int32_bits : Shape.t
+  val bin_int32_bits : int32 t
 
   (*$ mk_base_tp "int64_bits" "int64" *)
   val bin_writer_int64_bits : int64 writer

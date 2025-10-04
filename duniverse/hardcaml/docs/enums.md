@@ -1,4 +1,4 @@
-# Enums in Hardcaml
+# 5.5 Enums in Hardcaml
 
 <!--
 ```ocaml
@@ -6,6 +6,7 @@
 - : unit = ()
 ```
 -->
+
 
 Hardcaml provides support for enumerations with a finite number of
 instances through the Enum module. An Enum type declares a finite (ie
@@ -78,15 +79,15 @@ and `(module Signal)` shipped with Hardcaml support them)
 # let x : Signal.t Hello.Binary.t =
     Hello.Binary.of_enum (module Signal) (Foo Foo_a)
   ;;
-val x : Reg_spec.signal Hello.Binary.t = <abstr>
+val x : Signal.t Hello.Binary.t = <abstr>
 # let y = Hello.Binary.Of_signal.of_enum (Bar Bar_a)
-val y : Reg_spec.signal Hello.Binary.t = <abstr>
+val y : Signal.t Hello.Binary.t = <abstr>
 
 # let z = Hello.Binary.Of_signal.(==:) x y
-val z : Reg_spec.signal = (const (width 1) (value 0b0))
+val z : Signal.t = (const (width 1) (value 0b0))
 
 # let a = Hello.Binary.Of_signal.is x (Foo Foo_a)
-val a : Reg_spec.signal = (const (width 1) (value 0b1))
+val a : Signal.t = (const (width 1) (value 0b1))
 ```
 
 You get several enum-specific features for defining circuits in the
@@ -100,8 +101,7 @@ let non_exhaustive_matching =
   Hello.Binary.match_
     (module Signal)
     (* [default] needs to be specified when the match cases are not
-       exhaustive.
-    *)
+       exhaustive. *)
     ~default:(zero 10)
     x
     [ Foo Foo_a, ones 10
@@ -110,17 +110,16 @@ let non_exhaustive_matching =
 ;;
 
 (* [Of_signal.match_] is similar to [match_], except it does not
-   require an explicit a first class module argument.
-*)
+   require an explicit a first class module argument. *)
 let exhaustive_matching =
   let open Signal in
   Hello.Binary.Of_signal.match_
     y
-    [ Foo Foo_a, of_int ~width:10 55
-    ; Foo Foo_b, of_int ~width:10 44
-    ; Bar Bar_a, of_int ~width:10 66
-    ; Bar Bar_b, of_int ~width:10 88
-    ; Bar Bar_c, of_int ~width:10 77
+    [ Foo Foo_a, of_unsigned_int ~width:10 55
+    ; Foo Foo_b, of_unsigned_int ~width:10 44
+    ; Bar Bar_a, of_unsigned_int ~width:10 66
+    ; Bar Bar_b, of_unsigned_int ~width:10 88
+    ; Bar Bar_c, of_unsigned_int ~width:10 77
     ]
 ;;
 ```
@@ -133,7 +132,7 @@ for non-exhaustive matches.
 ```ocaml
 # Hello.Binary.Of_always.match_ ;;
 - : ?default:Always.t list ->
-    Reg_spec.signal Hello.Binary.t ->
+    Signal.t Hello.Binary.t ->
     (Hello.Enum.t * Always.t list) list -> Always.t
 = <fun>
 
@@ -147,11 +146,11 @@ for non-exhaustive matches.
           (* Some logic here. *)
         ];
         Bar Bar_a, [
-          (* Even more logic here *)
+          (* Even more logic here. *)
         ]
       ]
   ;;
-val exhaustive_matching : Reg_spec.signal Hello.Binary.t -> Always.t = <fun>
+val exhaustive_matching : Signal.t Hello.Binary.t -> Always.t = <fun>
 ```
 
 This generated enum module implements the `Hardcaml.Interface.S`, so you
@@ -160,8 +159,7 @@ get access to the various convenient functions defined in `Of_signal`,
 
 ```ocaml
 (* A multiplexer that returns value of the enum, as opposed to
-   multiplexing on the enum itself (as match_ does)
-*)
+   multiplexing on the enum itself (as match_ does). *)
 let multiplexers =
   let selector = Signal.input "selector" 2 in
   Hello.Binary.Of_signal.(mux
@@ -175,7 +173,7 @@ let multiplexers =
 ;;
 
 let clock = Signal.input "clock" 1
-let spec = Reg_spec.create ~clock ()
+let spec = Signal.Reg_spec.create ~clock ()
 
 (* Registers that stores the enum value. *)
 let registers : Signal.t Hello.Binary.t =
@@ -185,7 +183,7 @@ let registers : Signal.t Hello.Binary.t =
 ;;
 
 (* Usage in always blocks. You can (almost) seamlessly assign values
-   to them*)
+   to them. *)
 let _ : Always.t list =
   let cond = Signal.input "cond" 1 in
   let var = Hello.Binary.Of_always.reg ~enable:Signal.vdd spec in
@@ -203,7 +201,7 @@ let _ : Always.t list =
 ;;
 ```
 
-The generated enum can even be used as part of regular hardcaml
+The generated enum can even be used as part of regular Hardcaml
 interfaces! This makes Hardcaml Enums powerful, since the circuit
 interfaces can simply use it without nasty type conversions. For
 example:
@@ -228,20 +226,19 @@ number of possible cases.
 
 ```ocaml
 # let this_will_raise_due_to_a_width_mismatch =
-    Hello.Binary.Of_signal.of_raw (Signal.of_int ~width:30 10)
+    Hello.Binary.Of_signal.of_raw (Signal.of_unsigned_int ~width:30 10)
   ;;
 Exception: (Failure "Width mismatch. Enum expects 3, but obtained 30").
 
 # let this_is_valid_and_fine =
-    Hello.Binary.Of_signal.of_raw (Signal.of_int ~width:3 0)
+    Hello.Binary.Of_signal.of_raw (Signal.of_unsigned_int ~width:3 0)
   ;;
-val this_is_valid_and_fine : Reg_spec.signal Hello.Binary.t = <abstr>
+val this_is_valid_and_fine : Signal.t Hello.Binary.t = <abstr>
 
 # let this_is_undefined_and_will_not_raise =
-    Hello.Binary.Of_signal.of_raw (Signal.of_int ~width:3 6)
+    Hello.Binary.Of_signal.of_raw (Signal.of_unsigned_int ~width:3 6)
   ;;
-val this_is_undefined_and_will_not_raise : Reg_spec.signal Hello.Binary.t =
-  <abstr>
+val this_is_undefined_and_will_not_raise : Signal.t Hello.Binary.t = <abstr>
 ```
 
 Enums are well supported in simulations too! Let's make a little state
@@ -263,7 +260,7 @@ end
 ```ocaml
 # let create (i : _ I.t) =
     let open Signal in
-    let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
+    let spec = Signal.Reg_spec.create ~clock:i.clock ~clear:i.clear () in
     let ctr = Always.Variable.reg spec ~width:32 ~enable:vdd in
     let prev_hello = Hello.Binary.Of_always.reg ~enable:vdd spec in
     Always.(compile [
@@ -285,7 +282,7 @@ end
     ; prev_hello = Hello.Binary.Of_always.value prev_hello
     }
   ;;
-val create : Reg_spec.signal I.t -> Reg_spec.signal O.t = <fun>
+val create : Signal.t I.t -> Signal.t O.t = <fun>
 ```
 
 Since these enum files are not simply of type `Bits.t ref`, we need to
@@ -293,45 +290,33 @@ opt for special APIs for getting/setting them in simulations:
 
 ```ocaml
 # Hello.Binary.sim_set
-  ;;
 - : Bits.t ref Hello.Binary.t -> Hello.Enum.t -> unit = <fun>
-
 # Hello.Binary.sim_set_raw
-  ;;
 - : Bits.t ref Hello.Binary.t -> Bits.t -> unit = <fun>
-
 # Hello.Binary.sim_get
-  ;;
 - : Bits.t ref Hello.Binary.t -> Hello.Enum.t Or_error.t = <fun>
-
 # Hello.Binary.sim_get_raw
-  ;;
 - : Bits.t ref Hello.Binary.t -> Bits.t = <fun>
 ```
 
-Using those functions, we can drive a hardcaml Cyclesim.t similar to
-regular hardcaml sims:
+Using those functions, we can drive a Hardcaml Cyclesim.t similar to
+regular Hardcaml sims:
 
 ```ocaml
 let sim =
     let module Sim = Cyclesim.With_interface(I)(O) in
     Sim.create create
-  ;;
 
 let inputs = Cyclesim.inputs sim
-;;
-
 let outputs = Cyclesim.outputs sim
-;;
 
 let print () =
   let prev_hello = Or_error.ok_exn (Hello.Binary.sim_get outputs.prev_hello) in
-  let counter = Bits.to_int !(outputs.counter) in
+  let counter = Bits.to_unsigned_int !(outputs.counter) in
   Stdio.print_s [%message
     (prev_hello : Hello.Enum.t)
     (counter : int)
   ]
-;;
 ```
 
 ```ocaml

@@ -1,7 +1,7 @@
 open! Import
 
 let%expect_test "no outputs" =
-  require_does_raise [%here] (fun () ->
+  require_does_raise (fun () ->
     Combinational_op.create
       ()
       ~name:"no_outputs"
@@ -12,7 +12,7 @@ let%expect_test "no outputs" =
 ;;
 
 let%expect_test "no inputs" =
-  require_does_not_raise [%here] (fun () ->
+  require_does_not_raise (fun () ->
     ignore
       (Combinational_op.create
          ()
@@ -20,12 +20,12 @@ let%expect_test "no inputs" =
          ~input_widths:[]
          ~output_widths:[ 1 ]
          ~create_fn:(fun _ _ -> ())
-        : Combinational_op.t));
+       : Combinational_op.t));
   [%expect {| |}]
 ;;
 
 let%expect_test "bad output width" =
-  require_does_raise [%here] (fun () ->
+  require_does_raise (fun () ->
     Combinational_op.create
       ()
       ~name:"bad_width"
@@ -36,7 +36,7 @@ let%expect_test "bad output width" =
 ;;
 
 let%expect_test "bad input width" =
-  require_does_raise [%here] (fun () ->
+  require_does_raise (fun () ->
     Combinational_op.create
       ()
       ~name:"bad_width"
@@ -57,7 +57,7 @@ let%expect_test "names must be unique in database" =
   in
   let database = Combinational_ops_database.create () in
   Combinational_ops_database.insert database op;
-  require_does_raise [%here] (fun () -> Combinational_ops_database.insert database op);
+  require_does_raise (fun () -> Combinational_ops_database.insert database op);
   [%expect
     {|
     ("A [Combinational_op] of the same name already exists in the database"
@@ -88,11 +88,11 @@ let create_op_mutable () =
     ~input_widths:[ num_bits; num_bits ]
     ~output_widths:[ num_bits; num_bits ]
     ~create_fn:(fun i o ->
-    match i, o with
-    | [ a; b ], [ c; d ] ->
-      Bits.Mutable.( +: ) c a b;
-      Bits.Mutable.( -: ) d a b
-    | _ -> raise_s [%message "invalid arguments"])
+      match i, o with
+      | [ a; b ], [ c; d ] ->
+        Bits.Mutable.( +: ) c a b;
+        Bits.Mutable.( -: ) d a b
+      | _ -> raise_s [%message "invalid arguments"])
 ;;
 
 let%expect_test "sexp_of" =
@@ -148,19 +148,19 @@ let%expect_test "internal representation" =
         output [7:0] c;
         output [7:0] d;
 
+        wire [7:0] _6;
+        wire [15:0] _5;
         wire [7:0] _7;
-        wire [15:0] _6;
-        wire [7:0] _8;
-        assign _7 = _6[15:8];
+        assign _6 = _5[15:8];
         add_sub
             the_add_sub
             ( .i0(a),
               .i1(b),
-              .o1(_6[15:8]),
-              .o0(_6[7:0]) );
-        assign _8 = _6[7:0];
-        assign c = _8;
-        assign d = _7;
+              .o1(_5[15:8]),
+              .o0(_5[7:0]) );
+        assign _7 = _5[7:0];
+        assign c = _7;
+        assign d = _6;
 
     endmodule
     |}]
@@ -183,19 +183,19 @@ let%expect_test "internal representation (mutable)" =
         output [7:0] c;
         output [7:0] d;
 
+        wire [7:0] _6;
+        wire [15:0] _5;
         wire [7:0] _7;
-        wire [15:0] _6;
-        wire [7:0] _8;
-        assign _7 = _6[15:8];
+        assign _6 = _5[15:8];
         add_sub_mutable
             the_add_sub_mutable
             ( .i0(a),
               .i1(b),
-              .o1(_6[15:8]),
-              .o0(_6[7:0]) );
-        assign _8 = _6[7:0];
-        assign c = _8;
-        assign d = _7;
+              .o1(_5[15:8]),
+              .o0(_5[7:0]) );
+        assign _7 = _5[7:0];
+        assign c = _7;
+        assign d = _6;
 
     endmodule
     |}]
@@ -220,8 +220,8 @@ let testbench ~create_circuit ~create_sim =
   let c, d = Cyclesim.out_port sim "c", Cyclesim.out_port sim "d" in
   List.init 4 ~f:(fun i ->
     List.init 4 ~f:(fun j ->
-      a := Bits.of_int ~width:num_bits i;
-      b := Bits.of_int ~width:num_bits j;
+      a := Bits.of_int_trunc ~width:num_bits i;
+      b := Bits.of_int_trunc ~width:num_bits j;
       Cyclesim.cycle sim;
       !a, !b, !c, !d))
   |> List.concat
@@ -240,9 +240,9 @@ let%expect_test "functional sim / bits" =
       o
       o'
   in
-  require [%here] (equal o1 o2);
-  require [%here] (equal o1 o3);
-  require [%here] (equal o1 o4);
+  require (equal o1 o2);
+  require (equal o1 o3);
+  require (equal o1 o4);
   let sexp_of_result (a, b, c, d) =
     [%message "" (a : Bits.t) (b : Bits.t) (c : Bits.t) (d : Bits.t)]
   in

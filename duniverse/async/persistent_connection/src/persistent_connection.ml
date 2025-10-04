@@ -1,5 +1,8 @@
 open! Core
-open! Async
+open Async_kernel
+open Async_log_kernel
+open Async_rpc_kernel
+open Async_unix
 open! Import
 open! Require_explicit_time_source
 include Persistent_connection_intf
@@ -9,6 +12,7 @@ module Make' (Conn_err : Connection_error) (Conn : Closable) = struct
 
   let create
     (type address)
+    ~(created_at : [%call_pos])
     ~server_name
     ?log
     ?(on_event = fun _ -> Deferred.unit)
@@ -26,16 +30,20 @@ module Make' (Conn_err : Connection_error) (Conn : Closable) = struct
     in
     let on_event event =
       Option.iter log ~f:(fun log ->
-        if Log.would_log log (Some (Persistent_connection_kernel.Event.log_level event))
-        then
-          [%log.sexp
-            log (event : Address.t Event.t) [@@tags
-                                              [ "persistent-connection-to", server_name ]]
-                                            [@@level
-                                              Some
-                                                (Persistent_connection_kernel.Event
-                                                 .log_level
-                                                   event)]]);
+        let open Ppx_log_syntax in
+        let created_at =
+          if Source_code_position.equal created_at Lexing.dummy_pos
+          then None
+          else Some created_at
+        in
+        [%log
+          log
+            (Persistent_connection_kernel.Event.Variants.to_name event)
+            (event : Address.t Event.t)
+            ~persistent_connection_to:(server_name : string)
+            (created_at
+             : (Source_code_position.t Sexp_hidden_in_test.t option[@sexp.option]))
+          [@@level Some (Persistent_connection_kernel.Event.log_level event)]]);
       on_event event
     in
     create
@@ -51,21 +59,14 @@ module Make' (Conn_err : Connection_error) (Conn : Closable) = struct
 end
 
 module Make (Conn : Closable) = struct
-  include
-    Make'
-      (struct
-        type t = Error.t [@@deriving equal, sexp_of]
-
-        let to_error e = e
-        let of_exception_error e = e
-      end)
-      (Conn)
+  include Make' (Persistent_connection_kernel.Default_connection_error) (Conn)
 end
 
 let create_convenience_wrapper
-  ~create
+  ~(create : created_at:[%call_pos] -> server_name:string -> _)
   ~connection_of_rpc_connection
   ~server_name
+  ~created_at
   ?log
   ?on_event
   ?retry_delay
@@ -81,7 +82,7 @@ let create_convenience_wrapper
   =
   let connect host_and_port =
     let%bind.Deferred.Or_error conn =
-      Rpc.Connection.client
+      Async_rpc.Rpc.Connection.client
         (Tcp.Where_to_connect.of_host_and_port ?bind_to_address host_and_port)
         ?implementations
         ?max_message_size
@@ -102,40 +103,30 @@ let create_convenience_wrapper
     ?time_source
     ~connect
     ~address:(module Host_and_port : Address with type t = Host_and_port.t)
+    ~created_at
     get_address
 ;;
 
 module Versioned_rpc = struct
-  include Make (struct
-    type t = Versioned_rpc.Connection_with_menu.t
+  include Make (Async_rpc_kernel.Persistent_connection.Versioned_rpc_conn)
 
-    let rpc_connection = Versioned_rpc.Connection_with_menu.connection
-    let close t = Rpc.Connection.close (rpc_connection t)
-    let is_closed t = Rpc.Connection.is_closed (rpc_connection t)
-    let close_finished t = Rpc.Connection.close_finished (rpc_connection t)
-  end)
-
-  let create' ~server_name =
+  let create' ~(created_at : [%call_pos]) ~server_name =
     create_convenience_wrapper
       ~server_name
       ~create
+      ~created_at
       ~connection_of_rpc_connection:Versioned_rpc.Connection_with_menu.create
   ;;
 end
 
 module Rpc = struct
-  include Make (struct
-    type t = Rpc.Connection.t
+  include Make (Async_rpc_kernel.Persistent_connection.Rpc_conn)
 
-    let close t = Rpc.Connection.close t
-    let is_closed t = Rpc.Connection.is_closed t
-    let close_finished t = Rpc.Connection.close_finished t
-  end)
-
-  let create' ~server_name =
+  let create' ~(created_at : [%call_pos]) ~server_name =
     create_convenience_wrapper
       ~server_name
       ~create
+      ~created_at
       ~connection_of_rpc_connection:Deferred.Or_error.return
   ;;
 end

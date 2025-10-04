@@ -9,7 +9,7 @@ module Blocker : sig
   type t [@@deriving sexp_of]
 
   val create : unit -> t
-  val critical_section : t -> f:(unit -> 'a) -> 'a
+  val critical_section : t -> f:local_ (unit -> 'a) -> 'a
   val wait : t -> unit
   val signal : t -> unit
   val save_unused : t -> unit
@@ -37,9 +37,10 @@ end = struct
   let save_unused t = Thread_safe_queue.enqueue unused t
 
   let create () =
-    if Thread_safe_queue.length unused > 0
-    then Thread_safe_queue.dequeue_exn unused
-    else { mutex = Mutex.create (); condition = Condition.create () }
+    match Thread_safe_queue.dequeue unused with
+    | Thread_safe_queue.Dequeue_result.Empty ->
+      { mutex = Mutex.create (); condition = Condition.create () }
+    | Not_empty { elt } -> elt
   ;;
 
   let critical_section t ~f = Mutex.critical_section t.mutex ~f
@@ -48,20 +49,25 @@ end = struct
 end
 
 module Thread_id_option : sig
-  type t [@@deriving equal, sexp_of] [@@immediate]
+  type t : immediate [@@deriving equal, sexp_of]
 
   val none : t
   val some : int -> t
   val is_none : t -> bool
   val is_some : t -> bool
 end = struct
-  type t = int [@@deriving equal, sexp_of]
+  type t = int [@@deriving sexp_of]
 
   let none = -1
   let[@inline always] is_none t = t = none
   let[@inline always] is_some t = t <> none
   let[@inline always] some int = int
   let sexp_of_t t = if t = none then [%sexp "None"] else [%sexp (t : t)]
+
+  (* The atomicity of some sections marked "BEGIN/END ATOMIC" later in this file require
+     [equal] to be implemented such that the OCaml compiler will not insert safepoints in
+     its prelude.  We write out the definition rather than deriving it for this reason. *)
+  let[@inline] equal (t1 : int) t2 = t1 = t2
 end
 
 (* We represent a nano mutex using an OCaml record.  The [id_of_thread_holding_lock] field
@@ -104,7 +110,7 @@ let invariant t =
        there is an agreed-upon winner in the race to create a blocker. *)
     if t.num_using_blocker = 0 then assert (Uopt.is_none t.blocker)
   with
-  | exn -> failwiths ~here:[%here] "invariant failed" (exn, t) [%sexp_of: exn * t]
+  | exn -> failwiths "invariant failed" (exn, t) [%sexp_of: exn * t]
 ;;
 
 let equal (t : t) t' = phys_equal t t'
@@ -168,7 +174,7 @@ let[@inline never] [@specialise never] [@local never] with_blocker0 t ~new_block
 
 (* [with_blocker t f] runs [f blocker] in a critical section.  It allocates a blocker for
    [t] if [t] doesn't already have one. *)
-let with_blocker t f =
+let with_blocker t (local_ f) =
   t.num_using_blocker <- t.num_using_blocker + 1;
   let blocker =
     match%optional.Uopt t.blocker with

@@ -27,10 +27,10 @@ module type With_comparable = sig
 end
 
 module Comparable_satisfies_with_comparable (M : sig
-  type t [@@deriving sexp_of]
+    type t [@@deriving sexp_of]
 
-  include Comparable.S with type t := t
-end) : With_comparable =
+    include Comparable.S with type t := t
+  end) : With_comparable =
   M
 
 module type With_hashable = sig
@@ -51,10 +51,10 @@ module type With_hashable = sig
 end
 
 module Hashable_satisfies_with_hashable (M : sig
-  type t [@@deriving sexp_of]
+    type t [@@deriving sexp_of]
 
-  include Hashable.S with type t := t
-end) : With_hashable =
+    include Hashable.S with type t := t
+  end) : With_hashable =
   M
 
 module type With_containers = sig
@@ -79,14 +79,14 @@ module type Expect_test_helpers_core = sig
   (** {3 Serialization tests} *)
 
   (** [print_and_check_stable_type] prints the bin-io digest for the given type, and the
-      bin-io and sexp serializations of the given values.  Prints an error message for any
+      bin-io and sexp serializations of the given values. Prints an error message for any
       serializations that fail to round-trip, and for any bin-io serializations that
       exceed [max_binable_length]. *)
   val print_and_check_stable_type
     :  ?cr:CR.t (** default is [CR] *)
     -> ?hide_positions:bool (** default is [false] when [cr=CR], [true] otherwise *)
     -> ?max_binable_length:int (** default is [Int.max_value] *)
-    -> Source_code_position.t
+    -> here:[%call_pos]
     -> (module Stable_without_comparator with type t = 'a)
     -> 'a list
     -> unit
@@ -97,20 +97,20 @@ module type Expect_test_helpers_core = sig
     :  ?cr:CR.t (** default is [CR] *)
     -> ?hide_positions:bool (** default is [false] when [cr=CR], [true] otherwise *)
     -> ?max_binable_length:int (** default is [Int.max_value] *)
-    -> Source_code_position.t
-    -> (module Stable_int63able with type t = 'a)
+    -> here:[%call_pos]
+    -> (module Stable_int63able_without_comparator with type t = 'a)
     -> 'a list
     -> unit
 
   (** [print_and_check_container_sexps] prints the sexp representation of maps, sets, hash
-      tables, and hash sets based on the given values.  For sets and hash sets, prints a
-      CR if the sexp does not correspond to a list of elements.  For maps and hash tables,
+      tables, and hash sets based on the given values. For sets and hash sets, prints a CR
+      if the sexp does not correspond to a list of elements. For maps and hash tables,
       prints a CR if the sexp does not correspond to an association list keyed on
       elements. *)
   val print_and_check_container_sexps
     :  ?cr:CR.t (** default is [CR] *)
     -> ?hide_positions:bool (** default is [false] when [cr=CR], [true] otherwise *)
-    -> Source_code_position.t
+    -> here:[%call_pos]
     -> (module With_containers with type t = 'a)
     -> 'a list
     -> unit
@@ -120,7 +120,7 @@ module type Expect_test_helpers_core = sig
   val print_and_check_comparable_sexps
     :  ?cr:CR.t (** default is [CR] *)
     -> ?hide_positions:bool (** default is [false] when [cr=CR], [true] otherwise *)
-    -> Source_code_position.t
+    -> here:[%call_pos]
     -> (module With_comparable with type t = 'a)
     -> 'a list
     -> unit
@@ -130,7 +130,7 @@ module type Expect_test_helpers_core = sig
   val print_and_check_hashable_sexps
     :  ?cr:CR.t (** default is [CR] *)
     -> ?hide_positions:bool (** default is [false] when [cr=CR], [true] otherwise *)
-    -> Source_code_position.t
+    -> here:[%call_pos]
     -> (module With_hashable with type t = 'a)
     -> 'a list
     -> unit
@@ -144,9 +144,12 @@ module type Expect_test_helpers_core = sig
     include Allocation_limit
   end
 
+  [%%template:
+  [@@@kind.default k = (value, float64, bits32, bits64, word)]
+
   (** [require_allocation_does_not_exceed] is a specialized form of [require] that only
-      produces output when [f ()] allocates more than the given limits.  The output will
-      include the actual number of major and minor words allocated.  We do NOT include
+      produces output when [f ()] allocates more than the given limits. The output will
+      include the actual number of major and minor words allocated. We do NOT include
       these numbers in the successful case because those numbers are not stable with
       respect to compiler versions and build flags.
 
@@ -164,30 +167,51 @@ module type Expect_test_helpers_core = sig
 
       With the latter idiom, the compiler may optimize the computation of [f ()] taking
       advantage of the fact that the result is ignored, and eliminate allocation that is
-      intended to be measured.  With the former idiom, the compiler cannot do such
+      intended to be measured. With the former idiom, the compiler cannot do such
       optimization and must compute the result of [f ()].
 
       Also prints up to [print_limit] allocation locations.
 
       See documentation above about CRs and workflows for failing allocation tests. *)
   val require_allocation_does_not_exceed
-    :  ?print_limit:int (** default is [1_000] *)
+    :  ?cr:CR.t
+    -> ?print_limit:int (** default is [1_000] *)
     -> ?hide_positions:bool (** default is [false] *)
     -> Allocation_limit.t
-    -> Source_code_position.t
-    -> (unit -> 'a)
+    -> here:[%call_pos]
+    -> local_ (unit -> ('a : k))
     -> 'a
 
-  (** [require_no_allocation here f] is equivalent to [require_allocation_does_not_exceed
-      (Minor_words 0) here f].
+  (** Like [require_allocation_does_not_exceed], for functions producing local values. *)
+  val require_allocation_does_not_exceed_local
+    :  ?cr:CR.t
+    -> ?print_limit:int (** default is [1_000] *)
+    -> ?hide_positions:bool (** default is [false] *)
+    -> Allocation_limit.t
+    -> here:[%call_pos]
+    -> local_ (unit -> local_ ('a : k))
+    -> local_ 'a
+
+  (** [require_no_allocation here f] is equivalent to
+      [require_allocation_does_not_exceed (Minor_words 0) here f].
 
       See documentation above about CRs and workflows for failing allocation tests. *)
   val require_no_allocation
-    :  ?print_limit:int
+    :  ?cr:CR.t
+    -> ?print_limit:int
     -> ?hide_positions:bool (** default is [false] *)
-    -> Source_code_position.t
-    -> (unit -> 'a)
+    -> here:[%call_pos]
+    -> local_ (unit -> ('a : k))
     -> 'a
+
+  (** Like [require_no_allocation], for functions producing local values. *)
+  val require_no_allocation_local
+    :  ?cr:CR.t
+    -> ?print_limit:int
+    -> ?hide_positions:bool (** default is [false] *)
+    -> here:[%call_pos]
+    -> local_ (unit -> local_ ('a : k))
+    -> local_ 'a]
 
   (**/**)
 
@@ -196,13 +220,13 @@ module type Expect_test_helpers_core = sig
       interfere with other [Private] modules or create problems due to multiple
       definitions of [Private]. *)
   module Expect_test_helpers_core_private : sig
-    val require_allocation_does_not_exceed
+    val require_allocation_does_not_exceed_local
       :  ?cr:CR.t
       -> ?hide_positions:bool
       -> ?print_limit:int
       -> Allocation_limit.t
-      -> Source_code_position.t
-      -> (unit -> 'a)
-      -> 'a
+      -> here:[%call_pos]
+      -> local_ (unit -> local_ 'a)
+      -> local_ 'a
   end
 end

@@ -1,17 +1,16 @@
-This test demonstratest that fetching package sources should be cached
+This test demonstrates that fetching package sources should be cached
 
   $ . ./helpers.sh
 
   $ make_lockdir
 
-  $ tarball=source.tar.gz
+  $ tarball=source.tar
   $ sources="sources/"
   $ mkdir $sources; touch $sources/dummy
-  $ tar -czf $tarball $sources
+  $ tar cf $tarball $sources
   $ checksum=$(md5sum $tarball | awk '{ print $1 }')
-  $ webserver_oneshot --content-file $tarball --port-file port.txt &
-  $ until test -f port.txt ; do sleep 0.1; done
-  $ port=$(cat port.txt)
+  $ echo $tarball > fake-curls
+  $ port=1
 
   $ makepkg() {
   > make_lockpkg $1 <<EOF

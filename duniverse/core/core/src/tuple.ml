@@ -1,4 +1,5 @@
 open! Import
+include Tuple_intf.Definitions
 
 module type T = sig
   type t
@@ -9,7 +10,7 @@ module Make (T1 : T) (T2 : T) = struct
 end
 
 module T2 = struct
-  type ('a, 'b) t = 'a * 'b [@@deriving sexp, typerep]
+  type ('a, 'b) t = 'a * 'b [@@deriving sexp, sexp_grammar, typerep]
 
   let create a b = a, b
 
@@ -25,13 +26,22 @@ module T2 = struct
 
   [%%if flambda_backend]
 
-  external get1 : (('a, _) t[@local_opt]) -> ('a[@local_opt]) = "%field0_immut"
-  external get2 : ((_, 'a) t[@local_opt]) -> ('a[@local_opt]) = "%field1_immut"
+  external get1
+    :  (('a, _) t[@local_opt])
+    -> ('a[@local_opt])
+    @@ portable
+    = "%field0_immut"
+
+  external get2
+    :  ((_, 'a) t[@local_opt])
+    -> ('a[@local_opt])
+    @@ portable
+    = "%field1_immut"
 
   [%%else]
 
-  external get1 : (('a, _) t[@local_opt]) -> ('a[@local_opt]) = "%field0"
-  external get2 : ((_, 'a) t[@local_opt]) -> ('a[@local_opt]) = "%field1"
+  external get1 : (('a, _) t[@local_opt]) -> ('a[@local_opt]) @@ portable = "%field0"
+  external get2 : ((_, 'a) t[@local_opt]) -> ('a[@local_opt]) @@ portable = "%field1"
 
   [%%endif]
 
@@ -48,17 +58,18 @@ module T2 = struct
   ;;
 
   let equal ~eq1 ~eq2 (x, y) (x', y') = eq1 x x' && eq2 y y'
+  let sort ((a, b) as t) ~compare = if compare a b <= 0 then t else b, a
   let swap (a, b) = b, a
 
-  include Comparator.Derived2 (struct
-    type nonrec ('a, 'b) t = ('a, 'b) t [@@deriving sexp_of]
+  include%template Comparator.Derived2 [@modality portable] (struct
+      type nonrec ('a, 'b) t = ('a, 'b) t [@@deriving sexp_of]
 
-    let compare cmp1 cmp2 = compare ~cmp1 ~cmp2
-  end)
+      let compare cmp1 cmp2 = compare ~cmp1 ~cmp2
+    end)
 end
 
 module T3 = struct
-  type ('a, 'b, 'c) t = 'a * 'b * 'c [@@deriving sexp, typerep]
+  type ('a, 'b, 'c) t = 'a * 'b * 'c [@@deriving sexp, sexp_grammar, typerep]
 
   let create a b c = a, b, c
 
@@ -81,13 +92,22 @@ module T3 = struct
 
   [%%if flambda_backend]
 
-  external get1 : (('a, _, _) t[@local_opt]) -> ('a[@local_opt]) = "%field0_immut"
-  external get2 : ((_, 'a, _) t[@local_opt]) -> ('a[@local_opt]) = "%field1_immut"
+  external get1
+    :  (('a, _, _) t[@local_opt])
+    -> ('a[@local_opt])
+    @@ portable
+    = "%field0_immut"
+
+  external get2
+    :  ((_, 'a, _) t[@local_opt])
+    -> ('a[@local_opt])
+    @@ portable
+    = "%field1_immut"
 
   [%%else]
 
-  external get1 : (('a, _, _) t[@local_opt]) -> ('a[@local_opt]) = "%field0"
-  external get2 : ((_, 'a, _) t[@local_opt]) -> ('a[@local_opt]) = "%field1"
+  external get1 : (('a, _, _) t[@local_opt]) -> ('a[@local_opt]) @@ portable = "%field0"
+  external get2 : ((_, 'a, _) t[@local_opt]) -> ('a[@local_opt]) @@ portable = "%field1"
 
   [%%endif]
 
@@ -107,29 +127,16 @@ module T3 = struct
   let equal ~eq1 ~eq2 ~eq3 (x, y, z) (x', y', z') = eq1 x x' && eq2 y y' && eq3 z z'
 end
 
-module type Comparable_sexpable = sig
-  type t [@@deriving sexp]
-
-  include Comparable.S with type t := t
-end
-
-module type Hashable_sexpable = sig
-  type t [@@deriving sexp]
-
-  include Hashable.S with type t := t
-end
-
-module type Hasher_sexpable = sig
-  type t [@@deriving compare, hash, sexp]
-end
-
-module Sexpable (S1 : Sexpable.S) (S2 : Sexpable.S) = struct
+module%template.portable Sexpable (S1 : Sexpable.S) (S2 : Sexpable.S) = struct
   type t = S1.t * S2.t [@@deriving sexp]
 end
 
-module Binable (B1 : Binable.S) (B2 : Binable.S) = struct
+module%template.portable Binable (B1 : Binable.S) (B2 : Binable.S) = struct
   type t = B1.t * B2.t [@@deriving bin_io]
 end
+
+(* Redefinition to avoid shadowing Core.Comparator *)
+module Comparator_ = Comparator
 
 module Comparator (S1 : Comparator.S) (S2 : Comparator.S) = struct
   include Make (S1) (S2)
@@ -140,52 +147,117 @@ module Comparator (S1 : Comparator.S) (S2 : Comparator.S) = struct
   let comparator = T2.comparator S1.comparator S2.comparator
 end
 
-module Comparable_plain (S1 : Comparable.S_plain) (S2 : Comparable.S_plain) = struct
+[%%template
+[@@@mode.default m = (local, global)]
+
+module%template.portable
+  [@modality p] Comparable_plain
+    (S1 : Comparable_plain_arg
+  [@mode m] [@modality p])
+    (S2 : Comparable_plain_arg
+  [@mode m] [@modality p]) =
+struct
+  module S1 = struct
+    include S1
+
+    let compare = [%eta2 Comparator_.compare comparator]
+  end
+
+  module S2 = struct
+    include S2
+
+    let compare = [%eta2 Comparator_.compare comparator]
+  end
+
   module T = struct
     include Comparator (S1) (S2)
 
-    let sexp_of_t = comparator.sexp_of_t
+    let sexp_of_t = [%eta1 Comparator_.sexp_of_t comparator]
+
+    let compare (s1, s2) (s1', s2') =
+      match (S1.compare [@mode m]) s1 s1' with
+      | 0 -> (S2.compare [@mode m]) s2 s2'
+      | x -> x
+    [@@mode m = (global, m)]
+    ;;
+
+    let _ = compare (* in the global case, we only need the comparator *)
   end
 
   include T
-  include Comparable.Make_plain_using_comparator (T)
+  include Comparable.Make_plain_using_comparator [@mode m] [@modality p] (T)
 end
 
-module Comparable (S1 : Comparable_sexpable) (S2 : Comparable_sexpable) = struct
+module%template.portable
+  [@modality p] Comparable
+    (S1 : Comparable_arg
+  [@mode m])
+    (S2 : Comparable_arg
+  [@mode m]) =
+struct
   module T = struct
-    include Sexpable (S1) (S2)
+    include Sexpable [@modality p] (S1) (S2)
 
     let compare (s1, s2) (s1', s2') =
-      match S1.compare s1 s1' with
-      | 0 -> S2.compare s2 s2'
+      match (S1.compare [@mode m]) s1 s1' with
+      | 0 -> (S2.compare [@mode m]) s2 s2'
       | x -> x
+    [@@mode m = (global, m)]
     ;;
   end
 
   include T
-  include Comparable.Make (T)
+  include Comparable.Make [@mode m] [@modality p] (T)
 end
 
-module Hasher (H1 : Hasher_sexpable) (H2 : Hasher_sexpable) = struct
+module%template.portable
+  [@modality p] Hashable_plain
+    (S1 : Hashable_plain_arg
+  [@mode m])
+    (S2 : Hashable_plain_arg
+  [@mode m]) =
+struct
   module T = struct
-    type t = H1.t * H2.t [@@deriving compare, hash, sexp]
+    type t = S1.t * S2.t [@@deriving (compare [@mode m]), hash, sexp_of]
   end
 
   include T
-  include Hashable.Make (T)
+  include Hashable.Make_plain [@modality p] (T)
 end
 
-module Hasher_sexpable_of_hashable_sexpable (S : Hashable_sexpable) :
-  Hasher_sexpable with type t = S.t = struct
+module%template.portable
+  [@modality p] Hasher
+    (H1 : Hashable_arg
+  [@mode m])
+    (H2 : Hashable_arg
+  [@mode m]) =
+struct
+  module T = struct
+    type t = H1.t * H2.t [@@deriving (compare [@mode m]), hash, sexp]
+  end
+
+  include T
+  include Hashable.Make [@modality p] (T)
+end
+
+module%template.portable
+  [@modality p] Hasher_sexpable_of_hashable_sexpable
+    (S : Hashable_arg
+  [@mode m]) : Hashable_arg [@mode m] with type t = S.t = struct
   include S
 
   let hash_fold_t state t = hash_fold_int state (hash t)
 end
 
-module Hashable_t (S1 : Hashable_sexpable) (S2 : Hashable_sexpable) =
-  Hasher
-    (Hasher_sexpable_of_hashable_sexpable
+module%template.portable
+  [@modality p] Hashable_t
+    (S1 : Hashable_arg
+  [@mode m])
+    (S2 : Hashable_arg
+  [@mode m]) =
+  Hasher [@mode m] [@modality p]
+    (Hasher_sexpable_of_hashable_sexpable [@mode m] [@modality p]
        (S1))
-       (Hasher_sexpable_of_hashable_sexpable (S2))
+       (Hasher_sexpable_of_hashable_sexpable [@mode m] [@modality p] (S2))
 
-module Hashable = Hashable_t
+module%template.portable [@modality p] Hashable = Hashable_t [@mode m] [@modality p]]

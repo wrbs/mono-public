@@ -13,6 +13,15 @@ module Sys_vars = struct
     ; sys_ocaml_version : string option Memo.Lazy.t
     }
 
+  let os t (v : Dune_lang.Pform.Var.Os.t) =
+    Memo.Lazy.force
+      (match v with
+       | Os -> t.os
+       | Os_version -> t.os_version
+       | Os_distribution -> t.os_distribution
+       | Os_family -> t.os_family)
+  ;;
+
   let poll =
     let vars =
       lazy
@@ -66,6 +75,26 @@ module Sys_vars = struct
                (Dune_sexp.Template.Pform.describe source)
            ])
   ;;
+
+  let solver_env () =
+    let open Memo.O in
+    let module V = Package_variable_name in
+    let { os; os_version; os_distribution; os_family; arch; sys_ocaml_version } = poll in
+    let+ var_value_pairs =
+      [ V.os, os
+      ; V.os_version, os_version
+      ; V.os_distribution, os_distribution
+      ; V.os_family, os_family
+      ; V.arch, arch
+      ; V.sys_ocaml_version, sys_ocaml_version
+      ]
+      |> Memo.List.filter_map ~f:(fun (var, value) ->
+        let+ value = Memo.Lazy.force value in
+        Option.map value ~f:(fun value -> var, Variable_value.string value))
+    in
+    List.fold_left var_value_pairs ~init:Solver_env.empty ~f:(fun acc (var, value) ->
+      Solver_env.set acc var value)
+  ;;
 end
 
 module Load = Make_load (struct
@@ -75,7 +104,7 @@ module Load = Make_load (struct
       Fs_memo.dir_contents (In_source_dir path)
       >>| function
       | Error _ ->
-        (* CR-rgrinberg: add some proper message here *)
+        (* CR-someday rgrinberg: add some proper message here *)
         User_error.raise [ Pp.text "" ]
       | Ok content -> Fs_cache.Dir_contents.to_list content
     ;;
@@ -128,16 +157,33 @@ let get_workspace_lock_dir ctx =
   Workspace.find_lock_dir workspace path
 ;;
 
-let get (ctx : Context_name.t) : t Memo.t =
-  let* lock_dir = get_path ctx >>| Option.value_exn >>= Load.load in
-  let+ workspace_lock_dir = get_workspace_lock_dir ctx in
-  (match workspace_lock_dir with
-   | None -> ()
-   | Some workspace_lock_dir ->
-     Solver_stats.Expanded_variable_bindings.validate_against_solver_env
-       lock_dir.expanded_solver_variable_bindings
-       (workspace_lock_dir.solver_env |> Option.value ~default:Solver_env.empty));
-  lock_dir
+let get_with_path ctx =
+  let* path = get_path ctx >>| Option.value_exn in
+  Load.load path
+  >>= function
+  | Error e -> Memo.return (Error e)
+  | Ok lock_dir ->
+    let+ workspace_lock_dir = get_workspace_lock_dir ctx in
+    (match workspace_lock_dir with
+     | None -> ()
+     | Some workspace_lock_dir ->
+       Solver_stats.Expanded_variable_bindings.validate_against_solver_env
+         lock_dir.expanded_solver_variable_bindings
+         (workspace_lock_dir.solver_env |> Option.value ~default:Solver_env.empty));
+    Ok (path, lock_dir)
+;;
+
+let get ctx = get_with_path ctx >>| Result.map ~f:snd
+let get_exn ctx = get ctx >>| User_error.ok_exn
+
+let of_dev_tool dev_tool =
+  let path = Dune_pkg.Lock_dir.dev_tool_lock_dir_path dev_tool in
+  Fs_memo.dir_exists (In_source_dir path)
+  >>= function
+  | true -> Load.load_exn path
+  | false ->
+    User_error.raise
+      [ Pp.textf "%s does not exist" (Path.Source.to_string_maybe_quoted path) ]
 ;;
 
 let lock_dir_active ctx =

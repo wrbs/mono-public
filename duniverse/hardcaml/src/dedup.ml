@@ -13,12 +13,13 @@ module Structure_kind = struct
     | Const of Bits.t
     | Op of Signal.Type.signal_op
     | Mux
+    | Cases
     | Cat
     | Not
     | Wire of string list
     | Select of int * int
     | Mem_read_port
-    | Dont_dedup of Signal.Uid.t
+    | Dont_dedup of Signal.Type.Uid.t
   [@@deriving sexp_of, compare, hash]
 
   let equal a b = compare a b = 0
@@ -30,6 +31,7 @@ let structure_kind (signal : Signal.t) =
   | Const { constant; _ } -> Structure_kind.Const constant
   | Op2 { op; _ } -> Structure_kind.Op op
   | Mux _ -> Structure_kind.Mux
+  | Cases _ -> Structure_kind.Cases
   | Cat _ -> Structure_kind.Cat
   | Not _ -> Structure_kind.Not
   | Wire _ -> Structure_kind.Wire (Signal.names signal)
@@ -41,47 +43,20 @@ let structure_kind (signal : Signal.t) =
 ;;
 
 module Children = Signal.Type.Make_deps (struct
-  let fold t ~init ~f =
-    match structure_kind t with
-    | Structure_kind.Dont_dedup _ -> init
-    | _ -> Signal.Type.Deps.fold t ~init ~f
-  ;;
-end)
+    let fold t ~init ~f =
+      match structure_kind t with
+      | Structure_kind.Dont_dedup _ -> init
+      | _ -> Signal.Type.Deps.fold t ~init ~f
+    ;;
+  end)
 
-let map_children signal ~f =
-  match signal with
-  | Signal.Type.Empty -> signal
-  | Const _ -> signal
-  | Op2 { signal_id; op; arg_a; arg_b } ->
-    let arg_a = f arg_a in
-    let arg_b = f arg_b in
-    Op2 { signal_id = { signal_id with s_id = Signal.Type.new_id () }; op; arg_a; arg_b }
-  | Mux { signal_id; select; cases } ->
-    let select = f select in
-    let cases = List.map cases ~f in
-    Mux { signal_id = { signal_id with s_id = Signal.Type.new_id () }; select; cases }
-  | Cat { signal_id; args } ->
-    let args = List.map args ~f in
-    Cat { signal_id = { signal_id with s_id = Signal.Type.new_id () }; args }
-  | Not { signal_id; arg } ->
-    let arg = f arg in
-    Not { signal_id = { signal_id with s_id = Signal.Type.new_id () }; arg }
-  | Wire { signal_id; driver } ->
-    Wire
-      { signal_id = { signal_id with s_id = Signal.Type.new_id () }
-      ; driver = ref (f !driver)
-      }
-  | Select { signal_id; arg; high; low } ->
-    let arg = f arg in
-    Select { signal_id = { signal_id with s_id = Signal.Type.new_id () }; arg; high; low }
-  | Multiport_mem _ | Reg _ -> assert false
-  | Mem_read_port { signal_id; memory; read_address } ->
-    Mem_read_port
-      { signal_id = { signal_id with s_id = Signal.Type.new_id () }
-      ; memory = f memory
-      ; read_address = f read_address
-      }
-  | Inst _ -> signal
+let give_signal_fresh_id signal ~new_id =
+  Signal.Type.map_signal_id signal ~f:(fun signal_id ->
+    { signal_id with s_id = new_id () })
+;;
+
+let map_children_and_give_fresh_id signal ~f ~new_id =
+  Signal.Type.map_dependant signal ~f |> give_signal_fresh_id ~new_id
 ;;
 
 let find_by_signal_uid memo s = Hashtbl.find_exn memo (Signal.uid s)
@@ -92,20 +67,32 @@ let signal_hash memo signal =
     [%hash: Structure_kind.t * int list] (structure_kind signal, children_hashes))
 ;;
 
-let make_canonical_signal canonical sequential_wires signal =
+let create_wire_with_fresh_id ~width ~new_id =
+  Signal.wire width |> give_signal_fresh_id ~new_id
+;;
+
+let make_canonical_signal canonical sequential_wires signal ~new_id =
   match structure_kind signal with
   | Structure_kind.Dont_dedup _ ->
-    let wire = Signal.wire (Signal.width signal) in
+    let wire = create_wire_with_fresh_id ~width:(Signal.width signal) ~new_id in
     Hashtbl.add_exn sequential_wires ~key:(Signal.uid signal) ~data:(signal, wire);
     wire
   | Structure_kind.Mem_read_port ->
     let transformed =
-      map_children signal ~f:(fun child -> Hashtbl.find_exn canonical (Signal.uid child))
+      map_children_and_give_fresh_id
+        signal
+        ~f:(fun child -> Hashtbl.find_exn canonical (Signal.uid child))
+        ~new_id
     in
     (* wrap all Mem_read_ports in wires, so we can later replace them in next stage *)
-    Signal.wireof transformed
+    let wire = create_wire_with_fresh_id ~width:(Signal.width transformed) ~new_id in
+    Signal.( <-- ) wire transformed;
+    wire
   | _ ->
-    map_children signal ~f:(fun child -> Hashtbl.find_exn canonical (Signal.uid child))
+    map_children_and_give_fresh_id
+      signal
+      ~f:(fun child -> Hashtbl.find_exn canonical (Signal.uid child))
+      ~new_id
 ;;
 
 let is_anonymous signal = Signal.is_empty signal || List.is_empty (Signal.names signal)
@@ -120,16 +107,16 @@ let rec shallow_equal a b =
   && Structure_kind.equal (structure_kind a) (structure_kind b)
   &&
   match a, b with
-  | Wire { driver = r_a; _ }, Wire { driver = r_b; _ } ->
+  | Wire { driver = Some r_a; _ }, Wire { driver = Some r_b; _ } ->
     (* special case wires, due to special treatment of Mem_read_port... *)
-    shallow_equal !r_a !r_b
+    shallow_equal r_a r_b
   | _ ->
-    [%equal: Signal.Uid.t list]
+    [%equal: Signal.Type.Uid.t list]
       (Children.rev_map a ~f:Signal.uid)
       (Children.rev_map b ~f:Signal.uid)
 ;;
 
-let transform_sequential_signal canonical signal =
+let transform_sequential_signal canonical signal ~new_id =
   let get_canonical signal = Hashtbl.find_exn canonical (Signal.uid signal) in
   let rewrite_instantiation (instantiation : Signal.Type.instantiation) =
     let inst_inputs =
@@ -137,43 +124,11 @@ let transform_sequential_signal canonical signal =
     in
     { instantiation with inst_inputs }
   in
-  let rewrite_register register =
-    let { Reg_spec.reg_clock
-        ; reg_clock_edge
-        ; reg_reset
-        ; reg_reset_edge
-        ; reg_reset_value
-        ; reg_clear
-        ; reg_clear_level
-        ; reg_clear_value
-        ; reg_enable
-        }
-      =
-      register
-    in
-    { Reg_spec.reg_clock = get_canonical reg_clock
-    ; reg_clock_edge
-    ; reg_reset = get_canonical reg_reset
-    ; reg_reset_edge
-    ; reg_reset_value = get_canonical reg_reset_value
-    ; reg_clear = get_canonical reg_clear
-    ; reg_clear_level
-    ; reg_clear_value = get_canonical reg_clear_value
-    ; reg_enable = get_canonical reg_enable
-    }
-  in
+  let rewrite_register = Signal.Type.Register.map ~f:get_canonical in
   let rewrite_signal_id (signal_id : Signal.Type.signal_id) =
-    { signal_id with s_id = Signal.Type.new_id () }
+    { signal_id with s_id = new_id () }
   in
-  let rewrite_write_port
-    { Write_port.write_clock; write_address; write_enable; write_data }
-    =
-    { Write_port.write_clock = get_canonical write_clock
-    ; write_address = get_canonical write_address
-    ; write_enable = get_canonical write_enable
-    ; write_data = get_canonical write_data
-    }
-  in
+  let rewrite_write_port = Write_port.map ~f:get_canonical in
   match signal with
   | Signal.Type.Reg { signal_id; register; d } ->
     Signal.Type.Reg
@@ -181,16 +136,16 @@ let transform_sequential_signal canonical signal =
       ; register = rewrite_register register
       ; d = get_canonical d
       }
-  | Multiport_mem { signal_id; size; write_ports } ->
+  | Multiport_mem { signal_id; size; write_ports; initialize_to } ->
     Multiport_mem
       { signal_id = rewrite_signal_id signal_id
       ; size
       ; write_ports = Array.map write_ports ~f:rewrite_write_port
+      ; initialize_to
       }
-  | Inst { signal_id; extra_uid; instantiation } ->
+  | Inst { signal_id; instantiation } ->
     Inst
       { signal_id = rewrite_signal_id signal_id
-      ; extra_uid
       ; instantiation = rewrite_instantiation instantiation
       }
   | _ ->
@@ -205,8 +160,9 @@ let transform_sequential_signal canonical signal =
 
 let rec unwrap_wire s =
   match s with
-  | Signal.Type.Wire { driver; _ } when List.is_empty (Signal.names s) ->
-    unwrap_wire !driver
+  | None -> None
+  | Some (Signal.Type.Wire { driver; _ } as s) when List.is_empty (Signal.names s) ->
+    unwrap_wire driver
   | _ -> s
 ;;
 
@@ -214,34 +170,36 @@ let fix_mem_read_ports signals =
   (* We wrap all sequential signals in wires. However, Mem_read_port expects to contain
      Multiport_mem and not Multiport_mem wrapped in wire. Rewrite the wire out. *)
   List.iter signals ~f:(function
-    | Signal.Type.Wire { driver; _ } ->
+    | Signal.Type.Wire ({ driver; _ } as w) ->
       (* every Mem_read_port signal is pointed to by a single wire *)
-      (match !driver with
-       | Signal.Type.Mem_read_port
-           { signal_id; memory = Wire { driver = mem_ref; _ }; read_address } ->
+      (match driver with
+       | Some
+           (Signal.Type.Mem_read_port
+             { signal_id; memory = Wire { driver = mem_ref; _ }; read_address }) ->
          let memory =
-           match unwrap_wire !mem_ref with
-           | Signal.Type.Multiport_mem _ as unwrapped -> unwrapped
-           | _ -> assert false
+           match unwrap_wire mem_ref with
+           | Some (Signal.Type.Multiport_mem _ as unwrapped) -> unwrapped
+           | Some _ | None -> assert false
          in
-         driver := Mem_read_port { signal_id; memory; read_address }
-       | _ -> ())
+         w.driver <- Some (Mem_read_port { signal_id; memory; read_address })
+       | Some _ | None -> ())
     | _ -> ())
 ;;
 
 let compress_wires signals =
   Signal_graph.create signals
   |> Signal_graph.iter ~f:(function
-       | Signal.Type.Wire { driver; _ } -> driver := unwrap_wire !driver
-       | _ -> ())
+    | Signal.Type.Wire ({ driver; _ } as w) -> w.driver <- unwrap_wire driver
+    | _ -> ())
 ;;
 
 let canonicalize signals =
-  let hash_memo = Hashtbl.create (module Signal.Uid) in
-  let canonical = Hashtbl.create (module Signal.Uid) in
+  let hash_memo = Hashtbl.create (module Signal.Type.Uid) in
+  let canonical = Hashtbl.create (module Signal.Type.Uid) in
   let canonical_by_hash = Hashtbl.create (module Int) in
   (* we replace all sequential elements with wires, to be able to transform them later *)
-  let sequential_wires = Hashtbl.create (module Signal.Uid) in
+  let sequential_wires = Hashtbl.create (module Signal.Type.Uid) in
+  let `New new_id, `Reset _ = Signal.Type.Uid.generator () in
   List.iter
     (Signal_graph.topological_sort_exn
        ~deps:(module Children)
@@ -249,28 +207,31 @@ let canonicalize signals =
     ~f:(fun signal ->
       let my_hash = signal_hash hash_memo signal in
       let signal_with_canonical_children =
-        make_canonical_signal canonical sequential_wires signal
+        make_canonical_signal canonical sequential_wires signal ~new_id
       in
       let canonical_signal =
-        let cannonical_signals_with_matching_hash =
-          Hashtbl.find_multi canonical_by_hash my_hash
-        in
-        match
-          List.find
-            cannonical_signals_with_matching_hash
-            ~f:(shallow_equal signal_with_canonical_children)
-        with
-        | None ->
-          Hashtbl.add_multi
-            canonical_by_hash
-            ~key:my_hash
-            ~data:signal_with_canonical_children;
-          signal_with_canonical_children
-        | Some canonical_signal -> canonical_signal
+        match structure_kind signal with
+        | Dont_dedup _ -> signal_with_canonical_children
+        | _ ->
+          let cannonical_signals_with_matching_hash =
+            Hashtbl.find_multi canonical_by_hash my_hash
+          in
+          (match
+             List.find
+               cannonical_signals_with_matching_hash
+               ~f:(shallow_equal signal_with_canonical_children)
+           with
+           | None ->
+             Hashtbl.add_multi
+               canonical_by_hash
+               ~key:my_hash
+               ~data:signal_with_canonical_children;
+             signal_with_canonical_children
+           | Some canonical_signal -> canonical_signal)
       in
       Hashtbl.add_exn canonical ~key:(Signal.uid signal) ~data:canonical_signal);
   Hashtbl.iter sequential_wires ~f:(fun (signal, wire) ->
-    Signal.( <== ) wire (transform_sequential_signal canonical signal));
+    Signal.( <-- ) wire (transform_sequential_signal canonical signal ~new_id));
   fix_mem_read_ports (Hashtbl.data canonical);
   compress_wires (Hashtbl.data canonical);
   canonical
@@ -294,3 +255,7 @@ let deduplicate circuit =
     ~name:(Circuit.name circuit)
     (List.map outputs ~f:(fun signal -> Hashtbl.find_exn canonical (Signal.uid signal)))
 ;;
+
+module For_testing = struct
+  let signal_hash = signal_hash
+end

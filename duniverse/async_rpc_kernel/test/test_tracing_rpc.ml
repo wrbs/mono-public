@@ -26,6 +26,7 @@ let rpc' ~print_impl ~bin_response ~include_in_error_count sexp_of_response =
     Async_rpc_kernel.Rpc.Implementations.create_exn
       ~implementations:[ impl ]
       ~on_unknown_rpc:`Raise
+      ~on_exception:Log_on_background_exn
   in
   response1, response2, impl
 ;;
@@ -43,7 +44,7 @@ let write_query ?metadata ?don't_read_yet ?(id = 123) t =
     ?don't_read_yet
     t
     [%bin_writer: string]
-    (Query
+    (Query_v2
        { tag = Protocol.Rpc_tag.of_string "rpc"
        ; version = 1
        ; id = Protocol.Query_id.of_int_exn id
@@ -76,7 +77,7 @@ let%expect_test "Single successful rpc implementation" =
   [%expect
     {|
     (Tracing_event
-     ((event (Received Query)) (rpc (((name rpc) (version 1)))) (id 123)
+     ((event (Received Query)) (rpc ((name rpc) (version 1))) (id 123)
       (payload_bytes 34)))
     (Implementation_called "example query (id = 123)")
     |}];
@@ -84,9 +85,11 @@ let%expect_test "Single successful rpc implementation" =
   let%bind () = Scheduler.yield_until_no_jobs_remain () in
   [%expect
     {|
-    (Send (Response ((id 123) (data (Ok (Ok "example response"))))))
+    (Send
+     (Response_v2
+      ((id 123) (impl_menu_index (0)) (data (Ok (Ok "example response"))))))
     (Tracing_event
-     ((event (Sent (Response Single_succeeded))) (rpc (((name rpc) (version 1))))
+     ((event (Sent (Response Single_succeeded))) (rpc ((name rpc) (version 1)))
       (id 123) (payload_bytes 1)))
     |}];
   return ()
@@ -98,7 +101,7 @@ let%expect_test "Single successful rpc implementation, returning user-defined er
   [%expect
     {|
     (Tracing_event
-     ((event (Received Query)) (rpc (((name rpc) (version 1)))) (id 123)
+     ((event (Received Query)) (rpc ((name rpc) (version 1))) (id 123)
       (payload_bytes 34)))
     (Implementation_called "example query (id = 123)")
     |}];
@@ -106,10 +109,12 @@ let%expect_test "Single successful rpc implementation, returning user-defined er
   let%bind () = Scheduler.yield_until_no_jobs_remain () in
   [%expect
     {|
-    (Send (Response ((id 123) (data (Ok (Error "user error"))))))
+    (Send
+     (Response_v2
+      ((id 123) (impl_menu_index (0)) (data (Ok (Error "user error"))))))
     (Tracing_event
      ((event (Sent (Response Single_or_streaming_user_defined_error)))
-      (rpc (((name rpc) (version 1)))) (id 123) (payload_bytes 1)))
+      (rpc ((name rpc) (version 1))) (id 123) (payload_bytes 1)))
     |}];
   return ()
 ;;
@@ -120,19 +125,19 @@ let%expect_test "Single raising rpc implementation" =
   [%expect
     {|
     (Tracing_event
-     ((event (Received Query)) (rpc (((name rpc) (version 1)))) (id 123)
+     ((event (Received Query)) (rpc ((name rpc) (version 1))) (id 123)
       (payload_bytes 34)))
     (Implementation_called "example query (id = 123)")
     |}];
-  Backtrace.elide := true;
+  Dynamic.set_root Backtrace.elide true;
   Ivar.fill_exn rpc_response (Error (Failure "injected exn"));
   let%bind () = Scheduler.yield_until_no_jobs_remain () in
-  Backtrace.elide := false;
+  Dynamic.set_root Backtrace.elide false;
   [%expect
     {|
     (Send
-     (Response
-      ((id 123)
+     (Response_v2
+      ((id 123) (impl_menu_index (0))
        (data
         (Error
          (Uncaught_exn
@@ -142,7 +147,7 @@ let%expect_test "Single raising rpc implementation" =
              ("<backtrace elided in test>"))))))))))
     (Tracing_event
      ((event (Sent (Response Single_or_streaming_rpc_error_or_exn)))
-      (rpc (((name rpc) (version 1)))) (id 123) (payload_bytes 1)))
+      (rpc ((name rpc) (version 1))) (id 123) (payload_bytes 1)))
     |}];
   return ()
 ;;
@@ -153,22 +158,22 @@ let%expect_test "Single rpc implementation raising rpc error" =
   [%expect
     {|
     (Tracing_event
-     ((event (Received Query)) (rpc (((name rpc) (version 1)))) (id 123)
+     ((event (Received Query)) (rpc ((name rpc) (version 1))) (id 123)
       (payload_bytes 34)))
     (Implementation_called "example query (id = 123)")
     |}];
-  Backtrace.elide := true;
+  Dynamic.set_root Backtrace.elide true;
   Ivar.fill_exn
     rpc_response
     (Error
        (Async_rpc_kernel.Rpc_error.Rpc (Unknown (Atom "injected exn"), Info.createf "info")));
   let%bind () = Scheduler.yield_until_no_jobs_remain () in
-  Backtrace.elide := false;
+  Dynamic.set_root Backtrace.elide false;
   [%expect
     {|
     (Send
-     (Response
-      ((id 123)
+     (Response_v2
+      ((id 123) (impl_menu_index (0))
        (data
         (Error
          (Uncaught_exn
@@ -178,7 +183,7 @@ let%expect_test "Single rpc implementation raising rpc error" =
              ("<backtrace elided in test>"))))))))))
     (Tracing_event
      ((event (Sent (Response Single_or_streaming_rpc_error_or_exn)))
-      (rpc (((name rpc) (version 1)))) (id 123) (payload_bytes 1)))
+      (rpc ((name rpc) (version 1))) (id 123) (payload_bytes 1)))
     |}];
   return ()
 ;;
@@ -189,7 +194,7 @@ let%expect_test "Single rpc implementation fails to send once" =
   [%expect
     {|
     (Tracing_event
-     ((event (Received Query)) (rpc (((name rpc) (version 1)))) (id 123)
+     ((event (Received Query)) (rpc ((name rpc) (version 1))) (id 123)
       (payload_bytes 34)))
     (Implementation_called "example query (id = 123)")
     |}];
@@ -199,13 +204,15 @@ let%expect_test "Single rpc implementation fails to send once" =
   let%bind () = Scheduler.yield_until_no_jobs_remain () in
   [%expect
     {|
-    (Send (Response ((id 123) (data (Ok (Ok "attempted response"))))))
+    (Send
+     (Response_v2
+      ((id 123) (impl_menu_index (0)) (data (Ok (Ok "attempted response"))))))
     (Tracing_event
      ((event (Failed_to_send (Response Single_succeeded) Too_large))
-      (rpc (((name rpc) (version 1)))) (id 123) (payload_bytes 100)))
+      (rpc ((name rpc) (version 1))) (id 123) (payload_bytes 100)))
     (Send
-     (Response
-      ((id 123)
+     (Response_v2
+      ((id 123) (impl_menu_index (0))
        (data
         (Error
          (Write_error (Message_too_big ((size 100) (max_message_size 10)))))))))
@@ -219,10 +226,11 @@ let%expect_test "Single rpc implementation fails to send twice" =
   [%expect
     {|
     (Tracing_event
-     ((event (Received Query)) (rpc (((name rpc) (version 1)))) (id 123)
+     ((event (Received Query)) (rpc ((name rpc) (version 1))) (id 123)
       (payload_bytes 34)))
     (Implementation_called "example query (id = 123)")
     |}];
+  Dynamic.set_root Backtrace.elide true;
   for i = 1 to 2 do
     Mock_peer.enqueue_send_result
       t
@@ -233,23 +241,47 @@ let%expect_test "Single rpc implementation fails to send twice" =
   let%bind () = Scheduler.yield_until_no_jobs_remain () in
   [%expect
     {|
-    (Send (Response ((id 123) (data (Ok (Ok "attempted response"))))))
+    (Send
+     (Response_v2
+      ((id 123) (impl_menu_index (0)) (data (Ok (Ok "attempted response"))))))
     (Tracing_event
      ((event (Failed_to_send (Response Single_succeeded) Too_large))
-      (rpc (((name rpc) (version 1)))) (id 123) (payload_bytes 100)))
+      (rpc ((name rpc) (version 1))) (id 123) (payload_bytes 100)))
     (Send
-     (Response
-      ((id 123)
+     (Response_v2
+      ((id 123) (impl_menu_index (0))
        (data
         (Error
          (Write_error (Message_too_big ((size 100) (max_message_size 10)))))))))
+    (Send
+     (message
+      ("00000000  05 05 21 65 78 6e 20 72  61 69 73 65 64 20 69 6e  |..!exn raised in|"
+       "00000010  20 52 50 43 20 63 6f 6e  6e 65 63 74 69 6f 6e 20  | RPC connection |"
+       "00000020  6c 6f 6f 70 02 01 03 00  10 6d 6f 6e 69 74 6f 72  |loop.....monitor|"
+       "00000030  2e 6d 6c 2e 45 72 72 6f  72 01 02 00 24 46 61 69  |.ml.Error...$Fai|"
+       "00000040  6c 65 64 20 74 6f 20 73  65 6e 64 20 77 72 69 74  |led to send writ|"
+       "00000050  65 20 65 72 72 6f 72 20  74 6f 20 63 6c 69 65 6e  |e error to clien|"
+       "00000060  74 01 02 01 02 00 05 65  72 72 6f 72 01 02 00 0f  |t......error....|"
+       "00000070  4d 65 73 73 61 67 65 5f  74 6f 6f 5f 62 69 67 01  |Message_too_big.|"
+       "00000080  02 01 02 00 04 73 69 7a  65 00 03 31 30 30 01 02  |.....size..100..|"
+       "00000090  00 10 6d 61 78 5f 6d 65  73 73 61 67 65 5f 73 69  |..max_message_si|"
+       "000000a0  7a 65 00 02 31 30 01 02  00 06 72 65 61 73 6f 6e  |ze..10....reason|"
+       "000000b0  01 02 00 0f 4d 65 73 73  61 67 65 5f 74 6f 6f 5f  |....Message_too_|"
+       "000000c0  62 69 67 01 02 01 02 00  04 73 69 7a 65 00 03 32  |big......size..2|"
+       "000000d0  30 30 01 02 00 10 6d 61  78 5f 6d 65 73 73 61 67  |00....max_messag|"
+       "000000e0  65 5f 73 69 7a 65 00 02  31 30 01 02 00 1a 3c 62  |e_size..10....<b|"
+       "000000f0  61 63 6b 74 72 61 63 65  20 65 6c 69 64 65 64 20  |acktrace elided |"
+       "00000100  69 6e 20 74 65 73 74 3e  00 25 43 61 75 67 68 74  |in test>.%Caught|"
+       "00000110  20 62 79 20 6d 6f 6e 69  74 6f 72 20 52 50 43 20  | by monitor RPC |"
+       "00000120  63 6f 6e 6e 65 63 74 69  6f 6e 20 6c 6f 6f 70     |connection loop|")))
     (Close_started
-     ("exn raised in RPC connection loop"
-      (monitor.ml.Error
-       ("Failed to send write error to client"
-        ((error (Message_too_big ((size 100) (max_message_size 10))))
-         (reason (Message_too_big ((size 200) (max_message_size 10))))))
-       ("<backtrace elided in test>" "Caught by monitor RPC connection loop"))))
+     (("exn raised in RPC connection loop"
+       (monitor.ml.Error
+        ("Failed to send write error to client"
+         ((error (Message_too_big ((size 100) (max_message_size 10))))
+          (reason (Message_too_big ((size 200) (max_message_size 10))))))
+        ("<backtrace elided in test>" "Caught by monitor RPC connection loop")))
+      (connection_description <created-directly>)))
     Close_writer
     Close_reader
     Close_finished
@@ -263,7 +295,7 @@ let%expect_test "connection closed for single rpc response" =
   [%expect
     {|
     (Tracing_event
-     ((event (Received Query)) (rpc (((name rpc) (version 1)))) (id 123)
+     ((event (Received Query)) (rpc ((name rpc) (version 1))) (id 123)
       (payload_bytes 34)))
     (Implementation_called "example query (id = 123)")
     |}];
@@ -275,10 +307,12 @@ let%expect_test "connection closed for single rpc response" =
   let%bind () = Scheduler.yield_until_no_jobs_remain () in
   [%expect
     {|
-    (Send (Response ((id 123) (data (Ok (Ok "attempted response"))))))
+    (Send
+     (Response_v2
+      ((id 123) (impl_menu_index (0)) (data (Ok (Ok "attempted response"))))))
     (Tracing_event
      ((event (Failed_to_send (Response Single_succeeded) Closed))
-      (rpc (((name rpc) (version 1)))) (id 123) (payload_bytes 0)))
+      (rpc ((name rpc) (version 1))) (id 123) (payload_bytes 0)))
     |}];
   return ()
 ;;
@@ -289,7 +323,7 @@ let%expect_test "connection fully closes before single rpc response" =
   [%expect
     {|
     (Tracing_event
-     ((event (Received Query)) (rpc (((name rpc) (version 1)))) (id 123)
+     ((event (Received Query)) (rpc ((name rpc) (version 1))) (id 123)
       (payload_bytes 34)))
     (Implementation_called "example query (id = 123)")
     |}];
@@ -297,7 +331,8 @@ let%expect_test "connection fully closes before single rpc response" =
   let%bind () = Scheduler.yield_until_no_jobs_remain () in
   [%expect
     {|
-    (Close_started "EOF or connection closed")
+    (Close_started
+     ("EOF or connection closed" (connection_description <created-directly>)))
     Close_writer
     Close_reader
     Close_finished
@@ -318,7 +353,7 @@ let%expect_test "Single rpc implementation fails to send user-defined error once
   [%expect
     {|
     (Tracing_event
-     ((event (Received Query)) (rpc (((name rpc) (version 1)))) (id 123)
+     ((event (Received Query)) (rpc ((name rpc) (version 1))) (id 123)
       (payload_bytes 34)))
     (Implementation_called "example query (id = 123)")
     |}];
@@ -328,15 +363,17 @@ let%expect_test "Single rpc implementation fails to send user-defined error once
   let%bind () = Scheduler.yield_until_no_jobs_remain () in
   [%expect
     {|
-    (Send (Response ((id 123) (data (Ok (Error "user error"))))))
+    (Send
+     (Response_v2
+      ((id 123) (impl_menu_index (0)) (data (Ok (Error "user error"))))))
     (Tracing_event
      ((event
        (Failed_to_send (Response Single_or_streaming_user_defined_error)
         Too_large))
-      (rpc (((name rpc) (version 1)))) (id 123) (payload_bytes 100)))
+      (rpc ((name rpc) (version 1))) (id 123) (payload_bytes 100)))
     (Send
-     (Response
-      ((id 123)
+     (Response_v2
+      ((id 123) (impl_menu_index (0))
        (data
         (Error
          (Write_error (Message_too_big ((size 100) (max_message_size 10)))))))))
@@ -350,10 +387,11 @@ let%expect_test "Single rpc implementation fails to send twice" =
   [%expect
     {|
     (Tracing_event
-     ((event (Received Query)) (rpc (((name rpc) (version 1)))) (id 123)
+     ((event (Received Query)) (rpc ((name rpc) (version 1))) (id 123)
       (payload_bytes 34)))
     (Implementation_called "example query (id = 123)")
     |}];
+  Dynamic.set_root Backtrace.elide true;
   for i = 1 to 2 do
     Mock_peer.enqueue_send_result
       t
@@ -364,25 +402,49 @@ let%expect_test "Single rpc implementation fails to send twice" =
   let%bind () = Scheduler.yield_until_no_jobs_remain () in
   [%expect
     {|
-    (Send (Response ((id 123) (data (Ok (Error "user error"))))))
+    (Send
+     (Response_v2
+      ((id 123) (impl_menu_index (0)) (data (Ok (Error "user error"))))))
     (Tracing_event
      ((event
        (Failed_to_send (Response Single_or_streaming_user_defined_error)
         Too_large))
-      (rpc (((name rpc) (version 1)))) (id 123) (payload_bytes 100)))
+      (rpc ((name rpc) (version 1))) (id 123) (payload_bytes 100)))
     (Send
-     (Response
-      ((id 123)
+     (Response_v2
+      ((id 123) (impl_menu_index (0))
        (data
         (Error
          (Write_error (Message_too_big ((size 100) (max_message_size 10)))))))))
+    (Send
+     (message
+      ("00000000  05 05 21 65 78 6e 20 72  61 69 73 65 64 20 69 6e  |..!exn raised in|"
+       "00000010  20 52 50 43 20 63 6f 6e  6e 65 63 74 69 6f 6e 20  | RPC connection |"
+       "00000020  6c 6f 6f 70 02 01 03 00  10 6d 6f 6e 69 74 6f 72  |loop.....monitor|"
+       "00000030  2e 6d 6c 2e 45 72 72 6f  72 01 02 00 24 46 61 69  |.ml.Error...$Fai|"
+       "00000040  6c 65 64 20 74 6f 20 73  65 6e 64 20 77 72 69 74  |led to send writ|"
+       "00000050  65 20 65 72 72 6f 72 20  74 6f 20 63 6c 69 65 6e  |e error to clien|"
+       "00000060  74 01 02 01 02 00 05 65  72 72 6f 72 01 02 00 0f  |t......error....|"
+       "00000070  4d 65 73 73 61 67 65 5f  74 6f 6f 5f 62 69 67 01  |Message_too_big.|"
+       "00000080  02 01 02 00 04 73 69 7a  65 00 03 31 30 30 01 02  |.....size..100..|"
+       "00000090  00 10 6d 61 78 5f 6d 65  73 73 61 67 65 5f 73 69  |..max_message_si|"
+       "000000a0  7a 65 00 02 31 30 01 02  00 06 72 65 61 73 6f 6e  |ze..10....reason|"
+       "000000b0  01 02 00 0f 4d 65 73 73  61 67 65 5f 74 6f 6f 5f  |....Message_too_|"
+       "000000c0  62 69 67 01 02 01 02 00  04 73 69 7a 65 00 03 32  |big......size..2|"
+       "000000d0  30 30 01 02 00 10 6d 61  78 5f 6d 65 73 73 61 67  |00....max_messag|"
+       "000000e0  65 5f 73 69 7a 65 00 02  31 30 01 02 00 1a 3c 62  |e_size..10....<b|"
+       "000000f0  61 63 6b 74 72 61 63 65  20 65 6c 69 64 65 64 20  |acktrace elided |"
+       "00000100  69 6e 20 74 65 73 74 3e  00 25 43 61 75 67 68 74  |in test>.%Caught|"
+       "00000110  20 62 79 20 6d 6f 6e 69  74 6f 72 20 52 50 43 20  | by monitor RPC |"
+       "00000120  63 6f 6e 6e 65 63 74 69  6f 6e 20 6c 6f 6f 70     |connection loop|")))
     (Close_started
-     ("exn raised in RPC connection loop"
-      (monitor.ml.Error
-       ("Failed to send write error to client"
-        ((error (Message_too_big ((size 100) (max_message_size 10))))
-         (reason (Message_too_big ((size 200) (max_message_size 10))))))
-       ("<backtrace elided in test>" "Caught by monitor RPC connection loop"))))
+     (("exn raised in RPC connection loop"
+       (monitor.ml.Error
+        ("Failed to send write error to client"
+         ((error (Message_too_big ((size 100) (max_message_size 10))))
+          (reason (Message_too_big ((size 200) (max_message_size 10))))))
+        ("<backtrace elided in test>" "Caught by monitor RPC connection loop")))
+      (connection_description <created-directly>)))
     Close_writer
     Close_reader
     Close_finished
@@ -397,11 +459,11 @@ let%expect_test "two rpcs in one batch" =
   [%expect
     {|
     (Tracing_event
-     ((event (Received Query)) (rpc (((name rpc) (version 1)))) (id 25)
+     ((event (Received Query)) (rpc ((name rpc) (version 1))) (id 25)
       (payload_bytes 33)))
     (Implementation_called "example query (id = 25)")
     (Tracing_event
-     ((event (Received Query)) (rpc (((name rpc) (version 1)))) (id 75)
+     ((event (Received Query)) (rpc ((name rpc) (version 1))) (id 75)
       (payload_bytes 33)))
     (Implementation_called "example query (id = 75)")
     |}];
@@ -410,13 +472,17 @@ let%expect_test "two rpcs in one batch" =
   let%bind () = Scheduler.yield_until_no_jobs_remain () in
   [%expect
     {|
-    (Send (Response ((id 75) (data (Ok (Error "example error 2"))))))
+    (Send
+     (Response_v2
+      ((id 75) (impl_menu_index (0)) (data (Ok (Error "example error 2"))))))
     (Tracing_event
      ((event (Sent (Response Single_or_streaming_user_defined_error)))
-      (rpc (((name rpc) (version 1)))) (id 75) (payload_bytes 1)))
-    (Send (Response ((id 25) (data (Ok (Ok "example response 1"))))))
+      (rpc ((name rpc) (version 1))) (id 75) (payload_bytes 1)))
+    (Send
+     (Response_v2
+      ((id 25) (impl_menu_index (0)) (data (Ok (Ok "example response 1"))))))
     (Tracing_event
-     ((event (Sent (Response Single_succeeded))) (rpc (((name rpc) (version 1))))
+     ((event (Sent (Response Single_succeeded))) (rpc ((name rpc) (version 1)))
       (id 25) (payload_bytes 1)))
     |}];
   return ()
@@ -431,21 +497,25 @@ let%expect_test "two immediately-returning rpcs in one batch" =
   [%expect
     {|
     (Tracing_event
-     ((event (Received Query)) (rpc (((name rpc) (version 1)))) (id 25)
+     ((event (Received Query)) (rpc ((name rpc) (version 1))) (id 25)
       (payload_bytes 33)))
     (Implementation_called "example query (id = 25)")
-    (Send (Response ((id 25) (data (Ok (Ok "example response 1"))))))
+    (Send
+     (Response_v2
+      ((id 25) (impl_menu_index (0)) (data (Ok (Ok "example response 1"))))))
     (Tracing_event
-     ((event (Sent (Response Single_succeeded))) (rpc (((name rpc) (version 1))))
+     ((event (Sent (Response Single_succeeded))) (rpc ((name rpc) (version 1)))
       (id 25) (payload_bytes 1)))
     (Tracing_event
-     ((event (Received Query)) (rpc (((name rpc) (version 1)))) (id 75)
+     ((event (Received Query)) (rpc ((name rpc) (version 1))) (id 75)
       (payload_bytes 33)))
     (Implementation_called "example query (id = 75)")
-    (Send (Response ((id 75) (data (Ok (Error "example error 2"))))))
+    (Send
+     (Response_v2
+      ((id 75) (impl_menu_index (0)) (data (Ok (Error "example error 2"))))))
     (Tracing_event
      ((event (Sent (Response Single_or_streaming_user_defined_error)))
-      (rpc (((name rpc) (version 1)))) (id 75) (payload_bytes 1)))
+      (rpc ((name rpc) (version 1))) (id 75) (payload_bytes 1)))
     |}];
   let%bind () = Scheduler.yield_until_no_jobs_remain () in
   [%expect {| |}];
@@ -454,7 +524,7 @@ let%expect_test "two immediately-returning rpcs in one batch" =
 
 let%expect_test "recognising errors in responses" =
   let test bin_response sexp_of_response include_in_error_count response =
-    Backtrace.elide := true;
+    Dynamic.set_root Backtrace.elide true;
     let response1, (_response2 : (_, exn) Result.t Ivar.t), implementations =
       rpc' ~print_impl:false ~bin_response ~include_in_error_count sexp_of_response
     in
@@ -480,9 +550,11 @@ let%expect_test "recognising errors in responses" =
             bs
         in
         (match data with
-         | Response { id = _; data = Ok x } ->
+         | Response_v1 { id = _; data = Ok x }
+         | Response_v2 { id = _; impl_menu_index = _; data = Ok x } ->
            print_part (Sexp.to_string [%message "sent" ~_:(x : response)])
-         | Response { id = _; data = Error (Uncaught_exn _) } ->
+         | Response_v1 { id = _; data = Error (Uncaught_exn _) }
+         | Response_v2 { id = _; impl_menu_index = _; data = Error (Uncaught_exn _) } ->
            print_part "sent Uncaught_exn"
          | data ->
            print_endline "";
@@ -492,7 +564,7 @@ let%expect_test "recognising errors in responses" =
         print_s [%message "unexpected event" ~_:(e : Mock_peer.Event.t)]);
     write_query t;
     let%map () = Scheduler.yield_until_no_jobs_remain () in
-    Backtrace.elide := false
+    Dynamic.set_root Backtrace.elide false
   in
   let f e = test [%bin_type_class: string] [%sexp_of: string] e in
   let%bind () = f Only_on_exn (`Return "x") in
@@ -639,21 +711,22 @@ let%expect_test "connection closes before response received" =
   let result = Async_rpc_kernel.Rpc.Rpc.dispatch' regular conn "query" in
   [%expect
     {|
-    (Send (Query ((tag rpc) (version 1) (id 1) (metadata ()) (data query))))
+    (Send (Query_v2 ((tag rpc) (version 1) (id 1) (metadata ()) (data query))))
     (Tracing_event
-     ((event (Sent Query)) (rpc (((name rpc) (version 1)))) (id 1)
+     ((event (Sent Query)) (rpc ((name rpc) (version 1))) (id 1)
       (payload_bytes 1)))
     |}];
   Mock_peer.close_reader t;
   let%bind () = Scheduler.yield_until_no_jobs_remain () in
   [%expect
     {|
-    (Close_started "EOF or connection closed")
+    (Close_started
+     ("EOF or connection closed" (connection_description <created-directly>)))
     Close_writer
     Close_reader
     Close_finished
     |}];
-  let%bind result = result in
+  let%bind result in
   print_s ([%sexp_of: unit Protocol.Rpc_result.t] result);
   [%expect {| (Error Connection_closed) |}];
   return ()
@@ -666,24 +739,25 @@ let%expect_test "expert unknown rpc handler" =
       ~on_unknown_rpc:
         (`Expert
           (fun (_ : Mock_peer.t)
-               ~rpc_tag
-               ~version
-               ~metadata
-               responder
-               bs
-               ~pos
-               ~len:(_ : int) ->
+            ~rpc_tag
+            ~version
+            ~metadata
+            responder
+            bs
+            ~pos
+            ~len:(_ : int) ->
             print_s
               [%message
                 "Unknown rpc"
                   ~rpc_tag
                   (version : int)
-                  (metadata : string option)
+                  (metadata : Async_rpc_kernel.Rpc_metadata.V1.t option)
                   ~data:([%bin_read: string] bs ~pos_ref:(ref pos))];
             Rpc.Rpc.Expert.Responder.write_error
               responder
               (Error.create_s [%message "example error"]);
             return ()))
+      ~on_exception:Log_on_background_exn
   in
   let%bind t = Mock_peer.create_and_connect' ~implementations default_config in
   Mock_peer.expect_message t [%bin_reader: Nothing.t] [%sexp_of: Nothing.t];
@@ -691,40 +765,40 @@ let%expect_test "expert unknown rpc handler" =
   [%expect
     {|
     (Tracing_event
-     ((event (Received Query)) (rpc (((name rpc) (version 1)))) (id 123)
+     ((event (Received Query)) (rpc ((name rpc) (version 1))) (id 123)
       (payload_bytes 34)))
     ("Unknown rpc" (rpc_tag rpc) (version 1) (metadata ())
      (data "example query (id = 123)"))
     (Send
-     (Response
-      ((id 123)
+     (Response_v2
+      ((id 123) (impl_menu_index ())
        (data
         (Error
          (Uncaught_exn
           ((location "server-side raw rpc computation") (exn "example error"))))))))
     (Tracing_event
      ((event (Sent (Response Expert_single_succeeded_or_failed)))
-      (rpc (((name rpc) (version 1)))) (id 123) (payload_bytes 0)))
+      (rpc ((name rpc) (version 1))) (id 123) (payload_bytes 0)))
     |}];
   Mock_peer.expect_message t [%bin_reader: Nothing.t] [%sexp_of: Nothing.t];
-  write_query ~metadata:"example metadata" t;
+  write_query ~metadata:(Async_rpc_kernel.Rpc_metadata.V1.of_string "example metadata") t;
   [%expect
     {|
     (Tracing_event
-     ((event (Received Query)) (rpc (((name rpc) (version 1)))) (id 123)
+     ((event (Received Query)) (rpc ((name rpc) (version 1))) (id 123)
       (payload_bytes 51)))
     ("Unknown rpc" (rpc_tag rpc) (version 1) (metadata ("example metadata"))
      (data "example query (id = 123)"))
     (Send
-     (Response
-      ((id 123)
+     (Response_v2
+      ((id 123) (impl_menu_index ())
        (data
         (Error
          (Uncaught_exn
           ((location "server-side raw rpc computation") (exn "example error"))))))))
     (Tracing_event
      ((event (Sent (Response Expert_single_succeeded_or_failed)))
-      (rpc (((name rpc) (version 1)))) (id 123) (payload_bytes 0)))
+      (rpc ((name rpc) (version 1))) (id 123) (payload_bytes 0)))
     |}];
   return ()
 ;;

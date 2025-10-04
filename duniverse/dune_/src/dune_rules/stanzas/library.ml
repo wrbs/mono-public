@@ -187,7 +187,7 @@ let decode =
      and+ melange_runtime_deps =
        field
          "melange.runtime_deps"
-         (Dune_lang.Syntax.since Melange_stanzas.syntax (0, 1)
+         (Dune_lang.Syntax.since Dune_lang.Melange.syntax (0, 1)
           >>> located (repeat Dep_conf.decode))
          ~default:(stanza_loc, [])
      in
@@ -409,11 +409,12 @@ let to_lib_id ~src_dir t =
 ;;
 
 let to_lib_info
-  conf
-  ~expander
-  ~dir
-  ~lib_config:
-    ({ Lib_config.has_native; ext_lib; ext_dll; natdynlink_supported; _ } as lib_config)
+      conf
+      ~expander
+      ~dir
+      ~lib_config:
+        ({ Lib_config.has_native; ext_lib; ext_dll; natdynlink_supported; _ } as
+         lib_config)
   =
   let open Memo.O in
   let obj_dir = obj_dir ~dir conf in
@@ -426,14 +427,20 @@ let to_lib_info
     Mode.Dict.of_func (fun ~mode -> archive_for_mode ~f_ext ~mode |> Option.to_list)
   in
   let jsoo_runtime =
-    List.map conf.buildable.js_of_ocaml.javascript_files ~f:(Path.Build.relative dir)
+    let in_buildable = conf.buildable.js_of_ocaml.js in
+    List.map in_buildable.javascript_files ~f:(Path.Build.relative dir)
+  in
+  let wasmoo_runtime =
+    let in_buildable = conf.buildable.js_of_ocaml.wasm in
+    List.map in_buildable.javascript_files ~f:(Path.Build.relative dir)
+    @ List.map in_buildable.wasm_files ~f:(Path.Build.relative dir)
   in
   let status =
     match conf.visibility with
     | Private pkg -> Lib_info.Status.Private (conf.project, pkg)
     | Public p -> Public (conf.project, p.package)
   in
-  let virtual_library = is_virtual conf in
+  let virtual_ = is_virtual conf in
   let foreign_archives =
     let init =
       Mode.Map.Multi.create_for_all_modes
@@ -449,21 +456,20 @@ let to_lib_info
   in
   let native_archives =
     let archive = archive ext_lib in
-    if virtual_library || not modes.ocaml.native
+    if virtual_ || not modes.ocaml.native
     then Lib_info.Files []
-    else if Option.is_some conf.implements
-            || (Lib_config.linker_can_create_empty_archives lib_config
-                && Ocaml.Version.ocamlopt_always_calls_library_linker
-                     lib_config.ocaml_version)
+    else if
+      Option.is_some conf.implements
+      || (Lib_config.linker_can_create_empty_archives lib_config
+          && Ocaml.Version.ocamlopt_always_calls_library_linker lib_config.ocaml_version)
     then Lib_info.Files [ archive ]
     else Lib_info.Needs_module_info archive
   in
   let foreign_dll_files = foreign_dll_files conf ~dir ~ext_dll in
   let exit_module = Option.bind conf.stdlib ~f:(fun x -> x.exit_module) in
-  let virtual_ = Option.map conf.virtual_modules ~f:(fun _ -> Lib_info.Source.Local) in
   let foreign_objects = Lib_info.Source.Local in
   let archives, plugins =
-    if virtual_library
+    if virtual_
     then Mode.Dict.make_both [], Mode.Dict.make_both []
     else (
       let plugins =
@@ -566,6 +572,7 @@ let to_lib_info
     ~native_archives
     ~foreign_dll_files
     ~jsoo_runtime
+    ~wasmoo_runtime
     ~preprocess
     ~enabled
     ~virtual_deps

@@ -3,8 +3,7 @@
     allowing older logs to be read by the new code.
 
     If you make a new version you must add a version to the Version module below and
-    should follow the Make_versioned_serializable pattern.
-*)
+    should follow the Make_versioned_serializable pattern. *)
 module Stable = struct
   open Core.Core_stable
 
@@ -33,15 +32,16 @@ module Stable = struct
 
     module V2 = struct
       include Versioned.Stable.Make (struct
-        type 'time t = ('time, Sexp_or_string.Stable.V1.t) T2.t [@@deriving bin_io, sexp]
+          type 'time t = ('time, Sexp_or_string.Stable.V1.t) T2.t
+          [@@deriving bin_io, sexp]
 
-        let%expect_test "bin_digest Message.V2" =
-          print_endline [%bin_digest: unit t];
-          [%expect {| 26b02919ac3971aaace97169310e9d15 |}]
-        ;;
+          let%expect_test "bin_digest Message.V2" =
+            print_endline [%bin_digest: unit t];
+            [%expect {| 26b02919ac3971aaace97169310e9d15 |}]
+          ;;
 
-        let version = Versioned.Stable.Version.V2
-      end)
+          let version = Versioned.Stable.Version.V2
+        end)
 
       let of_v0 = T2.map_message ~f:(fun m -> `String m)
       let to_v0 = T2.map_message ~f:Sexp_or_string.Stable.V1.to_string

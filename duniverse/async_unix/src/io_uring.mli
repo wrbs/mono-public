@@ -17,14 +17,14 @@ val read
   -> Bigstring.t
   -> (int, Exn.t) Result.t Deferred.t
 
-val read_file_descr
+val read_file_descr_or_unix_error
   :  t
   -> ?file_offset:int
   -> File_descr.t
   -> ?off:int
   -> ?len:int
   -> Bigstring.t
-  -> (int, Exn.t) Result.t Deferred.t
+  -> (int, Unix.Error.t) Result.t Deferred.t
 
 val write
   :  t
@@ -85,6 +85,12 @@ val stat
   -> string
   -> (Io_uring_raw.Statx.t, Exn.t) Result.t Deferred.t
 
+val stat_or_unix_error
+  :  t
+  -> ?mask:Io_uring_raw.Statx.Mask.t
+  -> string
+  -> (Io_uring_raw.Statx.t, Unix.Error.t) Result.t Deferred.t
+
 val fstat
   :  t
   -> ?mask:Io_uring_raw.Statx.Mask.t
@@ -96,5 +102,11 @@ val lstat
   -> ?mask:Io_uring_raw.Statx.Mask.t
   -> string
   -> (Io_uring_raw.Statx.t, Exn.t) Result.t Deferred.t
+
+val lstat_or_unix_error
+  :  t
+  -> ?mask:Io_uring_raw.Statx.Mask.t
+  -> string
+  -> (Io_uring_raw.Statx.t, Unix.Error.t) Result.t Deferred.t
 
 val the_one_and_only : unit -> t option

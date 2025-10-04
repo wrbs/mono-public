@@ -2,36 +2,28 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    ocamllsp = {
-      url = "git+https://github.com/ocaml/ocaml-lsp?submodules=1";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.flake-utils.follows = "flake-utils";
-    };
     melange = {
-      # branch v4-414-for-dune
-      url = "github:melange-re/melange?rev=ab48cfcfe5f2c0ca4a4a4fcafceb73b95c2acb1d";
+      url = "github:melange-re/melange/refs/tags/5.1.0-53";
       inputs.nixpkgs.follows = "nixpkgs";
-      inputs.flake-utils.follows = "flake-utils";
     };
     ocaml-overlays = {
       url = "github:nix-ocaml/nix-overlays";
       inputs.nixpkgs.follows = "nixpkgs";
-      inputs.flake-utils.follows = "flake-utils";
     };
   };
   outputs =
     { self
     , flake-utils
     , nixpkgs
-    , ocamllsp
     , melange
     , ocaml-overlays
     }:
     flake-utils.lib.eachDefaultSystem (system:
     let
       pkgs = nixpkgs.legacyPackages.${system}.appendOverlays [
+        ocaml-overlays.overlays.default
         (self: super: {
-          ocamlPackages = super.ocaml-ng.ocamlPackages_4_14.overrideScope (oself: osuper: {
+          ocamlPackages = super.ocaml-ng.ocamlPackages_5_3.overrideScope (oself: osuper: {
             mdx = osuper.mdx.override {
               logs = oself.logs;
             };
@@ -41,10 +33,14 @@
           });
         })
         melange.overlays.default
-        ocamllsp.overlays.default
+        (self: super: {
+          coq_8_16_native = super.coq_8_16.overrideAttrs (a: {
+            configureFlags = [ "-native-compiler" "yes" ];
+          });
+        })
       ];
       dune-static-overlay = self: super: {
-        ocamlPackages = super.ocaml-ng.ocamlPackages_4_14.overrideScope (oself: osuper: {
+        ocamlPackages = super.ocaml-ng.ocamlPackages_5_3.overrideScope (oself: osuper: {
           dune_3 = osuper.dune_3.overrideAttrs (a: {
             src = ./.;
             preBuild = "ocaml boot/bootstrap.ml --static";
@@ -55,6 +51,15 @@
         ocaml-overlays.overlays.default
         dune-static-overlay
       ];
+
+      add-experimental-configure-flags = pkg: pkg.overrideAttrs {
+        configureFlags =
+          [
+            "--pkg-build-progress" "enable"
+            "--lock-dev-tool" "enable"
+            "--portable-lock-dir" "enable"
+          ];
+      };
 
       ocamlformat =
         let
@@ -73,9 +78,22 @@
         builtins.getAttr ("ocamlformat_" + ocamlformat_version) pkgs;
 
       testBuildInputs = with pkgs;
-        [ file mercurial ]
+        [ file mercurial unzip ]
         ++ lib.optionals stdenv.isLinux [ strace ];
-      testNativeBuildInputs = with pkgs; [ nodejs-slim pkg-config opam ocamlformat ];
+      testNativeBuildInputs = pkgs: with pkgs; [
+        nodejs-slim
+        pkg-config
+        opam
+        ocamlformat
+      ];
+
+      docInputs = with pkgs.python3.pkgs; [
+        sphinx-autobuild
+        furo
+        sphinx-copybutton
+        sphinx-design
+        myst-parser
+      ];
     in
     {
       formatter = pkgs.nixpkgs-fmt;
@@ -83,8 +101,25 @@
       packages = {
         default = with pkgs; stdenv.mkDerivation {
           pname = "dune";
-          version = "n/a";
-          src = ./.;
+          version = "3.x-n/a";
+          src =
+            let fs = lib.fileset; in
+            fs.toSource {
+              root = ./.;
+              fileset = fs.unions [
+                ./bin
+                ./boot
+                ./configure
+                ./dune-project
+                ./dune-file
+                ./src
+                ./plugin
+                ./vendor
+                ./otherlibs
+                ./Makefile
+                (fs.fileFilter (file: file.hasExt "opam" || file.hasExt "template") ./.)
+              ];
+            };
           nativeBuildInputs = with ocamlPackages; [ ocaml findlib ];
           buildInputs = lib.optionals stdenv.isDarwin [
             darwin.apple_sdk.frameworks.CoreServices
@@ -98,12 +133,15 @@
         };
         dune = self.packages.${system}.default;
         dune-static = pkgs-static.pkgsCross.musl64.ocamlPackages.dune;
+        dune-experimental = add-experimental-configure-flags self.packages.${system}.dune;
+        dune-static-experimental = add-experimental-configure-flags self.packages.${system}.dune-static;
       };
 
       devShells =
         let
+          INSIDE_NIX = "true";
           makeDuneDevShell =
-            { extraBuildInputs ? [ ]
+            { extraBuildInputs ? (pkgs: [ ])
             , meta ? null
             , duneFromScope ? false
             }:
@@ -118,14 +156,8 @@
                     })
                 else pkgs;
 
-              inherit (pkgs') writeScriptBin stdenv lib;
+              inherit (pkgs') writeScriptBin stdenv;
 
-              docInputs = with pkgs'.python3.pkgs; [
-                sphinx-autobuild
-                sphinx_rtd_theme
-                sphinx-copybutton
-                sphinx-design
-              ];
               duneScript =
                 writeScriptBin "dune" ''
                   #!${stdenv.shell}
@@ -138,13 +170,16 @@
                 export DUNE_SOURCE_ROOT=$PWD
               '';
               inherit meta;
-              nativeBuildInputs = testNativeBuildInputs
+              nativeBuildInputs = (testNativeBuildInputs pkgs')
                 ++ docInputs
                 ++ [ duneScript ];
               inputsFrom = [ pkgs'.ocamlPackages.dune_3 ];
               buildInputs = testBuildInputs ++ (with pkgs'.ocamlPackages; [
+                ocaml-lsp
                 merlin
+                ocaml-index
                 ppx_expect
+                spawn
                 ctypes
                 integers
                 mdx
@@ -153,21 +188,15 @@
                 odoc
                 lwt
                 patdiff
-              ] ++ extraBuildInputs);
+              ] ++ (extraBuildInputs pkgs'));
+              inherit INSIDE_NIX;
             };
         in
         {
           doc =
             pkgs.mkShell {
-              buildInputs = (with pkgs;
-                [
-                  sphinx
-                  sphinx-autobuild
-                  python310Packages.sphinx-copybutton
-                  python310Packages.sphinx-rtd-theme
-                  python310Packages.sphinx-design
-                ]
-              );
+              inherit INSIDE_NIX;
+              buildInputs = docInputs;
               meta.description = ''
                 Provides a shell environment suitable for building the Dune
                 documentation website (e.g. `make doc`).
@@ -176,6 +205,7 @@
 
           fmt =
             pkgs.mkShell {
+              inherit INSIDE_NIX;
               nativeBuildInputs = [ ocamlformat ];
               inputsFrom = [ pkgs.dune_3 ];
               meta.description = ''
@@ -191,7 +221,7 @@
             '';
           };
           slim-melange = makeDuneDevShell {
-            extraBuildInputs = [
+            extraBuildInputs = pkgs: [
               pkgs.ocamlPackages.melange
             ];
             meta.description = ''
@@ -200,7 +230,8 @@
             '';
           };
           slim-opam = with pkgs; mkShell {
-            nativeBuildInputs = lib.remove pkgs.ocamlformat testNativeBuildInputs;
+            inherit INSIDE_NIX;
+            nativeBuildInputs = lib.remove pkgs.ocamlformat (testNativeBuildInputs pkgs);
             buildInputs = lib.optionals stdenv.isDarwin [
               darwin.apple_sdk.frameworks.CoreServices
             ];
@@ -212,17 +243,28 @@
 
           coq =
             pkgs.mkShell {
-              nativeBuildInputs = testNativeBuildInputs;
-              inputsFrom = [ pkgs.dune_3 ];
+              inherit INSIDE_NIX;
+              nativeBuildInputs = (testNativeBuildInputs pkgs);
+              # Coq requires OCaml 4.x
+              inputsFrom = [ pkgs.ocaml-ng.ocamlPackages_4_14.dune_3 ];
               buildInputs = with pkgs; [
-                coq_8_16
-                coq_8_16.ocamlPackages.findlib
+                coq_8_16_native
+                coq_8_16_native.ocamlPackages.findlib
               ];
               meta.description = ''
                 Provides a minimal shell environment built purely from nixpkgs
                 that can build Dune and the Coq testsuite.
               '';
             };
+          microbench = makeDuneDevShell {
+            extraBuildInputs = pkgs: [
+              pkgs.ocamlPackages.core_bench
+            ];
+            meta.description = ''
+              Provides a minimal shell environment that can build the
+              microbenchmarks.
+            '';
+          };
 
           scope = makeDuneDevShell {
             duneFromScope = true;
@@ -234,9 +276,14 @@
           };
           default =
             makeDuneDevShell {
-              extraBuildInputs = (with pkgs; [
+              extraBuildInputs = pkgs: (with pkgs; [
                 # dev tools
                 ccls
+                # test dependencies
+                git
+                which
+                curl
+                procps
               ]) ++ (with pkgs.ocamlPackages; [
                 pkgs.ocamlPackages.ocaml-lsp
                 pkgs.ocamlPackages.melange

@@ -54,14 +54,14 @@ module Kind = struct
   let infer_using_uring_stat file_descr uring =
     let statx_buffer = Io_uring_raw.Statx.create () in
     match%map
-      Io_uring_raw.statx
-        uring
-        ~fd:file_descr
-        ~mask:Io_uring_raw.Statx.Mask.type'
-        ""
-        statx_buffer
-        Io_uring_raw.Statx.Flags.empty_path
-      |> Io_uring_raw.syscall_result
+      Io_uring_raw.syscall_result_retry_on_ECANCELED (fun () ->
+        Io_uring_raw.statx
+          uring
+          ~fd:file_descr
+          ~mask:Io_uring_raw.Statx.Mask.type'
+          ""
+          statx_buffer
+          Io_uring_raw.Statx.Flags.empty_path)
     with
     | Ok res ->
       assert (res = 0);
@@ -136,18 +136,19 @@ module Close = struct
   let close_syscall file_descr =
     match Io_uring_raw_singleton.the_one_and_only () with
     | Some uring ->
-      Io_uring_raw.syscall_result (Io_uring_raw.close uring file_descr)
+      Io_uring_raw.syscall_result_retry_on_ECANCELED (fun () ->
+        Io_uring_raw.close uring file_descr)
       >>| (function
-      | Error err ->
-        raise
-          (Unix.Unix_error
-             ( err
-             , "close"
-             , Core_unix.Private.sexp_to_string_hum
-                 [%sexp { fd : File_descr.t = file_descr }] ))
-      | Ok result ->
-        assert (result = 0);
-        ())
+       | Error err ->
+         raise
+           (Unix.Unix_error
+              ( err
+              , "close"
+              , Core_unix.Private.sexp_to_string_hum
+                  [%sexp { fd : File_descr.t = file_descr }] ))
+       | Ok result ->
+         assert (result = 0);
+         ())
     | None -> In_thread.syscall_exn ~name:"close" (fun () -> Unix.close file_descr)
   ;;
 
@@ -266,15 +267,15 @@ let stop_watching_upon_interrupt t read_or_write ivar ~interrupt =
        ; choice (Ivar.read ivar) (fun _ -> `Not_interrupted)
        ])
     (function
-     | `Not_interrupted -> ()
-     | `Interrupted ->
-       if Ivar.is_empty ivar
-       then
-         Scheduler.request_stop_watching
-           (the_one_and_only ())
-           t
-           read_or_write
-           `Interrupted)
+      | `Not_interrupted -> ()
+      | `Interrupted ->
+        if Ivar.is_empty ivar
+        then
+          Scheduler.request_stop_watching
+            (the_one_and_only ())
+            t
+            read_or_write
+            `Interrupted)
 ;;
 
 let interruptible_ready_to t read_or_write ~interrupt =
@@ -318,13 +319,19 @@ let interruptible_every_ready_to t read_or_write ~interrupt f x =
       (t, read_or_write)
       [%sexp_of: t * Read_write_pair.Key.t];
   let job = Scheduler.(create_job (t ())) f x in
-  let finished = Ivar.create () in
-  match start_watching t read_or_write (Watch_repeatedly (job, finished)) with
+  let finished_ivar = Ivar.create () in
+  match
+    start_watching
+      t
+      read_or_write
+      (Watch_repeatedly { job; finished_ivar; pending = (fun () -> true) })
+  with
   | `Already_closed -> return `Closed
   | `Unsupported -> return `Unsupported
   | `Watching ->
-    stop_watching_upon_interrupt t read_or_write finished ~interrupt;
-    (Ivar.read finished :> [ `Bad_fd | `Closed | `Unsupported | `Interrupted ] Deferred.t)
+    stop_watching_upon_interrupt t read_or_write finished_ivar ~interrupt;
+    (Ivar.read finished_ivar
+      :> [ `Bad_fd | `Closed | `Unsupported | `Interrupted ] Deferred.t)
 ;;
 
 let every_ready_to t read_or_write f x =
@@ -332,12 +339,17 @@ let every_ready_to t read_or_write f x =
   then
     Debug.log "Fd.every_ready_to" (t, read_or_write) [%sexp_of: t * Read_write_pair.Key.t];
   let job = Scheduler.(create_job (t ())) f x in
-  let finished = Ivar.create () in
-  match start_watching t read_or_write (Watch_repeatedly (job, finished)) with
+  let finished_ivar = Ivar.create () in
+  match
+    start_watching
+      t
+      read_or_write
+      (Watch_repeatedly { job; finished_ivar; pending = (fun () -> true) })
+  with
   | `Already_closed -> return `Closed
   | `Unsupported -> return `Unsupported
   | `Watching ->
-    (match%map Ivar.read finished with
+    (match%map Ivar.read finished_ivar with
      | (`Unsupported | `Bad_fd | `Closed) as x -> x
      | `Interrupted -> (* impossible *) assert false)
 ;;
@@ -418,12 +430,12 @@ module Private = struct
     else (
       t.kind <- kind;
       t.info
-        <- (match info with
-            | `Set i -> i
-            | `Extend i ->
-              Info.create
-                "replaced"
-                (i, `previously_was t.info)
-                [%sexp_of: Info.t * [ `previously_was of Info.t ]]))
+      <- (match info with
+          | `Set i -> i
+          | `Extend i ->
+            Info.create
+              "replaced"
+              (i, `previously_was t.info)
+              [%sexp_of: Info.t * [ `previously_was of Info.t ]]))
   ;;
 end

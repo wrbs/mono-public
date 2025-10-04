@@ -1,6 +1,6 @@
 (*---------------------------------------------------------------------------
    Copyright (c) 2011 The cmdliner programmers. All rights reserved.
-   Distributed under the ISC license, see terms at the end of the file.
+   SPDX-License-Identifier: ISC
   ---------------------------------------------------------------------------*)
 
 (** Declarative definition of command line interfaces.
@@ -183,6 +183,21 @@ module Term : sig
 
   val app : ('a -> 'b) t -> 'a t -> 'b t
   (** [app] is {!($)}. *)
+
+  val map : ('a -> 'b) -> 'a t -> 'b t
+  (** [map f t] is [app (const f) t]. *)
+
+  val product : 'a t -> 'b t  -> ('a * 'b) t
+  (** [product t0 t1] is [app (app (map (fun x y -> (x, y)) t0) t1)] *)
+
+  (** [let] operators. *)
+  module Syntax : sig
+    val ( let+ ) : 'a t -> ('a -> 'b) -> 'b t
+    (** [( let+ )] is {!map}. *)
+
+    val ( and+ ) : 'a t -> 'b t -> ('a * 'b) t
+    (** [( and* )] is {!product}. *)
+  end
 
   (** {1 Interacting with Cmdliner's evaluation} *)
 
@@ -726,6 +741,10 @@ module Cmd : sig
   | `Exn (** An uncaught exception occurred. *) ]
   (** The type for erroring evaluation results. *)
 
+  type 'a eval_exit =
+  [ `Ok of 'a (** The term of the command evaluated to this value. *)
+  | `Exit of Exit.code (** The evaluation wants to exit with this code. *) ]
+
   val eval_value :
     ?help:Format.formatter -> ?err:Format.formatter -> ?catch:bool ->
     ?env:(string -> string option) -> ?argv:string array -> 'a t ->
@@ -743,6 +762,15 @@ module Cmd : sig
          (defaults to {!Format.std_formatter})}
       {- [err] is the formatter used to print error messages
          (defaults to {!Format.err_formatter}).}} *)
+
+  val eval_value' :
+    ?help:Format.formatter -> ?err:Format.formatter -> ?catch:bool ->
+    ?env:(string -> string option) -> ?argv:string array -> ?term_err:int ->
+    'a t -> 'a eval_exit
+  (** [eval_value'] is like {!eval_value}, but if the command term
+      does not evaluate, returns an exit code like the
+      {{!eval}evaluation} function do (which can be {!Exit.ok} in case
+      help or version was requested). *)
 
   val eval_peek_opts :
     ?version_opt:bool -> ?env:(string -> string option) ->
@@ -1160,20 +1188,3 @@ module Arg : sig
   [@@ocaml.deprecated "Use Cmd.Env.info instead."]
   (** See {!Cmd.Env.val-info}. *)
 end
-
-(*---------------------------------------------------------------------------
-   Copyright (c) 2011 The cmdliner programmers
-
-   Permission to use, copy, modify, and/or distribute this software for any
-   purpose with or without fee is hereby granted, provided that the above
-   copyright notice and this permission notice appear in all copies.
-
-
-   THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-   WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-   MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-   ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-   WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-   ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-  ---------------------------------------------------------------------------*)

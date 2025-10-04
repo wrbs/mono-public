@@ -1,6 +1,17 @@
 open! Core
 open! Import
 
+(* Constant folding an assoc with a large constant input (> 50,000 in tests) results
+   in a stack overflow on startup.
+
+   It can also result in significantly slower startup, and less efficient graph structure.
+   It's cheaper to maintain one 1,000-input assoc around a `Bonsai.state` than 1,000
+   separate `Bonsai.state`s.
+
+   The value here is relatively arbitrary.
+*)
+let assoc_max_input_size_to_fold = 20
+
 module Constants_in_scope =
   Univ_map.Make
     (Univ_map.Type_id_key)
@@ -31,22 +42,21 @@ end
 open Types.Down
 
 include struct
-  let value_id name = Type_equal.Id.create ~name sexp_of_opaque
-  let wrap_value ~here name v = { Value.value = v; here; id = value_id name }
+  let wrap_value ~(here : [%call_pos]) v = { Value.value = v; here }
 
   let value_exception_folder ~f =
     try f () with
-    | exn -> wrap_value ~here:None "exception" (Value.Exception exn)
+    | exn -> wrap_value (Value.Exception exn)
   ;;
 
-  let computation_exception_folder name ~f =
+  let computation_exception_folder ~here ~f =
     try f () with
     | exn ->
-      Trampoline.return (Computation.Return (wrap_value ~here:None name (Exception exn)))
+      Trampoline.return (Computation.Return { value = wrap_value (Exception exn); here })
   ;;
 
   let lazy_contents_if_value_is_constant : type a. a Value.t -> a Lazy.t option =
-    fun { value; here = _; id = _ } ->
+    fun { value; here = _ } ->
     match value with
     | Incr _
     | Named _
@@ -72,32 +82,29 @@ include struct
   let constant_or_value (with_id : _ Value.t) ~f =
     value_exception_folder ~f:(fun () ->
       match f () with
-      | Some constant -> { with_id with value = Constant constant }
+      | Some (`Constant constant) -> { with_id with value = Constant constant }
+      | Some (`Value value) -> { with_id with value }
       | None -> with_id)
   ;;
 
   let simplify_assoc_if_simpl
     (type k v cmp)
-    ~(key_comparator : (k, cmp) comparator)
+    ~(here : Source_code_position.t)
+    ~(key_comparator : (k, cmp) Comparator.Module.t)
     ~(key_id : k Type_equal.Id.t)
     ~(data_id : v Type_equal.Id.t)
     (map : (k, v, cmp) Map.t Value.t)
     by
     =
     let module C = (val key_comparator) in
-    let%map.Option by, can_contain_path =
+    let%map.Option by, may_contain =
       Simplify.computation_to_function
         by
-        ~key_compare:C.comparator.compare
+        ~key_compare:(Comparator.compare C.comparator)
         ~key_id
         ~data_id
     in
-    let may_contain_path =
-      match can_contain_path with
-      | `Can_contain_path -> May_contain.Path.Yes_or_maybe
-      | `Cannot_contain_path -> No
-    in
-    Computation.Assoc_simpl { map; by; may_contain_path }
+    Computation.Assoc_simpl { map; by; may_contain; here }
   ;;
 end
 
@@ -105,17 +112,17 @@ module Constant_fold (Recurse : Fix_transform.Recurse with module Types := Types
   let transform_v (type a) { constants_in_scope; evaluated } (value : a Value.t)
     : a Value.t
     =
-    let (), (), ({ Value.value; here = _; id } as value_with_id) =
+    let (), (), ({ Value.value; here = _ } as value_with_position) =
       Recurse.on_value { constants_in_scope; evaluated } () `Skipping_over value
     in
-    let rebuild value = { value_with_id with value } in
+    let rebuild value = { value_with_position with value } in
     let open Option.Let_syntax in
     match value with
-    | Exception _ | Constant _ | Incr _ -> value_with_id
-    | Named _ ->
+    | Exception _ | Constant _ | Incr _ -> value_with_position
+    | Named (_, id) ->
       (match Constants_in_scope.find constants_in_scope id with
        | Some value -> value
-       | None -> value_with_id)
+       | None -> value_with_position)
     | Both (a, b) as original ->
       value_exception_folder ~f:(fun () ->
         let value =
@@ -149,54 +156,123 @@ module Constant_fold (Recurse : Fix_transform.Recurse with module Types := Types
                }
            | None, _ -> original))
     | Map { t; f } ->
-      constant_or_value value_with_id ~f:(fun () ->
+      constant_or_value value_with_position ~f:(fun () ->
         let%map t1 = contents_if_value_is_constant t in
-        f t1)
+        `Constant (f t1))
     | Map2 { t1; t2; f } ->
-      constant_or_value value_with_id ~f:(fun () ->
-        let%bind t1 = contents_if_value_is_constant t1 in
-        let%map t2 = contents_if_value_is_constant t2 in
-        f t1 t2)
+      constant_or_value value_with_position ~f:(fun () ->
+        match contents_if_value_is_constant t1, contents_if_value_is_constant t2 with
+        | Some t1, Some t2 -> Some (`Constant (f t1 t2))
+        | Some t1, None -> Some (`Value (Value.Map { t = t2; f = (fun t2 -> f t1 t2) }))
+        | None, Some t2 -> Some (`Value (Value.Map { t = t1; f = (fun t1 -> f t1 t2) }))
+        | None, None -> None)
     | Map3 { t1; t2; t3; f } ->
-      constant_or_value value_with_id ~f:(fun () ->
-        let%bind t1 = contents_if_value_is_constant t1 in
-        let%bind t2 = contents_if_value_is_constant t2 in
-        let%map t3 = contents_if_value_is_constant t3 in
-        f t1 t2 t3)
+      constant_or_value value_with_position ~f:(fun () ->
+        match
+          ( contents_if_value_is_constant t1
+          , contents_if_value_is_constant t2
+          , contents_if_value_is_constant t3 )
+        with
+        | Some t1, Some t2, Some t3 -> Some (`Constant (f t1 t2 t3))
+        | Some t1, Some t2, None ->
+          Some (`Value (Value.Map { t = t3; f = (fun t3 -> f t1 t2 t3) }))
+        | Some t1, None, Some t3 ->
+          Some (`Value (Value.Map { t = t2; f = (fun t2 -> f t1 t2 t3) }))
+        | None, Some t2, Some t3 ->
+          Some (`Value (Value.Map { t = t1; f = (fun t1 -> f t1 t2 t3) }))
+        | Some t1, None, None ->
+          Some (`Value (Value.Map2 { t1 = t2; t2 = t3; f = (fun t2 t3 -> f t1 t2 t3) }))
+        | None, None, Some t3 ->
+          Some (`Value (Value.Map2 { t1; t2; f = (fun t1 t2 -> f t1 t2 t3) }))
+        | None, Some t2, None ->
+          Some (`Value (Value.Map2 { t1; t2 = t3; f = (fun t1 t3 -> f t1 t2 t3) }))
+        | None, None, None -> None)
     | Map4 { t1; t2; t3; t4; f } ->
-      constant_or_value value_with_id ~f:(fun () ->
-        let%bind t1 = contents_if_value_is_constant t1 in
-        let%bind t2 = contents_if_value_is_constant t2 in
-        let%bind t3 = contents_if_value_is_constant t3 in
-        let%map t4 = contents_if_value_is_constant t4 in
-        f t1 t2 t3 t4)
+      constant_or_value value_with_position ~f:(fun () ->
+        match
+          ( contents_if_value_is_constant t1
+          , contents_if_value_is_constant t2
+          , contents_if_value_is_constant t3
+          , contents_if_value_is_constant t4 )
+        with
+        | Some t1, Some t2, Some t3, Some t4 -> Some (`Constant (f t1 t2 t3 t4))
+        | Some t1, Some t2, Some t3, None ->
+          Some (`Value (Value.Map { t = t4; f = (fun t4 -> f t1 t2 t3 t4) }))
+        | Some t1, Some t2, None, Some t4 ->
+          Some (`Value (Value.Map { t = t3; f = (fun t3 -> f t1 t2 t3 t4) }))
+        | Some t1, None, Some t3, Some t4 ->
+          Some (`Value (Value.Map { t = t2; f = (fun t2 -> f t1 t2 t3 t4) }))
+        | None, Some t2, Some t3, Some t4 ->
+          Some (`Value (Value.Map { t = t1; f = (fun t1 -> f t1 t2 t3 t4) }))
+        | Some t1, Some t2, None, None ->
+          Some
+            (`Value (Value.Map2 { t1 = t3; t2 = t4; f = (fun t3 t4 -> f t1 t2 t3 t4) }))
+        | Some t1, None, Some t3, None ->
+          Some
+            (`Value (Value.Map2 { t1 = t2; t2 = t4; f = (fun t2 t4 -> f t1 t2 t3 t4) }))
+        | None, Some t2, Some t3, None ->
+          Some (`Value (Value.Map2 { t1; t2 = t4; f = (fun t1 t4 -> f t1 t2 t3 t4) }))
+        | Some t1, None, None, Some t4 ->
+          Some
+            (`Value (Value.Map2 { t1 = t2; t2 = t3; f = (fun t2 t3 -> f t1 t2 t3 t4) }))
+        | None, Some t2, None, Some t4 ->
+          Some (`Value (Value.Map2 { t1; t2 = t3; f = (fun t1 t3 -> f t1 t2 t3 t4) }))
+        | None, None, Some t3, Some t4 ->
+          Some (`Value (Value.Map2 { t1; t2; f = (fun t1 t2 -> f t1 t2 t3 t4) }))
+        | Some t1, None, None, None ->
+          Some
+            (`Value
+              (Value.Map3
+                 { t1 = t2; t2 = t3; t3 = t4; f = (fun t2 t3 t4 -> f t1 t2 t3 t4) }))
+        | None, Some t2, None, None ->
+          Some
+            (`Value
+              (Value.Map3 { t1; t2 = t3; t3 = t4; f = (fun t1 t3 t4 -> f t1 t2 t3 t4) }))
+        | None, None, Some t3, None ->
+          Some
+            (`Value (Value.Map3 { t1; t2; t3 = t4; f = (fun t1 t2 t4 -> f t1 t2 t3 t4) }))
+        | None, None, None, Some t4 ->
+          Some (`Value (Value.Map3 { t1; t2; t3; f = (fun t1 t2 t3 -> f t1 t2 t3 t4) }))
+        | None, None, None, None -> None)
     | Map5 { t1; t2; t3; t4; t5; f } ->
-      constant_or_value value_with_id ~f:(fun () ->
-        let%bind t1 = contents_if_value_is_constant t1 in
-        let%bind t2 = contents_if_value_is_constant t2 in
-        let%bind t3 = contents_if_value_is_constant t3 in
-        let%bind t4 = contents_if_value_is_constant t4 in
-        let%map t5 = contents_if_value_is_constant t5 in
-        f t1 t2 t3 t4 t5)
+      constant_or_value value_with_position ~f:(fun () ->
+        match
+          ( contents_if_value_is_constant t1
+          , contents_if_value_is_constant t2
+          , contents_if_value_is_constant t3
+          , contents_if_value_is_constant t4
+          , contents_if_value_is_constant t5 )
+        with
+        | Some t1, Some t2, Some t3, Some t4, Some t5 ->
+          Some (`Constant (f t1 t2 t3 t4 t5))
+        | _ -> None)
     | Map6 { t1; t2; t3; t4; t5; t6; f } ->
-      constant_or_value value_with_id ~f:(fun () ->
-        let%bind t1 = contents_if_value_is_constant t1 in
-        let%bind t2 = contents_if_value_is_constant t2 in
-        let%bind t3 = contents_if_value_is_constant t3 in
-        let%bind t4 = contents_if_value_is_constant t4 in
-        let%bind t5 = contents_if_value_is_constant t5 in
-        let%map t6 = contents_if_value_is_constant t6 in
-        f t1 t2 t3 t4 t5 t6)
+      constant_or_value value_with_position ~f:(fun () ->
+        match
+          ( contents_if_value_is_constant t1
+          , contents_if_value_is_constant t2
+          , contents_if_value_is_constant t3
+          , contents_if_value_is_constant t4
+          , contents_if_value_is_constant t5
+          , contents_if_value_is_constant t6 )
+        with
+        | Some t1, Some t2, Some t3, Some t4, Some t5, Some t6 ->
+          Some (`Constant (f t1 t2 t3 t4 t5 t6))
+        | _ -> None)
     | Map7 { t1; t2; t3; t4; t5; t6; t7; f } ->
-      constant_or_value value_with_id ~f:(fun () ->
-        let%bind t1 = contents_if_value_is_constant t1 in
-        let%bind t2 = contents_if_value_is_constant t2 in
-        let%bind t3 = contents_if_value_is_constant t3 in
-        let%bind t4 = contents_if_value_is_constant t4 in
-        let%bind t5 = contents_if_value_is_constant t5 in
-        let%bind t6 = contents_if_value_is_constant t6 in
-        let%map t7 = contents_if_value_is_constant t7 in
-        f t1 t2 t3 t4 t5 t6 t7)
+      constant_or_value value_with_position ~f:(fun () ->
+        match
+          ( contents_if_value_is_constant t1
+          , contents_if_value_is_constant t2
+          , contents_if_value_is_constant t3
+          , contents_if_value_is_constant t4
+          , contents_if_value_is_constant t5
+          , contents_if_value_is_constant t6
+          , contents_if_value_is_constant t7 )
+        with
+        | Some t1, Some t2, Some t3, Some t4, Some t5, Some t6, Some t7 ->
+          Some (`Constant (f t1 t2 t3 t4 t5 t6 t7))
+        | _ -> None)
   ;;
 
   open Trampoline.Let_syntax
@@ -205,26 +281,39 @@ module Constant_fold (Recurse : Fix_transform.Recurse with module Types := Types
     : a Computation.t Trampoline.t
     =
     match t with
-    | Assoc ({ map; key_id; data_id; by; key_comparator; _ } as assoc_t) ->
+    | Assoc ({ map; key_id; data_id; by; key_comparator; here; _ } as assoc_t) ->
       let (), (), map_v =
         Recurse.on_value { constants_in_scope; evaluated } () `Directly_on map
       in
       (match map_v.value with
        | Exception exn -> return (Proc.read (Value.return_exn exn))
-       | Constant map ->
+       | Constant map when Map.length map <= assoc_max_input_size_to_fold ->
          let folded =
            Map.mapi map ~f:(fun ~key ~data ->
              (* In this case, the map is constant, so we have access to the key/data pair
                 directly. We use the [Sub]s below with the correct [key_id]/[data_id] so
                 that [by] will refer to these constants and then we can recursively rely on
-                the constant-folding optimizations to clean up these [Sub]s for us. *)
+                the constant-folding optimizations to clean up these [Sub]s for us.
+
+                We only invert lifecycles for explicit calls to
+                [Bonsai.with_inverted_lifecycle_ordering], so it's [false] here. *)
              let data_binding =
                Computation.Sub
-                 { here = None; from = Proc.const data; via = data_id; into = by }
+                 { here
+                 ; from = Proc.const data
+                 ; via = data_id
+                 ; into = by
+                 ; invert_lifecycles = false
+                 }
              in
              Computation.Sub
-               { here = None; from = Proc.const key; via = key_id; into = data_binding })
-           |> Proc.Computation.all_map
+               { here
+               ; from = Proc.const key
+               ; via = key_id
+               ; into = data_binding
+               ; invert_lifecycles = false
+               })
+           |> Proc.Computation.all_map ~here
          in
          let%bind (), (), r =
            Recurse.on_computation { constants_in_scope; evaluated } () `Directly_on folded
@@ -238,12 +327,14 @@ module Constant_fold (Recurse : Fix_transform.Recurse with module Types := Types
              `Directly_on
              by
          in
-         (match simplify_assoc_if_simpl ~key_comparator ~key_id ~data_id map_v by with
+         (match
+            simplify_assoc_if_simpl ~here ~key_comparator ~key_id ~data_id map_v by
+          with
           | Some kind -> return kind
           | None -> return (Computation.Assoc { assoc_t with map = map_v; by })))
     | Assoc_on
-        ({ map; io_comparator = key_comparator; io_key_id = key_id; data_id; by; _ } as
-        assoc_on_t) ->
+        ({ map; io_comparator = key_comparator; io_key_id = key_id; data_id; by; here; _ }
+         as assoc_on_t) ->
       let (), (), map =
         Recurse.on_value { constants_in_scope; evaluated } () `Directly_on map
       in
@@ -254,7 +345,7 @@ module Constant_fold (Recurse : Fix_transform.Recurse with module Types := Types
           `Directly_on
           by
       in
-      (match simplify_assoc_if_simpl ~key_comparator ~key_id ~data_id map by with
+      (match simplify_assoc_if_simpl ~here ~key_comparator ~key_id ~data_id map by with
        | Some kind -> return kind
        | None -> return (Computation.Assoc_on { assoc_on_t with map; by }))
     | Switch { match_; arms; here } ->
@@ -292,12 +383,12 @@ module Constant_fold (Recurse : Fix_transform.Recurse with module Types := Types
            |> Trampoline.all_map
          in
          return (Computation.Switch { match_; arms; here }))
-    | Sub { from; via; into; here } ->
+    | Sub { from; via; into; invert_lifecycles; here } ->
       let%bind (), (), from =
         Recurse.on_computation { constants_in_scope; evaluated } () `Directly_on from
       in
       (match from with
-       | Return with_id when value_is_constant with_id ->
+       | Return { value = with_id; here = _ } when value_is_constant with_id ->
          let new_constants_in_scope =
            Constants_in_scope.add_exn ~key:via ~data:with_id constants_in_scope
          in
@@ -313,23 +404,23 @@ module Constant_fold (Recurse : Fix_transform.Recurse with module Types := Types
          let%bind (), (), into =
            Recurse.on_computation { constants_in_scope; evaluated } () `Directly_on into
          in
-         return (Computation.Sub { from; via; into; here }))
-    | Leaf1 { input; input_id; model; dynamic_action; apply_action; reset } ->
+         return (Computation.Sub { from; via; into; invert_lifecycles; here }))
+    | Leaf1 { input; input_id; model; dynamic_action; apply_action; reset; here } ->
       let (), (), input =
         Recurse.on_value { constants_in_scope; evaluated } () `Directly_on input
       in
-      computation_exception_folder "leaf1" ~f:(fun () ->
+      computation_exception_folder ~here ~f:(fun () ->
         match contents_if_value_is_constant input with
         | None ->
           return
             (Computation.Leaf1
-               { input; input_id; model; dynamic_action; apply_action; reset })
+               { input; input_id; model; dynamic_action; apply_action; reset; here })
         | Some input ->
           let apply_action ~inject = apply_action ~inject (Some input) in
           return
             (Computation.Leaf0
-               { model; static_action = dynamic_action; apply_action; reset }))
-    | Lazy t ->
+               { model; static_action = dynamic_action; apply_action; reset; here }))
+    | Lazy { t; here } ->
       (match evaluated with
        | Unconditionally ->
          let%bind (), (), c =
@@ -363,8 +454,9 @@ module Constant_fold (Recurse : Fix_transform.Recurse with module Types := Types
                   t
               in
               return t))
-         |> Computation.Lazy
-         |> return)
+         |> fun t -> Computation.Lazy { t; here } |> return)
+    | Fix_define _
+    | Fix_recurse _
     | Return _
     | Leaf0 _
     | Leaf_incr _
@@ -372,8 +464,9 @@ module Constant_fold (Recurse : Fix_transform.Recurse with module Types := Types
     | Fetch _
     | Wrap _
     | With_model_resetter _
-    | Path
+    | Path _
     | Assoc_simpl _
+    | Computation_watcher _
     | Lifecycle _ ->
       let%bind (), (), c =
         Recurse.on_computation { constants_in_scope; evaluated } () `Skipping_over t

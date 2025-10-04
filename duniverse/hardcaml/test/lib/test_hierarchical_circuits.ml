@@ -20,11 +20,11 @@ let middle ~cause_exn ~db ~share =
   let inst =
     Instantiation.create () ~name:inner_name1 ~inputs:[ "a", a ] ~outputs:[ "b", 1 ]
   in
-  let b1 = Map.find_exn inst "b" in
+  let b1 = Instantiation.output inst "b" in
   let inst =
     Instantiation.create () ~name:inner_name2 ~inputs:[ "a", a ] ~outputs:[ "b", 1 ]
   in
-  let b2 = Map.find_exn inst "b" in
+  let b2 = Instantiation.output inst "b" in
   let circ = Circuit.create_exn ~name:"middle" [ output "b" (b1 |: b2) ] in
   let name = Circuit_database.insert ~share db circ in
   name
@@ -37,7 +37,7 @@ let outer ~cause_exn ~db ~share =
   let inst =
     Instantiation.create () ~name:middle_name ~inputs:[ "a", a ] ~outputs:[ "b", 1 ]
   in
-  let b = output "b" (Map.find_exn inst "b") in
+  let b = output "b" (Instantiation.output inst "b") in
   Circuit.create_exn ~name:"outer" [ b ]
 ;;
 
@@ -55,7 +55,7 @@ let%expect_test "generate hierarchy without sharing" =
     {|
     (circuit_database (
       (inner  inner)
-      (inner  inner_0)
+      (inner  inner_1)
       (middle middle)))
 
     Verilog
@@ -71,7 +71,7 @@ let%expect_test "generate hierarchy without sharing" =
         assign b = a;
 
     endmodule
-    module inner_0 (
+    module inner_1 (
         a,
         b
     );
@@ -90,23 +90,23 @@ let%expect_test "generate hierarchy without sharing" =
         input a;
         output b;
 
-        wire _6;
+        wire _5;
         wire _1;
-        wire _8;
+        wire _6;
         wire _3;
-        wire _9;
-        inner_0
-            the_inner_0
+        wire _7;
+        inner_1
+            the_inner_1
             ( .a(a),
-              .b(_6) );
-        assign _1 = _6;
+              .b(_5) );
+        assign _1 = _5;
         inner
             the_inner
             ( .a(a),
-              .b(_8) );
-        assign _3 = _8;
-        assign _9 = _3 | _1;
-        assign b = _9;
+              .b(_6) );
+        assign _3 = _6;
+        assign _7 = _3 | _1;
+        assign b = _7;
 
     endmodule
     module outer (
@@ -117,13 +117,13 @@ let%expect_test "generate hierarchy without sharing" =
         input a;
         output b;
 
-        wire _5;
+        wire _4;
         wire _2;
         middle
             the_middle
             ( .a(a),
-              .b(_5) );
-        assign _2 = _5;
+              .b(_4) );
+        assign _2 = _4;
         assign b = _2;
 
     endmodule
@@ -159,23 +159,23 @@ let%expect_test "generate hierarchy with sharing" =
         input a;
         output b;
 
-        wire _6;
+        wire _5;
         wire _1;
-        wire _8;
+        wire _6;
         wire _3;
-        wire _9;
+        wire _7;
         inner
             the_inner
             ( .a(a),
-              .b(_6) );
-        assign _1 = _6;
+              .b(_5) );
+        assign _1 = _5;
         inner
-            the_inner_0
+            the_inner_1
             ( .a(a),
-              .b(_8) );
-        assign _3 = _8;
-        assign _9 = _3 | _1;
-        assign b = _9;
+              .b(_6) );
+        assign _3 = _6;
+        assign _7 = _3 | _1;
+        assign b = _7;
 
     endmodule
     module outer (
@@ -186,13 +186,13 @@ let%expect_test "generate hierarchy with sharing" =
         input a;
         output b;
 
-        wire _5;
+        wire _4;
         wire _2;
         middle
             the_middle
             ( .a(a),
-              .b(_5) );
-        assign _2 = _5;
+              .b(_4) );
+        assign _2 = _4;
         assign b = _2;
 
     endmodule

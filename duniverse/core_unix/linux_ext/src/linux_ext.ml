@@ -211,6 +211,10 @@ module Null_toplevel = struct
   let settcpopt_bool = u "Linux_ext.settcpopt_bool"
   let settcpopt_string = u "Linux_ext.settcpopt_string"
   let peer_credentials = u "Linux_ext.peer_credentials"
+  let setfsuid = u "Linux_ext.setfsuid"
+  let setfsgid = u "Linux_ext.setfsgid"
+  let getfsuid = u "Linux_ext.getfsuid"
+  let getfsgid = u "Linux_ext.getfsgid"
 
   module Epoll = Epoll.Impl
 end
@@ -246,7 +250,7 @@ module Null : Linux_ext_intf.S = struct
   end
 
   module Eventfd = struct
-    type t = File_descr.t [@@deriving compare, sexp_of]
+    type t = File_descr.t [@@deriving compare ~localize, sexp_of]
 
     module Flags = struct
       (* These (and flags below) are in octal to match the system header file
@@ -256,11 +260,11 @@ module Null : Linux_ext_intf.S = struct
       let semaphore = Int63.of_int 0o1
 
       include Flags.Make (struct
-        let allow_intersecting = true
-        let should_print_error = true
-        let remove_zero_flags = false
-        let known = [ nonblock, "nonblock"; cloexec, "cloexec"; semaphore, "semaphore" ]
-      end)
+          let allow_intersecting = true
+          let should_print_error = true
+          let remove_zero_flags = false
+          let known = [ nonblock, "nonblock"; cloexec, "cloexec"; semaphore, "semaphore" ]
+        end)
     end
 
     let create = Or_error.unimplemented "Linux_ext.Eventfd.create"
@@ -269,9 +273,41 @@ module Null : Linux_ext_intf.S = struct
     let to_file_descr t = t
   end
 
+  module Fallocate = struct
+    module Flags = struct
+      (* As per include/uapi/linux/memfd.h *)
+
+      let i63 = Int63.of_int
+      let keep_size = i63 0x01
+      let punch_hole = i63 0x02
+      let collapse_range = i63 0x08
+      let zero_range = i63 0x10
+      let insert_range = i63 0x20
+      let unshare_range = i63 0x40
+
+      include Flags.Make (struct
+          let allow_intersecting = false
+          let should_print_error = true
+          let remove_zero_flags = false
+
+          let known =
+            [ keep_size, "keep_size"
+            ; punch_hole, "punch_hole"
+            ; collapse_range, "collapse_range"
+            ; zero_range, "zero_range"
+            ; insert_range, "insert_range"
+            ; unshare_range, "unshare_range"
+            ]
+          ;;
+        end)
+    end
+
+    let fallocate = Or_error.unimplemented "Linux_ext.Fallocate.fallocate"
+  end
+
   module Timerfd = struct
     module Clock = struct
-      type t = unit [@@deriving bin_io, compare, sexp]
+      type t = unit [@@deriving bin_io, compare ~localize, sexp]
 
       let realtime = ()
       let monotonic = ()
@@ -282,14 +318,14 @@ module Null : Linux_ext_intf.S = struct
       let cloexec = Int63.of_int 0o2000000
 
       include Flags.Make (struct
-        let allow_intersecting = false
-        let should_print_error = true
-        let remove_zero_flags = false
-        let known = List.rev [ nonblock, "nonblock"; cloexec, "cloexec" ]
-      end)
+          let allow_intersecting = false
+          let should_print_error = true
+          let remove_zero_flags = false
+          let known = List.rev [ nonblock, "nonblock"; cloexec, "cloexec" ]
+        end)
     end
 
-    type t = File_descr.t [@@deriving compare, sexp_of]
+    type t = File_descr.t [@@deriving compare ~localize, sexp_of]
 
     let to_file_descr t = t
 
@@ -326,21 +362,21 @@ module Null : Linux_ext_intf.S = struct
       let huge_1gb = i63 (30 lsl hugetlb_flag_encode_shift)
 
       include Flags.Make (struct
-        let allow_intersecting = true (* huge_* flags intersect *)
-        let should_print_error = true
-        let remove_zero_flags = false
+          let allow_intersecting = true (* huge_* flags intersect *)
+          let should_print_error = true
+          let remove_zero_flags = false
 
-        let known =
-          [ cloexec, "cloexec"
-          ; allow_sealing, "allow_sealing"
-          ; hugetlb, "hugetlb"
-          ; noexec_seal, "noexec_seal"
-          ; exec, "exec"
-          ; huge_2mb, "huge_2mb"
-          ; huge_1gb, "huge_1gb"
-          ]
-        ;;
-      end)
+          let known =
+            [ cloexec, "cloexec"
+            ; allow_sealing, "allow_sealing"
+            ; hugetlb, "hugetlb"
+            ; noexec_seal, "noexec_seal"
+            ; exec, "exec"
+            ; huge_2mb, "huge_2mb"
+            ; huge_1gb, "huge_1gb"
+            ]
+          ;;
+        end)
     end
 
     type t = File_descr.t [@@deriving sexp_of]
@@ -381,7 +417,7 @@ module _ = Null
    depending on the conditional compilation below. *)
 
 [%%import "config.h"]
-[%%ifdef JSC_POSIX_TIMERS]
+[%%if defined JSC_POSIX_TIMERS && defined JSC_LINUX_EXT]
 
 module Clock = struct
   type t
@@ -427,16 +463,85 @@ end
 module Clock = Null.Clock
 
 [%%endif]
-[%%ifdef JSC_TIMERFD]
+[%%if defined JSC_FALLOCATE && defined JSC_LINUX_EXT]
+
+module Fallocate = struct
+  module Flags = struct
+    external keep_size : unit -> Int63.t = "core_linux_fallocate_FALLOC_FL_KEEP_SIZE"
+    external punch_hole : unit -> Int63.t = "core_linux_fallocate_FALLOC_FL_PUNCH_HOLE"
+
+    external collapse_range
+      :  unit
+      -> Int63.t
+      = "core_linux_fallocate_FALLOC_FL_COLLAPSE_RANGE"
+
+    external zero_range : unit -> Int63.t = "core_linux_fallocate_FALLOC_FL_ZERO_RANGE"
+
+    external insert_range
+      :  unit
+      -> Int63.t
+      = "core_linux_fallocate_FALLOC_FL_INSERT_RANGE"
+
+    external unshare_range
+      :  unit
+      -> Int63.t
+      = "core_linux_fallocate_FALLOC_FL_UNSHARE_RANGE"
+
+    let keep_size = keep_size ()
+    let punch_hole = punch_hole ()
+    let collapse_range = collapse_range ()
+    let zero_range = zero_range ()
+    let insert_range = insert_range ()
+    let unshare_range = unshare_range ()
+
+    include Flags.Make (struct
+        let allow_intersecting = false
+        let should_print_error = true
+        let remove_zero_flags = false
+
+        let known =
+          [ keep_size, "keep_size"
+          ; punch_hole, "punch_hole"
+          ; collapse_range, "collapse_range"
+          ; zero_range, "zero_range"
+          ; insert_range, "insert_range"
+          ; unshare_range, "unshare_range"
+          ]
+        ;;
+      end)
+  end
+
+  external fallocate
+    :  (int[@untagged])
+    -> mode:(int[@untagged])
+    -> offset:(int[@untagged])
+    -> size:(int[@untagged])
+    -> unit
+    = "caml_no_bytecode_impl" "core_linux_fallocate"
+  [@@noalloc]
+
+  let[@inline] fallocate fd ~mode ~offset ~size =
+    fallocate (File_descr.to_int fd) ~mode:(Flags.to_int_exn mode) ~offset ~size
+  ;;
+
+  let fallocate = Or_error.return fallocate
+end
+
+[%%else]
+
+module Fallocate = Null.Fallocate
+
+[%%endif]
+[%%if defined JSC_TIMERFD && defined JSC_LINUX_EXT]
 
 module Timerfd = struct
   module Clock : sig
-    type t [@@deriving bin_io, compare, sexp]
+    type t [@@deriving bin_io, compare ~localize, sexp]
 
     val realtime : t
     val monotonic : t
   end = struct
-    type t = Int63.t [@@deriving bin_io, compare, sexp]
+    type t = Int63.t [@@deriving bin_io, compare ~localize, sexp]
 
     external realtime : unit -> Int63.t = "core_linux_timerfd_CLOCK_REALTIME"
 
@@ -457,14 +562,14 @@ module Timerfd = struct
     let cloexec = cloexec ()
 
     include Flags.Make (struct
-      let allow_intersecting = false
-      let should_print_error = true
-      let remove_zero_flags = false
-      let known = List.rev [ nonblock, "nonblock"; cloexec, "cloexec" ]
-    end)
+        let allow_intersecting = false
+        let should_print_error = true
+        let remove_zero_flags = false
+        let known = List.rev [ nonblock, "nonblock"; cloexec, "cloexec" ]
+      end)
   end
 
-  type t = File_descr.t [@@deriving compare, sexp_of]
+  type t = File_descr.t [@@deriving compare ~localize, sexp_of]
 
   let to_file_descr t = t
 
@@ -500,7 +605,7 @@ module Timerfd = struct
     -> interval:Int63.t
     -> Syscall_result.Unit.t
     = "core_linux_timerfd_settime"
-    [@@noalloc]
+  [@@noalloc]
 
   let timerfd_settime t ~absolute ~initial ~interval =
     (* We could accept [interval < 0] or [initial < 0 when absolute], but then the
@@ -525,12 +630,7 @@ module Timerfd = struct
 
   let set_at t at =
     if Time_ns.( <= ) at Time_ns.epoch
-    then
-      failwiths
-        ~here:[%here]
-        "Timerfd.set_at got time before epoch"
-        at
-        [%sexp_of: Time_ns.t];
+    then failwiths "Timerfd.set_at got time before epoch" at [%sexp_of: Time_ns.t];
     timerfd_settime
       t
       ~absolute:true
@@ -546,7 +646,6 @@ module Timerfd = struct
     if Time_ns.Span.( <= ) interval Time_ns.Span.zero
     then
       failwiths
-        ~here:[%here]
         "Timerfd.set_repeating got invalid interval"
         interval
         [%sexp_of: Time_ns.Span.t];
@@ -561,15 +660,10 @@ module Timerfd = struct
   let set_repeating_at t at (interval : Time_ns.Span.t) =
     if Time_ns.( <= ) at Time_ns.epoch
     then
-      failwiths
-        ~here:[%here]
-        "Timerfd.set_repeating_at got time before epoch"
-        at
-        [%sexp_of: Time_ns.t];
+      failwiths "Timerfd.set_repeating_at got time before epoch" at [%sexp_of: Time_ns.t];
     if Time_ns.Span.( <= ) interval Time_ns.Span.zero
     then
       failwiths
-        ~here:[%here]
         "Timerfd.set_repeating_at got invalid interval"
         interval
         [%sexp_of: Time_ns.Span.t];
@@ -610,7 +704,7 @@ end
 module Timerfd = Null.Timerfd
 
 [%%endif]
-[%%ifdef JSC_MEMFD]
+[%%if defined JSC_MEMFD && defined JSC_LINUX_EXT]
 
 module Memfd = struct
   module Flags = struct
@@ -631,24 +725,24 @@ module Memfd = struct
     let huge_1gb = huge_1gb ()
 
     include Flags.Make (struct
-      let allow_intersecting = true (* huge_* flags intersect *)
-      let should_print_error = true
-      let remove_zero_flags = false
+        let allow_intersecting = true (* huge_* flags intersect *)
+        let should_print_error = true
+        let remove_zero_flags = false
 
-      let known =
-        [ cloexec, "cloexec"
-        ; allow_sealing, "allow_sealing"
-        ; hugetlb, "hugetlb"
-        ; noexec_seal, "noexec_seal"
-        ; exec, "exec"
-        ; huge_2mb, "huge_2mb"
-        ; huge_1gb, "huge_1gb"
-        ]
-      ;;
-    end)
+        let known =
+          [ cloexec, "cloexec"
+          ; allow_sealing, "allow_sealing"
+          ; hugetlb, "hugetlb"
+          ; noexec_seal, "noexec_seal"
+          ; exec, "exec"
+          ; huge_2mb, "huge_2mb"
+          ; huge_1gb, "huge_1gb"
+          ]
+        ;;
+      end)
   end
 
-  type t = File_descr.t [@@deriving compare, sexp_of]
+  type t = File_descr.t [@@deriving compare ~localize, sexp_of]
 
   external create
     :  flags:Flags.t
@@ -688,14 +782,14 @@ module Eventfd = struct
     let known = [ cloexec, "cloexec"; nonblock, "nonblock"; semaphore, "semaphore" ]
 
     include Flags.Make (struct
-      let allow_intersecting = true
-      let should_print_error = true
-      let known = known
-      let remove_zero_flags = false
-    end)
+        let allow_intersecting = true
+        let should_print_error = true
+        let known = known
+        let remove_zero_flags = false
+      end)
   end
 
-  type t = File_descr.t [@@deriving compare, sexp_of]
+  type t = File_descr.t [@@deriving compare ~localize, sexp_of]
 
   external create : Int32.t -> Flags.t -> t = "core_linux_eventfd"
   external read : t -> Int64.t = "core_linux_eventfd_read"
@@ -987,6 +1081,12 @@ let get_bind_to_interface fd =
   | name -> Bound_to_interface.Only name
 ;;
 
+external setfsuid : uid:int -> int = "core_linux_setfsuid"
+external setfsgid : gid:int -> int = "core_linux_setfsgid"
+
+let getfsuid () = setfsuid ~uid:(-1)
+let getfsgid () = setfsgid ~gid:(-1)
+
 module Epoll = Epoll.Impl
 
 let cores = Ok cores
@@ -1019,6 +1119,10 @@ let sendmsg_nonblocking_no_sigpipe = Ok sendmsg_nonblocking_no_sigpipe
 let settcpopt_bool = Ok settcpopt_bool
 let settcpopt_string = Ok settcpopt_string
 let peer_credentials = Ok peer_credentials
+let setfsuid = Ok setfsuid
+let setfsgid = Ok setfsgid
+let getfsuid = Ok getfsuid
+let getfsgid = Ok getfsgid
 
 module Extended_file_attributes = struct
   module Flags = struct
@@ -1079,6 +1183,16 @@ module Extended_file_attributes = struct
 end
 
 [%%else]
+
+(* Uncomment this if you need to suppress "unused <blah>" warnings.
+   Keeping commented out because this section is not checked by the CI, so is likely
+   to go stale / cause maintenance pains.  *)
+(* module _ = Thread
+module _ = Syscall_result
+
+let _ = isolated_cpus
+let _ = online_cpus
+   let _ = cpus_local_to_nic *)
 
 include Null_toplevel
 module Eventfd = Null.Eventfd

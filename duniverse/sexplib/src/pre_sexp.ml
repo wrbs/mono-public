@@ -4,6 +4,7 @@ open Format
 open Bigarray
 module Sexplib = Sexplib0
 module Conv = Sexplib.Sexp_conv
+module Domain = Basement.Stdlib_shim.Domain
 
 (* conv.ml depends on us so we can only use this module *)
 
@@ -47,18 +48,14 @@ let output = output_mach
    is taken in account.  Under Unix there's no easy way to get the umask in
    a thread-safe way. *)
 module Tmp_file = struct
-  let prng = ref None
+  let prng = Domain.Safe.DLS.new_key (fun () -> Random.State.make_self_init ())
 
   let temp_file_name prefix suffix =
-    let rand_state =
-      match !prng with
-      | Some v -> v
-      | None ->
-        let ret = Random.State.make_self_init () in
-        prng := Some ret;
-        ret
+    let rnd =
+      Domain.Safe.DLS.access (fun access ->
+        let rand_state = Domain.Safe.DLS.get access prng in
+        Random.State.bits rand_state land 0xFFFFFF)
     in
-    let rnd = Random.State.bits rand_state land 0xFFFFFF in
     Printf.sprintf "%s%06x%s" prefix rnd suffix
   ;;
 
@@ -307,16 +304,18 @@ let () =
     | _ -> assert false)
 ;;
 
-module Parser_output : sig
-  module type T = sig
-    module Impl : Parsexp.Eager_parser
+module type T = sig
+  module Impl : Parsexp.Eager_parser
 
-    type output
+  type output
 
-    exception Found of output
+  exception Found of output
 
-    val raise_found : Impl.State.Read_only.t -> Impl.parsed_value -> unit
-  end
+  val raise_found : Impl.State.Read_only.t -> Impl.parsed_value -> unit
+end
+
+module Parser_output : sig @@ portable
+  module type T = T
 
   module Bare_sexp : T with type output = Type.t
   module Annotated_sexp : T with type output = Annot.t
@@ -324,15 +323,7 @@ module Parser_output : sig
   val annotate_sexp : Type.t -> Parsexp.Positions.Iterator.t -> Annot.t
   val annotate_sexp_list : Type.t list -> Parsexp.Positions.Iterator.t -> Annot.t list
 end = struct
-  module type T = sig
-    module Impl : Parsexp.Eager_parser
-
-    type output
-
-    exception Found of output
-
-    val raise_found : Impl.State.Read_only.t -> Impl.parsed_value -> unit
-  end
+  module type T = T
 
   module I = Parsexp.Positions.Iterator
 
@@ -377,20 +368,22 @@ end = struct
 end
 
 module Make_parser (T : sig
-  include Parser_output.T
+  @@ portable
+    include Parser_output.T
 
-  type input
+    type input
 
-  val length : input -> int
+    val length : input -> int
 
-  val unsafe_feed_loop
-    :  Impl.State.t
-    -> Impl.Stack.t
-    -> input
-    -> max_pos:int
-    -> pos:int
-    -> Impl.Stack.t
-end) : sig
+    val unsafe_feed_loop
+      :  Impl.State.t
+      -> Impl.Stack.t
+      -> input
+      -> max_pos:int
+      -> pos:int
+      -> Impl.Stack.t
+  end) : sig
+  @@ portable
   val parse
     :  ?parse_pos:Parse_pos.t
     -> ?len:int
@@ -474,75 +467,75 @@ end
 [@@inline always]
 
 module String_single_sexp = Make_parser (struct
-  include Parser_output.Bare_sexp
+    include Parser_output.Bare_sexp
 
-  type input = string
+    type input = string
 
-  let length = String.length
+    let length = String.length
 
-  let rec unsafe_feed_loop state stack str ~max_pos ~pos =
-    if pos <= max_pos
-    then (
-      let stack = Impl.feed state (String.unsafe_get str pos) stack in
-      unsafe_feed_loop state stack str ~max_pos ~pos:(pos + 1))
-    else stack
-  ;;
-end)
+    let rec unsafe_feed_loop state stack str ~max_pos ~pos =
+      if pos <= max_pos
+      then (
+        let stack = Impl.feed state (String.unsafe_get str pos) stack in
+        unsafe_feed_loop state stack str ~max_pos ~pos:(pos + 1))
+      else stack
+    ;;
+  end)
 
 let parse_str = String_single_sexp.parse
 let parse = String_single_sexp.parse
 
 module String_single_annot = Make_parser (struct
-  include Parser_output.Annotated_sexp
+    include Parser_output.Annotated_sexp
 
-  type input = string
+    type input = string
 
-  let length = String.length
+    let length = String.length
 
-  let rec unsafe_feed_loop state stack str ~max_pos ~pos =
-    if pos <= max_pos
-    then (
-      let stack = Impl.feed state (String.unsafe_get str pos) stack in
-      unsafe_feed_loop state stack str ~max_pos ~pos:(pos + 1))
-    else stack
-  ;;
-end)
+    let rec unsafe_feed_loop state stack str ~max_pos ~pos =
+      if pos <= max_pos
+      then (
+        let stack = Impl.feed state (String.unsafe_get str pos) stack in
+        unsafe_feed_loop state stack str ~max_pos ~pos:(pos + 1))
+      else stack
+    ;;
+  end)
 
 let parse_str_annot = String_single_annot.parse
 
 module Bigstring_single_sexp = Make_parser (struct
-  include Parser_output.Bare_sexp
+    include Parser_output.Bare_sexp
 
-  type input = bigstring
+    type input = bigstring
 
-  let length = Array1.dim
+    let length = Array1.dim
 
-  let rec unsafe_feed_loop state stack (str : input) ~max_pos ~pos =
-    if pos <= max_pos
-    then (
-      let stack = Impl.feed state (Array1.unsafe_get str pos) stack in
-      unsafe_feed_loop state stack str ~max_pos ~pos:(pos + 1))
-    else stack
-  ;;
-end)
+    let rec unsafe_feed_loop state stack (str : input) ~max_pos ~pos =
+      if pos <= max_pos
+      then (
+        let stack = Impl.feed state (Array1.unsafe_get str pos) stack in
+        unsafe_feed_loop state stack str ~max_pos ~pos:(pos + 1))
+      else stack
+    ;;
+  end)
 
 let parse_bigstring = Bigstring_single_sexp.parse
 
 module Bigstring_single_annot = Make_parser (struct
-  include Parser_output.Annotated_sexp
+    include Parser_output.Annotated_sexp
 
-  type input = bigstring
+    type input = bigstring
 
-  let length = Array1.dim
+    let length = Array1.dim
 
-  let rec unsafe_feed_loop state stack (str : input) ~max_pos ~pos =
-    if pos <= max_pos
-    then (
-      let stack = Impl.feed state (Array1.unsafe_get str pos) stack in
-      unsafe_feed_loop state stack str ~max_pos ~pos:(pos + 1))
-    else stack
-  ;;
-end)
+    let rec unsafe_feed_loop state stack (str : input) ~max_pos ~pos =
+      if pos <= max_pos
+      then (
+        let stack = Impl.feed state (Array1.unsafe_get str pos) stack in
+        unsafe_feed_loop state stack str ~max_pos ~pos:(pos + 1))
+      else stack
+    ;;
+  end)
 
 let parse_bigstring_annot = Bigstring_single_annot.parse
 
@@ -914,8 +907,8 @@ let is_unit = function
   | _ -> false
 ;;
 
-external sexp_of_t : t -> t = "%identity"
-external t_of_sexp : t -> t = "%identity"
+external sexp_of_t : t -> t @@ portable = "%identity"
+external t_of_sexp : t -> t @@ portable = "%identity"
 
 (* Utilities for conversion error handling *)
 

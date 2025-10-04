@@ -16,7 +16,7 @@ let%test_unit "snoc to_list" =
     [%quickcheck.generator: Elem.t list t * Elem.t]
     ~sexp_of:[%sexp_of: Elem.t list t * Elem.t]
     ~f:(fun (xs, x) ->
-    [%test_result: Elem.t list] ~expect:(to_list xs @ [ x ]) (to_list (snoc xs x)))
+      [%test_result: Elem.t list] ~expect:(to_list xs @ [ x ]) (to_list (snoc xs x)))
 ;;
 
 let%test_unit "singleton" =
@@ -58,7 +58,7 @@ let%test_unit "of_list -> to_list_rev" =
     [%quickcheck.generator: Elem.t list]
     ~sexp_of:[%sexp_of: Elem.t list]
     ~f:(fun x ->
-    [%test_result: Elem.t list] ~expect:(List.rev x) (to_list_rev (of_list x)))
+      [%test_result: Elem.t list] ~expect:(List.rev x) (to_list_rev (of_list x)))
 ;;
 
 let%test_unit "of_list_rev -> to_list" =
@@ -66,7 +66,7 @@ let%test_unit "of_list_rev -> to_list" =
     [%quickcheck.generator: Elem.t list]
     ~sexp_of:[%sexp_of: Elem.t list]
     ~f:(fun x ->
-    [%test_result: Elem.t list] ~expect:(List.rev x) (to_list (of_list_rev x)))
+      [%test_result: Elem.t list] ~expect:(List.rev x) (to_list (of_list_rev x)))
 ;;
 
 let mapping_f x = `F x
@@ -76,9 +76,9 @@ let%test_unit "map_to_list" =
     [%quickcheck.generator: Elem.t list t * [ `F of Elem.t ] list option]
     ~sexp_of:[%sexp_of: Elem.t list t * [ `F of Elem.t ] list option]
     ~f:(fun (x, tail) ->
-    [%test_result: [ `F of Elem.t ] list]
-      ~expect:(List.map (to_list x) ~f:mapping_f @ Option.value tail ~default:[])
-      (map_to_list ?tail x ~f:mapping_f))
+      [%test_result: [ `F of Elem.t ] list]
+        ~expect:(List.map (to_list x) ~f:mapping_f @ Option.value tail ~default:[])
+        (map_to_list ?tail x ~f:mapping_f))
 ;;
 
 let%test_unit "map_append" =
@@ -86,9 +86,9 @@ let%test_unit "map_append" =
     [%quickcheck.generator: [ `F of Elem.t ] list t * Elem.t list]
     ~sexp_of:[%sexp_of: [ `F of Elem.t ] list t * Elem.t list]
     ~f:(fun (x, y) ->
-    [%test_result: [ `F of Elem.t ] list t]
-      ~expect:(List.fold (List.map y ~f:mapping_f) ~init:x ~f:snoc)
-      (map_append x y ~f:mapping_f))
+      [%test_result: [ `F of Elem.t ] list t]
+        ~expect:(List.fold (List.map y ~f:mapping_f) ~init:x ~f:snoc)
+        (map_append x y ~f:mapping_f))
 ;;
 
 let%test_unit "compare" =

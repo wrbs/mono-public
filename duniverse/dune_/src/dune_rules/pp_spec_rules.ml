@@ -2,7 +2,6 @@ open Import
 open Memo.O
 
 let pped_module m ~f =
-  let open Memo.O in
   let pped = Module.pped m in
   let+ () =
     Module.iter m ~f:(fun ml_kind file ->
@@ -36,7 +35,6 @@ let get_rules sctx key =
       in
       pps, scope
   in
-  let open Memo.O in
   let* pps =
     let lib_db = Scope.libs scope in
     List.map pp_names ~f:(fun x -> Loc.none, x) |> Lib.DB.resolve_pps lib_db
@@ -56,7 +54,7 @@ let promote_correction fn build ~suffix =
   Action.Full.reduce
     [ act
     ; Action.Full.make
-        (Action.diff
+        (Promote.Diff_action.diff
            ~optional:true
            (Path.build fn)
            (Path.Build.extend_basename fn ~suffix))
@@ -69,7 +67,7 @@ let promote_correction_with_target fn build ~suffix =
     ; Action_builder.with_no_targets
         (Action_builder.return
            (Action.Full.make
-              (Action.diff
+              (Promote.Diff_action.diff
                  ~optional:true
                  (Path.build fn)
                  (Path.Build.extend_basename fn ~suffix))))
@@ -105,7 +103,6 @@ let action_for_pp_with_target ~sandbox ~loc ~expander ~action ~src ~target =
 (* Generate rules for the dialect modules in [modules] and return a a new module
    with only OCaml sources *)
 let setup_dialect_rules sctx ~sandbox ~dir ~expander (m : Module.t) =
-  let open Memo.O in
   let ml = Module.ml_source m in
   let+ () =
     Module.iter m ~f:(fun ml_kind f ->
@@ -209,15 +206,15 @@ let lint_module sctx ~sandbox ~dir ~expander ~lint ~lib_name ~scope =
 ;;
 
 let pp_one_module
-  sctx
-  ~lib_name
-  ~scope
-  ~preprocessor_deps
-  ~(lint_module : source:_ -> ast:_ -> unit Memo.t)
-  ~sandbox
-  ~dir
-  ~expander
-  (pp : _ Preprocess.Without_future_syntax.t)
+      sctx
+      ~lib_name
+      ~scope
+      ~preprocessor_deps
+      ~(lint_module : source:_ -> ast:_ -> unit Memo.t)
+      ~sandbox
+      ~dir
+      ~expander
+      (pp : _ Preprocess.Without_future_syntax.t)
   =
   let open Action_builder.O in
   match pp with
@@ -368,15 +365,15 @@ let pp_one_module
 ;;
 
 let make
-  sctx
-  ~dir
-  ~expander
-  ~lint
-  ~preprocess
-  ~preprocessor_deps
-  ~instrumentation_deps
-  ~lib_name
-  ~scope
+      sctx
+      ~dir
+      ~expander
+      ~lint
+      ~preprocess
+      ~preprocessor_deps
+      ~instrumentation_deps
+      ~lib_name
+      ~scope
   =
   let preprocessor_deps = preprocessor_deps @ instrumentation_deps in
   let+ ocaml = Context.ocaml (Super_context.context sctx) in

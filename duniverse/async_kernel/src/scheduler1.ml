@@ -48,7 +48,7 @@ module Very_low_priority_worker = struct
   [@@deriving fields ~iterators:iter, sexp_of]
 
   let invariant t =
-    Invariant.invariant [%here] t [%sexp_of: t] (fun () ->
+    Invariant.invariant t [%sexp_of: t] (fun () ->
       let check f = Invariant.check_field t f in
       Fields.iter ~execution_context:(check Execution_context.invariant) ~exec:ignore)
   ;;
@@ -63,12 +63,12 @@ type t = Scheduler0.t =
   ; normal_priority_jobs : Job_queue.t
   ; low_priority_jobs : Job_queue.t
   ; very_low_priority_workers : Very_low_priority_worker.t Deque.t
-  ; mutable main_execution_context : Execution_context.t
+  ; main_execution_context : Execution_context.t
   ; mutable current_execution_context : Execution_context.t
-      (* The scheduler calls [got_uncaught_exn] when an exception bubbles to the top of the
-     monitor tree without being handled.  This function guarantees to never run another
-     job after this by calling [clear] and because [enqueue_job] will never add another
-     job. *)
+      (* The scheduler calls [got_uncaught_exn] when an exception bubbles to the top of
+         the monitor tree without being handled.  This function guarantees to never run
+         another job after this by calling [clear] and because [enqueue_job] will never
+         add another job. *)
   ; mutable uncaught_exn : (Exn.t * Sexp.t) option
   ; mutable cycle_count : int
   ; mutable cycle_start : Time_ns.t
@@ -81,39 +81,40 @@ type t = Scheduler0.t =
       (Types.Cycle_hook_handle.t, (Types.Cycle_hook.t[@sexp.opaque])) Hashtbl.t
   ; mutable last_cycle_time : Time_ns.Span.t
   ; mutable last_cycle_num_jobs : int
+  ; job_infos_for_cycle : Job_infos_for_cycle.t
   ; mutable total_cycle_time : Time_ns.Span.t
   ; mutable time_source : read_write Synchronous_time_source.T1.t
-      (* [external_jobs] is a queue of actions sent from outside of async.  This is for the
-     case where we want to schedule a job or fill an ivar from a context where it is not
-     safe to run async code, because the async lock isn't held.  For instance: - in an
-     OCaml finalizer, as they can run at any time in any thread.
+      (* [external_jobs] is a queue of actions sent from outside of async.  This is for
+         the case where we want to schedule a job or fill an ivar from a context where it
+         is not safe to run async code, because the async lock isn't held.  For
+         instance: - in an OCaml finalizer, as they can run at any time in any thread.
 
-     The way to do it is to queue a thunk in [external_jobs] and call
-     [thread_safe_external_job_hook], which is responsible for notifying the scheduler
-     that new actions are available.
+         The way to do it is to queue a thunk in [external_jobs] and call
+         [thread_safe_external_job_hook], which is responsible for notifying the scheduler
+         that new actions are available.
 
-     When using Async on unix, [thread_safe_external_job_hook] is set in [Async_unix]
-     to call [Interruptor.thread_safe_interrupt], which will wake up the
-     [Async_unix] scheduler and run a cycle.
+         When using Async on unix, [thread_safe_external_job_hook] is set in [Async_unix]
+         to call [Interruptor.thread_safe_interrupt], which will wake up the [Async_unix]
+         scheduler and run a cycle.
 
-     Note that this hook might be used in other context (js_of_ocaml, mirage).
+         Note that this hook might be used in other context (js_of_ocaml, mirage).
 
-     When running a cycle, we pull external actions at every job and perform them
-     immediately. *)
-  ; external_jobs : External_job.t Thread_safe_queue.t
-  ; mutable thread_safe_external_job_hook : unit -> unit
-      (* [job_queued_hook] and [event_added_hook] aim to be used by js_of_ocaml. *)
-      (* We use [_ option] here because those hooks will not be set in the common case
-     and we want to avoid extra function calls. *)
-  ; mutable job_queued_hook : (Priority.t -> unit) option
+         When running a cycle, we pull external actions at every job and perform them
+         immediately. *)
+  ; external_jobs : External_job.t Mpsc_queue.t
+  ; thread_safe_external_job_hook : (unit -> unit) Atomic.t
+  ; (* [job_queued_hook] and [event_added_hook] aim to be used by js_of_ocaml. *)
+    (* We use [_ option] here because those hooks will not be set in the common case and
+       we want to avoid extra function calls. *)
+    mutable job_queued_hook : (Priority.t -> unit) option
   ; mutable event_added_hook : (Time_ns.t -> unit) option
   ; mutable yield : ((unit, read_write) Types.Bvar.t[@sexp.opaque])
-  ; mutable
-      yield_until_no_jobs_remain :
+  ; mutable yield_until_no_jobs_remain :
       ((unit, read_write) Types.Bvar.t[@sexp.opaque] (* configuration*))
   ; mutable check_invariants : bool
   ; mutable max_num_jobs_per_priority_per_cycle : Max_num_jobs_per_priority_per_cycle.t
   ; mutable record_backtraces : bool
+  ; mutable reset_in_forked_process : bool
   }
 [@@deriving fields ~getters ~iterators:iter, sexp_of]
 
@@ -185,6 +186,7 @@ let invariant t : unit =
       ~total_cycle_time:ignore
       ~last_cycle_num_jobs:
         (check (fun last_cycle_num_jobs -> assert (last_cycle_num_jobs >= 0)))
+      ~job_infos_for_cycle:ignore
       ~time_source:
         (check
            (Synchronous_time_source.Read_write.invariant_with_jobs ~job:(fun job ->
@@ -198,6 +200,7 @@ let invariant t : unit =
       ~check_invariants:ignore
       ~max_num_jobs_per_priority_per_cycle:ignore
       ~record_backtraces:ignore
+      ~reset_in_forked_process:ignore
   with
   | exn -> raise_s [%message "Scheduler.invariant failed" (exn : exn) (t : t)]
 ;;
@@ -259,10 +262,11 @@ let create () =
     ; run_every_cycle_end_state = Hashtbl.create (module Types.Cycle_hook_handle)
     ; last_cycle_time = sec 0.
     ; last_cycle_num_jobs = 0
+    ; job_infos_for_cycle = Job_infos_for_cycle.create ()
     ; total_cycle_time = sec 0.
     ; time_source
-    ; external_jobs = Thread_safe_queue.create ()
-    ; thread_safe_external_job_hook = ignore
+    ; external_jobs = Mpsc_queue.create_alone ()
+    ; thread_safe_external_job_hook = Atomic.make ignore
     ; job_queued_hook = None
     ; event_added_hook = None
     ; yield = Bvar.create ()
@@ -271,6 +275,7 @@ let create () =
     ; max_num_jobs_per_priority_per_cycle =
         Async_kernel_config.max_num_jobs_per_priority_per_cycle
     ; record_backtraces = Async_kernel_config.record_backtraces
+    ; reset_in_forked_process = false
     }
   and events =
     Timing_wheel.create ~config:Async_kernel_config.timing_wheel_config ~start:now
@@ -300,10 +305,10 @@ let backtrace_of_first_job t =
 
 let t_ref =
   match Result.try_with create with
-  | Ok t -> ref t
+  | Ok t -> Atomic.make (Capsule.Initial.Data.wrap t)
   | Error exn ->
     Debug.log "Async cannot create its raw scheduler" exn [%sexp_of: exn];
-    exit 1
+    exit 1 |> Nothing.unreachable_code
 ;;
 
 let check_access t =
@@ -312,8 +317,28 @@ let check_access t =
   | Some f -> f ()
 ;;
 
+(* Since there is no mli file, in order to get encapsulated_t_without_checking_access to be
+   portable in the interface, we must explicitly annotate its type via a module-inclusion
+   check *)
+include (
+struct
+  let encapsulated_t_without_checking_access : _ -> _ @ portable =
+    fun () -> Atomic.get t_ref
+  ;;
+end :
+sig
+  val encapsulated_t_without_checking_access
+    :  unit
+    -> t Capsule.Initial.Data.t
+    @@ portable
+end)
+
+let t_without_checking_access () =
+  encapsulated_t_without_checking_access () |> Capsule.Initial.Data.unwrap
+;;
+
 let t () =
-  let t = !t_ref in
+  let t = t_without_checking_access () in
   check_access t;
   t
 ;;
@@ -324,13 +349,15 @@ let current_execution_context t =
   else t.current_execution_context
 ;;
 
-let with_execution_context1 t tmp_context ~f x =
+let with_execution_context1 t tmp_context ~(local_ f) x =
   let old_context = current_execution_context t in
   set_execution_context t tmp_context;
   protectx ~f x ~finally:(fun _ -> set_execution_context t old_context)
 ;;
 
-let with_execution_context t tmp_context ~f = with_execution_context1 t tmp_context ~f ()
+let with_execution_context t tmp_context ~(local_ f) =
+  with_execution_context1 t tmp_context ~f ()
+;;
 
 let create_job (type a) t execution_context f a =
   if Pool.is_full t.job_pool then t.job_pool <- Pool.grow t.job_pool;

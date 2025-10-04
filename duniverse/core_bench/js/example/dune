@@ -1,6 +1,0 @@
-(executables
- (modes byte exe)
- (names main)
- (libraries js_of_ocaml core core_bench_js)
- (preprocess
-  (pps ppx_jane ppx_bench)))

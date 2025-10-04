@@ -8,11 +8,11 @@ let maybe_match type_ (_ : Ctx.t) =
     match core_type.ptyp_desc with
     | Ptyp_constr (_, []) -> None
     | Ptyp_constr (longident_loc, type_parameters) ->
-      (match Helpers.split_longident longident_loc.txt, module_name with
-       | (`prefix (Some module_name'), `last "t"), Some module_name
+      (match Helpers.split_longident longident_loc, module_name with
+       | Some (`prefix (Some module_name'), `last "t"), Some module_name
          when [%compare.equal: Longident.t] module_name.txt module_name' ->
          Some type_parameters
-       | (`prefix None, `last "t"), None -> Some type_parameters
+       | Some (`prefix None, `last "t"), None -> Some type_parameters
        | _ -> None)
     | _ -> None
   in
@@ -29,5 +29,5 @@ let maybe_match type_ (_ : Ctx.t) =
          let functor_ = pmod_ident ~loc functor_name in
          List.fold children ~init:functor_ ~f:(pmod_apply ~loc))
    }
-    : Clause.Match.t)
+   : Clause.Match.t)
 ;;

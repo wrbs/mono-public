@@ -5,11 +5,13 @@ module Stable = struct
 
   module V1 = struct
     module T = struct
-      type t = unit [@@deriving bin_io ~localize, compare, sexp, stable_witness]
+      type t = unit
+      [@@deriving bin_io ~localize, compare ~localize, sexp, sexp_grammar, stable_witness]
     end
 
     include T
-    include Comparator.Stable.V1.Make (T)
+
+    include%template Comparator.Stable.V1.Make [@modality portable] (T)
 
     let%expect_test _ =
       print_endline [%bin_digest: t];
@@ -18,7 +20,9 @@ module Stable = struct
   end
 
   module V2 = struct
-    type t = unit [@@deriving compare, equal, sexp, stable_witness]
+    type t = unit
+    [@@deriving compare ~localize, equal ~localize, sexp, sexp_grammar, stable_witness]
+
     type comparator_witness = V1.comparator_witness
 
     let comparator = V1.comparator
@@ -57,11 +61,11 @@ end
 
 open! Import
 
-include
-  Identifiable.Extend
+include%template
+  Identifiable.Extend [@mode local] [@modality portable]
     (Base.Unit)
     (struct
-      type t = unit [@@deriving bin_io]
+      type t = unit [@@deriving bin_io ~localize]
     end)
 
 include Base.Unit

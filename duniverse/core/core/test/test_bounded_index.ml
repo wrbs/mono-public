@@ -3,12 +3,11 @@ open! Import
 open! Bounded_index
 
 module M = Make (struct
-  let label = "index"
-  let module_name = "Test_bounded_index"
-end)
+    let label = "index"
+    let module_name = "Test_bounded_index"
+  end)
 
-let%test_module "V1" =
-  (module Stable_unit_test.Make (struct
+module%test V1 = Stable_unit_test.Make (struct
     type t = M.Stable.V1.t [@@deriving sexp, bin_io, compare]
 
     let equal x y = compare x y = 0
@@ -35,8 +34,7 @@ let%test_module "V1" =
         , "\253\000\101\205\029\001\253\000\202\154\059" )
       ]
     ;;
-  end))
-;;
+  end)
 
 let%test_unit "zero-based indexing" =
   let gen =

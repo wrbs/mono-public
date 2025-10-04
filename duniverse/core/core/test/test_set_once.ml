@@ -15,8 +15,8 @@ let test_serialization (module Format : Format) =
   in
   let t1 = create () in
   let t2 = create () in
-  set_exn t2 [%here] 13;
-  print_and_check_stable_type [%here] (module T) [ t1; t2 ]
+  set_exn t2 13;
+  print_and_check_stable_type (module T) [ t1; t2 ]
 ;;
 
 let%expect_test "[Stable.V1] serialization" =
@@ -52,7 +52,7 @@ let%expect_test "[sexp_of_t]" =
   let t = create () in
   show t;
   [%expect {| unset |}];
-  set_exn t [%here] 13;
+  set_exn t 13;
   show t;
   [%expect
     {|
@@ -61,12 +61,23 @@ let%expect_test "[sexp_of_t]" =
     |}]
 ;;
 
+let%expect_test "handles [Lexing.dummy_pos]" =
+  (* Location information should be excluded when [here] is [Lexing.dummy_pos], which is
+     the default value of [here] in the external version of Base *)
+  let t = create () in
+  show_raise (fun () -> get_exn t ~here:Lexing.dummy_pos);
+  [%expect {| (raised "[Set_once.get_exn] unset") |}];
+  set_exn t ~here:Lexing.dummy_pos 12;
+  show t;
+  [%expect {| (value 12) |}]
+;;
+
 let%expect_test "[get]" =
   let t = create () in
   let show_get () = print_s [%message "" ~_:(get t : int option)] in
   show_get ();
   [%expect {| () |}];
-  set_exn t [%here] 13;
+  set_exn t 13;
   show_get ();
   [%expect {| (13) |}]
 ;;
@@ -74,36 +85,36 @@ let%expect_test "[get]" =
 let%expect_test "[get] doesn't allocate" =
   let t = create () in
   let check_get here =
-    ignore (require_no_allocation here (fun () -> get t) : int option)
+    ignore (require_no_allocation ~here (fun () -> get t) : int option)
   in
   check_get [%here];
   [%expect {| |}];
-  set_exn t [%here] 13;
+  set_exn t 13;
   check_get [%here];
   [%expect {| |}]
 ;;
 
 let%expect_test "[get_exn]" =
   let t = create () in
-  show_raise ~hide_positions (fun () -> get_exn t [%here]);
+  show_raise ~hide_positions (fun () -> get_exn t);
   [%expect
     {| (raised ("[Set_once.get_exn] unset" (at lib/core/test/test_set_once.ml:LINE:COL))) |}];
-  set_exn t [%here] 13;
-  print_s [%message "" ~_:(get_exn t [%here] : int)];
+  set_exn t 13;
+  print_s [%message "" ~_:(get_exn t : int)];
   [%expect {| 13 |}]
 ;;
 
 let%expect_test "[set]" =
   let t = create () in
-  print_s [%message "" ~_:(set t [%here] 13 : unit Or_error.t)];
+  print_s [%message "" ~_:(set t 13 : unit Or_error.t)];
   [%expect {| (Ok ()) |}]
 ;;
 
 let%expect_test "[set_if_none]" =
   let t = create () in
   let set_if_none_and_print ~value =
-    set_if_none t [%here] value;
-    print_s ~hide_positions [%sexp (Set_once.get_exn t [%here] : string)]
+    set_if_none t value;
+    print_s ~hide_positions [%sexp (Set_once.get_exn t : string)]
   in
   set_if_none_and_print ~value:"first call to set_if_none";
   [%expect {| "first call to set_if_none" |}];
@@ -113,8 +124,8 @@ let%expect_test "[set_if_none]" =
 
 let%expect_test "[set] error" =
   let t = create () in
-  set_exn t [%here] 13;
-  print_s ~hide_positions [%message "" ~_:(set t [%here] 14 : unit Or_error.t)];
+  set_exn t 13;
+  print_s ~hide_positions [%message "" ~_:(set t 14 : unit Or_error.t)];
   [%expect
     {|
     (Error (
@@ -126,8 +137,8 @@ let%expect_test "[set] error" =
 
 let%expect_test "[set_exn] error" =
   let t = create () in
-  set_exn t [%here] 13;
-  show_raise ~hide_positions (fun () -> set_exn t [%here] 14);
+  set_exn t 13;
+  show_raise ~hide_positions (fun () -> set_exn t 14);
   [%expect
     {|
     (raised (
@@ -137,19 +148,54 @@ let%expect_test "[set_exn] error" =
     |}]
 ;;
 
+let%expect_test "[get_or_set_thunk] already set" =
+  let t = create () in
+  set_exn t 13;
+  let return_14 () =
+    print_endline "f unexpectedly called";
+    14
+  in
+  print_s
+    [%message
+      "Already set, return existing value" (get_or_set_thunk t ~f:return_14 : int)];
+  [%expect
+    {| ("Already set, return existing value" ("get_or_set_thunk t ~f:return_14" 13)) |}]
+;;
+
+let%expect_test "[get_or_set_thunk] not set" =
+  let t = create () in
+  let return_14 () =
+    print_endline "f expectedly called";
+    14
+  in
+  print_s
+    [%message
+      "Not set, should call f and return value:" (get_or_set_thunk t ~f:return_14 : int)];
+  print_s [%message "Value should be set: " (get t : int option)];
+  [%expect
+    {|
+    f expectedly called
+    ("Not set, should call f and return value:" (
+      "get_or_set_thunk t ~f:return_14" 14))
+    ("Value should be set: " ("get t" (14)))
+    |}]
+;;
+
 let%expect_test "[is_none], [is_some]" =
   let t = create () in
   let show () =
     print_s [%message "" ~is_none:(is_none t : bool) ~is_some:(is_some t : bool)]
   in
   show ();
-  [%expect {|
+  [%expect
+    {|
     ((is_none true)
      (is_some false))
     |}];
-  set_exn t [%here] 13;
+  set_exn t 13;
   show ();
-  [%expect {|
+  [%expect
+    {|
     ((is_none false)
      (is_some true))
     |}]
@@ -166,7 +212,7 @@ let%expect_test "[match%optional]" =
   in
   show ();
   [%expect {| none |}];
-  set_exn t [%here] 13;
+  set_exn t 13;
   show ();
   [%expect {| (some 13) |}]
 ;;
@@ -176,7 +222,7 @@ let%expect_test "[iter]" =
   let iter () = iter t ~f:(fun i -> print_s [%message (i : int)]) in
   iter ();
   [%expect {| |}];
-  set_exn t [%here] 13;
+  set_exn t 13;
   iter ();
   [%expect {| (i 13) |}]
 ;;

@@ -4,6 +4,8 @@
 
 open Base
 
+type t
+
 val create
   :  ?lib:string
   -> ?arch:string
@@ -14,7 +16,16 @@ val create
   -> name:string
   -> inputs:(string * Signal.t) list
   -> outputs:(string * int) list
-  -> Signal.t Map.M(String).t
+  -> t
+
+(** Return the underlying [Inst] signal constructor. *)
+val instantiation_signal : t -> Signal.t
+
+(** Return a map from output port name to output signal. *)
+val outputs : t -> Signal.t Map.M(String).t
+
+(** Find an output signal from it's name. Raises if it doesns't exist. *)
+val output : t -> string -> Signal.t
 
 module With_interface (I : Interface.S) (O : Interface.S) : sig
   (** Instantiate an RTL design with the given input and output interface. *)
@@ -27,18 +38,6 @@ module With_interface (I : Interface.S) (O : Interface.S) : sig
     -> name:string
     -> Interface.Create_fn(I)(O).t
 end
-
-val create_with_interface
-  :  (module Interface.S_Of_signal with type Of_signal.t = 'i)
-  -> (module Interface.S_Of_signal with type Of_signal.t = 'o)
-  -> ?lib:string
-  -> ?arch:string
-  -> ?instance:string
-  -> ?parameters:Parameter.t list
-  -> ?attributes:Rtl_attribute.t list
-  -> name:string
-  -> 'i
-  -> 'o
 
 module Expert : sig
   (* Check that name only contains alphanumeric or underscore characters.  *)

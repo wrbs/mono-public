@@ -22,14 +22,12 @@ let%expect_test "reg, clock + enable" =
         input [7:0] d;
         output [7:0] q;
 
-        wire [7:0] _6;
-        reg [7:0] _7;
-        assign _6 = 8'b00000000;
+        reg [7:0] _5;
         always @(posedge clock) begin
             if (enable)
-                _7 <= d;
+                _5 <= d;
         end
-        assign q = _7;
+        assign q = _5;
 
     endmodule
     |}];
@@ -51,32 +49,18 @@ let%expect_test "reg, clock + enable" =
 
     architecture rtl of reg is
 
-        -- conversion functions
-        function hc_uns(a : std_logic)        return unsigned         is variable b : unsigned(0 downto 0); begin b(0) := a; return b; end;
-        function hc_uns(a : std_logic_vector) return unsigned         is begin return unsigned(a); end;
-        function hc_sgn(a : std_logic)        return signed           is variable b : signed(0 downto 0); begin b(0) := a; return b; end;
-        function hc_sgn(a : std_logic_vector) return signed           is begin return signed(a); end;
-        function hc_sl (a : std_logic_vector) return std_logic        is begin return a(a'right); end;
-        function hc_sl (a : unsigned)         return std_logic        is begin return a(a'right); end;
-        function hc_sl (a : signed)           return std_logic        is begin return a(a'right); end;
-        function hc_sl (a : boolean)          return std_logic        is begin if a then return '1'; else return '0'; end if; end;
-        function hc_slv(a : std_logic_vector) return std_logic_vector is begin return a; end;
-        function hc_slv(a : unsigned)         return std_logic_vector is begin return std_logic_vector(a); end;
-        function hc_slv(a : signed)           return std_logic_vector is begin return std_logic_vector(a); end;
-        signal hc_6 : std_logic_vector(7 downto 0);
-        signal hc_7 : std_logic_vector(7 downto 0);
+        signal hc_5 : std_logic_vector(7 downto 0);
 
     begin
 
-        hc_6 <= "00000000";
         process (clock) begin
             if rising_edge(clock) then
                 if enable = '1' then
-                    hc_7 <= d;
+                    hc_5 <= d;
                 end if;
             end if;
         end process;
-        q <= hc_7;
+        q <= hc_5;
 
     end architecture;
     |}]
@@ -142,18 +126,6 @@ let%expect_test "reg, clock, reset, clear + enable" =
 
     architecture rtl of reg is
 
-        -- conversion functions
-        function hc_uns(a : std_logic)        return unsigned         is variable b : unsigned(0 downto 0); begin b(0) := a; return b; end;
-        function hc_uns(a : std_logic_vector) return unsigned         is begin return unsigned(a); end;
-        function hc_sgn(a : std_logic)        return signed           is variable b : signed(0 downto 0); begin b(0) := a; return b; end;
-        function hc_sgn(a : std_logic_vector) return signed           is begin return signed(a); end;
-        function hc_sl (a : std_logic_vector) return std_logic        is begin return a(a'right); end;
-        function hc_sl (a : unsigned)         return std_logic        is begin return a(a'right); end;
-        function hc_sl (a : signed)           return std_logic        is begin return a(a'right); end;
-        function hc_sl (a : boolean)          return std_logic        is begin if a then return '1'; else return '0'; end if; end;
-        function hc_slv(a : std_logic_vector) return std_logic_vector is begin return a; end;
-        function hc_slv(a : unsigned)         return std_logic_vector is begin return std_logic_vector(a); end;
-        function hc_slv(a : signed)           return std_logic_vector is begin return std_logic_vector(a); end;
         signal hc_8 : std_logic_vector(7 downto 0);
         signal hc_9 : std_logic_vector(7 downto 0);
 
@@ -245,20 +217,17 @@ let%expect_test "mem" =
 
     architecture rtl of reg is
 
-        -- conversion functions
-        function hc_uns(a : std_logic)        return unsigned         is variable b : unsigned(0 downto 0); begin b(0) := a; return b; end;
-        function hc_uns(a : std_logic_vector) return unsigned         is begin return unsigned(a); end;
-        function hc_sgn(a : std_logic)        return signed           is variable b : signed(0 downto 0); begin b(0) := a; return b; end;
-        function hc_sgn(a : std_logic_vector) return signed           is begin return signed(a); end;
-        function hc_sl (a : std_logic_vector) return std_logic        is begin return a(a'right); end;
-        function hc_sl (a : unsigned)         return std_logic        is begin return a(a'right); end;
-        function hc_sl (a : signed)           return std_logic        is begin return a(a'right); end;
-        function hc_sl (a : boolean)          return std_logic        is begin if a then return '1'; else return '0'; end if; end;
-        function hc_slv(a : std_logic_vector) return std_logic_vector is begin return a; end;
-        function hc_slv(a : unsigned)         return std_logic_vector is begin return std_logic_vector(a); end;
-        function hc_slv(a : signed)           return std_logic_vector is begin return std_logic_vector(a); end;
-        type hc_7_type is array (0 to 3) of std_logic_vector(7 downto 0);
-        signal hc_7 : hc_7_type;
+        type hc_7_type is protected
+            procedure set(address : integer; data : std_logic_vector(7 downto 0));
+            impure function get(address : integer) return std_logic_vector;
+        end protected;
+        type hc_7_type is protected body
+            type t is array (0 to 3) of std_logic_vector(7 downto 0);
+            variable memory : t;
+            procedure set(address : integer; data : std_logic_vector(7 downto 0)) is begin memory(address) := data; end procedure;
+            impure function get(address : integer) return std_logic_vector is begin return memory(address); end function;
+        end protected body;
+        shared variable hc_7 : hc_7_type;
         signal hc_8 : std_logic_vector(7 downto 0);
 
     begin
@@ -266,11 +235,11 @@ let%expect_test "mem" =
         process (clock) begin
             if rising_edge(clock) then
                 if write_enable = '1' then
-                    hc_7(to_integer(hc_uns(write_address))) <= write_data;
+                    hc_7.set(to_integer(unsigned(write_address)), write_data);
                 end if;
             end if;
         end process;
-        hc_8 <= hc_7(to_integer(hc_uns(read_address)));
+        hc_8 <= hc_7.get(to_integer(unsigned(read_address)));
         q <= hc_8;
 
     end architecture;
@@ -309,11 +278,9 @@ let%expect_test "multiport mem" =
         input [1:0] read_address;
         output [7:0] q0;
 
-        wire [7:0] _11;
         reg [7:0] _8[0:3];
         wire [7:0] _9;
-        reg [7:0] _12;
-        assign _11 = 8'b00000000;
+        reg [7:0] _10;
         always @(posedge clock) begin
             if (write_enable)
                 _8[write_address] <= write_data;
@@ -321,9 +288,9 @@ let%expect_test "multiport mem" =
         assign _9 = _8[read_address];
         always @(posedge clock) begin
             if (read_enable)
-                _12 <= _9;
+                _10 <= _9;
         end
-        assign q0 = _12;
+        assign q0 = _10;
 
     endmodule
     |}];
@@ -348,43 +315,38 @@ let%expect_test "multiport mem" =
 
     architecture rtl of reg is
 
-        -- conversion functions
-        function hc_uns(a : std_logic)        return unsigned         is variable b : unsigned(0 downto 0); begin b(0) := a; return b; end;
-        function hc_uns(a : std_logic_vector) return unsigned         is begin return unsigned(a); end;
-        function hc_sgn(a : std_logic)        return signed           is variable b : signed(0 downto 0); begin b(0) := a; return b; end;
-        function hc_sgn(a : std_logic_vector) return signed           is begin return signed(a); end;
-        function hc_sl (a : std_logic_vector) return std_logic        is begin return a(a'right); end;
-        function hc_sl (a : unsigned)         return std_logic        is begin return a(a'right); end;
-        function hc_sl (a : signed)           return std_logic        is begin return a(a'right); end;
-        function hc_sl (a : boolean)          return std_logic        is begin if a then return '1'; else return '0'; end if; end;
-        function hc_slv(a : std_logic_vector) return std_logic_vector is begin return a; end;
-        function hc_slv(a : unsigned)         return std_logic_vector is begin return std_logic_vector(a); end;
-        function hc_slv(a : signed)           return std_logic_vector is begin return std_logic_vector(a); end;
-        signal hc_11 : std_logic_vector(7 downto 0);
-        type hc_8_type is array (0 to 3) of std_logic_vector(7 downto 0);
-        signal hc_8 : hc_8_type;
+        type hc_8_type is protected
+            procedure set(address : integer; data : std_logic_vector(7 downto 0));
+            impure function get(address : integer) return std_logic_vector;
+        end protected;
+        type hc_8_type is protected body
+            type t is array (0 to 3) of std_logic_vector(7 downto 0);
+            variable memory : t;
+            procedure set(address : integer; data : std_logic_vector(7 downto 0)) is begin memory(address) := data; end procedure;
+            impure function get(address : integer) return std_logic_vector is begin return memory(address); end function;
+        end protected body;
+        shared variable hc_8 : hc_8_type;
         signal hc_9 : std_logic_vector(7 downto 0);
-        signal hc_12 : std_logic_vector(7 downto 0);
+        signal hc_10 : std_logic_vector(7 downto 0);
 
     begin
 
-        hc_11 <= "00000000";
         process (clock) begin
             if rising_edge(clock) then
                 if write_enable = '1' then
-                    hc_8(to_integer(hc_uns(write_address))) <= write_data;
+                    hc_8.set(to_integer(unsigned(write_address)), write_data);
                 end if;
             end if;
         end process;
-        hc_9 <= hc_8(to_integer(hc_uns(read_address)));
+        hc_9 <= hc_8.get(to_integer(unsigned(read_address)));
         process (clock) begin
             if rising_edge(clock) then
                 if read_enable = '1' then
-                    hc_12 <= hc_9;
+                    hc_10 <= hc_9;
                 end if;
             end if;
         end process;
-        q0 <= hc_12;
+        q0 <= hc_10;
 
     end architecture;
     |}]
@@ -411,9 +373,7 @@ let%expect_test "Try generate a Verilog circuit with a signal using a reserved n
         input [7:0] d;
         output [7:0] q;
 
-        wire [7:0] _6;
         reg [7:0] signed_0;
-        assign _6 = 8'b00000000;
         always @(posedge clock) begin
             if (enable)
                 signed_0 <= d;
@@ -427,8 +387,8 @@ let%expect_test "Try generate a Verilog circuit with a signal using a reserved n
 let%expect_test "Try to generate a Verilog module name with dashes" =
   let input = Signal.input "in" 32 in
   let a = wire 32 -- "a" in
-  a <== input;
-  Expect_test_helpers_base.require_does_raise [%here] (fun () ->
+  a <-- input;
+  Expect_test_helpers_base.require_does_raise (fun () ->
     let circuit = Circuit.create_exn ~name:"mod-with-dash" [ output "out" a ] in
     Rtl.print Verilog circuit);
   [%expect
@@ -442,8 +402,8 @@ let%expect_test "Try to generate a Verilog module name with dashes" =
 let%expect_test "Try to generate a Verilog module name that starts with a number" =
   let input = Signal.input "in" 32 in
   let a = wire 32 -- "a" in
-  a <== input;
-  Expect_test_helpers_base.require_does_raise [%here] (fun () ->
+  a <-- input;
+  Expect_test_helpers_base.require_does_raise (fun () ->
     let circuit = Circuit.create_exn ~name:"999" [ output "out" a ] in
     Rtl.print Verilog circuit);
   [%expect
@@ -455,13 +415,13 @@ let%expect_test "Try to generate a Verilog module name that starts with a number
 ;;
 
 let%expect_test "Module name rules apply to instantiations also" =
-  Expect_test_helpers_base.require_does_raise [%here] (fun () ->
+  Expect_test_helpers_base.require_does_raise (fun () ->
     let input = Signal.input "in" 32 in
     let outputs =
       Instantiation.create ~name:"a^b" ~inputs:[ "a", input ] ~outputs:[ "b", 1 ] ()
     in
     let circuit =
-      Circuit.create_exn ~name:"foo" [ output "out" (Map.find_exn outputs "b") ]
+      Circuit.create_exn ~name:"foo" [ output "out" (Instantiation.output outputs "b") ]
     in
     Rtl.print Verilog circuit);
   [%expect
@@ -475,8 +435,8 @@ let%expect_test "Module name rules apply to instantiations also" =
 let%expect_test "Try to generate Verilog port names with dashes" =
   let input = input "in-with-dash" 32 in
   let a = wire 32 -- "a" in
-  a <== input;
-  Expect_test_helpers_base.require_does_raise [%here] (fun () ->
+  a <-- input;
+  Expect_test_helpers_base.require_does_raise (fun () ->
     let circuit = Circuit.create_exn ~name:"mod" [ output "out-with-dash" a ] in
     Rtl.print Verilog circuit);
   [%expect
@@ -484,24 +444,19 @@ let%expect_test "Try to generate Verilog port names with dashes" =
     ("Error while writing circuit"
       (circuit_name mod)
       (hierarchy_path (mod))
-      (output ((language Verilog) (mode (To_channel <stdout>))))
       (exn (
         "[Rtl_name.add_port_name] illegal port name"
         (name       in-with-dash)
         (legal_name in_with_dash)
         (note       "Hardcaml will not change ports names.")
-        (port (
-          wire
-          (names (in-with-dash))
-          (width   32)
-          (data_in empty))))))
+        (port (wire (names (in-with-dash)) (width 32))))))
     |}]
 ;;
 
 let%expect_test "Try to generate Verilog net names with dashes" =
   let input = Signal.input "in" 32 in
   let a = wire 32 -- "a-with-dash" in
-  a <== input;
+  a <-- input;
   let circuit = Circuit.create_exn ~name:"mod" [ output "out" a ] in
   Rtl.print Verilog circuit;
   [%expect
@@ -517,6 +472,106 @@ let%expect_test "Try to generate Verilog net names with dashes" =
         wire [31:0] a_with_dash;
         assign a_with_dash = in;
         assign out = a_with_dash;
+
+    endmodule
+    |}]
+;;
+
+let%expect_test "initial value of resisters" =
+  let spec = Reg_spec.create () ~clock in
+  let q = reg spec ~initialize_to:(Signal.of_string "00101011") ~enable d in
+  let circuit = Circuit.create_exn ~name:"reg" [ output "q" q ] in
+  Rtl.print Verilog circuit;
+  [%expect
+    {|
+    module reg (
+        enable,
+        clock,
+        d,
+        q
+    );
+
+        input enable;
+        input clock;
+        input [7:0] d;
+        output [7:0] q;
+
+        wire [7:0] _5;
+        reg [7:0] _6 = 8'b00101011;
+        assign _5 = 8'b00101011;
+        always @(posedge clock) begin
+            if (enable)
+                _6 <= d;
+        end
+        assign q = _6;
+
+    endmodule
+    |}];
+  Rtl.print Vhdl circuit;
+  [%expect
+    {|
+    library ieee;
+    use ieee.std_logic_1164.all;
+    use ieee.numeric_std.all;
+
+    entity reg is
+        port (
+            enable : in std_logic;
+            clock : in std_logic;
+            d : in std_logic_vector(7 downto 0);
+            q : out std_logic_vector(7 downto 0)
+        );
+    end entity;
+
+    architecture rtl of reg is
+
+        signal hc_5 : std_logic_vector(7 downto 0);
+        signal hc_6 : std_logic_vector(7 downto 0) := "00101011";
+
+    begin
+
+        hc_5 <= "00101011";
+        process (clock) begin
+            if rising_edge(clock) then
+                if enable = '1' then
+                    hc_6 <= d;
+                end if;
+            end if;
+        end process;
+        q <= hc_6;
+
+    end architecture;
+    |}]
+;;
+
+let%expect_test "initial value of resisters with comment (only in Verilog)" =
+  let spec = Reg_spec.create () ~clock in
+  let q = reg spec ~initialize_to:(Signal.of_string "00101011") ~enable d in
+  let q = set_comment q "some comment" in
+  let circuit = Circuit.create_exn ~name:"reg" [ output "q" q ] in
+  Rtl.print Verilog circuit;
+  [%expect
+    {|
+    module reg (
+        enable,
+        clock,
+        d,
+        q
+    );
+
+        input enable;
+        input clock;
+        input [7:0] d;
+        output [7:0] q;
+
+        wire [7:0] _5;
+        reg [7:0] _6/* some comment */ = 8'b00101011;
+        assign _5 = 8'b00101011;
+        always @(posedge clock) begin
+            if (enable)
+                _6 <= d;
+        end
+        assign q = _6;
 
     endmodule
     |}]

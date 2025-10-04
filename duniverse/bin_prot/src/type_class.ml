@@ -307,29 +307,25 @@ let bin_array bin_el =
   }
 ;;
 
-(*$ mk_base2 "hashtbl" *)
-let bin_writer_hashtbl bin_writer_el1 bin_writer_el2 =
-  { size = (fun v -> Size.bin_size_hashtbl bin_writer_el1.size bin_writer_el2.size v)
-  ; write =
-      (fun buf ~pos v ->
-        Write.bin_write_hashtbl bin_writer_el1.write bin_writer_el2.write buf ~pos v)
+(*$ mk_base1 "iarray" *)
+let bin_writer_iarray bin_writer_el =
+  { size = (fun v -> Size.bin_size_iarray bin_writer_el.size v)
+  ; write = (fun buf ~pos v -> Write.bin_write_iarray bin_writer_el.write buf ~pos v)
   }
 ;;
 
-let bin_reader_hashtbl bin_reader_el1 bin_reader_el2 =
-  { read =
-      (fun buf ~pos_ref ->
-        Read.bin_read_hashtbl bin_reader_el1.read bin_reader_el2.read buf ~pos_ref)
-  ; vtag_read = variant_wrong_type "hashtbl"
+let bin_reader_iarray bin_reader_el =
+  { read = (fun buf ~pos_ref -> Read.bin_read_iarray bin_reader_el.read buf ~pos_ref)
+  ; vtag_read = variant_wrong_type "iarray"
   }
 ;;
 
-let bin_shape_hashtbl x1 x2 = Shape.bin_shape_hashtbl x1 x2
+let bin_shape_iarray x1 = Shape.bin_shape_iarray x1
 
-let bin_hashtbl bin_el1 bin_el2 =
-  { shape = bin_shape_hashtbl bin_el1.shape bin_el2.shape
-  ; writer = bin_writer_hashtbl bin_el1.writer bin_el2.writer
-  ; reader = bin_reader_hashtbl bin_el1.reader bin_el2.reader
+let bin_iarray bin_el =
+  { shape = bin_shape_iarray bin_el.shape
+  ; writer = bin_writer_iarray bin_el.writer
+  ; reader = bin_reader_iarray bin_el.reader
   }
 ;;
 
@@ -542,6 +538,24 @@ let bin_int_64bit =
   { shape = bin_shape_int_64bit
   ; writer = bin_writer_int_64bit
   ; reader = bin_reader_int_64bit
+  }
+;;
+
+(*$ mk_base "int32_bits" *)
+let bin_writer_int32_bits =
+  { size = Size.bin_size_int32_bits; write = Write.bin_write_int32_bits }
+;;
+
+let bin_reader_int32_bits =
+  { read = Read.bin_read_int32_bits; vtag_read = variant_wrong_type "int32_bits" }
+;;
+
+let bin_shape_int32_bits = Shape.bin_shape_int32_bits
+
+let bin_int32_bits =
+  { shape = bin_shape_int32_bits
+  ; writer = bin_writer_int32_bits
+  ; reader = bin_reader_int32_bits
   }
 ;;
 

@@ -3,11 +3,10 @@
     retrieved and analyzed using [Core_bench].
 
     This module holds the registered benchmarks in a global hashtable indexed by library
-    name.  We care about the registered benchmarks if and only if the library is being
-    used in a [inline_benchmarks_runner.exe]. To avoid building this hashtable in cases
-    where we will not use it, this module peeks into the commandline args of the running
-    program to decide if the benchmarks should be registered or not.
-*)
+    name. We care about the registered benchmarks if and only if the library is being used
+    in a [inline_benchmarks_runner.exe]. To avoid building this hashtable in cases where
+    we will not use it, this module peeks into the commandline args of the running program
+    to decide if the benchmarks should be registered or not. *)
 
 module Current_libname : sig
   val set : string -> unit
@@ -15,15 +14,18 @@ module Current_libname : sig
 end
 
 module Entry : sig
+  (** This type exists to prevent "staged" functions with no setup from being curried. *)
+  type 'a thunk = { uncurried : unit -> 'a } [@@unboxed]
+
   type ('param, 'a) parameterised_spec =
     { arg_name : string
     ; params : (string * 'param) list
-        (** The first coordinate is some string representation of the second coordinate. *)
-    ; thunk : 'param -> unit -> 'a
+    (** The first coordinate is some string representation of the second coordinate. *)
+    ; thunk : 'param -> 'a thunk
     }
 
   type test_spec =
-    | Regular_thunk : ([ `init ] -> unit -> 'a) -> test_spec
+    | Regular_thunk : ([ `init ] -> 'a thunk) -> test_spec
     | Parameterised_thunk : ('param, 'a) parameterised_spec -> test_spec
 
   type t = private
@@ -44,8 +46,7 @@ module Entry : sig
   val get_module_name_opt : t -> string option
 end
 
-(** [add_environment_var] returns true if the benchmarks should be added to the
-    hashtable *)
+(** [add_environment_var] returns true if the benchmarks should be added to the hashtable *)
 val add_environment_var : bool
 
 (** [lookup_lib] returns all the benchmarks from the specified library *)

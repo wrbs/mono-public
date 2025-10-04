@@ -115,17 +115,17 @@ let user_info t =
 
 let set_user_info t info =
   t.user_info
-    <- (match info with
-        | None -> None
-        | Some i -> Some (Info i))
+  <- (match info with
+      | None -> None
+      | Some i -> Some (Info i))
 ;;
 
 let append_user_info_graphviz t ~label ~attrs =
   let new_ = Dot_user_info.dot ~label ~attributes:attrs in
   t.user_info
-    <- (match t.user_info with
-        | None -> Some new_
-        | Some other -> Some (Dot_user_info.append other new_))
+  <- (match t.user_info with
+      | None -> Some new_
+      | Some other -> Some (Dot_user_info.append other new_))
 ;;
 
 let edge_is_stale ~child ~parent =
@@ -289,7 +289,7 @@ let fold_observers (t : _ t) ~init ~f =
 let iter_observers t ~f = fold_observers t ~init:() ~f:(fun () observer -> f observer)
 
 let invariant (type a) (invariant_a : a -> unit) (t : a t) =
-  Invariant.invariant [%here] t [%sexp_of: _ t] (fun () ->
+  Invariant.invariant t [%sexp_of: _ t] (fun () ->
     [%test_eq: bool] (needs_to_be_computed t) (is_in_recompute_heap t);
     if is_necessary t
     then (
@@ -330,7 +330,7 @@ let invariant (type a) (invariant_a : a -> unit) (t : a t) =
               ~expect:
                 (List.length t.on_update_handlers
                  + fold_observers t ~init:0 ~f:(fun n { on_update_handlers; _ } ->
-                     n + List.length on_update_handlers))))
+                   n + List.length on_update_handlers))))
       ~num_parents:
         (check (fun num_parents ->
            assert (num_parents >= 0);
@@ -441,7 +441,7 @@ let unsafe_value t = Uopt.unsafe_value t.value_opt
 let value_exn t =
   if Uopt.is_some t.value_opt
   then Uopt.unsafe_value t.value_opt
-  else failwiths ~here:[%here] "attempt to get value of an invalid node" t [%sexp_of: _ t]
+  else failwiths "attempt to get value of an invalid node" t [%sexp_of: _ t]
 ;;
 
 let get_cutoff t = t.cutoff
@@ -491,7 +491,7 @@ let run_on_update_handlers t node_update ~now =
 let set_kind t kind =
   t.kind <- kind;
   t.my_parent_index_in_child_at_index
-    <- Array.create ~len:(Kind.initial_num_children kind) (-1)
+  <- Array.create ~len:(Kind.initial_num_children kind) (-1)
 ;;
 
 let create state created_in kind =
@@ -499,24 +499,24 @@ let create state created_in kind =
     { id = Node_id.next ()
     ; state
     ; recomputed_at = Stabilization_num.none
-    ; value_opt = Uopt.none
+    ; value_opt = Uopt.get_none ()
     ; kind
     ; cutoff = Cutoff.phys_equal
     ; changed_at = Stabilization_num.none
     ; num_on_update_handlers = 0
     ; num_parents = 0
-    ; parent1_and_beyond = Uniform_array.empty
-    ; parent0 = Uopt.none
+    ; parent1_and_beyond = Uniform_array.get_empty ()
+    ; parent0 = Uopt.get_none ()
     ; created_in
-    ; next_node_in_same_scope = Uopt.none
+    ; next_node_in_same_scope = Uopt.get_none ()
     ; height = -1
     ; height_in_recompute_heap = -1
-    ; prev_in_recompute_heap = Uopt.none
-    ; next_in_recompute_heap = Uopt.none
+    ; prev_in_recompute_heap = Uopt.get_none ()
+    ; next_in_recompute_heap = Uopt.get_none ()
     ; height_in_adjust_heights_heap = -1
-    ; next_in_adjust_heights_heap = Uopt.none
-    ; old_value_opt = Uopt.none
-    ; observers = Uopt.none
+    ; next_in_adjust_heights_heap = Uopt.get_none ()
+    ; old_value_opt = Uopt.get_none ()
+    ; observers = Uopt.get_none ()
     ; is_in_handle_after_stabilization = false
     ; on_update_handlers = []
     ; my_parent_index_in_child_at_index =
@@ -543,9 +543,9 @@ let make_space_for_parent_if_necessary t =
   then (
     let new_max_num_parents = 2 * max_num_parents t in
     t.parent1_and_beyond
-      <- Uniform_array.realloc t.parent1_and_beyond ~len:(new_max_num_parents - 1);
+    <- Uniform_array.realloc t.parent1_and_beyond ~len:(new_max_num_parents - 1);
     t.my_child_index_in_parent_at_index
-      <- Array.realloc t.my_child_index_in_parent_at_index ~len:new_max_num_parents (-1));
+    <- Array.realloc t.my_child_index_in_parent_at_index ~len:new_max_num_parents (-1));
   if debug then assert (t.num_parents < max_num_parents t)
 ;;
 
@@ -556,7 +556,7 @@ let make_space_for_child_if_necessary t ~child_index =
     if debug then assert (child_index = max_num_children);
     let new_max_num_children = Int.max 2 (2 * max_num_children) in
     t.my_parent_index_in_child_at_index
-      <- Array.realloc t.my_parent_index_in_child_at_index ~len:new_max_num_children (-1));
+    <- Array.realloc t.my_parent_index_in_child_at_index ~len:new_max_num_children (-1));
   if debug then assert (child_index < Array.length t.my_parent_index_in_child_at_index)
 ;;
 
@@ -580,7 +580,7 @@ let unlink
   : type a b. child:a t -> child_index:int -> parent:b t -> parent_index:int -> unit
   =
   fun ~child ~child_index ~parent ~parent_index ->
-  set_parent ~child ~parent:Uopt.none ~parent_index;
+  set_parent ~child ~parent:(Uopt.get_none ()) ~parent_index;
   if debug
   then (
     child.my_child_index_in_parent_at_index.(parent_index) <- -1;
@@ -642,12 +642,13 @@ let swap_children_except_in_kind parent ~child1 ~child_index1 ~child2 ~child_ind
 module Packed = struct
   type t = Packed.t = T : _ Types.Node.t -> t [@@unboxed]
 
-  let sexp_of_t (T t) = t |> [%sexp_of: _ t]
+  let sexp_of_t (T t) = Types.Node.sexp_of_t sexp_of_opaque t
   let invariant (T t) = invariant ignore t
 
   module As_list (M : sig
-    val next : Packed.t -> Packed.t Uopt.t
-  end) =
+    @@ portable
+      val next : Packed.t -> Packed.t Uopt.t
+    end) =
   struct
     type t = Packed.t Uopt.t
 

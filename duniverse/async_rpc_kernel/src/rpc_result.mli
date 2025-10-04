@@ -1,17 +1,18 @@
 open! Core
 open! Async_kernel
 
-type 'a t = 'a Protocol.Rpc_result.t
+type 'a t = 'a Protocol.Rpc_result.t [@@deriving globalize, sexp_of]
 
 val uncaught_exn : location:string -> exn -> 'a t
 val bin_io_exn : location:string -> exn -> 'a t
-val authorization_error : location:string -> exn -> 'a t
+val authorization_failure : location:string -> exn -> 'a t
+val lift_error : location:string -> exn -> 'a t
 
 val try_with
-  :  ?on_background_exception:(exn -> unit)
-  -> ?run:[ `Now | `Schedule ]
+  :  here:Source_code_position.t
+  -> local_ (unit -> 'a t Deferred.t)
   -> location:string
-  -> (unit -> 'a t Deferred.t)
+  -> on_background_exception:On_exception.Background_monitor_rest.t option
   -> 'a t Deferred.t
 
 val or_error

@@ -4,8 +4,8 @@ open Async_kernel
 type 'a message_handler = Bigstring.t -> pos:int -> len:int -> 'a
 
 module Handler_result = struct
-  (** Result of an [on_message] callback.  We split the [Continue] and [Wait _] cases to
-      make it clear that [Continue] is the expected case.  The implementation should be
+  (** Result of an [on_message] callback. We split the [Continue] and [Wait _] cases to
+      make it clear that [Continue] is the expected case. The implementation should be
       optimized for this case. *)
   type 'a t =
     | Stop of 'a
@@ -37,13 +37,19 @@ module Send_result = struct
     { size : int
     ; max_message_size : int
     }
-  [@@deriving bin_io, compare, globalize, sexp]
+  [@@deriving bin_io ~localize, compare, globalize, sexp]
+
+  let bin_read_message_too_big__local buf ~pos_ref =
+    let size = bin_read_int buf ~pos_ref in
+    let max_message_size = bin_read_int buf ~pos_ref in
+    exclave_ { size; max_message_size }
+  ;;
 
   type 'a t =
     | Sent of
-        { result : 'a
+        { global_ result : 'a
         ; bytes : int
-            (** Bytes should equal the size of the bin_prot rpc message and data. The total
+        (** Bytes should equal the size of the bin_prot rpc message and data. The total
             bytes written on the network in the standard protocol (which has 8-bytes sizes
             before each frame) will be [sum([8 + x.bytes for each send result x])]. Other
             framing protocols or encryption (e.g. rpc over kerberos) may write more or
@@ -51,7 +57,7 @@ module Send_result = struct
         }
     | Closed
     | Message_too_big of message_too_big
-  [@@deriving sexp_of, globalize]
+  [@@deriving compare, globalize, sexp_of]
 end
 
 module type Writer = sig
@@ -70,21 +76,26 @@ module type Writer = sig
   val stopped : t -> unit Deferred.t
 
   (** [flushed t] returns a deferred that must become determined when all prior sent
-      messages are delivered.
+      messages have either been flushed to the underlying stream transport or have been
+      dropped because the underlying transport has closed.
 
       It must be OK to call [flushed t] after [t] has been closed. *)
   val flushed : t -> unit Deferred.t
 
-  (** [ready_to_write t] becomes determined when it is a good time to send messages
-      again. Async RPC calls this function after sending a batch of messages, to avoid
-      flooding the transport.
+  (** [ready_to_write t] becomes determined when it is a good time to send messages again.
+      Async RPC calls this function after sending a batch of messages, to avoid flooding
+      the transport.
 
       Using [let ready_to_write = flushed] is an acceptable implementation. *)
   val ready_to_write : t -> unit Deferred.t
 
   (** All the following functions send exactly one message. *)
 
-  val send_bin_prot : t -> 'a Bin_prot.Type_class.writer -> 'a -> unit Send_result.t
+  val send_bin_prot
+    :  t
+    -> 'a Bin_prot.Type_class.writer
+    -> 'a
+    -> local_ unit Send_result.t
 
   val send_bin_prot_and_bigstring
     :  t
@@ -93,10 +104,10 @@ module type Writer = sig
     -> buf:Bigstring.t
     -> pos:int
     -> len:int
-    -> unit Send_result.t
+    -> local_ unit Send_result.t
 
   (** Same as [send_bin_prot_and_bigstring] but the bigstring can't be modified until the
-      returned deferred becomes determined.  This can be used to avoid copying the
+      returned deferred becomes determined. This can be used to avoid copying the
       bigstring. *)
   val send_bin_prot_and_bigstring_non_copying
     :  t
@@ -105,5 +116,5 @@ module type Writer = sig
     -> buf:Bigstring.t
     -> pos:int
     -> len:int
-    -> unit Deferred.t Send_result.t
+    -> local_ unit Deferred.t Send_result.t
 end

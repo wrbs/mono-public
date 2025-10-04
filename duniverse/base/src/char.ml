@@ -1,44 +1,29 @@
 open! Import
 module Array = Array0
+module Sexp = Sexp0
 module String = String0
 include Char0
 
 module T = struct
-  type t = char [@@deriving_inline compare, hash, globalize, sexp, sexp_grammar]
-
-  let compare = (compare_char : t -> t -> int)
-
-  let (hash_fold_t : Ppx_hash_lib.Std.Hash.state -> t -> Ppx_hash_lib.Std.Hash.state) =
-    hash_fold_char
-
-  and (hash : t -> Ppx_hash_lib.Std.Hash.hash_value) =
-    let func = hash_char in
-    fun x -> func x
-  ;;
-
-  let (globalize : t -> t) = (globalize_char : t -> t)
-  let t_of_sexp = (char_of_sexp : Sexplib0.Sexp.t -> t)
-  let sexp_of_t = (sexp_of_char : t -> Sexplib0.Sexp.t)
-  let (t_sexp_grammar : t Sexplib0.Sexp_grammar.t) = char_sexp_grammar
-
-  [@@@end]
+  type t = char
+  [@@deriving compare ~localize, hash, globalize, sexp ~localize, sexp_grammar]
 
   let to_string t = String.make 1 t
 
   let of_string s =
     match String.length s with
     | 1 -> s.[0]
-    | _ -> failwithf "Char.of_string: %S" s ()
+    | _ -> Printf.failwithf "Char.of_string: %S" s ()
   ;;
 end
 
 include T
 
-include Identifiable.Make (struct
-  include T
+include%template Identifiable.Make [@modality portable] (struct
+    include T
 
-  let module_name = "Base.Char"
-end)
+    let module_name = "Base.Char"
+  end)
 
 let pp fmt c = Stdlib.Format.fprintf fmt "%C" c
 
@@ -48,7 +33,12 @@ let pp fmt c = Stdlib.Format.fprintf fmt "%C" c
 open! Char_replace_polymorphic_compare
 
 let invariant (_ : t) = ()
-let all = Array.init 256 ~f:unsafe_of_int |> Array.to_list
+
+let all =
+  Array.init 256 ~f:unsafe_of_int
+  |> Array.to_list
+  |> Portability_hacks.Cross.Portable.(cross (list infer))
+;;
 
 let is_lowercase = function
   | 'a' .. 'z' -> true
@@ -92,7 +82,7 @@ let get_digit_unsafe t = to_int t - to_int '0'
 let get_digit_exn t =
   if is_digit t
   then get_digit_unsafe t
-  else failwithf "Char.get_digit_exn %C: not a digit" t ()
+  else Printf.failwithf "Char.get_digit_exn %C: not a digit" t ()
 ;;
 
 let get_digit t = if is_digit t then Some (get_digit_unsafe t) else None
@@ -136,13 +126,7 @@ end
 
 module Caseless = struct
   module T = struct
-    type t = char [@@deriving_inline sexp, sexp_grammar]
-
-    let t_of_sexp = (char_of_sexp : Sexplib0.Sexp.t -> t)
-    let sexp_of_t = (sexp_of_char : t -> Sexplib0.Sexp.t)
-    let (t_sexp_grammar : t Sexplib0.Sexp_grammar.t) = char_sexp_grammar
-
-    [@@@end]
+    type t = char [@@deriving sexp ~localize, sexp_grammar]
 
     let compare c1 c2 = compare (lowercase c1) (lowercase c2)
     let compare__local c1 c2 = compare c1 c2
@@ -151,7 +135,8 @@ module Caseless = struct
   end
 
   include T
-  include Comparable.Make (T)
+
+  include%template Comparable.Make [@modality portable] (T)
 
   let equal__local t1 t2 = equal_int (compare__local t1 t2) 0
 end

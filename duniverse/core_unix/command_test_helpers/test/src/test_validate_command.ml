@@ -13,7 +13,7 @@ let get_output_or_error command args ~f =
    | Ok () -> ()
    | Error error -> print_s [%sexp (error : Error.t)]
    | exception exn -> print_s [%sexp "Raised", (exn : exn)]);
-  expect_test_output [%here]
+  expect_test_output ()
 ;;
 
 (* Opam cannot distinguish between dependencies of the implementation and dependencies of
@@ -102,7 +102,7 @@ module _ = struct
         version                    . print version information
         help                       . explain a given subcommand (perhaps recursively)
 
-      subcommand foo is an ambiguous prefix: foo1, foo2
+      subcommand foo is ambiguous: foo1, foo2
       (command.ml.Exit_called (status 1))
       |}]
   ;;
@@ -186,7 +186,7 @@ module _ = struct
         {|
         Error parsing command line:
 
-          flag -f is an ambiguous prefix: -foobar, -fubar
+          flag -f is ambiguous: -foobar, -fubar
 
         For usage information, run
 

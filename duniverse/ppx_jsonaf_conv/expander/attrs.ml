@@ -61,6 +61,14 @@ let option =
     ()
 ;;
 
+let list =
+  Attribute.declare
+    "jsonaf.list"
+    Attribute.Context.label_declaration
+    Ast_pattern.(pstr nil)
+    ()
+;;
+
 let allow_extra_fields_td =
   Attribute.declare
     "jsonaf.allow_extra_fields"
@@ -72,6 +80,22 @@ let allow_extra_fields_td =
 let allow_extra_fields_cd =
   Attribute.declare
     "jsonaf.allow_extra_fields"
+    Attribute.Context.constructor_declaration
+    Ast_pattern.(pstr nil)
+    ()
+;;
+
+let allow_extra_fields_log_td =
+  Attribute.declare
+    "jsonaf.allow_extra_fields.log"
+    Attribute.Context.type_declaration
+    Ast_pattern.(pstr nil)
+    ()
+;;
+
+let allow_extra_fields_log_cd =
+  Attribute.declare
+    "jsonaf.allow_extra_fields.log"
     Attribute.Context.constructor_declaration
     Ast_pattern.(pstr nil)
     ()
@@ -111,6 +135,7 @@ let invalid_attribute ~loc attr description =
 
 let fail_if_allow_extra_field_cd ~loc x =
   if Option.is_some (Attribute.get allow_extra_fields_cd x)
+     || Option.is_some (Attribute.get allow_extra_fields_log_cd x)
   then
     Location.raise_errorf
       ~loc
@@ -118,27 +143,38 @@ let fail_if_allow_extra_field_cd ~loc x =
 ;;
 
 let fail_if_allow_extra_field_td ~loc x =
-  if Option.is_some (Attribute.get allow_extra_fields_td x)
-  then (
-    match x.ptype_kind with
-    | Ptype_variant cds
-      when List.exists cds ~f:(fun cd ->
-             match cd.pcd_args with
-             | Pcstr_record _ -> true
-             | _ -> false) ->
-      Location.raise_errorf
-        ~loc
-        "ppx_jsonaf_conv: [@@@@allow_extra_fields] only works on records. For inline \
-         records, do: type t = A of { a : int } [@@allow_extra_fields] | B [@@@@deriving \
-         jsonaf]"
-    | _ ->
-      Location.raise_errorf
-        ~loc
-        "ppx_jsonaf_conv: [@@@@allow_extra_fields] is only allowed on records.")
+  match
+    Attribute.get allow_extra_fields_td x, Attribute.get allow_extra_fields_log_td x
+  with
+  | None, None -> ()
+  | Some (), Some () ->
+    Location.raise_errorf
+      ~loc
+      "ppx_jsonaf_conv: You can only specify one of [@@@@allow_extra_fields] and \
+       [@@@@allow_extra_fields.log]"
+  | Some (), None | None, Some () ->
+    (match x.ptype_kind with
+     | Ptype_variant cds
+       when List.exists cds ~f:(fun cd ->
+              match cd.pcd_args with
+              | Pcstr_record _ -> true
+              | _ -> false) ->
+       Location.raise_errorf
+         ~loc
+         "ppx_jsonaf_conv: [@@@@allow_extra_fields] only works on records. For inline \
+          records, do: type t = A of { a : int } [@@allow_extra_fields] | B \
+          [@@@@deriving jsonaf]"
+     | _ ->
+       Location.raise_errorf
+         ~loc
+         "ppx_jsonaf_conv: [@@@@allow_extra_fields] is only allowed on records.")
 ;;
 
 module Record_field_handler = struct
-  type common = [ `jsonaf_option of core_type ]
+  type common =
+    [ `jsonaf_option of core_type
+    | `jsonaf_list
+    ]
 
   let get_attribute attr ld ~f =
     Option.map (Attribute.get attr ld) ~f:(fun x -> f x, Attribute.name attr)
@@ -152,6 +188,13 @@ module Record_field_handler = struct
             (match ld.pld_type with
              | [%type: [%t? ty] option] -> Some (`jsonaf_option ty, "[@jsonaf.option]")
              | _ -> invalid_attribute ~loc option "_ option")
+          | None -> None)
+      ; (fun ld ->
+          match Attribute.get list ld with
+          | Some () ->
+            (match ld.pld_type with
+             | [%type: [%t? _] list] -> Some (`jsonaf_list, "[@jsonaf.list]")
+             | _ -> invalid_attribute ~loc list "_ list")
           | None -> None)
       ]
     in

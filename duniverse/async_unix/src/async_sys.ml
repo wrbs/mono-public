@@ -15,16 +15,72 @@ let concat_quoted = Sys.concat_quoted
 let getcwd = wrap1 Sys_unix.getcwd
 let home_directory = wrap1 Sys_unix.home_directory
 let ls_dir = wrap1 Sys_unix.ls_dir
+let ls_dir_detailed = wrap1 Core_unix.ls_dir_detailed
 let readdir = wrap1 Sys_unix.readdir
 let remove = wrap1 Sys_unix.remove
 let rename = wrap2 Sys_unix.rename
-let wrap_is f ?follow_symlinks path = In_thread.run (fun () -> f ?follow_symlinks path)
-let file_exists = wrap_is Sys_unix.file_exists
-let file_exists_exn = wrap_is Sys_unix.file_exists_exn
-let is_directory = wrap_is Sys_unix.is_directory
-let is_directory_exn = wrap_is Sys_unix.is_directory_exn
-let is_file = wrap_is Sys_unix.is_file
-let is_file_exn = wrap_is Sys_unix.is_file_exn
+
+let raise_stat_exn ~follow_symlinks path err =
+  let syscall_name = if follow_symlinks then "stat" else "lstat" in
+  raise
+    (Unix.Unix_error
+       ( err
+       , syscall_name
+       , Core_unix.Private.sexp_to_string_hum [%sexp { filename : string = path }] ))
+;;
+
+let stat_check_exn f ?(follow_symlinks = true) path =
+  let stat =
+    if follow_symlinks
+    then Unix_syscalls.stat_or_unix_error
+    else Unix_syscalls.lstat_or_unix_error
+  in
+  stat path
+  >>| function
+  | Ok stat -> f stat
+  | Error (ENOENT | ENOTDIR) -> false
+  | Error err -> raise_stat_exn ~follow_symlinks path err
+;;
+
+let stat_check f ?(follow_symlinks = true) path =
+  let stat =
+    if follow_symlinks
+    then Unix_syscalls.stat_or_unix_error
+    else Unix_syscalls.lstat_or_unix_error
+  in
+  stat path
+  >>| function
+  | Ok stat -> if f stat then `Yes else `No
+  | Error (ENOENT | ENOTDIR) -> `No
+  | Error (EACCES | ELOOP) -> `Unknown
+  | Error err -> raise_stat_exn ~follow_symlinks path err
+;;
+
+let file_exists = stat_check (fun _ -> true)
+let file_exists_exn = stat_check_exn (fun _ -> true)
+
+let is_directory =
+  stat_check (fun stat -> [%equal: Unix.File_kind.t] stat.kind `Directory)
+;;
+
+let is_directory_exn =
+  stat_check_exn (fun stat -> [%equal: Unix.File_kind.t] stat.kind `Directory)
+;;
+
+let is_file = stat_check (fun stat -> [%equal: Unix.File_kind.t] stat.kind `File)
+let is_file_exn = stat_check_exn (fun stat -> [%equal: Unix.File_kind.t] stat.kind `File)
+
+let is_symlink =
+  stat_check
+    (fun stat -> [%equal: Unix.File_kind.t] stat.kind `Link)
+    ~follow_symlinks:false
+;;
+
+let is_symlink_exn =
+  stat_check_exn
+    (fun stat -> [%equal: Unix.File_kind.t] stat.kind `Link)
+    ~follow_symlinks:false
+;;
 
 let when_file_changes
   ?(time_source = Time_source.wall_clock ())
@@ -74,14 +130,65 @@ let when_file_exists ?follow_symlinks ?(poll_delay = sec 0.5) file =
     loop ())
 ;;
 
-let c_int_size = Sys_unix.c_int_size
-let execution_mode = Sys_unix.execution_mode
-let getenv = Sys.getenv
-let getenv_exn = Sys.getenv_exn
-let int_size = Sys.int_size_in_bits
-let interactive = Sys.interactive
-let ocaml_version = Sys.ocaml_version
-let os_type = Sys.os_type
-let word_size = Sys.word_size_in_bits
-let opaque_identity = Sys.opaque_identity
-let big_endian = Sys.big_endian
+(* We redeclare everything from Core.Sys that we're just passing through here so that we
+   are required to have everything enumerated and can consider whether it needs to be
+   turned into an async version. *)
+include struct
+  open Core.Sys
+
+  let interactive = interactive
+  let os_type = os_type
+  let unix = unix
+  let win32 = win32
+  let cygwin = cygwin
+
+  type nonrec backend_type : value mod contended portable = backend_type =
+    | Native
+    | Bytecode
+    | Other of string
+
+  let backend_type = backend_type
+  let word_size_in_bits = word_size_in_bits
+  let int_size_in_bits = int_size_in_bits
+  let big_endian = big_endian
+  let max_string_length = max_string_length
+  let max_array_length = max_array_length
+  let runtime_variant = runtime_variant
+  let runtime_parameters = runtime_parameters
+  let ocaml_version = ocaml_version
+  let enable_runtime_warnings = enable_runtime_warnings
+  let runtime_warnings_enabled = runtime_warnings_enabled
+  let getenv = getenv
+  let getenv_exn = getenv_exn
+
+  include (
+    Base.Sys :
+    sig
+      (* It seems like just aliasing primitives doesn't satisfy the compiler,
+         so this is brought in through [include] instead of a [let]. *)
+      external opaque_identity
+        : ('a : any).
+        ('a[@local_opt]) -> ('a[@local_opt])
+        = "%opaque"
+      [@@layout_poly]
+
+      external opaque_identity_global : ('a : any). 'a -> 'a = "%opaque" [@@layout_poly]
+    end)
+end
+
+include struct
+  open Sys_unix
+
+  let execution_mode = execution_mode
+end
+
+include (
+  Sys_unix :
+  sig
+    (* It seems like just aliasing primitives doesn't satisfy the compiler,
+         so this is brought in through [include] instead of a [let]. *)
+    external c_int_size : unit -> int = "c_int_size" [@@noalloc]
+  end)
+
+let word_size = word_size_in_bits
+let int_size = int_size_in_bits

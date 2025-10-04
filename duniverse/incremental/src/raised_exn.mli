@@ -1,4 +1,6 @@
-(** A module internal to Incremental.  Users should see {!Incremental_intf}.
+@@ portable
+
+(** A module internal to Incremental. Users should see {!Incremental_intf}.
 
     A [Raised_exn.t] is an exception paired with the backtrace that was grabbed at the
     time the exception was raised. *)

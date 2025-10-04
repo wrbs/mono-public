@@ -29,7 +29,6 @@
    type system, but I dont know how or if it's possible. *)
 
 open Base
-include Structural_intf
 
 type name = string
 type id = int
@@ -51,10 +50,8 @@ type signal =
       id
       * name
       * (string * generic) list
-      * (string * signal) list
-      (* inputs (read) *)
-      * (string * signal) list
-      (* outputs (write; drive wires/module outputs *)
+      * (string * signal) list (* inputs (read) *)
+      * (string * signal) list (* outputs (write; drive wires/module outputs *)
       * (string * signal) list (* tristate (write; drive triwires/module tristates *)
       * string option
       * Rtl_attribute.t list
@@ -73,10 +70,107 @@ and generic =
   | GString of string
   | GUnquoted of string
 
+(* Each of the instantiation types in the Lib api. *)
+module Structural_rtl_component = struct
+  module T = struct
+    type t =
+      | And of
+          { name : string
+          ; width : int
+          }
+      | Or of
+          { name : string
+          ; width : int
+          }
+      | Xor of
+          { name : string
+          ; width : int
+          }
+      | Add of
+          { name : string
+          ; width : int
+          }
+      | Sub of
+          { name : string
+          ; width : int
+          }
+      | Lt of
+          { name : string
+          ; width : int
+          }
+      | Eq of
+          { name : string
+          ; width : int
+          }
+      | Not of
+          { name : string
+          ; width : int
+          }
+      | Mul of
+          { name : string
+          ; signed : bool
+          ; width_a : int
+          ; width_b : int
+          }
+      | Reg of
+          { name : string
+          ; clock_edge : Edge.t
+          ; reset_edge : Edge.t
+          ; width : int
+          }
+    [@@deriving compare, sexp_of]
+  end
+
+  include T
+  include Comparator.Make (T)
+
+  (* Generate a hardcaml circuit for each instance type. *)
+  let rtl_circuit t =
+    let open Signal in
+    let op2 name width ~f =
+      Circuit.create_exn ~name [ output "o" (f (input "i0" width) (input "i1" width)) ]
+    in
+    match t with
+    | And { name; width } -> op2 name width ~f:( &: )
+    | Or { name; width } -> op2 name width ~f:( |: )
+    | Xor { name; width } -> op2 name width ~f:( ^: )
+    | Add { name; width } -> op2 name width ~f:( +: )
+    | Sub { name; width } -> op2 name width ~f:( -: )
+    | Lt { name; width } -> op2 name width ~f:( <: )
+    | Eq { name; width } -> op2 name width ~f:( ==: )
+    | Mul { signed = false; name; width_a; width_b } ->
+      Circuit.create_exn ~name [ output "o" (input "i0" width_a *: input "i1" width_b) ]
+    | Mul { signed = true; name; width_a; width_b } ->
+      Circuit.create_exn ~name [ output "o" (input "i0" width_a *+ input "i1" width_b) ]
+    | Not { name; width } -> Circuit.create_exn ~name [ output "o" ~:(input "i" width) ]
+    | Reg { name; clock_edge; reset_edge; width } ->
+      Circuit.create_exn
+        ~name
+        [ output
+            "q"
+            (reg
+               (Reg_spec.create
+                  ~clock:(input "clock" 1)
+                  ~clock_edge
+                  ~reset:(input "reset" 1)
+                  ~reset_edge
+                  ~clear:(input "clear" 1)
+                  ())
+               ~enable:(input "enable" 1)
+               ~reset_to:(input "reset_to" width)
+               ~clear_to:(input "clear_to" width)
+               (input "d" width))
+        ]
+  ;;
+end
+
 type circuit =
   { name : string
-  ; id : id
+  ; mutable id : id
   ; mutable signals : signal list
+  ; mutable structural_rtl_components_set : Set.M(Structural_rtl_component).t
+      (* Set of instantiations createing by the Lib api. *)
+  ; mutable const_map : signal Map.M(String).t
   }
 
 exception Invalid_submodule_input_connection of string * string * signal
@@ -107,27 +201,30 @@ let signal_is_empty = function
   | _ -> false
 ;;
 
-let initial_map () = Map.empty (module String)
-
 (* state *)
-let id' = ref 0
-let const_map = ref (initial_map ())
 let circuit' = ref None
 let circuits' = ref []
-let instance_names = Hash_set.create (module String)
+
+let add_structural_rtl_component t =
+  match !circuit' with
+  | None -> raise No_circuit
+  | Some circuit ->
+    circuit.structural_rtl_components_set
+    <- Set.add circuit.structural_rtl_components_set t
+;;
 
 let reset_circuit_database () =
-  id' := 0;
-  const_map := initial_map ();
   circuit' := None;
-  circuits' := [];
-  Hash_set.clear instance_names
+  circuits' := []
 ;;
 
 let id () =
-  let id = !id' in
-  Int.incr id';
-  id
+  match !circuit' with
+  | None -> raise No_circuit
+  | Some circ ->
+    let id = circ.id in
+    circ.id <- circ.id + 1;
+    id
 ;;
 
 let get_id = function
@@ -168,7 +265,14 @@ let width t =
     raise (Invalid_width t)
 ;;
 
-let empty name = { name; id = id (); signals = [] }
+let empty name =
+  { name
+  ; id = 1
+  ; signals = []
+  ; structural_rtl_components_set = Set.empty (module Structural_rtl_component)
+  ; const_map = Map.empty (module String)
+  }
+;;
 
 let circuit_exists name =
   match List.Assoc.find !circuits' name ~equal:String.equal with
@@ -182,12 +286,10 @@ let start_circuit name =
   | None ->
     if circuit_exists name
     then raise (Circuit_already_exists name)
-    else (
-      Hash_set.clear instance_names;
-      id' := 0;
-      const_map := initial_map ();
-      circuit' := Some (empty name))
+    else circuit' := Some (empty name)
 ;;
+
+let structural_rtl_components circuit = circuit.structural_rtl_components_set
 
 let check_unique_io_names c =
   let ios, _ =
@@ -204,7 +306,7 @@ let check_unique_io_names c =
          if Set.mem set name
          then raise (IO_name_already_exists name)
          else Set.add set name)
-      : Set.M(String).t);
+     : Set.M(String).t);
   ()
 ;;
 
@@ -223,6 +325,7 @@ let get_circuit () =
   | Some x -> x
 ;;
 
+let circuit_name circuit = circuit.name
 let find_circuit name = List.Assoc.find_exn !circuits' name ~equal:String.equal
 
 let create_circuit name f =
@@ -263,7 +366,7 @@ let mk_tristate name width =
 let mk_wire width = Internal_wire (id (), width, ref Empty) >> add_sig
 let mk_triwire width = Internal_triwire (id (), width, ref []) >> add_sig
 
-let ( <== ) a b =
+let ( <-- ) a b =
   match a with
   | Module_output (_, _, _, con, _) | Internal_wire (_, _, con) ->
     (match !con with
@@ -313,18 +416,17 @@ let inst ?instance_name ?(attributes = []) ?(g = []) ?(i = []) ?(o = []) ?(t = [
   List.iter o ~f:(fun (n, s) ->
     if not (is_writeable s)
     then raise (Invalid_submodule_output_connection (name, n, s))
-    else s <== Instantiation_output (mod_id, n));
+    else s <-- Instantiation_output (mod_id, n));
   List.iter t ~f:(fun (n, s) ->
     if not (is_readwrite s)
     then raise (Invalid_submodule_tristate_connection (name, n, s))
-    else s <== Instantiation_tristate (mod_id, n));
+    else s <-- Instantiation_tristate (mod_id, n));
   Option.iter instance_name ~f:(fun instance_name ->
     if String.is_prefix instance_name ~prefix:"_"
-    then raise_s [%message "explicitly specified instance_names cannot start with a '_'"];
-    Hash_set.add instance_names instance_name);
+    then raise_s [%message "explicitly specified instance_names cannot start with a '_'"]);
   ignore
     (Instantiation (mod_id, name, g, i, o, t, instance_name, attributes) >> add_sig
-      : signal)
+     : signal)
 ;;
 
 let ( ==> ) a b = a, b
@@ -338,12 +440,15 @@ let const' b =
 ;;
 
 let of_bit_string b =
-  match Map.find !const_map b with
-  | Some x -> x
-  | None ->
-    let c = const' b in
-    const_map := Map.set !const_map ~key:b ~data:c;
-    c
+  match !circuit' with
+  | None -> raise No_circuit
+  | Some circ ->
+    (match Map.find circ.const_map b with
+     | Some x -> x
+     | None ->
+       let c = const' b in
+       circ.const_map <- Map.set circ.const_map ~key:b ~data:c;
+       c)
 ;;
 
 let z w = of_bit_string (String.init w ~f:(fun _ -> 'z'))
@@ -370,7 +475,7 @@ let concat_msb d =
   Rtl_op (id (), List.fold d ~init:0 ~f:(fun a s -> a + width s), Concat d) >> add_sig
 ;;
 
-let select d hi lo =
+let select d ~high:hi ~low:lo =
   check_readable [ d ];
   if hi < lo then raise (Select_index_error (hi, lo));
   if lo < 0 then raise (Select_index_error (hi, lo));
@@ -378,12 +483,13 @@ let select d hi lo =
   Rtl_op (id (), hi - lo + 1, Select (hi, lo, d)) >> add_sig
 ;;
 
+(* Configure how we want to generate structural instantiations from the Comb API. *)
 let prefix = "hardcaml_lib_"
+let use_generic_instantiations = false
 
-(* Comb API *)
-module Base (C : Config) = struct
-  open C
-
+(* Comb primitives API. Also tracks a set of instantiations so they can be generated
+   later. *)
+module Base () = struct
   type t = signal
 
   let equal = signal_equal
@@ -396,119 +502,140 @@ module Base (C : Config) = struct
 
   let width = width
   let wire = mk_wire
-  let ( -- ) a _ = a
+
+  let ( -- ) ~(loc : [%call_pos]) a _ =
+    ignore loc;
+    a
+  ;;
 
   let binop0 name a b =
     if width a <> width b then raise (Binop_arg_widths_different name);
-    let o = wire 1 in
-    inst
-      (prefix ^ name)
-      ~g:[ "b" ==> GInt (width a) ]
-      ~i:[ "i0" ==> a; "i1" ==> b ]
-      ~o:[ "o" ==> o ];
-    o
+    let out = wire 1 in
+    let g = [ "b" ==> GInt (width a) ] in
+    let i = [ "i0" ==> a; "i1" ==> b ] in
+    let o = [ "o" ==> out ] in
+    let g, name =
+      if use_generic_instantiations
+      then g, [%string "%{prefix}%{name}"]
+      else [], [%string "%{prefix}%{name}_%{width a#Int}"]
+    in
+    inst name ~g ~i ~o;
+    out, name
   ;;
 
   let binop1 name a b =
     if width a <> width b then raise (Binop_arg_widths_different name);
-    let o = wire (width a) in
-    inst
-      (prefix ^ name)
-      ~g:[ "b" ==> GInt (width a) ]
-      ~i:[ "i0" ==> a; "i1" ==> b ]
-      ~o:[ "o" ==> o ];
-    o
+    let out = wire (width a) in
+    let g = [ "b" ==> GInt (width a) ] in
+    let i = [ "i0" ==> a; "i1" ==> b ] in
+    let o = [ "o" ==> out ] in
+    let g, name =
+      if use_generic_instantiations
+      then g, [%string "%{prefix}%{name}"]
+      else [], [%string "%{prefix}%{name}_%{width a#Int}"]
+    in
+    inst name ~g ~i ~o;
+    out, name
   ;;
 
   let binop2 name a b =
-    let o = wire (width a + width b) in
-    inst
-      (prefix ^ name)
-      ~g:[ "w0" ==> GInt (width a); "w1" ==> GInt (width b) ]
-      ~i:[ "i0" ==> a; "i1" ==> b ]
-      ~o:[ "o" ==> o ];
-    o
-  ;;
-
-  let concat2 = binop2 "concat2"
-
-  let s_concat_msb d =
-    let rec cat2 = function
-      | [] -> raise No_elements_to_concat
-      | [ a ] -> a
-      | h :: t -> concat2 h (cat2 t)
+    let out = wire (width a + width b) in
+    let g = [ "w0" ==> GInt (width a); "w1" ==> GInt (width b) ] in
+    let i = [ "i0" ==> a; "i1" ==> b ] in
+    let o = [ "o" ==> out ] in
+    let g, name =
+      if use_generic_instantiations
+      then g, [%string "%{prefix}%{name}"]
+      else [], [%string "%{prefix}%{name}_%{width a#Int}_%{width b#Int}"]
     in
-    cat2 d
+    inst name ~g ~i ~o;
+    out, name
   ;;
 
-  let concat_msb = if structural_concat then s_concat_msb else concat_msb
-
-  let s_select d h l =
-    let o = wire (h - l + 1) in
-    inst
-      (prefix ^ "select")
-      ~g:[ "b" ==> GInt (width d); "h" ==> GInt h; "l" ==> GInt l ]
-      ~i:[ "i" ==> d ]
-      ~o:[ "o" ==> o ];
-    o
-  ;;
-
-  let select = if structural_select then s_select else select
-
-  let mux2 s a b =
-    let o = wire (width a) in
-    inst
-      (prefix ^ "mux2")
-      ~g:[ "b" ==> GInt (width a) ]
-      ~i:[ "s" ==> s; "d0" ==> b; "d1" ==> a ]
-      ~o:[ "o" ==> o ];
-    o
-  ;;
-
-  let s_mux sel d =
-    let w = width sel in
-    let rec f n l def =
-      if n = w
-      then (
-        match l with
-        | [ a ] -> a
-        | _ -> raise (Too_many_mux_data_elements (List.length d)))
-      else (
-        let s = select sel n n in
-        let rec pairs = function
-          | [] -> []
-          | [ a ] -> [ a ]
-          | a :: b :: t -> mux2 s b a :: pairs t
-        in
-        match l with
-        | [ a ] -> mux2 s def a
-        | _ -> f (n + 1) (pairs l) def)
-    in
-    let def =
-      try List.hd_exn (List.rev d) with
-      | _ -> raise Too_few_mux_data_elements
-    in
-    f 0 d def
-  ;;
-
-  let mux = if structural_mux then s_mux else mux
+  let concat_msb = concat_msb
+  let select = select
+  let mux = mux
   let of_constant c = Constant.to_binary_string c |> of_bit_string
-  let ( +: ) = binop1 "add"
-  let ( -: ) = binop1 "sub"
-  let ( *: ) = binop2 "mulu"
-  let ( *+ ) = binop2 "muls"
-  let ( &: ) = binop1 "and"
-  let ( |: ) = binop1 "or"
-  let ( ^: ) = binop1 "xor"
 
-  let ( ~: ) i =
-    let o = wire (width i) in
-    inst (prefix ^ "not") ~g:[ "b" ==> GInt (width i) ] ~i:[ "i" ==> i ] ~o:[ "o" ==> o ];
+  let ( +: ) a b =
+    let o, name = binop1 "add" a b in
+    add_structural_rtl_component (Add { name; width = width a });
     o
   ;;
 
-  let ( ==: ) = binop0 "eq"
-  let ( <: ) = binop0 "lt"
+  let ( -: ) a b =
+    let o, name = binop1 "sub" a b in
+    add_structural_rtl_component (Sub { name; width = width a });
+    o
+  ;;
+
+  let ( *: ) a b =
+    let o, name = binop2 "mulu" a b in
+    add_structural_rtl_component
+      (Mul { name; signed = false; width_a = width a; width_b = width b });
+    o
+  ;;
+
+  let ( *+ ) a b =
+    let o, name = binop2 "muls" a b in
+    add_structural_rtl_component
+      (Mul { name; signed = true; width_a = width a; width_b = width b });
+    o
+  ;;
+
+  let ( &: ) a b =
+    let o, name = binop1 "and" a b in
+    add_structural_rtl_component (And { name; width = width a });
+    o
+  ;;
+
+  let ( |: ) a b =
+    let o, name = binop1 "or" a b in
+    add_structural_rtl_component (Or { name; width = width a });
+    o
+  ;;
+
+  let ( ^: ) a b =
+    let o, name = binop1 "xor" a b in
+    add_structural_rtl_component (Xor { name; width = width a });
+    o
+  ;;
+
+  let ( ~: ) a =
+    let out = wire (width a) in
+    let g = [ "b" ==> GInt (width a) ] in
+    let i = [ "i" ==> a ] in
+    let o = [ "o" ==> out ] in
+    let name = "not" in
+    let g, name =
+      if use_generic_instantiations
+      then g, [%string "%{prefix}%{name}"]
+      else [], [%string "%{prefix}%{name}_%{width a#Int}"]
+    in
+    inst name ~g ~i ~o;
+    add_structural_rtl_component (Not { name; width = width a });
+    out
+  ;;
+
+  let ( ==: ) a b =
+    let o, name = binop0 "eq" a b in
+    add_structural_rtl_component (Eq { name; width = width a });
+    o
+  ;;
+
+  let ( <: ) a b =
+    let o, name = binop0 "lt" a b in
+    add_structural_rtl_component (Lt { name; width = width a });
+    o
+  ;;
+
+  include Comb.Expert.Gen_cases_from_mux (struct
+      type nonrec t = t
+
+      let mux = mux
+      let ( ==: ) = ( ==: )
+    end)
+
   let to_string s = name s
   let to_constant _ = failwith "Structural.Base.to_constant not supported"
 
@@ -539,26 +666,87 @@ module Base (C : Config) = struct
   ;;
 end
 
-module Base0 = Base (struct
-  let structural_const = false
-  let structural_mux = false
-  let structural_concat = false
-  let structural_select = false
-end)
+module type Lib = Structural_intf.Lib with type t = signal
 
-module Base1 = Base (struct
-  let structural_const = false
-  let structural_mux = true
-  let structural_concat = true
-  let structural_select = true
-end)
+module Lib () = struct
+  include Comb.Make (Base ())
 
-module Base2 = Base (struct
-  let structural_const = true
-  let structural_mux = true
-  let structural_concat = true
-  let structural_select = true
-end)
+  let reg
+    ~clock
+    ?(clock_edge = Edge.Rising)
+    ?reset
+    ?(reset_edge = Edge.Rising)
+    ?reset_value
+    ?clear
+    ?clear_value
+    ?enable
+    data
+    =
+    let module E = struct
+      let to_string = function
+        | Edge.Rising -> "r"
+        | Falling -> "f"
+      ;;
+
+      let to_int = function
+        | Edge.Rising -> 1
+        | Falling -> 0
+      ;;
+    end
+    in
+    let wd = width data in
+    let or_gnd = Option.value ~default:gnd in
+    let or_vdd = Option.value ~default:vdd in
+    let or_edge = function
+      | Edge.Rising -> or_gnd
+      | Falling -> or_vdd
+    in
+    let or_zero = function
+      | None -> zero wd
+      | Some x -> x
+    in
+    let q = mk_wire wd in
+    let g =
+      [ "w" ==> GInt (width data)
+      ; "ce" ==> GInt (E.to_int clock_edge)
+      ; "re" ==> GInt (E.to_int reset_edge)
+      ; "cl" ==> GInt 1
+      ]
+    in
+    let i =
+      [ "clock" ==> clock
+      ; "reset" ==> or_edge reset_edge reset
+      ; "reset_value" ==> or_zero reset_value
+      ; "clear" ==> or_gnd clear
+      ; "clear_value" ==> or_zero clear_value
+      ; "enable" ==> or_vdd enable
+      ; "d" ==> data
+      ]
+    in
+    let o = [ "q" ==> q ] in
+    let g, name =
+      let name = "reg" in
+      if use_generic_instantiations
+      then g, [%string "%{prefix}%{name}"]
+      else [], [%string "%{prefix}%{name}_%{wd#Int}_%{clock_edge#E}%{reset_edge#E}"]
+    in
+    add_structural_rtl_component
+      (Reg { name; clock_edge; reset_edge; width = width data });
+    inst name ~g ~i ~o;
+    q
+  ;;
+
+  let tristate_buffer ~en ~i ~t =
+    let o = mk_wire (width i) in
+    inst
+      (prefix ^ "tristate_buffer")
+      ~g:[ "b" ==> GInt (width i) ]
+      ~i:[ "en" ==> en; "i" ==> i ]
+      ~o:[ "o" ==> o ]
+      ~t:[ "t" ==> t ];
+    o
+  ;;
+end
 
 (* {[
      let remove_unconnected circuit =
@@ -585,6 +773,8 @@ end)
        ()
    ]} *)
 
+let concat_map ?sep l ~f = Rope.concat ?sep (List.map l ~f)
+
 let get_attributes signal =
   match signal with
   | Module_input (_, _, _, attrs)
@@ -593,41 +783,41 @@ let get_attributes signal =
   | _ -> []
 ;;
 
-let attribute_value_to_string (v : Rtl_attribute.Value.t) =
+let attribute_value_to_rope (v : Rtl_attribute.Value.t) =
   match v with
-  | String s -> "\"" ^ s ^ "\""
-  | Int i -> Int.to_string i
-  | Bool b -> if b then "true" else "false"
+  | String s -> [%rope {|"%{s#String}"|}]
+  | Int i -> [%rope "%{i#Int}"]
+  | Bool b -> Rope.of_string (if b then "true" else "false")
 ;;
 
-let attributes_to_string attrs =
+let attributes_to_rope attrs =
   let body =
-    List.map attrs ~f:(fun attr ->
-      let name = Rtl_attribute.name attr in
-      match Rtl_attribute.value attr with
-      | None -> name
-      | Some value -> Printf.sprintf "%s=%s" name (attribute_value_to_string value))
-    |> String.concat ~sep:","
+    concat_map
+      attrs
+      ~f:(fun attr ->
+        let name = Rtl_attribute.name attr in
+        match Rtl_attribute.value attr with
+        | None -> Rope.of_string name
+        | Some value -> [%rope "%{name#String}=%{attribute_value_to_rope value}"])
+      ~sep:[%rope ","]
   in
-  Printf.sprintf "(* %s *)" body
+  [%rope "(* %{body} *)"]
 ;;
 
-let write_verilog os circuit =
-  let open Printf in
+let to_verilog circuit =
+  let name s = Rope.of_string (name s) in
   let declare typ signal =
-    (match get_attributes signal with
-     | [] -> ""
-     | attrs -> "  " ^ attributes_to_string attrs ^ "\n")
-    ^ "  "
-    ^ typ
-    ^ " "
-    ^ (if width signal = 1 then "" else sprintf "[%i:0] " (width signal - 1))
-    ^ name signal
+    let attrs =
+      match get_attributes signal with
+      | [] -> Rope.empty
+      | attrs -> [%rope "  %{attributes_to_rope attrs}\n"]
+    in
+    let width_spec =
+      if width signal = 1 then Rope.empty else [%rope "[%{(width signal - 1)#Int}:0] "]
+    in
+    [%rope "%{attrs}  %{typ#String} %{width_spec}%{name signal}"]
   in
-  let seperator sep l =
-    List.fold l ~init:"" ~f:(fun a s -> if String.is_empty a then s else a ^ sep ^ s)
-  in
-  let assign s0 s1 = os ("  assign " ^ name s0 ^ " = " ^ name s1 ^ ";\n") in
+  let assign s0 s1 = [%rope "  assign %{name s0} = %{name s1};\n"] in
   let part f = List.partition_tf ~f in
   let is_input = function
     | Module_input _ -> true
@@ -651,20 +841,22 @@ let write_verilog os circuit =
   let inouts, signals = part is_inout signals in
   let inst, signals = part is_inst signals in
   (* module interface *)
-  os ("module " ^ circuit.name ^ "\n");
-  os "(\n";
-  os
-    (seperator
-       ",\n"
-       (List.concat
-          [ List.map inputs ~f:(declare "input")
-          ; List.map outputs ~f:(declare "output")
-          ; List.map inouts ~f:(declare "inout")
-          ]));
-  os "\n);\n\n";
+  let io_ports =
+    let sep = [%rope ",\n"] in
+    Rope.concat
+      ~sep
+      ([ List.map inputs ~f:(declare "input")
+       ; List.map outputs ~f:(declare "output")
+       ; List.map inouts ~f:(declare "inout")
+       ]
+       |> List.concat)
+  in
   (* write wire declarations *)
-  let declare_wire s = os (declare "wire" s ^ ";\n") in
-  List.iter signals ~f:declare_wire;
+  let declare_wire s =
+    let wire s = declare "wire" s in
+    [%rope "%{wire s};\n"]
+  in
+  let wires = concat_map signals ~f:declare_wire in
   (* write assignments *)
   let connects = function
     | Empty | Instantiation_output _ | Instantiation_tristate _ -> false
@@ -672,152 +864,103 @@ let write_verilog os circuit =
   in
   let write_assignment s =
     match s with
-    | Internal_wire (_, _, con) -> if connects !con then assign s !con
+    | Internal_wire (_, _, con) -> if connects !con then assign s !con else Rope.empty
     | Internal_triwire (_, _, cons) ->
-      List.iter !cons ~f:(fun con -> if connects con then assign s con)
+      concat_map !cons ~f:(fun con -> if connects con then assign s con else Rope.empty)
     | Rtl_op (_, width, op) ->
-      os ("  assign " ^ name s ^ " = ");
-      (match op with
-       | Constant b -> os (Int.to_string width ^ "'b" ^ b)
-       | Select (hi, lo, s) ->
-         os (name s ^ "[" ^ Int.to_string hi ^ ":" ^ Int.to_string lo ^ "]")
-       | Concat d ->
-         os "{ ";
-         os (seperator ", " (List.map d ~f:name));
-         os " }"
-       | Mux (sel, d) ->
-         let rec write n l =
-           match l with
-           | [] -> ()
-           | [ x ] -> os ("    " ^ name x)
-           | x :: t ->
-             os ("    " ^ name sel ^ " == " ^ Int.to_string n ^ " ? " ^ name x ^ " :\n");
-             write (n + 1) t
-         in
-         os "\n";
-         write 0 d);
-      os ";\n"
+      let expr =
+        match op with
+        | Constant b -> [%rope "%{width#Int}'b%{b#String}"]
+        | Select (hi, lo, s) -> [%rope "%{name s}[%{hi#Int}:%{lo#Int}]"]
+        | Concat d ->
+          let parts = concat_map ~sep:[%rope ", "] d ~f:name in
+          [%rope "{ %{parts} }"]
+        | Mux (sel, d) ->
+          let rec write n l =
+            match l with
+            | [] -> Rope.empty
+            | [ x ] -> [%rope "    %{name x}"]
+            | x :: t ->
+              [%rope "    %{name sel} == %{n#Int} ? %{name x} :\n%{write (n+1) t}"]
+          in
+          [%rope "\n%{write 0 d}"]
+      in
+      [%rope "  assign %{name s} = %{expr};\n"]
     | _ -> failwith "write_assignment"
   in
-  List.iter signals ~f:write_assignment;
+  let assignments = concat_map signals ~f:write_assignment in
   (* write module outputs and inouts *)
   let assign_output s =
     match s with
-    | Module_output (_, _, _, con, _) -> if connects !con then assign s !con
+    | Module_output (_, _, _, con, _) ->
+      if connects !con then assign s !con else Rope.empty
     | Module_tristate (_, _, _, cons, _) ->
-      List.iter !cons ~f:(fun con -> if connects con then assign s con)
+      concat_map !cons ~f:(fun con -> if connects con then assign s con else Rope.empty)
     | _ -> failwith "assign_output"
   in
-  List.iter outputs ~f:assign_output;
-  List.iter inouts ~f:assign_output;
+  let assign_outputs = concat_map outputs ~f:assign_output in
+  let assign_inouts = concat_map inouts ~f:assign_output in
   (* write instantiations *)
   let write_inst = function
     | Instantiation (id, iname, g, i, o, t, instance_name, attributes) ->
-      if not (List.is_empty attributes)
-      then (
-        os "  ";
-        os (attributes_to_string attributes);
-        os "\n");
-      os ("  " ^ iname ^ "");
-      if not (List.is_empty g)
-      then (
-        os "\n  #(\n";
-        os
-          (seperator
-             ",\n"
-             (List.map g ~f:(fun (n, g) ->
-                "    ."
-                ^ n
-                ^ "("
-                ^ (match g with
-                   | GInt i -> Int.to_string i
-                   | GFloat f -> Float.to_string f
-                   | GString s -> "\"" ^ s ^ "\""
-                   | GUnquoted s -> s)
-                ^ ")")));
-        os "\n  )");
+      let attributes =
+        if List.is_empty attributes
+        then Rope.empty
+        else [%rope "  %{attributes_to_rope attributes}\n"]
+      in
+      let parameters =
+        let parameter (n, g) =
+          let value =
+            match g with
+            | GInt i -> [%rope "%{i#Int}"]
+            | GFloat f -> [%rope "%{f#Float}"]
+            | GString s -> [%rope {|"%{s#String}"|}]
+            | GUnquoted s -> Rope.of_string s
+          in
+          [%rope "    .%{n#String}(%{value})"]
+        in
+        if List.is_empty g
+        then Rope.empty
+        else (
+          let parameters = concat_map ~sep:[%rope ", \n"] g ~f:parameter in
+          [%rope "\n  #(\n%{parameters}\n  )"])
+      in
       let instance_name =
         match instance_name with
         | None -> "_" ^ Int.to_string id
         | Some instance_name -> instance_name
       in
-      os (" " ^ instance_name ^ "\n");
-      os "  (\n";
-      os
-        (seperator
-           ", \n"
-           (List.concat
-              [ List.map i ~f:(fun (n, s) -> "    ." ^ n ^ "(" ^ name s ^ ")")
-              ; List.map o ~f:(fun (n, s) -> "    ." ^ n ^ "(" ^ name s ^ ")")
-              ; List.map t ~f:(fun (n, s) -> "    ." ^ n ^ "(" ^ name s ^ ")")
-              ]));
-      os "\n  );\n"
+      let ports =
+        let sep = [%rope ", \n"] in
+        let port (n, s) = [%rope "    .%{n#String}(%{name s})"] in
+        Rope.concat
+          ~sep
+          ([ List.map i ~f:port; List.map o ~f:port; List.map t ~f:port ] |> List.concat)
+      in
+      [%rope_dedent
+        {|
+        > %{attributes}  %{iname#String}%{parameters} %{instance_name#String}
+        >   (
+        > %{ports}
+        >   );
+        >
+        |}]
     | _ ->
       (* This should never be raised *)
       raise_s [%message "Expecting an instantiation"]
   in
-  List.iter inst ~f:write_inst;
-  os "endmodule\n"
+  let insts = concat_map inst ~f:write_inst in
+  [%rope_dedent
+    {|
+    > module %{circuit.name#String}
+    > (
+    > %{io_ports}
+    > );
+    >
+    > %{wires}%{assignments}%{assign_outputs}%{assign_inouts}%{insts}endmodule
+    >
+    |}]
 ;;
-
-module Lib = struct
-  let reg ~clock ~en d =
-    let q = mk_wire (width d) in
-    inst
-      (prefix ^ "reg")
-      ~g:[ "b" ==> GInt (width d) ]
-      ~i:[ "clock" ==> clock; "enable" ==> en; "d" ==> d ]
-      ~o:[ "q" ==> q ];
-    q
-  ;;
-
-  let reg_r ~clock ~reset ?(def = 0) ~en d =
-    let q = mk_wire (width d) in
-    inst
-      (prefix ^ "reg_r")
-      ~g:[ "b" ==> GInt (width d); "default" ==> GInt def ]
-      ~i:[ "clock" ==> clock; "reset" ==> reset; "enable" ==> en; "d" ==> d ]
-      ~o:[ "q" ==> q ];
-    q
-  ;;
-
-  let reg_c ~clock ~clear ?(def = 0) ~en d =
-    let q = mk_wire (width d) in
-    inst
-      (prefix ^ "reg_c")
-      ~g:[ "b" ==> GInt (width d); "default" ==> GInt def ]
-      ~i:[ "clock" ==> clock; "clear" ==> clear; "enable" ==> en; "d" ==> d ]
-      ~o:[ "q" ==> q ];
-    q
-  ;;
-
-  let reg_rc ~clock ~reset ~clear ?(def = 0) ~en d =
-    let q = mk_wire (width d) in
-    inst
-      (prefix ^ "reg_rc")
-      ~g:[ "b" ==> GInt (width d); "default" ==> GInt def ]
-      ~i:
-        [ "clock" ==> clock
-        ; "reset" ==> reset
-        ; "clear" ==> clear
-        ; "enable" ==> en
-        ; "d" ==> d
-        ]
-      ~o:[ "q" ==> q ];
-    q
-  ;;
-
-  let tristate_buffer ~en ~i ~t =
-    let o = mk_wire (width i) in
-    inst
-      (prefix ^ "tristate_buffer")
-      ~g:[ "b" ==> GInt (width i) ]
-      ~i:[ "en" ==> en; "i" ==> i ]
-      ~o:[ "o" ==> o ]
-      ~t:[ "t" ==> t ];
-    o
-  ;;
-end
 
 module With_interface (I : Interface.S) (O : Interface.S) (T : Interface.S) = struct
   let create_circuit name f =
@@ -828,7 +971,7 @@ module With_interface (I : Interface.S) (O : Interface.S) (T : Interface.S) = st
       f i o t)
   ;;
 
-  let inst ?instance_name ?attributes ?g name i o t =
+  let validate i o t =
     let check_port_width name expected_width s =
       if width s <> expected_width
       then
@@ -841,7 +984,11 @@ module With_interface (I : Interface.S) (O : Interface.S) (T : Interface.S) = st
     in
     I.iter3 I.port_names I.port_widths i ~f:check_port_width;
     O.iter3 O.port_names O.port_widths o ~f:check_port_width;
-    T.iter3 T.port_names T.port_widths t ~f:check_port_width;
+    T.iter3 T.port_names T.port_widths t ~f:check_port_width
+  ;;
+
+  let inst ?instance_name ?attributes ?g name i o t =
+    validate i o t;
     inst
       ?instance_name
       ?attributes

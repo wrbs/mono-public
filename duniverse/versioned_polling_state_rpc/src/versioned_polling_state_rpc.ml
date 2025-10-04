@@ -3,9 +3,9 @@ open! Async_rpc_kernel
 include Versioned_polling_state_rpc_intf
 
 module Make_stable_query
-  (Unstable : Query.Unstable)
-  (Stable : Query.Stable)
-  (Conv : Query.Conv with module Unstable := Unstable and module Stable := Stable) :
+    (Unstable : Query.Unstable)
+    (Stable : Query.Stable)
+    (Conv : Query.Conv with module Unstable := Unstable and module Stable := Stable) :
   Query.S with type t = Unstable.t = struct
   type t = Unstable.t [@@deriving equal]
 
@@ -25,9 +25,9 @@ module Make_stable_query
 end
 
 module Make_stable_response
-  (Unstable : Response.Unstable)
-  (Stable : Response.Stable)
-  (Conv : Response.Conv with module Unstable := Unstable and module Stable := Stable) :
+    (Unstable : Response.Unstable)
+    (Stable : Response.Stable)
+    (Conv : Response.Conv with module Unstable := Unstable and module Stable := Stable) :
   Response.S with module Unstable := Unstable = struct
   type t = Unstable.t
 

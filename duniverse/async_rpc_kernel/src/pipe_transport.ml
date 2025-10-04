@@ -1,6 +1,5 @@
 open Core
 open Async_kernel
-open Int.Replace_polymorphic_compare
 
 include struct
   open Transport
@@ -199,9 +198,9 @@ module Pipe_writer (Data : DATA) = struct
      transport. *)
   let flushed (_ : t) = Deferred.unit
   let ready_to_write = flushed
-  let sent_result x ~bytes : _ Send_result.t = Sent { result = x; bytes }
+  let sent_result x ~bytes : _ Send_result.t = exclave_ Sent { result = x; bytes }
 
-  let check_closed (t : t) f =
+  let check_closed (t : t) (local_ f) = exclave_
     if not (Pipe.is_closed t.pipe) then f () else Send_result.Closed
   ;;
 
@@ -209,8 +208,8 @@ module Pipe_writer (Data : DATA) = struct
     t.bytes_written <- Int63.(t.bytes_written + of_int num_bytes)
   ;;
 
-  let send_bin_prot t writer x =
-    check_closed t (fun () ->
+  let send_bin_prot t writer x = exclave_
+    check_closed t (fun () -> exclave_
       let buf = Bin_prot.Utils.bin_dump ~header:true writer x in
       let data = Data.of_bigstring buf in
       let len = Data.length data in
@@ -226,8 +225,8 @@ module Pipe_writer (Data : DATA) = struct
     ~buf
     ~pos
     ~len:payload_size
-    =
-    check_closed t (fun () ->
+    = exclave_
+    check_closed t (fun () -> exclave_
       (* Write the size header manually and concatenate the two *)
       let data_size = writer.size x in
       let data = Bigstring.create (data_size + Header.length + payload_size) in
@@ -241,7 +240,7 @@ module Pipe_writer (Data : DATA) = struct
       sent_result () ~bytes:(len - Header.length))
   ;;
 
-  let send_bin_prot_and_bigstring_non_copying t writer x ~buf ~pos ~len =
+  let send_bin_prot_and_bigstring_non_copying t writer x ~buf ~pos ~len = exclave_
     match send_bin_prot_and_bigstring t writer x ~buf ~pos ~len with
     | Sent { result = (); bytes } -> sent_result Deferred.unit ~bytes
     | (Closed | Message_too_big _) as r -> r
@@ -296,6 +295,14 @@ let make_writer (type a) (x : a Kind.t) (writer : a Pipe.Writer.t) =
 
 let create kind reader writer =
   { Transport.reader = make_reader kind reader; writer = make_writer kind writer }
+;;
+
+let create_pair kind =
+  let reader__b_to_a, writer__b_to_a = Pipe.create () in
+  let reader__a_to_b, writer__a_to_b = Pipe.create () in
+  let transport_a = create kind reader__b_to_a writer__a_to_b in
+  let transport_b = create kind reader__a_to_b writer__b_to_a in
+  transport_a, transport_b
 ;;
 
 (* Testing *)
@@ -455,8 +462,8 @@ module Test_reader (Transport_reader : Transport_reader) = struct
   ;;
 end
 
-let%test_module "Test_reader_string" = (module Test_reader (String_pipe_reader))
-let%test_module "Test_reader_bigstring" = (module Test_reader (Bigstring_pipe_reader))
+module%test Test_reader_string = Test_reader (String_pipe_reader)
+module%test Test_reader_bigstring = Test_reader (Bigstring_pipe_reader)
 
 module Bench_reader (Transport_reader : Transport_reader) = struct
   open Transport_reader.For_testing
@@ -552,5 +559,5 @@ module Bench_reader (Transport_reader : Transport_reader) = struct
   ;;
 end
 
-let%bench_module "Test_reader_string" = (module Bench_reader (String_pipe_reader))
-let%bench_module "Test_reader_bigstring" = (module Bench_reader (Bigstring_pipe_reader))
+module%bench Test_reader_string = Bench_reader (String_pipe_reader)
+module%bench Test_reader_bigstring = Bench_reader (Bigstring_pipe_reader)

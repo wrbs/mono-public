@@ -118,7 +118,8 @@ let%expect_test "logging non-string literals (expected extremely rare / unused, 
   [%log.global 5];
   [%log.global 3.14e-1];
   let%bind () = Log.Global.flushed () in
-  [%expect {|
+  [%expect
+    {|
     c
     "\000"
     5
@@ -137,17 +138,39 @@ let%expect_test "printf format string edge case" =
   Deferred.unit
 ;;
 
-let%test_module "json" =
-  (module struct
-    open Jsonaf_kernel.Conv
-
-    type t = { users : string list } [@@deriving jsonaf_of]
-
-    let%expect_test "printf format string edge case" =
-      let my_t = { users = [ "me"; "you" ] } in
-      [%log.global (my_t : (t[@j]))];
-      [%expect {| (my_t(Object((users(Array((String me)(String you))))))) |}];
-      Deferred.unit
-    ;;
-  end)
+let%expect_test "logging with raw_message and `Raw format" =
+  let i = 1 in
+  let raw_message = [%log.make_raw "hi" (i : int)] in
+  let source, data = raw_message in
+  [%log.raw (force Log.Global.log) raw_message];
+  [%log.global.error_raw source, data];
+  [%log.global.raw [%log.make_raw "hi" (i : int)]];
+  let%bind () = Log.Global.flushed () in
+  [%expect
+    {|
+    (hi(i 1))
+    (hi(i 1))
+    (hi(i 1))
+    |}];
+  (* Some users may want to render the message into a sexp for further use later. *)
+  print_s (Ppx_log_types.Raw_message.sexp_of_t_hum raw_message);
+  [%expect
+    {|
+    ((hi (i 1))
+     ((source "ppx/ppx_log/test/test_log_extensions.ml:143 (Ppx_log_test)")))
+    |}];
+  return ()
 ;;
+
+module%test [@name "json"] _ = struct
+  open Jsonaf_kernel.Conv
+
+  type t = { users : string list } [@@deriving jsonaf_of]
+
+  let%expect_test "printf format string edge case" =
+    let my_t = { users = [ "me"; "you" ] } in
+    [%log.global (my_t : (t[@j]))];
+    [%expect {| (my_t(Object((users(Array((String me)(String you))))))) |}];
+    Deferred.unit
+  ;;
+end

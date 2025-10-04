@@ -80,29 +80,49 @@ let float_vec_of_sexp empty_float_vec create_float_vec sexp =
   | Atom _ -> of_sexp_error "float_vec_of_sexp: list needed" sexp
 ;;
 
-let create_float32_vec = Array1.create float32 fortran_layout
-let create_float64_vec = Array1.create float64 fortran_layout
+let create_float32_vec n = Array1.create float32 fortran_layout n
+let create_float64_vec n = Array1.create float64 fortran_layout n
 let empty_float32_vec = create_float32_vec 0
+
+let[@inline] get_empty_float32_vec () =
+  Basement.Portability_hacks.magic_uncontended__promise_deeply_immutable empty_float32_vec
+;;
+
 let empty_float64_vec = create_float64_vec 0
-let float32_vec_of_sexp = float_vec_of_sexp empty_float32_vec create_float32_vec
-let float64_vec_of_sexp = float_vec_of_sexp empty_float64_vec create_float64_vec
-let vec_of_sexp = float_vec_of_sexp empty_float64_vec create_float64_vec
+
+let[@inline] get_empty_float64_vec () =
+  Basement.Portability_hacks.magic_uncontended__promise_deeply_immutable empty_float64_vec
+;;
+
+let float32_vec_of_sexp sexp =
+  float_vec_of_sexp (get_empty_float32_vec ()) create_float32_vec sexp
+;;
+
+let float64_vec_of_sexp sexp =
+  float_vec_of_sexp (get_empty_float64_vec ()) create_float64_vec sexp
+;;
+
+let vec_of_sexp sexp =
+  float_vec_of_sexp (get_empty_float64_vec ()) create_float64_vec sexp
+;;
+
 let vec_sexp_grammar : _ Sexplib0.Sexp_grammar.t = { untyped = List (Many Float) }
 let float32_vec_sexp_grammar = vec_sexp_grammar
 let float64_vec_sexp_grammar = vec_sexp_grammar
-
-let check_too_much_data sexp data res =
-  if data = [] then res else of_sexp_error "float_mat_of_sexp: too much data" sexp
-;;
 
 let float_mat_of_sexp create_float_mat sexp =
   match sexp with
   | List (sm :: sn :: data) ->
     let m = int_of_sexp sm in
     let n = int_of_sexp sn in
+    if m < 0 || n < 0 then of_sexp_error "float_mat_of_sexp: negative dimension(s)" sexp;
+    let expect_size = m * n in
+    let actual_size = List.length data in
+    if expect_size <> actual_size
+    then of_sexp_error "float_mat_of_sexp: dimensions do not match amount of data" sexp;
     let res = create_float_mat m n in
     if m = 0 || n = 0
-    then check_too_much_data sexp data res
+    then res
     else (
       let rec loop_cols col data =
         let vec = Array2.slice_right res col in
@@ -111,7 +131,7 @@ let float_mat_of_sexp create_float_mat sexp =
           | h :: t ->
             vec.{row} <- float_of_sexp h;
             if row = m
-            then if col = n then check_too_much_data sexp t res else loop_cols (col + 1) t
+            then if col = n then res else loop_cols (col + 1) t
             else loop_rows (row + 1) t
         in
         loop_rows 1 data
@@ -121,11 +141,11 @@ let float_mat_of_sexp create_float_mat sexp =
   | Atom _ -> of_sexp_error "float_mat_of_sexp: list needed" sexp
 ;;
 
-let create_float32_mat = Array2.create float32 fortran_layout
-let create_float64_mat = Array2.create float64 fortran_layout
-let float32_mat_of_sexp = float_mat_of_sexp create_float32_mat
-let float64_mat_of_sexp = float_mat_of_sexp create_float64_mat
-let mat_of_sexp = float_mat_of_sexp create_float64_mat
+let create_float32_mat x y = Array2.create float32 fortran_layout x y
+let create_float64_mat x y = Array2.create float64 fortran_layout x y
+let float32_mat_of_sexp sexp = float_mat_of_sexp create_float32_mat sexp
+let float64_mat_of_sexp sexp = float_mat_of_sexp create_float64_mat sexp
+let mat_of_sexp sexp = float_mat_of_sexp create_float64_mat sexp
 
 let mat_sexp_grammar : _ Sexplib0.Sexp_grammar.t =
   { untyped = List (Cons (Integer, Cons (Integer, Many Float))) }

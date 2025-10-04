@@ -7,7 +7,6 @@ type t =
   ; package : Package.t option
   ; deps : Dep_conf.t Bindings.t
   ; enabled_if : Blang.t
-  ; build_if : Blang.t
   ; action : Dune_lang.Action.t option
   }
 
@@ -24,7 +23,7 @@ let gen_parse names =
        (Bindings.var_names deps)
        (let* dune_version = Dune_lang.Syntax.get_exn Stanza.syntax in
         let+ buildable = Buildable.decode Executable
-        and+ link_flags = Link_flags.Spec.decode ~check:None
+        and+ link_flags = Dune_lang.Link_flags.Spec.decode ~check:None
         and+ names = names
         and+ package = field_o "package" Stanza_common.Pkg.decode
         and+ locks = Locks.field ()
@@ -65,14 +64,13 @@ let gen_parse names =
             ; embed_in_plugin_libraries = []
             ; forbidden_libraries
             ; bootstrap_info = None
-            ; enabled_if
+            ; enabled_if = build_if
             ; dune_version
             }
         ; locks
         ; package
         ; deps
         ; enabled_if
-        ; build_if
         ; action
         }))
 ;;

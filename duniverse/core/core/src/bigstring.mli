@@ -1,3 +1,5 @@
+@@ portable
+
 (** String type based on [Bigarray], for use in I/O and C-bindings. *)
 
 open! Import
@@ -7,10 +9,11 @@ open Bigarray
 
 (** Type of bigstrings *)
 type t = (char, int8_unsigned_elt, c_layout) Array1.t
-[@@deriving compare, quickcheck, sexp_of]
+[@@deriving compare ~localize, quickcheck, sexp_of]
 
-(** Type of bigstrings which support hashing. Note that mutation invalidates previous hashes. *)
-type t_frozen = t [@@deriving compare, hash, sexp_of]
+(** Type of bigstrings which support hashing. Note that mutation invalidates previous
+    hashes. *)
+type t_frozen = t [@@deriving compare ~localize, hash, sexp_of]
 
 include module type of Base_bigstring with type t := t and type t_frozen := t_frozen
 include Hexdump.S with type t := t
@@ -18,19 +21,35 @@ include Hexdump.S with type t := t
 (** {2 Creation and string conversion} *)
 
 (** [create length]
-    @return a new bigstring having [length].
-    Content is undefined. *)
+    @return a new bigstring having [length]. Content is undefined. *)
 val create : int -> t
 
-(** [sub_shared ?pos ?len bstr] @return the sub-bigstring in [bstr]
-    that starts at position [pos] and has length [len].  The sub-bigstring
-    shares the same memory region, i.e. modifying it will modify the
-    original bigstring.  Holding on to the sub-bigstring will also keep
-    the (usually bigger) original one around.
+(** [sub_shared ?pos ?len bstr]
+
+    @return
+      the sub-bigstring in [bstr] that starts at position [pos] and has length [len]. The
+      sub-bigstring shares the same memory region, i.e. modifying it will modify the
+      original bigstring. Holding on to the sub-bigstring will also keep the (usually
+      bigger) original one around.
 
     @param pos default = 0
     @param len default = [Bigstring.length bstr - pos] *)
 val sub_shared : ?pos:int -> ?len:int -> t -> t
+
+(** Like [sub_shared], for local input and output.
+
+    The result is allocated on the global heap, even if built with a compiler supporting
+    stack allocation. At least as of 2024-08, custom blocks with finalizers cannot be
+    allocated on the local heap. *)
+val sub_shared_local : ?pos:int -> ?len:int -> local_ t -> local_ t
+
+(** Like [sub_shared], for local input and global output.
+
+    Creates a global bigstring sharing the same storage as the local input. This is unsafe
+    if the input's storage will be destroyed or overwritten after [t]'s local scope ends.
+    Only use this function if you know the input's underlying storage is safe to use
+    beyond the lifetime of the input [t]. *)
+val unsafe_sub_shared_of_local : ?pos:int -> ?len:int -> local_ t -> t
 
 (** {2 Reading/writing bin-prot} *)
 
@@ -39,7 +58,7 @@ val sub_shared : ?pos:int -> ?len:int -> t -> t
     [Unpack_buffer.Unpack_one.create_bin_prot]. *)
 
 (** [write_bin_prot t writer a] writes [a] to [t] starting at [pos], and returns the index
-    in [t] immediately after the last byte written.  It raises if [pos < 0] or if [a]
+    in [t] immediately after the last byte written. It raises if [pos < 0] or if [a]
     doesn't fit in [t]. *)
 val write_bin_prot
   :  t
@@ -60,7 +79,7 @@ val write_bin_prot_known_size
   -> int
 
 (** The [read_bin_prot*] functions read from the region of [t] starting at [pos] of length
-    [len].  They return the index in [t] immediately after the last byte read.  They raise
+    [len]. They return the index in [t] immediately after the last byte read. They raise
     if [pos] and [len] don't describe a region of [t]. *)
 val read_bin_prot
   :  t
@@ -80,40 +99,39 @@ val read_bin_prot_verbose_errors
 
 (** [unsafe_destroy bstr] destroys the bigstring by deallocating its associated data or,
     if memory-mapped, unmapping the corresponding file, and setting all dimensions to
-    zero.  This effectively frees the associated memory or address-space resources
-    instantaneously.  This feature helps reclaim the resources sooner than they are
+    zero. This effectively frees the associated memory or address-space resources
+    instantaneously. This feature helps reclaim the resources sooner than they are
     automatically reclaimed by the GC.
 
     This operation is safe unless you have passed the bigstring to another thread that is
-    performing operations on it at the same time.  Access to the bigstring after this
+    performing operations on it at the same time. Access to the bigstring after this
     operation will yield array bounds exceptions.
 
-    @raise Failure if the bigstring has already been deallocated (or deemed "external",
-    which is treated equivalently), or if it has proxies, i.e. other bigstrings referring
-    to the same data. *)
+    @raise Failure
+      if the bigstring has already been deallocated (or deemed "external", which is
+      treated equivalently), or if it has proxies, i.e. other bigstrings referring to the
+      same data. *)
 external unsafe_destroy : t -> unit = "bigstring_destroy_stub"
 
-(** [unsafe_destroy_and_resize bstr ~len] reallocates the memory backing
-    [bstr] and returns a new bigstring that starts at position 0 and has
-    length [len]. If [len] is greater than [length bstr] then the newly
-    allocated memory will not be initialized.
+(** [unsafe_destroy_and_resize bstr ~len] reallocates the memory backing [bstr] and
+    returns a new bigstring that starts at position 0 and has length [len]. If [len] is
+    greater than [length bstr] then the newly allocated memory will not be initialized.
 
-    Similar to [unsafe_destroy], this operation is safe unless you have passed
-    the bigstring to another thread that is performing operations on it at the
-    same time.  Access to [bstr] after this operation will yield array bounds
-    exceptions.
+    Similar to [unsafe_destroy], this operation is safe unless you have passed the
+    bigstring to another thread that is performing operations on it at the same time.
+    Access to [bstr] after this operation will yield array bounds exceptions.
 
-    @raise Failure if the bigstring has already been deallocated (or deemed
-    "external", which is treated equivalently), if it is backed by a memory
-    map, or if it has proxies, i.e. other bigstrings referring to the same
-    data. *)
+    @raise Failure
+      if the bigstring has already been deallocated (or deemed "external", which is
+      treated equivalently), if it is backed by a memory map, or if it has proxies, i.e.
+      other bigstrings referring to the same data. *)
 external unsafe_destroy_and_resize : t -> len:int -> t = "bigstring_realloc"
 
 (** Similar to [Binary_packing.unpack_tail_padded_fixed_string] and
     [.pack_tail_padded_fixed_string]. *)
 val get_tail_padded_fixed_string
   :  padding:char
-  -> t
+  -> local_ t
   -> pos:int
   -> len:int
   -> unit
@@ -121,23 +139,23 @@ val get_tail_padded_fixed_string
 
 val get_tail_padded_fixed_string_local
   :  padding:char
-  -> t
+  -> local_ t
   -> pos:int
   -> len:int
   -> unit
-  -> string
+  -> local_ string
 
 val set_tail_padded_fixed_string
   :  padding:char
-  -> t
+  -> local_ t
   -> pos:int
   -> len:int
-  -> string
+  -> local_ string
   -> unit
 
 val get_head_padded_fixed_string
   :  padding:char
-  -> t
+  -> local_ t
   -> pos:int
   -> len:int
   -> unit
@@ -145,30 +163,41 @@ val get_head_padded_fixed_string
 
 val get_head_padded_fixed_string_local
   :  padding:char
-  -> t
+  -> local_ t
   -> pos:int
   -> len:int
   -> unit
-  -> string
+  -> local_ string
 
 val set_head_padded_fixed_string
   :  padding:char
-  -> t
+  -> local_ t
   -> pos:int
   -> len:int
-  -> string
+  -> local_ string
   -> unit
 
 module Unstable : sig
-  type nonrec t = t [@@deriving bin_io ~localize, compare, equal, sexp_of]
-  type nonrec t_frozen = t_frozen [@@deriving bin_io ~localize, compare, hash, sexp_of]
+  type nonrec t = t
+  [@@deriving bin_io ~localize, compare ~localize, equal ~localize, sexp_of]
+
+  type nonrec t_frozen = t_frozen
+  [@@deriving bin_io ~localize, compare ~localize, hash, sexp_of]
 end
 
 module Stable : sig
   module V1 : sig
-    type nonrec t = t [@@deriving bin_io ~localize, stable_witness, compare, equal, sexp]
+    type nonrec t = t
+    [@@deriving
+      bin_io ~localize
+      , stable_witness
+      , compare ~localize
+      , equal ~localize
+      , sexp
+      , sexp_grammar]
 
     type nonrec t_frozen = t_frozen
-    [@@deriving bin_io ~localize, stable_witness, compare, hash, sexp]
+    [@@deriving
+      bin_io ~localize, stable_witness, compare ~localize, hash, sexp, sexp_grammar]
   end
 end

@@ -40,8 +40,7 @@ module Sum_map_direct = struct
      far better off using this type. Similarly, we can't return a float in %xmm
      registers. So the obvious [Map.fold] here actually allocates one box per map
      entry, so we're better off using a ref.
-
-     *)
+  *)
   type float_ref = { mutable contents : float }
 
   let float_ref contents = { contents }
@@ -57,9 +56,9 @@ module Sum_map_direct = struct
 end
 
 module M (M : sig
-  val outer : int
-  val inner : int
-end) =
+    val outer : int
+    val inner : int
+  end) =
 struct
   let outer = M.outer
   let inner = M.inner
@@ -78,61 +77,59 @@ struct
       ignore (Obs.value_exn sum : float)
   ;;
 
-  let%bench_module ("" [@name_suffix suffix]) =
-    (module struct
-      let%bench_fun "incr" = nested_sum_raw ()
+  module%bench [@name_suffix suffix] _ = struct
+    let%bench_fun "incr" = nested_sum_raw ()
 
-      (* Compute the outer sum incrementally using [sum_map], but do the inner sum
+    (* Compute the outer sum incrementally using [sum_map], but do the inner sum
          all-at-once. *)
-      let%bench_fun "out" =
-        let open Infix in
-        let input = Var.create (initialize ~outer ~inner) in
-        let inner_summed =
-          Incr_map.mapi (Var.watch input) ~f:(fun ~key:_ ~data ->
-            Sum_map_direct.sum data ~get:Fn.id)
-        in
-        let sum = Incr.observe (sum_map inner_summed) in
-        fun () ->
-          let o = Random.int outer in
-          let i = Random.int inner in
-          input := set_el !input o i (Random.float 1.0);
-          Incr.stabilize ();
-          ignore (Obs.value_exn sum : float)
-      ;;
+    let%bench_fun "out" =
+      let open Infix in
+      let input = Var.create (initialize ~outer ~inner) in
+      let inner_summed =
+        Incr_map.mapi (Var.watch input) ~f:(fun ~key:_ ~data ->
+          Sum_map_direct.sum data ~get:Fn.id)
+      in
+      let sum = Incr.observe (sum_map inner_summed) in
+      fun () ->
+        let o = Random.int outer in
+        let i = Random.int inner in
+        input := set_el !input o i (Random.float 1.0);
+        Incr.stabilize ();
+        ignore (Obs.value_exn sum : float)
+    ;;
 
-      (* Does the nested sum in an all-at-once way, using ordinary map folds *)
-      let%bench_fun "ord" =
-        let input = ref (initialize ~outer ~inner) in
-        let sum () = Sum_map_direct.sum !input ~get:(Sum_map_direct.sum ~get:Fn.id) in
-        fun () ->
-          let o = Random.int outer in
-          let i = Random.int inner in
-          input := set_el !input o i (Random.float 1.0);
-          ignore (sum ())
-      ;;
-    end)
-  ;;
+    (* Does the nested sum in an all-at-once way, using ordinary map folds *)
+    let%bench_fun "ord" =
+      let input = ref (initialize ~outer ~inner) in
+      let sum () = Sum_map_direct.sum !input ~get:(Sum_map_direct.sum ~get:Fn.id) in
+      fun () ->
+        let o = Random.int outer in
+        let i = Random.int inner in
+        input := set_el !input o i (Random.float 1.0);
+        ignore (sum ())
+    ;;
+  end
 end
 
 module _ = M (struct
-  let outer = 10000
-  let inner = 10
-end)
+    let outer = 10000
+    let inner = 10
+  end)
 
 module M2 = M (struct
-  let outer = 1000
-  let inner = 100
-end)
+    let outer = 1000
+    let inner = 100
+  end)
 
 module _ = M (struct
-  let outer = 100
-  let inner = 1000
-end)
+    let outer = 100
+    let inner = 1000
+  end)
 
 module _ = M (struct
-  let outer = 10
-  let inner = 10000
-end)
+    let outer = 10
+    let inner = 10000
+  end)
 
 (* Looks like it doesn't matter all that much how you choose to structure the nested maps,
    though more outer elements clearly adds expense.  Note also that despite the decently
@@ -161,38 +158,42 @@ end)
 let%expect_test "stats" =
   let stats = unstage (Stats.reporter ()) in
   stats ();
-  [%expect {|
+  [%expect
+    {|
     ((recomputed 0)
      (changed    0)
      (created    0))
     |}];
   let run = M2.nested_sum_raw () in
   stats ();
-  [%expect {|
+  [%expect
+    {|
     ((recomputed 0)
      (changed    0)
-     (created    6))
+     (created    4))
     |}];
   run ();
   stats ();
   [%expect
     {|
-    ((recomputed 2008)
-     (changed    2008)
-     (created    2002))
+    ((recomputed 2004)
+     (changed    2004)
+     (created    2000))
     |}];
   run ();
   stats ();
-  [%expect {|
-    ((recomputed 7)
-     (changed    6)
+  [%expect
+    {|
+    ((recomputed 6)
+     (changed    5)
      (created    0))
     |}];
   run ();
   stats ();
-  [%expect {|
-    ((recomputed 7)
-     (changed    6)
+  [%expect
+    {|
+    ((recomputed 6)
+     (changed    5)
      (created    0))
     |}]
 ;;

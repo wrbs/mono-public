@@ -1,41 +1,45 @@
 open! Import
 
 let%expect_test "rtl name legalization" =
-  let verilog = Rtl.Name.create (module Rtl.Name.Verilog) in
-  let vhdl = Rtl.Name.create (module Rtl.Name.Vhdl) in
+  let verilog = (module Rtl.Name.Verilog : Rtl.Name.Language) in
+  let vhdl = (module Rtl.Name.Vhdl : Rtl.Name.Language) in
+  let legalize (module Lang : Rtl.Name.Language) s = Lang.legalize s in
   let show name =
     [%message
-      ""
-        ~verilog:(Rtl.Name.legalize verilog name : string)
-        ~vhdl:(Rtl.Name.legalize vhdl name : string)]
+      "" ~verilog:(legalize verilog name : string) ~vhdl:(legalize vhdl name : string)]
     |> print_s
   in
-  require_does_raise ~cr:CR_someday [%here] (fun () -> show "");
-  [%expect {| "[Rtl_name] string is empty" |}];
+  require_does_raise ~cr:CR_someday (fun () -> show "");
+  [%expect {| "[Rtl_name.legalize] string is empty" |}];
   (* underscore really is a valid verilog name... *)
   show "_";
-  [%expect {|
+  [%expect
+    {|
     ((verilog _)
-     (vhdl    hc__))
+     (vhdl    hc_hc))
     |}];
   show "1";
-  [%expect {|
+  [%expect
+    {|
     ((verilog _1)
      (vhdl    hc_1))
     |}];
   show "_1";
-  [%expect {|
+  [%expect
+    {|
     ((verilog _1)
-     (vhdl    hc__1))
+     (vhdl    hc_1))
     |}];
   show "$";
-  [%expect {|
+  [%expect
+    {|
     ((verilog _$)
-     (vhdl    hc__))
+     (vhdl    hc_hc))
     |}];
   show "foo!\"£$%^&*()\"";
-  [%expect {|
+  [%expect
+    {|
     ((verilog foo____$_______)
-     (vhdl    foo____________))
+     (vhdl    foo_hc))
     |}]
 ;;

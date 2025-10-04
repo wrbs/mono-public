@@ -2,9 +2,10 @@ module Stable = struct
   open Core.Core_stable
 
   module V1 = struct
-    (** (field * value) list.  Where value should be escaped / quoted
-        as necessary as per https://www.w3.org/TR/CSS21/syndata.html#rule-sets. *)
-    type t = (string * string) list [@@deriving sexp, compare, equal, bin_io]
+    (** (field * value) list. Where value should be escaped / quoted as necessary as per
+        https://www.w3.org/TR/CSS21/syndata.html#rule-sets. *)
+    type t = (string * string) list
+    [@@deriving sexp, compare, equal, bin_io, stable_witness]
   end
 end
 
@@ -149,6 +150,17 @@ module Length = struct
 
   let to_string_css t = to_string_css (t :> t)
   let percent100 = `Percent (Percent.of_percentage 100.)
+  let raw s = `Raw s
+  let ch f = `Ch f
+  let rem f = `Rem f
+  let em i = `Em i
+  let em_float f = `Em_float f
+  let percent p = `Percent p
+  let pt f = `Pt f
+  let px i = `Px i
+  let px_float f = `Px_float f
+  let vh p = `Vh p
+  let vw p = `Vw p
 end
 
 module Auto_or_length = struct
@@ -177,10 +189,10 @@ let to_string_css t =
 
 let of_string_css_exn s = Css_parser.parse_declaration_list s |> Or_error.ok_exn
 
-(** create_raw creates a single field, value pair.  It assumes that the value is a valid
-    css value.  As such it is unsafe to use with arbitrary value strings.  But for the
-    vast majority of combinators in this module it is the right thing to use, as we know
-    by construction that the values do not need quoting / escaping. *)
+(** create_raw creates a single field, value pair. It assumes that the value is a valid
+    css value. As such it is unsafe to use with arbitrary value strings. But for the vast
+    majority of combinators in this module it is the right thing to use, as we know by
+    construction that the values do not need quoting / escaping. *)
 let create_raw ~field ~value = [ field, value ]
 
 module Expert = struct
@@ -301,6 +313,21 @@ let overflow_x = make_overflow "overflow-x"
 let overflow_y = make_overflow "overflow-y"
 let z_index i = create_raw ~field:"z-index" ~value:(Int.to_string i)
 let opacity i = create_raw ~field:"opacity" ~value:(f2s 6 i)
+
+type text_overflow =
+  [ `Clip
+  | `Ellipsis
+  | text_overflow css_global_values
+  ]
+
+let text_overflow v =
+  let rec to_string_css = function
+    | `Clip -> "clip"
+    | `Ellipsis -> "ellipsis"
+    | #css_global_values as global -> global_to_string_css global ~to_string_css
+  in
+  create_raw ~field:"text-overflow" ~value:(to_string_css v)
+;;
 
 let create_length_field field l =
   create_raw ~field ~value:(Auto_or_length.to_string_css l)
@@ -559,8 +586,8 @@ type border_style =
   | border_style css_global_values
   ]
 
-(** Concat 2 values with a space in between.  If either is the empty string
-    don't put in unnecessary whitespace. *)
+(** Concat 2 values with a space in between. If either is the empty string don't put in
+    unnecessary whitespace. *)
 let concat2v v1 v2 =
   match v1, v2 with
   | "", x -> x
@@ -921,66 +948,61 @@ let user_select s =
   create_raw ~field:"user-select" ~value
 ;;
 
-let%test_module "tests" =
-  (module struct
-    let%expect_test "to_string_css -> of_string_css_exn -> to_string_css" =
-      let t css =
-        let s = to_string_css css in
-        let s2 = to_string_css (of_string_css_exn s) in
-        print_endline s;
-        print_endline s2
-      in
-      t (flex_item ~grow:1.0 () @> overflow `Scroll);
-      t (flex_container ~inline:true ~direction:`Column () @> border ~style:`Dashed ());
-      t (color (`RGBA (Color.RGBA.create ~r:100 ~g:100 ~b:100 ())));
-      t
-        (color
-           (`HSLA
-             (Color.HSLA.create
-                ~h:100
-                ~s:(Percent.of_mult 0.75)
-                ~l:(Percent.of_mult 0.60)
-                ())));
-      t (create ~field:"content" ~value:{|";"|});
-      [%expect
-        {|
-        flex: 1.000000 1.000000 auto;overflow: scroll
-        flex: 1.000000 1.000000 auto;overflow: scroll
-        display: inline-flex;flex-direction: column;flex-wrap: nowrap;border: dashed
-        display: inline-flex;flex-direction: column;flex-wrap: nowrap;border: dashed
-        color: rgb(100,100,100)
-        color: rgb(100,100,100)
-        color: hsl(100,75%,60%)
-        color: hsl(100,75%,60%)
-        content: ";"
-        content: ";"
-        |}]
-    ;;
+module%test [@name "tests"] _ = struct
+  let%expect_test "to_string_css -> of_string_css_exn -> to_string_css" =
+    let t css =
+      let s = to_string_css css in
+      let s2 = to_string_css (of_string_css_exn s) in
+      print_endline s;
+      print_endline s2
+    in
+    t (flex_item ~grow:1.0 () @> overflow `Scroll);
+    t (flex_container ~inline:true ~direction:`Column () @> border ~style:`Dashed ());
+    t (color (`RGBA (Color.RGBA.create ~r:100 ~g:100 ~b:100 ())));
+    t
+      (color
+         (`HSLA
+           (Color.HSLA.create
+              ~h:100
+              ~s:(Percent.of_mult 0.75)
+              ~l:(Percent.of_mult 0.60)
+              ())));
+    t (create ~field:"content" ~value:{|";"|});
+    [%expect
+      {|
+      flex: 1.000000 1.000000 auto;overflow: scroll
+      flex: 1.000000 1.000000 auto;overflow: scroll
+      display: inline-flex;flex-direction: column;flex-wrap: nowrap;border: dashed
+      display: inline-flex;flex-direction: column;flex-wrap: nowrap;border: dashed
+      color: rgb(100,100,100)
+      color: rgb(100,100,100)
+      color: hsl(100,75%,60%)
+      color: hsl(100,75%,60%)
+      content: ";"
+      content: ";"
+      |}]
+  ;;
 
-    let%expect_test "gradients" =
-      let p x = Percent.of_mult x in
-      let c s = `Name s in
-      let t css = print_endline (to_string_css css) in
-      t
-        (background_image
-           (`Linear_gradient
-             { direction = `Deg 90
-             ; stops =
-                 [ p 0., c "black"
-                 ; p 0.2, c "#ff0000"
-                 ; p 0.4, c "red"
-                 ; ( p 1.
-                   , `RGBA
-                       (Color.RGBA.create ~r:100 ~g:50 ~b:30 ~a:(Percent.of_mult 0.75) ())
-                   )
-                 ]
-             }));
-      [%expect
-        {| background-image: linear-gradient(90deg, black 0.000000%, #ff0000 20.000000%, red 40.000000%, rgba(100,50,30,0.75) 100.000000%) |}];
-      t
-        (background_image
-           (`Radial_gradient { stops = [ p 0., c "black"; p 1., c "red" ] }));
-      [%expect {| background-image: radial-gradient(black 0.000000%, red 100.000000%) |}]
-    ;;
-  end)
-;;
+  let%expect_test "gradients" =
+    let p x = Percent.of_mult x in
+    let c s = `Name s in
+    let t css = print_endline (to_string_css css) in
+    t
+      (background_image
+         (`Linear_gradient
+           { direction = `Deg 90
+           ; stops =
+               [ p 0., c "black"
+               ; p 0.2, c "#ff0000"
+               ; p 0.4, c "red"
+               ; ( p 1.
+                 , `RGBA
+                     (Color.RGBA.create ~r:100 ~g:50 ~b:30 ~a:(Percent.of_mult 0.75) ()) )
+               ]
+           }));
+    [%expect
+      {| background-image: linear-gradient(90deg, black 0.000000%, #ff0000 20.000000%, red 40.000000%, rgba(100,50,30,0.75) 100.000000%) |}];
+    t (background_image (`Radial_gradient { stops = [ p 0., c "black"; p 1., c "red" ] }));
+    [%expect {| background-image: radial-gradient(black 0.000000%, red 100.000000%) |}]
+  ;;
+end

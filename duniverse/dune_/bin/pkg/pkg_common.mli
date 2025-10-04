@@ -12,6 +12,12 @@ val solver_env
   -> unset_solver_vars_from_context:Dune_lang.Package_variable_name.Set.t option
   -> Dune_pkg.Solver_env.t
 
+val poll_solver_env_from_current_system : unit -> Dune_pkg.Solver_env.t Fiber.t
+
+val solver_env_from_system_and_context
+  :  lock_dir_path:Path.Source.t
+  -> Dune_pkg.Solver_env.t Fiber.t
+
 module Version_preference : sig
   type t := Dune_pkg.Version_preference.t
 
@@ -38,6 +44,11 @@ val constraints_of_workspace
   -> lock_dir_path:Path.Source.t
   -> Dune_lang.Package_dependency.t list
 
+val depopts_of_workspace
+  :  Workspace.t
+  -> lock_dir_path:Path.Source.t
+  -> Package_name.t list
+
 val get_repos
   :  Dune_pkg.Pkg_workspace.Repository.t Dune_pkg.Pkg_workspace.Repository.Name.Map.t
   -> repositories:(Loc.t * Dune_pkg.Pkg_workspace.Repository.Name.t) list
@@ -50,6 +61,9 @@ module Lock_dirs_arg : sig
       created with [Lock_dirs_arg.term] and used with
       [Lock_dirs_arg.lock_dirs_of_workspace]. *)
   type t
+
+  (** Select all lockdirs *)
+  val all : t
 
   (** [Lock_dirs_arg.term] is a command-line argument that can be used to
       specify the lock directories to consider. This can then be passed to
@@ -75,4 +89,4 @@ end
 
 (** [pp_packages lock_dir] returns a list of pretty-printed packages occurring in
     [lock_dir]. *)
-val pp_packages : Dune_pkg.Lock_dir.Pkg.t list -> 'a Pp.t
+val pp_packages : Dune_pkg.Lock_dir.Pkg.t list -> User_message.Style.t Pp.t

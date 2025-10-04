@@ -9,13 +9,13 @@ module Make (Cases : Cases) = struct
   let number_of = List.length Cases.all
 
   include Scalar.Make (struct
-    let port_name = Cases.port_name
-    let port_width = number_of
-  end)
+      let port_name = Cases.port_name
+      let port_width = number_of
+    end)
 
   let rank_of_case =
     let alist = List.mapi Cases.all ~f:(fun i c -> c, i) in
-    fun c -> snd (List.find_exn alist ~f:(fun (x, _) -> [%compare.equal: Cases.t] c x))
+    fun a -> List.Assoc.find_exn ~equal:[%compare.equal: Cases.t] alist a
   ;;
 
   let case_of_rank =
@@ -27,15 +27,15 @@ module Make (Cases : Cases) = struct
     let flags = List.mapi Cases.all ~f:(fun i _ -> Flags.create ~bit:i)
 
     include Flags.Make (struct
-      let allow_intersecting = false
-      let should_print_error = true
-      let remove_zero_flags = false
+        let allow_intersecting = false
+        let should_print_error = true
+        let remove_zero_flags = false
 
-      let known =
-        List.map2_exn Cases.all flags ~f:(fun v flag ->
-          flag, Cases.sexp_of_t v |> Sexplib.Sexp.to_string)
-      ;;
-    end)
+        let known =
+          List.map2_exn Cases.all flags ~f:(fun v flag ->
+            flag, Cases.sexp_of_t v |> Sexplib.Sexp.to_string)
+        ;;
+      end)
 
     let of_cases =
       let arr = Array.of_list flags in
@@ -43,6 +43,7 @@ module Make (Cases : Cases) = struct
     ;;
 
     let to_string t = Sexp.to_string (sexp_of_t t)
+    let all = complement empty
   end
 
   let init (type a) (module Comb : Comb.S with type t = a) f =
@@ -56,7 +57,7 @@ module Make (Cases : Cases) = struct
   let to_bits b = b
 
   let of_flags (type a) (module Comb : Comb.S with type t = a) flags =
-    Comb.of_int ~width:number_of (Flags.to_int_exn flags)
+    Comb.of_int_trunc ~width:number_of (Flags.to_int_exn flags)
   ;;
 
   let of_cases_list (type a) (module Comb : Comb.S with type t = a) ts =
@@ -68,7 +69,7 @@ module Make (Cases : Cases) = struct
   let to_cases_list (t : Bits.t t) =
     let bits = Bits.bits_lsb t in
     List.filter_mapi bits ~f:(fun index bit ->
-      if Bits.is_vdd bit then Some (case_of_rank index) else None)
+      if Bits.to_bool bit then Some (case_of_rank index) else None)
   ;;
 
   let to_flags (t : Bits.t t) =
@@ -93,6 +94,10 @@ module Make (Cases : Cases) = struct
 
   let mux2 (type a) (module Comb : Comb.S with type t = a) (sel : a) (s : a t) (t : a t) =
     Comb.mux2 sel s t
+  ;;
+
+  let all (type a) (module Comb : Comb.S with type t = a) =
+    of_flags (module Comb) Flags.all
   ;;
 
   let deref (a : 'a ref t) : 'a t = !a

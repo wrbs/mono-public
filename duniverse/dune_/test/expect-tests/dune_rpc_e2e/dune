@@ -1,3 +1,10 @@
+(env
+ (_
+  (env-vars
+   ; We set ocaml to always be colored since it changes the output of
+   ; ocamlc error messages. See https://github.com/ocaml/ocaml/issues/14144
+   (OCAML_COLOR always))))
+
 (library
  (name dune_rpc_e2e)
  (modules dune_rpc_e2e)
@@ -16,7 +23,6 @@
   ;; in dune-project
   ppx_expect.config
   ppx_expect.config_types
-  ppx_expect.common
   base
   ppx_inline_test.config)
  (preprocess
@@ -39,7 +45,6 @@
   ;; in dune-project
   ppx_expect.config
   ppx_expect.config_types
-  ppx_expect.common
   base
   ppx_inline_test.config)
  (preprocess
@@ -56,7 +61,6 @@
   dune_rpc_e2e
   dune_engine
   dune_rpc_impl
-  dune_filesystem_stubs
   spawn
   stdune
   fiber
@@ -66,7 +70,6 @@
   ;; in dune-project
   ppx_expect.config
   ppx_expect.config_types
-  ppx_expect.common
   base
   ppx_inline_test.config)
  (preprocess
@@ -76,6 +79,8 @@
  (name dune_rpc_jobs_test)
  (modules dune_rpc_jobs)
  (inline_tests
+  ;; this test is flaky
+  (enabled_if false)
   (deps
    (package dune)))
  (libraries
@@ -90,7 +95,6 @@
   ;; in dune-project
   ppx_expect.config
   ppx_expect.config_types
-  ppx_expect.common
   base
   ppx_inline_test.config)
  (preprocess

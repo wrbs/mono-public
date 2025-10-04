@@ -1,7 +1,8 @@
-(** [ppx_log] translates to code that references a [module Ppx_log_syntax :
-    Ppx_log_types.S] expected to be in scope. Normally, this is provided by an actual log
-    implementation, like [Async_log]. If the module isn't in scope, this library provides
-    a stub implementation with an alert to direct users to the right place. *)
+(** [ppx_log] translates to code that references a
+    [module Ppx_log_syntax : Ppx_log_types.S] expected to be in scope. Normally, this is
+    provided by an actual log implementation, like [Async_log]. If the module isn't in
+    scope, this library provides a stub implementation with an alert to direct users to
+    the right place. *)
 
 open! Base
 
@@ -20,11 +21,11 @@ val message
   -> Ppx_log_types.Message_data.t
   -> Ppx_log_types.Message_source.t
   -> return_type
-  [@@alert
-    ppx_log_syntax_not_in_scope
-      "In order to use [ppx_log], you need to have a [Ppx_log_syntax] in scope. This is \
-       usually provided with [open Async], [open Async_log.Ppx_log_syntax], or [open \
-       Async_log_kernel.Ppx_log_syntax]."]
+[@@alert
+  ppx_log_syntax_not_in_scope
+    "In order to use [ppx_log], you need to have a [Ppx_log_syntax] in scope. This is \
+     usually provided with [open Async], [open Async_log.Ppx_log_syntax], or [open \
+     Async_log_kernel.Ppx_log_syntax]."]
 
 module Global : sig
   val would_log : Ppx_log_types.Level.t option -> bool
@@ -37,9 +38,9 @@ module Global : sig
     -> Ppx_log_types.Message_data.t
     -> Ppx_log_types.Message_source.t
     -> return_type
-    [@@alert
-      ppx_log_syntax_not_in_scope
-        "In order to use [ppx_log], you need to have a [Ppx_log_syntax] in scope. This \
-         is usually provided with [open Async], [open Async_log.Ppx_log_syntax], or \
-         [open Async_log_kernel.Ppx_log_syntax]."]
+  [@@alert
+    ppx_log_syntax_not_in_scope
+      "In order to use [ppx_log], you need to have a [Ppx_log_syntax] in scope. This is \
+       usually provided with [open Async], [open Async_log.Ppx_log_syntax], or [open \
+       Async_log_kernel.Ppx_log_syntax]."]
 end

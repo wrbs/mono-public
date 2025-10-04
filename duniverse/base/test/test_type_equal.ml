@@ -6,71 +6,67 @@ let%expect_test "[Id.sexp_of_t]" =
   [%expect {| some-type-id |}]
 ;;
 
-let%test_module "Type_equal.Id" =
-  (module struct
-    open Type_equal.Id
+module%test [@name "Type_equal.Id"] _ = struct
+  open Type_equal.Id
 
-    let t1 = create ~name:"t1" [%sexp_of: _]
-    let t2 = create ~name:"t2" [%sexp_of: _]
-    let%test _ = same t1 t1
-    let%test _ = not (same t1 t2)
-    let%test _ = Option.is_some (same_witness t1 t1)
-    let%test _ = Option.is_none (same_witness t1 t2)
-    let%test_unit _ = ignore (same_witness_exn t1 t1 : (_, _) Type_equal.t)
-    let%test _ = Result.is_error (Result.try_with (fun () -> same_witness_exn t1 t2))
-  end)
-;;
+  let t1 = create ~name:"t1" [%sexp_of: _]
+  let t2 = create ~name:"t2" [%sexp_of: _]
+  let%test _ = same t1 t1
+  let%test _ = not (same t1 t2)
+  let%test _ = Option.is_some (same_witness t1 t1)
+  let%test _ = Option.is_none (same_witness t1 t2)
+  let%test_unit _ = ignore (same_witness_exn t1 t1 : (_, _) Type_equal.t)
+  let%test _ = Result.is_error (Result.try_with (fun () -> same_witness_exn t1 t2))
+end
 
 (* This test shows that we need [conv] even though [Type_equal.T] is exposed. *)
-let%test_module "Type_equal" =
-  (module struct
-    open Type_equal
+module%test Type_equal = struct
+  open Type_equal
 
-    let id = Id.create ~name:"int" [%sexp_of: int]
+  let id = Id.create ~name:"int" [%sexp_of: int]
 
-    module A : sig
-      type t
+  module A : sig
+    type t
 
-      val id : t Id.t
-    end = struct
-      type t = int
+    val id : t Id.t
+  end = struct
+    type t = int
 
-      let id = id
-    end
+    let id = id
+  end
 
-    module B : sig
-      type t
+  module B : sig
+    type t
 
-      val id : t Id.t
-    end = struct
-      type t = int
+    val id : t Id.t
+  end = struct
+    type t = int
 
-      let id = id
-    end
+    let id = id
+  end
 
-    let _a_to_b (a : A.t) =
-      let eq = Id.same_witness_exn A.id B.id in
-      (conv eq a : B.t)
-    ;;
+  let _a_to_b (a : A.t) =
+    let eq = Id.same_witness_exn A.id B.id in
+    (conv eq a : B.t)
+  ;;
 
-    (* the following is rejected by the compiler *)
-    (* let _a_to_b (a : A.t) =
+  (* the following is rejected by the compiler *)
+  (* let _a_to_b (a : A.t) =
      *   let T = Id.same_witness_exn A.id B.id in
      *   (a : B.t)
-     *)
+    *)
 
-    module C = struct
-      type 'a t
-    end
+  module C = struct
+    type 'a t
+  end
 
-    module Liftc = Lift (C)
+  module Liftc = Lift (C)
 
-    let _ac_to_bc (ac : A.t C.t) =
-      let eq = Liftc.lift (Id.same_witness_exn A.id B.id) in
-      (conv eq ac : B.t C.t)
-    ;;
-  end)
-;;
+  let _ac_to_bc (ac : A.t C.t) =
+    let eq = Liftc.lift (Id.same_witness_exn A.id B.id) in
+    (conv eq ac : B.t C.t)
+  ;;
+end
 
 let%expect_test "Create*" =
   let test id1 id2 =
@@ -83,7 +79,6 @@ let%expect_test "Create*" =
     if Bool.( <> ) same_according_to_id same_according_to_uid
     then
       print_cr
-        [%here]
         [%message
           "[Type_equal.Id] and [Type_equal.Id.Uid] disagree"
             (id1 : _ Type_equal.Id.t)
@@ -209,5 +204,92 @@ let%expect_test "Create*" =
        Bool.type_equal_id
        (Option.type_equal_id Bool.type_equal_id))
     (Tuple3.type_equal_id Int.type_equal_id Bool.type_equal_id Int.type_equal_id);
-  [%expect {| ((tuple3 int bool (option bool)) <> (tuple3 int bool int)) |}]
+  [%expect {| ((tuple3 int bool (option bool)) <> (tuple3 int bool int)) |}];
+  let module Tuple4 =
+    Type_equal.Id.Create4 (struct
+      type ('a, 'b, 'c, 'd) t = 'a * 'b * 'c * 'd [@@deriving sexp_of]
+
+      let name = "tuple4"
+    end)
+  in
+  (* 4-ary vs 0-ary *)
+  test
+    (Tuple4.type_equal_id
+       Int.type_equal_id
+       Bool.type_equal_id
+       (Option.type_equal_id Bool.type_equal_id)
+       (Either.type_equal_id Int.type_equal_id Bool.type_equal_id))
+    Int.type_equal_id;
+  [%expect {| ((tuple4 int bool (option bool) (either int bool)) <> int) |}];
+  (* 4-ary vs 1-ary *)
+  test
+    (Tuple4.type_equal_id
+       Int.type_equal_id
+       Bool.type_equal_id
+       (Option.type_equal_id Bool.type_equal_id)
+       (Either.type_equal_id Int.type_equal_id Bool.type_equal_id))
+    (Option.type_equal_id Int.type_equal_id);
+  [%expect {| ((tuple4 int bool (option bool) (either int bool)) <> (option int)) |}];
+  (* 4-ary vs 2-ary *)
+  test
+    (Tuple4.type_equal_id
+       Int.type_equal_id
+       Bool.type_equal_id
+       (Option.type_equal_id Bool.type_equal_id)
+       (Either.type_equal_id Int.type_equal_id Bool.type_equal_id))
+    (Either.type_equal_id Int.type_equal_id Bool.type_equal_id);
+  [%expect {| ((tuple4 int bool (option bool) (either int bool)) <> (either int bool)) |}];
+  (* 4-ary vs 3-ary *)
+  test
+    (Tuple4.type_equal_id
+       Int.type_equal_id
+       Bool.type_equal_id
+       (Option.type_equal_id Bool.type_equal_id)
+       (Either.type_equal_id Int.type_equal_id Bool.type_equal_id))
+    (Tuple3.type_equal_id
+       Int.type_equal_id
+       Bool.type_equal_id
+       (Option.type_equal_id Bool.type_equal_id));
+  [%expect
+    {|
+    ((tuple4 int bool (option bool) (either int bool))
+     <>
+     (tuple3 int bool (option bool)))
+    |}];
+  (* 4-ary applied twice to same arguments *)
+  test
+    (Tuple4.type_equal_id
+       Int.type_equal_id
+       Bool.type_equal_id
+       (Option.type_equal_id Bool.type_equal_id)
+       (Either.type_equal_id Int.type_equal_id Bool.type_equal_id))
+    (Tuple4.type_equal_id
+       Int.type_equal_id
+       Bool.type_equal_id
+       (Option.type_equal_id Bool.type_equal_id)
+       (Either.type_equal_id Int.type_equal_id Bool.type_equal_id));
+  [%expect
+    {|
+    ((tuple4 int bool (option bool) (either int bool))
+     ==
+     (tuple4 int bool (option bool) (either int bool)))
+    |}];
+  (* 4-ary with different arguments *)
+  test
+    (Tuple4.type_equal_id
+       Int.type_equal_id
+       Bool.type_equal_id
+       (Option.type_equal_id Bool.type_equal_id)
+       (Either.type_equal_id Int.type_equal_id Bool.type_equal_id))
+    (Tuple4.type_equal_id
+       Int.type_equal_id
+       Bool.type_equal_id
+       (Option.type_equal_id Bool.type_equal_id)
+       Int.type_equal_id);
+  [%expect
+    {|
+    ((tuple4 int bool (option bool) (either int bool))
+     <>
+     (tuple4 int bool (option bool) int))
+    |}]
 ;;

@@ -2,11 +2,12 @@ open! Import
 include Linked_queue0
 
 let enqueue t x = Linked_queue0.push x t
-let dequeue t = if is_empty t then None else Some (Linked_queue0.pop t)
-let dequeue_exn = Linked_queue0.pop
+let dequeue_or_null t = if is_empty t then Null else This (Linked_queue0.pop t)
+let[@inline] dequeue t = dequeue_or_null t |> Or_null.to_option
+let[@inline] dequeue_exn = [%eta1 Linked_queue0.pop]
 let dequeue_and_ignore_exn (type elt) (t : elt t) = ignore (dequeue_exn t : elt)
 let peek t = if is_empty t then None else Some (Linked_queue0.peek t)
-let peek_exn = Linked_queue0.peek
+let[@inline] peek_exn = [%eta1 Linked_queue0.peek]
 
 let drain t ~f ~while_ =
   while (not (is_empty t)) && while_ (peek_exn t) do
@@ -14,15 +15,15 @@ let drain t ~f ~while_ =
   done
 ;;
 
-module C = Indexed_container.Make (struct
-  type nonrec 'a t = 'a t
+module%template C = Indexed_container.Make [@modality portable] (struct
+    type nonrec 'a t = 'a t
 
-  let fold = fold
-  let iter = `Custom iter
-  let length = `Custom length
-  let foldi = `Define_using_fold
-  let iteri = `Define_using_fold
-end)
+    let fold = fold
+    let iter = `Custom iter
+    let length = `Custom length
+    let foldi = `Define_using_fold
+    let iteri = `Define_using_fold
+  end)
 
 let count = C.count
 let exists = C.exists

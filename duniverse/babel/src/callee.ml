@@ -37,14 +37,12 @@ end
 let validate (t : _ t) : _ Validated.t Or_error.t =
   Map.to_alist t
   |> List.map ~f:(fun (description, implementer) ->
-       match implementer with
-       | Ok implementer -> Ok (description, implementer)
-       | Error shapes ->
-         Or_error.error_s
-           [%message
-             "Duplicate rpcs"
-               (description : Rpc.Description.t)
-               (shapes : Shape.Set.t Lazy.t)])
+    match implementer with
+    | Ok implementer -> Ok (description, implementer)
+    | Error shapes ->
+      Or_error.error_s
+        [%message
+          "Duplicate rpcs" (description : Rpc.Description.t) (shapes : Shape.Set.t Lazy.t)])
   |> Or_error.combine_errors
 ;;
 
@@ -61,7 +59,7 @@ let shapes t =
   let open Or_error.Let_syntax in
   validate t
   >>| List.map ~f:(fun (description, implementer) ->
-        description, Generic_rpc.shape implementer.rpc)
+    description, Generic_rpc.shape implementer.rpc)
 ;;
 
 let supported_rpcs t =
@@ -144,15 +142,17 @@ end
 module Pipe_rpc = struct
   open Async_rpc_kernel
 
-  let singleton rpc =
+  let singleton ?leave_open_on_exception rpc =
     singleton
       (Rpc.Pipe_rpc.description rpc)
-      { implement = (fun ?on_exception f -> Rpc.Pipe_rpc.implement ?on_exception rpc f)
+      { implement =
+          (fun ?on_exception f ->
+            Rpc.Pipe_rpc.implement ?on_exception ?leave_open_on_exception rpc f)
       ; rpc = Pipe rpc
       }
   ;;
 
-  let add = adder ~f:singleton
+  let add ?leave_open_on_exception = adder ~f:(singleton ?leave_open_on_exception)
   let map_query = map_query
 
   let map_error t =
@@ -181,7 +181,7 @@ module Pipe_rpc_direct = struct
   open Async_rpc_kernel
   module Direct_stream_writer = Direct_stream_writer
 
-  let singleton rpc =
+  let singleton ?leave_open_on_exception rpc =
     let description = Rpc.Pipe_rpc.description rpc in
     let description_sexp = [%sexp_of: Rpc.Description.t] description in
     let witness =
@@ -196,17 +196,18 @@ module Pipe_rpc_direct = struct
           (fun ?on_exception f ->
             Rpc.Pipe_rpc.implement_direct
               ?on_exception
+              ?leave_open_on_exception
               rpc
               (fun connection_state query writer ->
-              f
-                connection_state
-                query
-                (Direct_stream_writer.Expert.create_witnessed writer ~witness)))
+                 f
+                   connection_state
+                   query
+                   (Direct_stream_writer.Expert.create_witnessed writer ~witness)))
       ; rpc = Pipe rpc
       }
   ;;
 
-  let add = adder ~f:singleton
+  let add ?leave_open_on_exception = adder ~f:(singleton ?leave_open_on_exception)
   let map_query = map_query
 
   let map_error t =
@@ -236,15 +237,17 @@ end
 module State_rpc = struct
   open Async_rpc_kernel
 
-  let singleton rpc =
+  let singleton ?leave_open_on_exception rpc =
     singleton
       (Rpc.State_rpc.description rpc)
-      { implement = (fun ?on_exception f -> Rpc.State_rpc.implement ?on_exception rpc f)
+      { implement =
+          (fun ?on_exception f ->
+            Rpc.State_rpc.implement ?on_exception ?leave_open_on_exception rpc f)
       ; rpc = State rpc
       }
   ;;
 
-  let add = adder ~f:singleton
+  let add ?leave_open_on_exception = adder ~f:(singleton ?leave_open_on_exception)
   let map_query = map_query
 
   let map_state t =
@@ -276,13 +279,80 @@ module State_rpc = struct
   ;;
 end
 
+module State_rpc_direct = struct
+  open Async_rpc_kernel
+  module Direct_stream_writer = Direct_stream_writer
+
+  let singleton ?leave_open_on_exception rpc =
+    let description = Rpc.State_rpc.description rpc in
+    let description_sexp = [%sexp_of: Rpc.Description.t] description in
+    let witness =
+      Type_equal.Id.create
+        ~name:
+          [%string "[Babel.Callee.State_rpc_direct] type id for %{description_sexp#Sexp}"]
+        [%sexp_of: _]
+    in
+    singleton
+      description
+      { implement =
+          (fun ?on_exception f ->
+            Rpc.State_rpc.implement_direct
+              ?on_exception
+              ?leave_open_on_exception
+              rpc
+              (fun connection_state query writer ->
+                 f
+                   connection_state
+                   query
+                   (Direct_stream_writer.Expert.create_witnessed writer ~witness)))
+      ; rpc = State rpc
+      }
+  ;;
+
+  let add ?leave_open_on_exception = adder ~f:(singleton ?leave_open_on_exception)
+  let map_query = map_query
+
+  let map_state t =
+    Tilde_f.Let_syntax.(
+      map_response t >>= Fn.map >>= Deferred.map >>= Tilde_f.of_local_k Result.map)
+  ;;
+
+  let filter_map_update t ~f =
+    let id = Direct_stream_writer.Expert.Transformation_id.create () in
+    Tilde_f.Let_syntax.(
+      map_response t
+      >>= Fn.map_input
+      >>= Direct_stream_writer.Expert.filter_map_input_with_id ~id)
+      ~f
+  ;;
+
+  let map_update t ~f =
+    let id = Direct_stream_writer.Expert.Transformation_id.create () in
+    Tilde_f.Let_syntax.(
+      map_response t
+      >>= Fn.map_input
+      >>= Direct_stream_writer.Expert.map_input_with_id ~id)
+      ~f
+  ;;
+
+  let map_error t =
+    Tilde_f.Let_syntax.(
+      map_response t >>= Fn.map >>= Deferred.map >>= Tilde_f.of_local_k Result.map_error)
+  ;;
+end
+
 module One_way = struct
   open Async_rpc_kernel
 
   let singleton rpc =
     singleton
       (Rpc.One_way.description rpc)
-      { implement = (fun ?on_exception f -> Rpc.One_way.implement ?on_exception rpc f)
+      { implement =
+          (fun ?on_exception f ->
+            Rpc.One_way.implement
+              ~on_exception:(Option.value on_exception ~default:Close_connection)
+              rpc
+              f)
       ; rpc = One_way rpc
       }
   ;;
@@ -311,16 +381,17 @@ module Streamable_plain_rpc = struct
 end
 
 module Streamable_pipe_rpc = struct
-  let singleton rpc =
+  let singleton ?leave_open_on_exception rpc =
     singleton
       (Streamable.Pipe_rpc.description rpc)
       { implement =
-          (fun ?on_exception f -> Streamable.Pipe_rpc.implement ?on_exception rpc f)
+          (fun ?on_exception f ->
+            Streamable.Pipe_rpc.implement ?on_exception ?leave_open_on_exception rpc f)
       ; rpc = Streamable_pipe rpc
       }
   ;;
 
-  let add = adder ~f:singleton
+  let add ?leave_open_on_exception = adder ~f:(singleton ?leave_open_on_exception)
   let map_query = map_query
 
   let filter_map_response t =
@@ -341,16 +412,17 @@ module Streamable_pipe_rpc = struct
 end
 
 module Streamable_state_rpc = struct
-  let singleton rpc =
+  let singleton ?leave_open_on_exception rpc =
     singleton
       (Streamable.State_rpc.description rpc)
       { implement =
-          (fun ?on_exception f -> Streamable.State_rpc.implement ?on_exception rpc f)
+          (fun ?on_exception f ->
+            Streamable.State_rpc.implement ?on_exception ?leave_open_on_exception rpc f)
       ; rpc = Streamable_state rpc
       }
   ;;
 
-  let add = adder ~f:singleton
+  let add ?leave_open_on_exception = adder ~f:(singleton ?leave_open_on_exception)
   let map_query = map_query
 
   let map_state t =

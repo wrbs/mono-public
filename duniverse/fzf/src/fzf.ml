@@ -94,8 +94,7 @@ module Pick_from : sig
 
   (** A [Pick_from.Encoded.t] takes care to convert client provided keys into
       'fzf-friendly' strings (i.e., not containing any newlines), and maps the
-      'fzf-friendly' output from Fzf back into client-provided keys.
-  *)
+      'fzf-friendly' output from Fzf back into client-provided keys. *)
   module Encoded : sig
     type 'a unencoded := 'a t
     type 'a t
@@ -265,7 +264,8 @@ module Tiebreak = struct
 
   let%expect_test "demonstrate to_string" =
     List.iter all ~f:(fun t -> print_endline (to_string t));
-    [%expect {|
+    [%expect
+      {|
       length
       begin
       end
@@ -305,6 +305,7 @@ type ('a, 'return) pick_fun =
   -> ?exact_match:unit
   -> ?no_hscroll:unit
   -> ?case_match:[ `case_sensitive | `case_insensitive | `smart_case ]
+  -> ?ansi:unit
   -> ?expect:Expect.t
   -> 'a Pick_from.t
   -> 'return
@@ -360,6 +361,7 @@ module Blocking = struct
     ?select_many
     ?no_hscroll
     ?(case_match = `smart_case)
+    ?ansi
     (entries :
       [ `Streaming of Io.Input.t Async.Pipe.Reader.t
       | `List of Io.Input.t Nonempty_list.t
@@ -417,6 +419,7 @@ module Blocking = struct
              in
              make_command_option ~key:"tiebreak" value)
          ; Option.map no_hscroll ~f:(Fn.const "--no-hscroll")
+         ; Option.map ansi ~f:(Fn.const "--ansi")
          ; (match case_match with
             (* fzf uses the last case arg on the command-line if a user specifies both
                but in ocaml we instead allow at most one *)
@@ -435,8 +438,8 @@ module Blocking = struct
          ]
          |> List.filter_opt)
         @ Option.value_map bind ~default:[] ~f:(fun bindings ->
-            Nonempty_list.to_list bindings
-            |> List.map ~f:(fun binding -> make_command_option ~key:"bind" binding))
+          Nonempty_list.to_list bindings
+          |> List.map ~f:(fun binding -> make_command_option ~key:"bind" binding))
       in
       Exn.handle_uncaught ~exit:false (fun () ->
         never_returns (Unix.exec ~prog:fzf_path ~argv:(fzf_path :: args) ()));
@@ -520,7 +523,7 @@ module Blocking = struct
        | [ _ ] ->
          raise_s [%message "fzf bug: only got one line of output" (output : string)]
        | key_pressed :: selections ->
-         (match Set_once.set expect.key_pressed [%here] key_pressed with
+         (match Set_once.set expect.key_pressed key_pressed with
           | Error e -> raise_s [%message "BUG: already set key_pressed" (e : Error.t)]
           | Ok () -> String.concat ~sep:"\n" selections))
   ;;
@@ -548,6 +551,7 @@ module Blocking = struct
     ?exact_match
     ?no_hscroll
     ?case_match
+    ?ansi
     ?expect
     ~pid_ivar
     (pick_from : a Pick_from.t)
@@ -593,6 +597,7 @@ module Blocking = struct
         ?exact_match
         ?no_hscroll
         ?case_match
+        ?ansi
         ?expect
         entries
         ~buffer_size
@@ -629,6 +634,7 @@ module Blocking = struct
     ?exact_match
     ?no_hscroll
     ?case_match
+    ?ansi
     ?expect
     ~pid_ivar
     (pick_from : a Pick_from.t)
@@ -640,7 +646,7 @@ module Blocking = struct
           let each_entry_has_a_trailing_newline = 1 in
           (entries :> string Nonempty_list.t)
           |> Nonempty_list.map ~f:(fun entry ->
-               String.length entry + each_entry_has_a_trailing_newline)
+            String.length entry + each_entry_has_a_trailing_newline)
           |> Nonempty_list.reduce ~f:Int.( + )
           |> ( + ) (get_max_key_pressed_size expect))
       in
@@ -677,6 +683,7 @@ module Blocking = struct
         ?exact_match
         ?no_hscroll
         ?case_match
+        ?ansi
         ?expect
         entries
         ~buffer_size
@@ -740,6 +747,7 @@ let pick_one_with_pid_ivar
   ?exact_match
   ?no_hscroll
   ?case_match
+  ?ansi
   ?expect
   ~pid_ivar
   (entries : a Pick_from.t)
@@ -750,32 +758,33 @@ let pick_one_with_pid_ivar
     ~rest:`Log
     (* consider [`Raise] instead; see: https://wiki/x/Ux4xF *)
     (fun () ->
-    In_thread.run (fun () ->
-      Blocking.pick_one_with_pid_ivar
-        ?fzf_path
-        ?select1
-        ?query
-        ?header
-        ?preview
-        ?preview_window
-        ?no_sort
-        ?reverse_input
-        ?prompt_at_top
-        ?with_nth
-        ?nth
-        ?delimiter
-        ?height
-        ?bind
-        ?tiebreak
-        ?filter
-        ?border
-        ?info
-        ?exact_match
-        ?no_hscroll
-        ?case_match
-        ?expect
-        ~pid_ivar
-        entries))
+       In_thread.run (fun () ->
+         Blocking.pick_one_with_pid_ivar
+           ?fzf_path
+           ?select1
+           ?query
+           ?header
+           ?preview
+           ?preview_window
+           ?no_sort
+           ?reverse_input
+           ?prompt_at_top
+           ?with_nth
+           ?nth
+           ?delimiter
+           ?height
+           ?bind
+           ?tiebreak
+           ?filter
+           ?border
+           ?info
+           ?exact_match
+           ?no_hscroll
+           ?case_match
+           ?ansi
+           ?expect
+           ~pid_ivar
+           entries))
 ;;
 
 let pick_one = pick_one_with_pid_ivar ~pid_ivar:None
@@ -804,6 +813,7 @@ let pick_one_abort
   ?exact_match
   ?no_hscroll
   ?case_match
+  ?ansi
   ?expect
   (entries : a Pick_from.t)
   : (a option, [ `Aborted ]) Either.t Deferred.Or_error.t
@@ -831,6 +841,7 @@ let pick_one_abort
       ?exact_match
       ?no_hscroll
       ?case_match
+      ?ansi
       ?expect
       ~pid_ivar
       entries)
@@ -859,6 +870,7 @@ let pick_many_with_pid_ivar
   ?exact_match
   ?no_hscroll
   ?case_match
+  ?ansi
   ?expect
   ~pid_ivar
   (entries : a Pick_from.t)
@@ -869,32 +881,33 @@ let pick_many_with_pid_ivar
     ~rest:`Log
     (* consider [`Raise] instead; see: https://wiki/x/Ux4xF *)
     (fun () ->
-    In_thread.run (fun () ->
-      Blocking.pick_many_with_pid_ivar
-        ?fzf_path
-        ?select1
-        ?query
-        ?header
-        ?preview
-        ?preview_window
-        ?no_sort
-        ?reverse_input
-        ?prompt_at_top
-        ?with_nth
-        ?nth
-        ?delimiter
-        ?height
-        ?bind
-        ?tiebreak
-        ?filter
-        ?border
-        ?info
-        ?exact_match
-        ?no_hscroll
-        ?case_match
-        ?expect
-        ~pid_ivar
-        entries))
+       In_thread.run (fun () ->
+         Blocking.pick_many_with_pid_ivar
+           ?fzf_path
+           ?select1
+           ?query
+           ?header
+           ?preview
+           ?preview_window
+           ?no_sort
+           ?reverse_input
+           ?prompt_at_top
+           ?with_nth
+           ?nth
+           ?delimiter
+           ?height
+           ?bind
+           ?tiebreak
+           ?filter
+           ?border
+           ?info
+           ?exact_match
+           ?no_hscroll
+           ?case_match
+           ?ansi
+           ?expect
+           ~pid_ivar
+           entries))
 ;;
 
 let pick_many = pick_many_with_pid_ivar ~pid_ivar:None
@@ -923,6 +936,7 @@ let pick_many_abort
   ?exact_match
   ?no_hscroll
   ?case_match
+  ?ansi
   ?expect
   (entries : a Pick_from.t)
   : (a list option, [ `Aborted ]) Either.t Deferred.Or_error.t
@@ -950,6 +964,7 @@ let pick_many_abort
       ?exact_match
       ?no_hscroll
       ?case_match
+      ?ansi
       ?expect
       ~pid_ivar
       entries)

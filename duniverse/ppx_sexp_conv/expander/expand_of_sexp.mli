@@ -1,4 +1,4 @@
-open! Base
+open! Stdppx
 open! Ppxlib
 
 module Sig_generate_of_sexp : sig
@@ -11,10 +11,15 @@ module Sig_generate_of_sexp : sig
     -> loc:location
     -> path:string
     -> rec_flag * type_declaration list
+    -> portable:bool
     -> signature_item list
 end
 
 module Str_generate_of_sexp : sig
+  (** Given an identifier for a type, produce a pattern for that type's [of_sexp]
+      conversion. *)
+  val pattern_of_sexp : longident loc -> pattern
+
   (** Given a type, produce its [of_sexp] conversion. *)
   val core_type_of_sexp : path:string -> core_type -> expression
 
@@ -23,6 +28,7 @@ module Str_generate_of_sexp : sig
     :  loc:location
     -> poly:bool
     -> path:string
+    -> portable:bool
     -> rec_flag * type_declaration list
     -> structure_item list
 end

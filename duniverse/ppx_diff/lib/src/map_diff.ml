@@ -9,16 +9,24 @@ module Stable = struct
         | Remove of 'k
         | Add of 'k * 'v
         | Diff of 'k * 'v_diff
-      [@@deriving sexp, bin_io, stable_witness]
+      [@@deriving bin_io, equal ~localize, quickcheck, sexp, stable_witness]
     end
 
-    type ('k, 'v, 'v_diff) t = ('k, 'v, 'v_diff) Change.t list
-    [@@deriving sexp, bin_io, stable_witness]
+    include struct
+      open Base_quickcheck
 
-    let get (type a a_diff) (get_a : from:a -> to_:a -> a_diff Optional_diff.t) ~from ~to_
-      =
+      type ('k, 'v, 'v_diff) t = ('k, 'v, 'v_diff) Change.t list
+      [@@deriving bin_io, equal ~localize, quickcheck, sexp, stable_witness]
+    end
+
+    let get
+      (type a a_diff)
+      (get_a : from:a -> to_:a -> local_ a_diff Optional_diff.t)
+      ~from
+      ~to_
+      = exclave_
       if phys_equal from to_
-      then Optional_diff.none
+      then Optional_diff.get_none ()
       else (
         let diff =
           Map.fold_symmetric_diff
@@ -27,16 +35,18 @@ module Stable = struct
             ~data_equal:phys_equal
             ~init:[]
             ~f:(fun acc (key, diff) ->
-            match diff with
-            | `Left _ -> Change.Remove key :: acc
-            | `Right value -> Change.Add (key, value) :: acc
-            | `Unequal (from, to_) ->
-              let diff = get_a ~from ~to_ in
-              if Optional_diff.is_none diff
-              then acc
-              else Change.Diff (key, Optional_diff.unsafe_value diff) :: acc)
+              match diff with
+              | `Left _ -> Change.Remove key :: acc
+              | `Right value -> Change.Add (key, value) :: acc
+              | `Unequal (from, to_) ->
+                let diff = get_a ~from ~to_ in
+                if Optional_diff.is_none diff
+                then acc
+                else Change.Diff (key, Optional_diff.unsafe_value diff) :: acc)
         in
-        if List.is_empty diff then Optional_diff.none else Optional_diff.return diff)
+        if List.is_empty diff
+        then Optional_diff.get_none ()
+        else Optional_diff.return diff)
     ;;
 
     let apply_exn apply_a_exn derived_on diff =
@@ -48,21 +58,21 @@ module Stable = struct
     ;;
 
     let of_list_exn _ _ = function
-      | [] -> Optional_diff.none
-      | l -> Optional_diff.return (List.concat l)
+      | [] -> exclave_ Optional_diff.get_none ()
+      | l -> exclave_ Optional_diff.return (List.concat l)
     ;;
 
     module Make (M : sig
-      module Key : sig
-        type t
-        type comparator_witness
-      end
+        module Key : sig
+          type t
+          type comparator_witness
+        end
 
-      type 'v t = (Key.t, 'v, Key.comparator_witness) Map.t
-    end) :
+        type 'v t = (Key.t, 'v, Key.comparator_witness) Map.t
+      end) :
       Diff_intf.S1_plain
-        with type 'v derived_on := 'v M.t
-         and type ('v, 'v_diff) t := (M.Key.t, 'v, 'v_diff) t = struct
+      with type 'v derived_on := 'v M.t
+       and type ('v, 'v_diff) t := (M.Key.t, 'v, 'v_diff) t = struct
       let get = get
       let apply_exn = apply_exn
       let of_list_exn = of_list_exn

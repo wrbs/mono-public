@@ -14,31 +14,68 @@ module Sys = Sys0
 let invalid_argf = Printf.invalid_argf
 
 module Array = struct
-  external create : int -> 'a -> 'a array = "caml_make_vect"
-  external create_local : int -> 'a -> 'a array = "caml_make_vect"
-  external create_float_uninitialized : int -> float array = "caml_make_float_vect"
-  external get : ('a array[@local_opt]) -> (int[@local_opt]) -> 'a = "%array_safe_get"
-  external length : ('a array[@local_opt]) -> int = "%array_length"
+  [%%template
+    external create
+      : ('a : any_non_null).
+      len:int -> 'a -> 'a array @ m
+      @@ portable
+      = "%makearray_dynamic"
+    [@@alloc __ @ m = (heap_global, stack_local)] [@@layout_poly]]
+
+  external create_local
+    : ('a : any_non_null).
+    len:int -> 'a -> local_ 'a array
+    @@ portable
+    = "%makearray_dynamic"
+  [@@layout_poly]
+
+  external magic_create_uninitialized
+    : ('a : any_non_null).
+    len:int -> ('a array[@local_opt])
+    @@ portable
+    = "%makearray_dynamic_uninit"
+  [@@layout_poly]
+
+  external create_float_uninitialized
+    :  int
+    -> float array
+    @@ portable
+    = "caml_make_float_vect"
+
+  external%template get
+    : ('a : any_non_null).
+    ('a array[@local_opt]) @ m -> (int[@local_opt]) -> 'a @ m
+    @@ portable
+    = "%array_safe_get"
+  [@@layout_poly] [@@mode m = (uncontended, shared)]
+
+  external length
+    : ('a : any_non_null).
+    ('a array[@local_opt]) @ contended -> int
+    @@ portable
+    = "%array_length"
+  [@@layout_poly]
 
   external set
-    :  ('a array[@local_opt])
-    -> (int[@local_opt])
-    -> 'a
-    -> unit
+    : ('a : any_non_null).
+    ('a array[@local_opt]) -> (int[@local_opt]) -> 'a -> unit
+    @@ portable
     = "%array_safe_set"
+  [@@layout_poly]
 
-  external unsafe_get
-    :  ('a array[@local_opt])
-    -> (int[@local_opt])
-    -> 'a
+  external%template unsafe_get
+    : ('a : any_non_null).
+    ('a array[@local_opt]) @ m -> (int[@local_opt]) -> 'a @ m
+    @@ portable
     = "%array_unsafe_get"
+  [@@mode m = (uncontended, shared)] [@@layout_poly]
 
   external unsafe_set
-    :  ('a array[@local_opt])
-    -> (int[@local_opt])
-    -> 'a
-    -> unit
+    : ('a : any_non_null).
+    ('a array[@local_opt]) -> (int[@local_opt]) -> 'a -> unit
+    @@ portable
     = "%array_unsafe_set"
+  [@@layout_poly]
 
   external unsafe_blit
     :  src:('a array[@local_opt])
@@ -47,22 +84,32 @@ module Array = struct
     -> dst_pos:int
     -> len:int
     -> unit
+    @@ portable
     = "caml_array_blit"
+
+  external unsafe_fill
+    :  local_ 'a array
+    -> int
+    -> int
+    -> 'a
+    -> unit
+    @@ portable
+    = "caml_array_fill"
+
+  external unsafe_sub
+    :  local_ 'a array
+    -> int
+    -> int
+    -> 'a array
+    @@ portable
+    = "caml_array_sub"
+
+  external concat : local_ 'a array list -> 'a array @@ portable = "caml_array_concat"
 end
 
 include Array
 
 let max_length = Sys.max_array_length
-
-let create ~len x =
-  try create len x with
-  | Invalid_argument _ -> invalid_argf "Array.create ~len:%d: invalid length" len ()
-;;
-
-let create_local ~len x =
-  try create_local len x with
-  | Invalid_argument _ -> invalid_argf "Array.create_local ~len:%d: invalid length" len ()
-;;
 
 let create_float_uninitialized ~len =
   try create_float_uninitialized len with
@@ -71,30 +118,51 @@ let create_float_uninitialized ~len =
 ;;
 
 let append = Stdlib.Array.append
-let blit = Stdlib.Array.blit
-let concat = Stdlib.Array.concat
-let copy = Stdlib.Array.copy
-let fill = Stdlib.Array.fill
 
-let init len ~(f : _ -> _) =
+let blit ~(local_ src) ~src_pos ~(local_ dst) ~dst_pos ~len =
+  Ordered_collection_common0.check_pos_len_exn
+    ~pos:src_pos
+    ~len
+    ~total_length:(length src);
+  Ordered_collection_common0.check_pos_len_exn
+    ~pos:dst_pos
+    ~len
+    ~total_length:(length dst);
+  unsafe_blit ~src ~src_pos ~dst ~dst_pos ~len
+;;
+
+let fill (local_ a) ~pos ~len v =
+  if pos < 0 || len < 0 || pos > length a - len
+  then invalid_arg "Array.fill"
+  else unsafe_fill a pos len v
+;;
+
+let%template[@alloc a = (heap, stack)] init len ~(local_ f : _ -> _) =
   if len = 0
   then [||]
   else if len < 0
   then invalid_arg "Array.init"
   else (
-    let res = create ~len (f 0) in
-    for i = 1 to Int0.pred len do
-      unsafe_set res i (f i)
-    done;
-    res)
+    (let res = (create [@alloc a]) ~len (f 0) in
+     for i = 1 to Int0.pred len do
+       unsafe_set res i (f i)
+     done;
+     res)
+    [@exclave_if_stack a])
 ;;
 
 let make_matrix = Stdlib.Array.make_matrix
 let of_list = Stdlib.Array.of_list
-let sub = Stdlib.Array.sub
+
+let sub (local_ a) ~pos ~len =
+  if pos < 0 || len < 0 || pos > length a - len
+  then invalid_arg "Array.sub"
+  else unsafe_sub a pos len
+;;
+
 let to_list = Stdlib.Array.to_list
 
-let fold t ~init ~(f : _ -> _ -> _) =
+let fold t ~init ~(local_ f : _ -> _ -> _) =
   let r = ref init in
   for i = 0 to length t - 1 do
     r := f !r (unsafe_get t i)
@@ -102,27 +170,56 @@ let fold t ~init ~(f : _ -> _ -> _) =
   !r
 ;;
 
-let fold_right t ~(f : _ -> _ -> _) ~init =
+let%template fold_right (t @ m) ~(local_ f : _ @ m -> _ -> _) ~init =
   let r = ref init in
   for i = length t - 1 downto 0 do
-    r := f (unsafe_get t i) !r
+    r := f ((unsafe_get [@mode m]) t i) !r
   done;
   !r
+[@@mode m = (uncontended, shared)]
 ;;
 
-let iter t ~(f : _ -> _) =
+let iter t ~(local_ f : _ -> _) =
   for i = 0 to length t - 1 do
     f (unsafe_get t i)
   done
 ;;
 
-let iteri t ~(f : _ -> _ -> _) =
+let iteri t ~(local_ f : _ -> _ -> _) =
   for i = 0 to length t - 1 do
     f i (unsafe_get t i)
   done
 ;;
 
-let map t ~(f : _ -> _) =
+[@@@warning "-incompatible-with-upstream"]
+
+let%template[@kind
+              ki = (value, immediate, immediate64, float64, bits32, bits64, word)
+              , ko = (float64, bits32, bits64, word)] map
+  (type (a : ki) (b : ko))
+  (local_ (t : a array))
+  ~(local_ f : _ -> _)
+  : b array
+  =
+  let len = length t in
+  if len = 0
+  then [||]
+  else (
+    let r = magic_create_uninitialized ~len in
+    for i = 0 to len - 1 do
+      unsafe_set r i (f (unsafe_get t i))
+    done;
+    r)
+;;
+
+let%template[@kind
+              ki = (value, immediate, immediate64, float64, bits32, bits64, word)
+              , ko = (value, immediate, immediate64)] map
+  (type (a : ki) (b : ko))
+  (local_ (t : a array))
+  ~(local_ f : _ -> _)
+  : b array
+  =
   let len = length t in
   if len = 0
   then [||]
@@ -134,7 +231,7 @@ let map t ~(f : _ -> _) =
     r)
 ;;
 
-let mapi t ~(f : _ -> _ -> _) =
+let mapi t ~(local_ f : _ -> _ -> _) =
   let len = length t in
   if len = 0
   then [||]
@@ -148,7 +245,7 @@ let mapi t ~(f : _ -> _ -> _) =
 
 let stable_sort t ~compare = Stdlib.Array.stable_sort t ~cmp:compare
 
-let swap t i j =
+let swap (local_ t) i j =
   let elt_i = t.(i) in
   let elt_j = t.(j) in
   unsafe_set t i elt_j;

@@ -1,65 +1,22 @@
 open! Import
-
-include (
-  struct
-    type 'a t = 'a option
-    [@@deriving_inline compare ~localize, globalize, hash, sexp, sexp_grammar]
-
-    let compare__local : 'a. ('a -> 'a -> int) -> 'a t -> 'a t -> int =
-      compare_option__local
-    ;;
-
-    let compare : 'a. ('a -> 'a -> int) -> 'a t -> 'a t -> int = compare_option
-
-    let globalize : 'a. ('a -> 'a) -> 'a t -> 'a t =
-      fun (type a__009_) : ((a__009_ -> a__009_) -> a__009_ t -> a__009_ t) ->
-      globalize_option
-    ;;
-
-    let hash_fold_t :
-          'a.
-          (Ppx_hash_lib.Std.Hash.state -> 'a -> Ppx_hash_lib.Std.Hash.state)
-          -> Ppx_hash_lib.Std.Hash.state
-          -> 'a t
-          -> Ppx_hash_lib.Std.Hash.state
-      =
-      hash_fold_option
-    ;;
-
-    let t_of_sexp : 'a. (Sexplib0.Sexp.t -> 'a) -> Sexplib0.Sexp.t -> 'a t =
-      option_of_sexp
-    ;;
-
-    let sexp_of_t : 'a. ('a -> Sexplib0.Sexp.t) -> 'a t -> Sexplib0.Sexp.t =
-      sexp_of_option
-    ;;
-
-    let t_sexp_grammar : 'a. 'a Sexplib0.Sexp_grammar.t -> 'a t Sexplib0.Sexp_grammar.t =
-      fun _'a_sexp_grammar -> option_sexp_grammar _'a_sexp_grammar
-    ;;
-
-    [@@@end]
-  end :
-    sig
-      type 'a t = 'a option
-      [@@deriving_inline compare ~localize, globalize, hash, sexp, sexp_grammar]
-
-      include Ppx_compare_lib.Comparable.S1 with type 'a t := 'a t
-      include Ppx_compare_lib.Comparable.S_local1 with type 'a t := 'a t
-
-      val globalize : ('a -> 'a) -> 'a t -> 'a t
-
-      include Ppx_hash_lib.Hashable.S1 with type 'a t := 'a t
-      include Sexplib0.Sexpable.S1 with type 'a t := 'a t
-
-      val t_sexp_grammar : 'a Sexplib0.Sexp_grammar.t -> 'a t Sexplib0.Sexp_grammar.t
-
-      [@@@end]
-    end)
+module Constructors = Option0
+include Constructors
 
 type 'a t = 'a option =
   | None
   | Some of 'a
+
+[%%rederive.portable
+  type 'a t = 'a option [@@deriving compare ~localize, globalize, hash, sexp_grammar]]
+
+[%%template
+[@@@kind.default k = (value, float64, bits32, bits64, word)]
+
+open struct
+  type nonrec ('a : k) t = ('a t[@kind k]) =
+    | None
+    | Some of 'a
+end
 
 let is_none = function
   | None -> true
@@ -71,10 +28,72 @@ let is_some = function
   | _ -> false
 ;;
 
-let value_map o ~default ~f =
-  match o with
-  | Some x -> f x
+include struct
+  [@@@kind.default k]
+
+  let t_of_sexp a__of_sexp (sexp : Sexplib0.Sexp.t) : _ t =
+    if Dynamic.get read_old_option_format
+    then (
+      match sexp with
+      | List [] | Atom ("none" | "None") -> None
+      | List [ el ] | List [ Atom ("some" | "Some"); el ] -> Some (a__of_sexp el)
+      | List _ -> of_sexp_error "option_of_sexp: list must represent optional value" sexp
+      | Atom _ -> of_sexp_error "option_of_sexp: only none can be atom" sexp)
+    else (
+      match sexp with
+      | Atom ("none" | "None") -> None
+      | List [ Atom ("some" | "Some"); el ] -> Some (a__of_sexp el)
+      | Atom _ -> of_sexp_error "option_of_sexp: only none can be atom" sexp
+      | List _ -> of_sexp_error "option_of_sexp: list must be (some el)" sexp)
+  [@@kind k]
+  ;;
+
+  [@@@alloc a @ m = (heap_global, stack_local)]
+  [@@@mode.default m]
+
+  (* Copied and templated from [Sexplib0] *)
+
+  let sexp_of_t sexp_of__a option : Sexplib0.Sexp.t =
+    let write_old_option_format = Dynamic.get write_old_option_format in
+    match[@exclave_if_stack a] option with
+    | Some x when write_old_option_format -> List [ sexp_of__a x ]
+    | Some x -> List [ Atom "some"; sexp_of__a x ]
+    | None when write_old_option_format -> List []
+    | None -> Atom "none"
+  [@@kind k] [@@mode m]
+  ;;
+end
+
+[@@@mode.default m = (global, local)]
+
+let value t ~default =
+  match t with
   | None -> default
+  | Some x -> x
+;;
+
+let value_exn ~(here : [%call_pos]) ?error ?message t =
+  match t with
+  | Some x -> x
+  | None ->
+    let error =
+      match error, message with
+      | None, None ->
+        if Source_code_position.is_dummy here
+        then Error.of_string "Option.value_exn None"
+        else Error.create "Option.value_exn None" here Source_code_position0.sexp_of_t
+      | Some e, None -> e
+      | None, Some m -> Error.of_string m
+      | Some e, Some m -> Error.tag e ~tag:m
+    in
+    (match Error.raise error with
+     | (_ : Nothing.t) -> .)
+;;
+
+let value_or_thunk o ~default =
+  match o with
+  | Some x -> x
+  | None -> default () [@exclave_if_local m]
 ;;
 
 let iter o ~f =
@@ -83,6 +102,17 @@ let iter o ~f =
   | Some a -> f a
 ;;
 
+let value_map t ~default ~(local_ f) =
+  match t with
+  | Some x -> f x [@exclave_if_local m]
+  | None -> default
+[@@kind ki = k, ko = (value, float64, bits32, bits64, word)]
+;;]
+
+let t__float64_of_sexp = t_of_sexp__float64
+let t__bits32_of_sexp = t_of_sexp__bits32
+let t__bits64_of_sexp = t_of_sexp__bits64
+let t__word_of_sexp = t_of_sexp__word
 let invariant f t = iter t ~f
 
 let call x ~f =
@@ -91,50 +121,17 @@ let call x ~f =
   | Some f -> f x
 ;;
 
-let value t ~default =
-  match t with
-  | None -> default
-  | Some x -> x
-;;
-
-let value_exn ?here ?error ?message t =
-  match t with
-  | Some x -> x
-  | None ->
-    let error =
-      match here, error, message with
-      | None, None, None -> Error.of_string "Option.value_exn None"
-      | None, None, Some m -> Error.of_string m
-      | None, Some e, None -> e
-      | None, Some e, Some m -> Error.tag e ~tag:m
-      | Some p, None, None ->
-        Error.create "Option.value_exn" p Source_code_position0.sexp_of_t
-      | Some p, None, Some m -> Error.create m p Source_code_position0.sexp_of_t
-      | Some p, Some e, _ ->
-        Error.create
-          (value message ~default:"")
-          (e, p)
-          (sexp_of_pair Error.sexp_of_t Source_code_position0.sexp_of_t)
-    in
-    Error.raise error
-;;
-
-let value_or_thunk o ~default =
-  match o with
-  | Some x -> x
-  | None -> default ()
-;;
-
 let to_array t =
   match t with
   | None -> [||]
   | Some x -> [| x |]
 ;;
 
-let to_list t =
+let%template to_list t =
   match t with
   | None -> []
-  | Some x -> [ x ]
+  | Some x -> [ x ] [@exclave_if_local m]
+[@@mode m = (global, local)]
 ;;
 
 let for_all t ~f =
@@ -179,21 +176,18 @@ let find_map t ~f =
   | Some a -> f a
 ;;
 
-let equal f t t' =
+[%%template
+[@@@mode.default m = (global, local)]
+
+let equal f (t : (_ t[@kind k])) (t' : (_ t[@kind k])) =
   match t, t' with
   | None, None -> true
   | Some x, Some x' -> f x x'
   | _ -> false
+[@@kind k = (value, float64, bits32, bits64, word)]
 ;;
 
-let equal__local f t t' =
-  match t, t' with
-  | None, None -> true
-  | Some x, Some x' -> f x x'
-  | _ -> false
-;;
-
-let some x = Some x
+let some x = Some x [@exclave_if_local m]
 
 let first_some x y =
   match x with
@@ -201,7 +195,21 @@ let first_some x y =
   | None -> y
 ;;
 
-let some_if cond x = if cond then Some x else None
+let first_some_thunk x y =
+  match x with
+  | Some _ -> x
+  | None -> y () [@exclave_if_local m]
+;;
+
+let some_if cond x = if cond then Some x [@exclave_if_local m] else None]
+
+let%template[@mode global] some_if_thunk cond thunk =
+  if cond then Some (thunk ()) else None
+;;
+
+let%template[@mode local] some_if_thunk cond thunk = exclave_
+  if cond then Some (thunk ()) else None
+;;
 
 let merge a b ~f =
   match a, b with
@@ -227,11 +235,21 @@ let try_with_join f =
   | exception _ -> None
 ;;
 
-let map t ~f =
+[%%template
+[@@@kind.default
+  ki = (value, float64, bits32, bits64, word), ko = (value, float64, bits32, bits64, word)]
+
+let[@mode local] map (t : (_ t[@kind ki])) ~f : (_ t[@kind ko]) = exclave_
   match t with
   | None -> None
   | Some a -> Some (f a)
 ;;
+
+let[@mode global] map (t : (_ t[@kind ki])) ~f : (_ t[@kind ko]) =
+  match t with
+  | None -> None
+  | Some a -> Some (f a)
+;;]
 
 module Monad_arg = struct
   type 'a t = 'a option
@@ -246,7 +264,7 @@ module Monad_arg = struct
   ;;
 end
 
-include Monad.Make_local (Monad_arg)
+include%template Monad.Make [@mode local] [@modality portable] (Monad_arg)
 
 module Applicative_arg = struct
   type 'a t = 'a option
@@ -261,4 +279,5 @@ module Applicative_arg = struct
   ;;
 end
 
-include Applicative.Make_using_map2_local (Applicative_arg)
+include%template
+  Applicative.Make_using_map2 [@mode local] [@modality portable] (Applicative_arg)

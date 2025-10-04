@@ -96,7 +96,7 @@ Terminology
      from this directory. Moreover, scopes are separate from your project's
      dependencies. The scope also determines where private items are visible.
      Private items include libraries or binaries that will not be installed.
-     See :doc:`concepts/scopes` for more details.
+     See :doc:`/explanation/scopes` for more details.
 
    build context
      A specific configuration written in a
@@ -144,10 +144,17 @@ Terminology
      tree. It can also specify a custom formatter.
 
    placeholder substitution
-     A build step in which placeholders such as ``3.16.0`` in source files
+     A build step in which placeholders such as ``3.20.2`` in source files
      are replaced by concrete values such as ``1.2.3``. It is performed by
      :ref:`dune-subst` for development versions and dune-release_ for
      releases.
+
+   stanza
+     A fragment of a file interpreted by Dune, that will appear as a
+     s-expression at the top-level of a file. For example, the
+     :doc:`/reference/dune/library` stanza describes a library. This can be
+     either a generic term ("the library stanza") or it can refer to a
+     particular instance in a file ("the executable stanza in ``bin/dune``").
 
 Project Layout
 ==============
@@ -157,7 +164,7 @@ A typical Dune project will have a ``dune-project`` and one or more
 interesting things are: libraries, executables, tests, documents to install,
 etc.
 
-We recommended organising your project to have exactly one library per
+We recommend organising your project to have exactly one library per
 directory. You can have several executables in the same directory, as long as
 they share the same build configuration. If you'd like to have multiple
 executables with different configurations in the same directory, you will have

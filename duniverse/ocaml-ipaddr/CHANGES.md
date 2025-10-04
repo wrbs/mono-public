@@ -1,3 +1,7 @@
+## v5.6.1 (2025-08-01)
+
+* Add Ipaddr.Prefix.bits (#125 @psafont)
+
 ## v5.6.0 (2024-05-22)
 
 * Add host and subnet Seq.t iterators for Ipaddr.V4.prefix, Ipaddr.V6.Prefix

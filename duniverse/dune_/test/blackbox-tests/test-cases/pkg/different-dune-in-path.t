@@ -12,7 +12,7 @@ Clarify the behavior when the `dune` in PATH is not the one used to start the bu
   >  (allow_empty))
   > EOF
   > cd ..
-  > tar -czf $1.tar.gz tmp
+  > tar cf $1.tar tmp
   > rm -rf tmp
   > }
 
@@ -43,7 +43,7 @@ Make lockfiles for the packages.
   > 
   > (source
   >  (fetch
-  >   (url $PWD/foo.tar.gz)))
+  >   (url $PWD/foo.tar)))
   > 
   > (dev)
   > EOF
@@ -57,13 +57,13 @@ Make lockfiles for the packages.
   > 
   > (source
   >  (fetch
-  >   (url $PWD/bar.tar.gz)))
+  >   (url $PWD/bar.tar)))
   > 
   > (dev)
   > EOF
 
 Test that the project can be built normally.
-  $ dune build
+  $ build_pkg foo
 
 Make a fake dune exe:
   $ mkdir bin
@@ -76,6 +76,7 @@ Make a fake dune exe:
   $ dune clean
 Try building in an environment where `dune` refers to the fake dune.
   $ DUNE=$(which dune)  # otherwise we would start by running the wrong dune
-  $ PATH=$PWD/bin:$PATH $DUNE build
-  Fake dune! (args: build -p bar @install)
+  $ PATH=$PWD/bin:$PATH $DUNE build $pkg_root/foo/target/
   Fake dune! (args: build -p foo @install)
+  $ PATH=$PWD/bin:$PATH $DUNE build $pkg_root/bar/target/
+  Fake dune! (args: build -p bar @install)

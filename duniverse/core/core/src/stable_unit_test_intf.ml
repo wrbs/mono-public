@@ -3,14 +3,12 @@
 
 open! Import
 
-module type Arg = sig
-  type t [@@deriving sexp, bin_io]
-
-  val equal : t -> t -> bool
+module type%template [@mode m = (global, local)] Arg = sig
+  type t [@@deriving sexp, (bin_io [@mode m]), (equal [@mode m])]
 
   (** [tests] is a list of (value, sexp-representation, bin-io-representation) triples.
-      The unit tests check that the type properly serializes and
-      de-serializes according to the given representations. *)
+      The unit tests check that the type properly serializes and de-serializes according
+      to the given representations. *)
   val tests : (t * string * string) list
 end
 

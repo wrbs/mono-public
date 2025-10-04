@@ -73,7 +73,7 @@ end
 
 type t =
   { map : Value.t Key.Map.t Incr.Var.t
-  ; collate : (Key.t, Filter.t, Order.t) Collate.t Incr.Var.t
+  ; collate : (Key.t, Filter.t, Order.t) Collate_params.t Incr.Var.t
   ; observer : Concrete.t Incr.Observer.t
   }
 
@@ -100,7 +100,7 @@ let modify_map t ~f = Incr.Var.set t.map (f (Incr.Var.value t.map))
 let set_collate ?filter ?rank_range ?key_range ?order t =
   let collate = Incr.Var.value t.collate in
   let collate =
-    { Collate.filter = Option.value filter ~default:collate.filter
+    { Collate_params.filter = Option.value filter ~default:collate.filter
     ; key_range = Option.value key_range ~default:collate.key_range
     ; rank_range = Option.value rank_range ~default:collate.rank_range
     ; order = Option.value order ~default:collate.order
@@ -125,15 +125,15 @@ let init_test
   ?operation_order
   ?(filter = Filter.None)
   ?(order = Order.By_symbol)
-  ?(key_range = Collate.Which_range.All_rows)
-  ?(rank_range = Collate.Which_range.All_rows)
+  ?(key_range = Collate_params.Which_range.All_rows)
+  ?(rank_range = Collate_params.Which_range.All_rows)
   ?(do_collate = do_collate_default)
   ()
   =
   let initial = Key.Map.of_alist_exn data in
   let map = Incr.Var.create initial in
   let collate =
-    Incr.Var.create ({ filter; order; key_range; rank_range } : _ Collate.t)
+    Incr.Var.create ({ filter; order; key_range; rank_range } : _ Collate_params.t)
   in
   let observer =
     let collated =
@@ -233,7 +233,7 @@ let%expect_test "second & third, sort, filter" =
     init_test
       ~filter:Filter.Key_has_vowel
       ~order:Order.By_price
-      ~rank_range:(Collate.Which_range.Between (1, 2))
+      ~rank_range:(Collate_params.Which_range.Between (From_start 1, From_start 2))
       ()
   in
   print_res t;
@@ -256,9 +256,51 @@ let%expect_test "second & third, sort, filter" =
     |}]
 ;;
 
+let%expect_test "second last & last, sort, filter" =
+  let t =
+    init_test
+      ~filter:Filter.Key_has_vowel
+      ~order:Order.By_price
+      ~rank_range:(Collate_params.Which_range.Between (From_end 1, From_end 0))
+      ()
+  in
+  print_res t;
+  [%expect
+    {|
+    (((VOD  (10 2))
+      (GOOG (10 3)))
+     (num_filtered_rows   3)
+     (num_unfiltered_rows 3))
+    |}];
+  modify_map t ~f:(Map.add_exn ~key:"FB" ~data:(10, 4.0));
+  modify_map t ~f:(Map.add_exn ~key:"EEE" ~data:(10, 0.0));
+  print_res t;
+  (* We expect to see the same last 2 results because the insertion was made before *)
+  [%expect
+    {|
+    (((VOD  (10 2))
+      (GOOG (10 3)))
+     (num_filtered_rows   4)
+     (num_unfiltered_rows 5))
+    |}];
+  modify_map t ~f:(Map.set ~key:"EEE" ~data:(10, 4.0));
+  print_res t;
+  (* We expect to see EEE moved at the end *)
+  [%expect
+    {|
+    (((GOOG (10 3))
+      (EEE  (10 4)))
+     (num_filtered_rows   4)
+     (num_unfiltered_rows 5))
+    |}]
+;;
+
 let%expect_test "changing range" =
   let t =
-    init_test ~order:Order.By_price ~rank_range:(Collate.Which_range.Between (1, 2)) ()
+    init_test
+      ~order:Order.By_price
+      ~rank_range:(Collate_params.Which_range.Between (From_start 1, From_start 2))
+      ()
   in
   modify_map t ~f:(Map.add_exn ~key:"FB" ~data:(10, 4.0));
   modify_map t ~f:(Map.add_exn ~key:"EEE" ~data:(10, 0.0));
@@ -270,7 +312,54 @@ let%expect_test "changing range" =
      (num_filtered_rows   5)
      (num_unfiltered_rows 5))
     |}];
-  set_collate ~rank_range:(Between (3, 4)) t;
+  set_collate ~rank_range:(Between (From_start 3, From_start 4)) t;
+  print_res t;
+  [%expect
+    {|
+    (((GOOG (10 3))
+      (FB   (10 4)))
+     (num_filtered_rows   5)
+     (num_unfiltered_rows 5))
+    |}]
+;;
+
+let%expect_test "changing to from_end and mixed ranges" =
+  let t =
+    init_test
+      ~order:Order.By_price
+      ~rank_range:(Collate_params.Which_range.Between (From_start 1, From_start 2))
+      ()
+  in
+  modify_map t ~f:(Map.add_exn ~key:"FB" ~data:(10, 4.0));
+  modify_map t ~f:(Map.add_exn ~key:"EEE" ~data:(10, 0.0));
+  print_res t;
+  [%expect
+    {|
+    (((AAPL (10 1))
+      (VOD  (10 2)))
+     (num_filtered_rows   5)
+     (num_unfiltered_rows 5))
+    |}];
+  set_collate ~rank_range:(Between (From_end 1, From_end 0)) t;
+  print_res t;
+  [%expect
+    {|
+    (((GOOG (10 3))
+      (FB   (10 4)))
+     (num_filtered_rows   5)
+     (num_unfiltered_rows 5))
+    |}];
+  (* This is the same range as above but we mix From_start/From_end indices*)
+  set_collate ~rank_range:(Between (From_start 3, From_end 0)) t;
+  print_res t;
+  [%expect
+    {|
+    (((GOOG (10 3))
+      (FB   (10 4)))
+     (num_filtered_rows   5)
+     (num_unfiltered_rows 5))
+    |}];
+  set_collate ~rank_range:(Between (From_end 1, From_start 4)) t;
   print_res t;
   [%expect
     {|
@@ -294,11 +383,11 @@ let%expect_test "changing range" =
         ; "whip", (10, 3.0)
         ; "VOD", (10, 2.0)
         ]
-      ~rank_range:(Collate.Which_range.Between (1, 5))
+      ~rank_range:(Collate_params.Which_range.Between (From_start 1, From_start 5))
       ()
   in
   let res1 = get_res t in
-  set_collate ~rank_range:(Between (2, 6)) t;
+  set_collate ~rank_range:(Between (From_start 2, From_start 6)) t;
   let res2 = get_res t in
   let update = Concrete.diffs ~from:res1 ~to_:res2 in
   print_s [%sexp (update : Concrete.Update.t)];
@@ -388,7 +477,12 @@ let%expect_test "sort, no filter, key range" =
 ;;
 
 let%expect_test "no sort, no filter, key range + rank range" =
-  let t = init_test ~key_range:(From "GOOG") ~rank_range:(Between (0, 0)) () in
+  let t =
+    init_test
+      ~key_range:(From "GOOG")
+      ~rank_range:(Between (From_start 0, From_start 0))
+      ()
+  in
   print_res t;
   [%expect
     {|
@@ -485,7 +579,7 @@ let%expect_test "update values so that they compare equal" =
       ~order:Order.By_price
       ~filter:Filter.True
       ~key_range:(From "VOD")
-      ~rank_range:(Between (0, 100))
+      ~rank_range:(Between (From_start 0, From_start 100))
       ()
   in
   print_res t;
@@ -680,7 +774,7 @@ let%expect_test "diffs" =
      (Data (Add 0 (A (0 1)))))
     |}];
   let patched = Concrete.update res1 update in
-  require_equal [%here] (module Concrete) res2 patched;
+  require_equal (module Concrete) res2 patched;
   print_s [%message "" ~orig:(res2 : Concrete.t) ~patched:(patched : Concrete.t)];
   [%expect
     {|
@@ -801,221 +895,319 @@ let%expect_test "duplicates in diff" =
     |}]
 ;;
 
-let%test_module "new API" =
-  (module struct
-    module Range = Incr_map_collate.With_caching.Range_memoize_bucket
-
-    module Order_filter = struct
-      type t = Order.t * Filter.t [@@deriving equal, compare, sexp_of]
-    end
-
-    module Order_filter_range = struct
-      type t = Order.t * Filter.t * Range.t [@@deriving equal, compare, sexp_of]
-    end
-
-    let do_collate_new_api
-      ~order_cache_size
-      ~order_filter_cache_size
-      ~order_filter_range_cache_size
+let%expect_test "instrumentation: every instrumented stage gets hit once" =
+  let hits = String.Table.create () in
+  let instrument name =
+    { Incr_map.Instrumentation.f =
+        (fun f ->
+          Hashtbl.update hits name ~f:(function
+            | None -> 1
+            | Some x -> x + 1);
+          f ())
+    }
+  in
+  let print_hits () =
+    Expectable.print
+      (Hashtbl.to_alist hits
+       |> List.map ~f:(fun (stage, hits) -> [%sexp { stage : string; hits : int }]))
+  in
+  let instrumentation : Instrumentation.t =
+    { filter = instrument "filter"
+    ; fold = instrument "fold"
+    ; sort = instrument "sort"
+    ; key_subrange = instrument "key_subrange"
+    ; key_to_rank = instrument "key_to_rank"
+    ; rank_range = instrument "rank_range"
+    }
+  in
+  let do_collate =
+    Incr_map_collate.collate_and_fold
+      ~instrumentation
+      ~filter_to_predicate:Filter.to_predicate
+      ~order_to_compare:Order.to_compare
+      ~filter_equal:Filter.equal
+      ~order_equal:Order.equal
+      ~fold:
+        (Fold.create
+           ~init:()
+           ~add:(fun ~key:_ ~data:_ () -> ())
+           ~remove:(fun ~key:_ ~data:_ () -> ())
+           ())
+  in
+  let (_ : t) =
+    init_test
+      ~do_collate
+      ~operation_order:`Sort_first
+      ~order:Order.By_price
+      ~filter:Filter.True
+      ~key_range:(From "VOD")
+      ~rank_range:(Between (From_start 0, From_start 100))
       ()
-      ?operation_order
+  in
+  Incr.stabilize ();
+  print_hits ();
+  [%expect
+    {|
+    ┌──────────────┬──────┐
+    │ stage        │ hits │
+    ├──────────────┼──────┤
+    │ sort         │ 1    │
+    │ rank_range   │ 1    │
+    │ key_subrange │ 1    │
+    │ fold         │ 1    │
+    │ filter       │ 1    │
+    │ key_to_rank  │ 1    │
+    └──────────────┴──────┘
+    |}];
+  (* Verifying we witnessed 6 instrumentation stages *)
+  [%test_eq: int] (Hashtbl.length hits) 6;
+  (* Verifying we only ran each stage once *)
+  [%test_eq: int] (Hashtbl.fold ~init:0 ~f:(fun ~key:_ ~data acc -> data + acc) hits) 6
+;;
+
+module%test [@name "new API"] _ = struct
+  module Range = Incr_map_collate.With_caching.Range_memoize_bucket
+
+  module Order_filter = struct
+    type t = Order.t * Filter.t [@@deriving equal, compare, sexp_of]
+  end
+
+  module Order_filter_range = struct
+    type t = Order.t * Filter.t * Range.t [@@deriving equal, compare, sexp_of]
+  end
+
+  let do_collate_new_api
+    ~order_cache_size
+    ~order_filter_cache_size
+    ~order_filter_range_cache_size
+    ()
+    ?operation_order
+    input
+    collate
+    =
+    (match operation_order with
+     | None | Some `Sort_first -> ()
+     | Some `Filter_first -> failwith "New API only supports sorting first");
+    let order_cache_params =
+      Incr_memoize.Store_params.with_hooks
+        ~if_found:(printf !"Found  : %{sexp:Order.t}\n")
+        ~if_added:(printf !"Updated: %{sexp:Order.t}\n")
+        (Incr_memoize.Store_params.alist_based__lru
+           ~equal:Order.equal
+           ~max_size:order_cache_size)
+    in
+    let order_filter_cache_params =
+      Incr_memoize.Store_params.with_hooks
+        ~if_found:(fun (order, filter) ->
+          printf !"Found  : %{sexp:Order.t}, %{sexp:Filter.t}\n" order filter)
+        ~if_added:(fun (order, filter) ->
+          printf !"Updated: %{sexp:Order.t}, %{sexp:Filter.t}\n" order filter)
+        (Incr_memoize.Store_params.alist_based__lru
+           ~equal:Order_filter.equal
+           ~max_size:order_filter_cache_size)
+    in
+    let order_filter_range_cache_params =
+      Incr_memoize.Store_params.with_hooks
+        ~if_found:(fun (order, filter, range) ->
+          printf
+            !"Found  : %{sexp:Order.t}, %{sexp:Filter.t}, %{sexp:Range.t}\n"
+            order
+            filter
+            range)
+        ~if_added:(fun (order, filter, range) ->
+          printf
+            !"Updated: %{sexp:Order.t}, %{sexp:Filter.t}, %{sexp:Range.t}\n"
+            order
+            filter
+            range)
+        (Incr_memoize.Store_params.alist_based__lru
+           ~equal:Order_filter_range.equal
+           ~max_size:order_filter_range_cache_size)
+    in
+    Incr_map_collate.With_caching.collate__sort_first
+      ~filter_to_predicate:Filter.to_predicate
+      ~order_to_compare:Order.to_compare
+      ~filter_equal:Filter.equal
+      ~order_equal:Order.equal
+      ~range_memoize_bucket_size:1
+      ~order_cache_params
+      ~order_filter_cache_params
+      ~order_filter_range_cache_params
       input
       collate
-      =
-      (match operation_order with
-       | None | Some `Sort_first -> ()
-       | Some `Filter_first -> failwith "New API only supports sorting first");
-      let order_cache_params =
-        Incr_memoize.Store_params.with_hooks
-          ~if_found:(printf !"Found  : %{sexp:Order.t}\n")
-          ~if_added:(printf !"Updated: %{sexp:Order.t}\n")
-          (Incr_memoize.Store_params.alist_based__lru
-             ~equal:Order.equal
-             ~max_size:order_cache_size)
-      in
-      let order_filter_cache_params =
-        Incr_memoize.Store_params.with_hooks
-          ~if_found:(fun (order, filter) ->
-            printf !"Found  : %{sexp:Order.t}, %{sexp:Filter.t}\n" order filter)
-          ~if_added:(fun (order, filter) ->
-            printf !"Updated: %{sexp:Order.t}, %{sexp:Filter.t}\n" order filter)
-          (Incr_memoize.Store_params.alist_based__lru
-             ~equal:Order_filter.equal
-             ~max_size:order_filter_cache_size)
-      in
-      let order_filter_range_cache_params =
-        Incr_memoize.Store_params.with_hooks
-          ~if_found:(fun (order, filter, range) ->
-            printf
-              !"Found  : %{sexp:Order.t}, %{sexp:Filter.t}, %{sexp:Range.t}\n"
-              order
-              filter
-              range)
-          ~if_added:(fun (order, filter, range) ->
-            printf
-              !"Updated: %{sexp:Order.t}, %{sexp:Filter.t}, %{sexp:Range.t}\n"
-              order
-              filter
-              range)
-          (Incr_memoize.Store_params.alist_based__lru
-             ~equal:Order_filter_range.equal
-             ~max_size:order_filter_range_cache_size)
-      in
-      Incr_map_collate.With_caching.collate__sort_first
-        ~filter_to_predicate:Filter.to_predicate
-        ~order_to_compare:Order.to_compare
-        ~filter_equal:Filter.equal
-        ~order_equal:Order.equal
-        ~range_memoize_bucket_size:1
-        ~order_cache_params
-        ~order_filter_cache_params
-        ~order_filter_range_cache_params
-        input
-        collate
-    ;;
+  ;;
 
-    let%expect_test "behavior of deep caches" =
-      let t =
-        init_test
-          ~do_collate:
-            (do_collate_new_api
-               ~order_cache_size:1
-               ~order_filter_cache_size:2
-               ~order_filter_range_cache_size:3
-               ())
-          ()
-      in
-      (* Default sort + filter *)
-      Incr.stabilize ();
-      [%expect
-        {|
-        Updated: By_symbol
-        Updated: By_symbol, None
-        Updated: By_symbol, None, (All_rows All_rows)
-        |}];
-      (* Change range *)
-      set_collate t ~rank_range:(Between (1, 2));
-      Incr.stabilize ();
-      [%expect
-        {|
-        Found  : By_symbol
-        Found  : By_symbol, None
-        Updated: By_symbol, None, (All_rows (Between (1 2)))
-        |}];
-      (* Change range again. Now the (order, filter, range) cache is full. *)
-      set_collate t ~rank_range:(Between (2, 3));
-      Incr.stabilize ();
-      [%expect
-        {|
-        Found  : By_symbol
-        Found  : By_symbol, None
-        Updated: By_symbol, None, (All_rows (Between (2 3)))
-        |}];
-      (* (1,2) is still in the cache. *)
-      set_collate t ~rank_range:(Between (1, 2));
-      Incr.stabilize ();
-      [%expect
-        {|
-        Found  : By_symbol
-        Found  : By_symbol, None
-        Found  : By_symbol, None, (All_rows (Between (1 2)))
-        |}];
-      (* Adding a 4th range... *)
-      set_collate t ~rank_range:(Between (3, 4));
-      Incr.stabilize ();
-      [%expect
-        {|
-        Found  : By_symbol
-        Found  : By_symbol, None
-        Updated: By_symbol, None, (All_rows (Between (3 4)))
-        |}];
-      set_collate t ~rank_range:All_rows;
-      (* [All_rows] was evicted from the cache, so this will add it again. *)
-      Incr.stabilize ();
-      [%expect
-        {|
-        Found  : By_symbol
-        Found  : By_symbol, None
-        Updated: By_symbol, None, (All_rows All_rows)
-        |}]
-    ;;
+  let%expect_test "behavior of deep caches" =
+    let t =
+      init_test
+        ~do_collate:
+          (do_collate_new_api
+             ~order_cache_size:1
+             ~order_filter_cache_size:2
+             ~order_filter_range_cache_size:3
+             ())
+        ()
+    in
+    (* Default sort + filter *)
+    Incr.stabilize ();
+    [%expect
+      {|
+      Updated: By_symbol
+      Updated: By_symbol, None
+      Updated: By_symbol, None, (All_rows All_rows)
+      |}];
+    (* Change range *)
+    set_collate t ~rank_range:(Between (From_start 1, From_start 2));
+    Incr.stabilize ();
+    [%expect
+      {|
+      Found  : By_symbol
+      Found  : By_symbol, None
+      Updated: By_symbol, None, (All_rows (Between (1 2)))
+      |}];
+    (* Change range again. Now the (order, filter, range) cache is full. *)
+    set_collate t ~rank_range:(Between (From_start 2, From_start 3));
+    Incr.stabilize ();
+    [%expect
+      {|
+      Found  : By_symbol
+      Found  : By_symbol, None
+      Updated: By_symbol, None, (All_rows (Between (2 3)))
+      |}];
+    (* (1,2) is still in the cache. *)
+    set_collate t ~rank_range:(Between (From_start 1, From_start 2));
+    Incr.stabilize ();
+    [%expect
+      {|
+      Found  : By_symbol
+      Found  : By_symbol, None
+      Found  : By_symbol, None, (All_rows (Between (1 2)))
+      |}];
+    (* Adding a 4th range... *)
+    set_collate t ~rank_range:(Between (From_start 3, From_start 4));
+    Incr.stabilize ();
+    [%expect
+      {|
+      Found  : By_symbol
+      Found  : By_symbol, None
+      Updated: By_symbol, None, (All_rows (Between (3 4)))
+      |}];
+    (* Select a From_end range for the first time *)
+    set_collate t ~rank_range:(Between (From_end 1, From_end 0));
+    Incr.stabilize ();
+    [%expect
+      {|
+      Found  : By_symbol
+      Found  : By_symbol, None
+      Updated: By_symbol, None, (All_rows (Between (-2 -1)))
+      |}];
+    (* Select the prev range, we should find it *)
+    set_collate t ~rank_range:(Between (From_start 3, From_start 4));
+    Incr.stabilize ();
+    [%expect
+      {|
+      Found  : By_symbol
+      Found  : By_symbol, None
+      Found  : By_symbol, None, (All_rows (Between (3 4)))
+      |}];
+    (* Re-select the From_end range, we should find it *)
+    set_collate t ~rank_range:(Between (From_end 1, From_end 0));
+    Incr.stabilize ();
+    [%expect
+      {|
+      Found  : By_symbol
+      Found  : By_symbol, None
+      Found  : By_symbol, None, (All_rows (Between (-2 -1)))
+      |}];
+    set_collate t ~rank_range:All_rows;
+    (* [All_rows] was evicted from the cache, so this will add it again. *)
+    Incr.stabilize ();
+    [%expect
+      {|
+      Found  : By_symbol
+      Found  : By_symbol, None
+      Updated: By_symbol, None, (All_rows All_rows)
+      |}]
+  ;;
 
-    let%expect_test "shallow cache is evicted while value is still in use by deeper cache"
-      =
-      let t =
-        init_test
-          ~do_collate:
-            (do_collate_new_api
-               ~order_cache_size:1
-               ~order_filter_cache_size:2
-               ~order_filter_range_cache_size:3
-               ())
-          ()
-      in
-      (* Default sort + filter *)
-      Incr.stabilize ();
-      [%expect
-        {|
-        Updated: By_symbol
-        Updated: By_symbol, None
-        Updated: By_symbol, None, (All_rows All_rows)
-        |}];
-      (* Change range *)
-      set_collate t ~rank_range:(Between (1, 2));
-      Incr.stabilize ();
-      [%expect
-        {|
-        Found  : By_symbol
-        Found  : By_symbol, None
-        Updated: By_symbol, None, (All_rows (Between (1 2)))
-        |}];
-      (* Change range again. Now the (order, filter, range) cache is full. *)
-      set_collate t ~rank_range:(Between (2, 3));
-      Incr.stabilize ();
-      [%expect
-        {|
-        Found  : By_symbol
-        Found  : By_symbol, None
-        Updated: By_symbol, None, (All_rows (Between (2 3)))
-        |}];
-      (* This will evict [By_symbol] from the cache. *)
-      set_collate t ~order:By_price ~rank_range:(Between (1, 2));
-      Incr.stabilize ();
-      [%expect
-        {|
-        Updated: By_price
-        Updated: By_price, None
-        Updated: By_price, None, (All_rows (Between (1 2)))
-        |}];
-      (* As you can see, [By_symbol] is gone from the cache. *)
-      set_collate t ~order:By_symbol ~filter:True;
-      Incr.stabilize ();
-      [%expect
-        {|
-        Updated: By_symbol
-        Updated: By_symbol, True
-        Updated: By_symbol, True, (All_rows (Between (1 2)))
-        |}];
-      (* The old value of (order, filter, range) is still present in the cache, but we
+  let%expect_test "shallow cache is evicted while value is still in use by deeper cache" =
+    let t =
+      init_test
+        ~do_collate:
+          (do_collate_new_api
+             ~order_cache_size:1
+             ~order_filter_cache_size:2
+             ~order_filter_range_cache_size:3
+             ())
+        ()
+    in
+    (* Default sort + filter *)
+    Incr.stabilize ();
+    [%expect
+      {|
+      Updated: By_symbol
+      Updated: By_symbol, None
+      Updated: By_symbol, None, (All_rows All_rows)
+      |}];
+    (* Change range *)
+    set_collate t ~rank_range:(Between (From_start 1, From_start 2));
+    Incr.stabilize ();
+    [%expect
+      {|
+      Found  : By_symbol
+      Found  : By_symbol, None
+      Updated: By_symbol, None, (All_rows (Between (1 2)))
+      |}];
+    (* Change range again. Now the (order, filter, range) cache is full. *)
+    set_collate t ~rank_range:(Between (From_start 2, From_start 3));
+    Incr.stabilize ();
+    [%expect
+      {|
+      Found  : By_symbol
+      Found  : By_symbol, None
+      Updated: By_symbol, None, (All_rows (Between (2 3)))
+      |}];
+    (* This will evict [By_symbol] from the cache. *)
+    set_collate t ~order:By_price ~rank_range:(Between (From_start 1, From_start 2));
+    Incr.stabilize ();
+    [%expect
+      {|
+      Updated: By_price
+      Updated: By_price, None
+      Updated: By_price, None, (All_rows (Between (1 2)))
+      |}];
+    (* As you can see, [By_symbol] is gone from the cache. *)
+    set_collate t ~order:By_symbol ~filter:True;
+    Incr.stabilize ();
+    [%expect
+      {|
+      Updated: By_symbol
+      Updated: By_symbol, True
+      Updated: By_symbol, True, (All_rows (Between (1 2)))
+      |}];
+    (* The old value of (order, filter, range) is still present in the cache, but we
          don't want to use it, as this would mean having two copies of the "sort by
          symbol" intermediate computation (the one created just above, and the one kept
          alive by the reference from the (order, filter, range) cache.
 
          So, here we don't use it, but instead recreate the computation on top of the new
          sorting computation. *)
-      set_collate t ~order:By_symbol ~filter:None ~rank_range:(Between (2, 3));
-      print_res t;
-      [%expect
-        {|
-        Found  : By_symbol
-        Found  : By_symbol, None, (All_rows (Between (2 3)))
-        Updated: By_symbol, None
-        Updated: By_symbol, None, (All_rows (Between (2 3)))
-        (((VOD (10 2)))
-         (num_filtered_rows   3)
-         (num_unfiltered_rows 3))
-        |}];
-      set_collate t ~rank_range:All_rows
-    ;;
-  end)
-;;
+    set_collate
+      t
+      ~order:By_symbol
+      ~filter:None
+      ~rank_range:(Between (From_start 2, From_start 3));
+    print_res t;
+    [%expect
+      {|
+      Found  : By_symbol
+      Found  : By_symbol, None, (All_rows (Between (2 3)))
+      Updated: By_symbol, None
+      Updated: By_symbol, None, (All_rows (Between (2 3)))
+      (((VOD (10 2)))
+       (num_filtered_rows   3)
+       (num_unfiltered_rows 3))
+      |}];
+    set_collate t ~rank_range:All_rows
+  ;;
+end

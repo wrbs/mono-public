@@ -1,11 +1,7 @@
 open! Import
 module List = List0
-open Set_intf
+include Set_intf
 module Merge_to_sequence_element = Merge_to_sequence_element
-
-module type Elt_plain = Elt_plain
-module type Elt = Elt
-module type Elt_binable = Elt_binable
 
 let to_comparator = Comparator.of_module
 let of_comparator = Comparator.to_module
@@ -58,42 +54,48 @@ end
 module Accessors = struct
   include (
     Set.Using_comparator :
-      Set.Accessors_generic
+    sig
+    @@ portable
+      include
+        Set.Accessors_generic
         with type ('a, 'b) t := ('a, 'b) Set.t
         with type ('a, 'b) tree := ('a, 'b) Tree.t
         with type 'c cmp := 'c
         with type 'a elt := 'a
-        with type ('a, 'b, 'c) access_options := ('a, 'b, 'c) Without_comparator.t)
+        with type ('a, 'b, 'c) access_options := ('a, 'b, 'c) Without_comparator.t
+    end)
 end
 
 type 'a cmp = 'a
 type 'a elt = 'a
 
 include (
-  struct
-    include Set
+struct
+  include Set
 
-    let of_tree m = Set.Using_comparator.of_tree ~comparator:(to_comparator m)
-    let to_tree = Set.Using_comparator.to_tree
-    let sexp_of_t = Set.Using_comparator.sexp_of_t
-  end :
-    sig
-      type ('a, 'b) t = ('a, 'b) Set.t [@@deriving sexp_of]
+  let of_tree m = Set.Using_comparator.of_tree ~comparator:(to_comparator m)
+  let to_tree = Set.Using_comparator.to_tree
+  let sexp_of_t = Set.Using_comparator.sexp_of_t
+end :
+sig
+@@ portable
+  type ('a, 'b) t = ('a, 'b) Set.t [@@deriving sexp_of]
 
-      include
-        Set.Creators_and_accessors_generic
-          with type ('a, 'b, 'c) create_options :=
-            ('a, 'b, 'c) Set.With_first_class_module.t
-          with type ('a, 'b, 'c) access_options := ('a, 'b, 'c) Set.Without_comparator.t
-          with type ('a, 'b) t := ('a, 'b) t
-          with type ('a, 'b) set := ('a, 'b) t
-          with type ('a, 'b) tree := ('a, 'b) Tree.t
-          with type 'a cmp := 'a cmp
-          with type 'a elt := 'a elt
-          with module Named = Set.Named
-    end)
+  include
+    Set.Creators_and_accessors_and_transformers_generic
+    with type ('a, 'b, 'c) create_options := ('a, 'b, 'c) Set.With_first_class_module.t
+    with type ('a, 'b, 'c) access_options := ('a, 'b, 'c) Set.Without_comparator.t
+    with type ('a, 'b) t := ('a, 'b) t
+    with type ('a, 'b) set := ('a, 'b) t
+    with type ('a, 'b) tree := ('a, 'b) Tree.t
+    with type 'a cmp := 'a cmp
+    with type 'a elt := 'a elt
+    with module Named = Set.Named
+end)
 
-let compare _ _ t1 t2 = compare_direct t1 t2
+let%template compare _ _ t1 t2 = (compare_direct [@mode m]) t1 t2
+[@@mode m = (local, global)]
+;;
 
 module Using_comparator = struct
   include (
@@ -127,7 +129,7 @@ let of_hashtbl_keys m hashtbl =
   Using_comparator.of_hashtbl_keys ~comparator:(to_comparator m) hashtbl
 ;;
 
-module Creators (Elt : Comparator.S1) : sig
+module%template.portable [@modality p] Creators (Elt : Comparator.S1) : sig
   type nonrec ('a, 'comparator) t_ = ('a Elt.t, Elt.comparator_witness) t
   type ('a, 'b) tree = ('a Elt.t, Elt.comparator_witness) Tree.t
   type 'a elt_ = 'a Elt.t
@@ -137,12 +139,12 @@ module Creators (Elt : Comparator.S1) : sig
 
   include
     Creators_generic
-      with type ('a, 'b) t := ('a, 'b) t_
-      with type ('a, 'b) set := ('a, 'b) t
-      with type ('a, 'b) tree := ('a, 'b) tree
-      with type 'a elt := 'a elt_
-      with type ('a, 'b, 'c) create_options := ('a, 'b, 'c) Without_comparator.t
-      with type 'a cmp := 'a cmp_
+    with type ('a, 'b) t := ('a, 'b) t_
+    with type ('a, 'b) set := ('a, 'b) t
+    with type ('a, 'b) tree := ('a, 'b) tree
+    with type 'a elt := 'a elt_
+    with type ('a, 'b, 'c) create_options := ('a, 'b, 'c) Without_comparator.t
+    with type 'a cmp := 'a cmp_
 end = struct
   open Using_comparator
 
@@ -161,7 +163,7 @@ end = struct
 
   let of_sorted_array array = of_sorted_array ~comparator array
 
-  module M_empty = Empty_without_value_restriction (Elt)
+  module M_empty = Empty_without_value_restriction [@modality p] (Elt)
 
   let empty = M_empty.empty
   let singleton e = singleton ~comparator e
@@ -171,7 +173,6 @@ end = struct
   let of_hash_set h = of_hash_set ~comparator h
   let of_hashtbl_keys h = of_hashtbl_keys ~comparator h
   let of_array a = of_array ~comparator a
-  let stable_dedup_list xs = stable_dedup_list ~comparator xs [@alert "-deprecated"]
   let map t ~f = map ~comparator t ~f
   let filter_map t ~f = filter_map ~comparator t ~f
 
@@ -183,14 +184,46 @@ end = struct
   let quickcheck_generator elt = quickcheck_generator ~comparator elt
 end
 
-module Make_tree_S1 (Elt : Comparator.S1) = struct
+module type For_make_tree_S1 = sig
+  module Elt : Comparator.S1
+
+  include
+    Creators_generic
+    with type ('elt, 'cmp) t := ('elt Elt.t, Elt.comparator_witness) Tree.t
+     and type ('elt, 'cmp) set := ('elt, 'cmp) Tree.t
+     and type ('elt, 'cmp) tree := ('elt Elt.t, Elt.comparator_witness) Tree.t
+     and type 'elt elt := 'elt Elt.t
+     and type _ cmp := Elt.comparator_witness
+     and type ('elt, 'cmp, 'fn) create_options := 'fn
+
+  [%%template:
+  [@@@mode.default m = (local, global)]
+
+  val compare_direct
+    :  ('a Elt.t, Elt.comparator_witness) Tree.t @ m
+    -> ('a Elt.t, Elt.comparator_witness) Tree.t @ m
+    -> int
+
+  val equal
+    :  ('a Elt.t, Elt.comparator_witness) Tree.t @ m
+    -> ('a Elt.t, Elt.comparator_witness) Tree.t @ m
+    -> bool]
+end
+
+module%template.portable Make_tree_S1 (Elt : Comparator.S1) :
+  For_make_tree_S1 with module Elt := Elt = struct
   let comparator = Elt.comparator
   let empty = Tree.empty_without_value_restriction
   let singleton e = Tree.singleton ~comparator e
   let map t ~f = Tree.map t ~f ~comparator
   let filter_map t ~f = Tree.filter_map t ~f ~comparator
-  let compare_direct t1 t2 = Tree.compare_direct ~comparator t1 t2
-  let equal t1 t2 = Tree.equal t1 t2 ~comparator
+
+  [%%template
+  [@@@mode.default m = (local, global)]
+
+  let compare_direct t1 t2 = (Tree.compare_direct [@mode m]) ~comparator t1 t2
+  let equal t1 t2 = (Tree.equal [@mode m]) t1 t2 ~comparator]
+
   let of_list l = Tree.of_list l ~comparator
   let of_sequence s = Tree.of_sequence s ~comparator
   let of_hash_set h = Tree.of_hash_set h ~comparator
@@ -204,46 +237,61 @@ module Make_tree_S1 (Elt : Comparator.S1) = struct
 
   let of_sorted_array a = Tree.of_sorted_array a ~comparator
   let union_list l = Tree.union_list l ~comparator
-  let stable_dedup_list xs = Tree.stable_dedup_list xs ~comparator [@alert "-deprecated"]
   let of_tree t = t
   let of_map_keys = Tree.of_map_keys
   let quickcheck_generator elt = For_quickcheck.gen_tree elt ~comparator
 end
 
-module Make_tree_plain (Elt : sig
-  type t [@@deriving sexp_of]
+module%template.portable
+  [@modality p] Make_tree_plain (Elt : sig
+    type t [@@deriving sexp_of]
 
-  include Comparator.S with type t := t
-end) =
+    include Comparator.S with type t := t
+  end) =
 struct
-  module Elt_S1 = Comparator.S_to_S1 (Elt)
-  include Make_tree_S1 (Elt_S1)
+  module Elt_S1 = Comparator.S_to_S1 [@modality p] (Elt)
+  include Make_tree_S1 [@modality p] (Elt_S1)
 
   type t = (Elt.t, Elt.comparator_witness) Tree.t
 
-  let compare t1 t2 = compare_direct t1 t2
-  let sexp_of_t t = Tree.sexp_of_t Elt.sexp_of_t [%sexp_of: _] t
+  let%template compare t1 t2 = (compare_direct [@mode m]) t1 t2
+  [@@mode m = (local, global)]
+  ;;
 
-  module Provide_of_sexp
-    (X : sig
-      type t [@@deriving of_sexp]
-    end
-    with type t := Elt.t) =
-  struct
-    let t_of_sexp sexp =
-      Tree.t_of_sexp_direct X.t_of_sexp sexp ~comparator:Elt_S1.comparator
-    ;;
-  end
+  let sexp_of_t t = Tree.sexp_of_t Elt.sexp_of_t [%sexp_of: _] t
 end
 
-module Make_tree (Elt : sig
-  type t [@@deriving sexp]
+module%template.portable Provide_of_sexp_tree (X : sig
+    type t [@@deriving of_sexp]
 
-  include Comparator.S with type t := t
-end) =
+    include Comparator.S with type t := t
+  end) =
 struct
-  include Make_tree_plain (Elt)
-  include Provide_of_sexp (Elt)
+  let t_of_sexp sexp = Tree.t_of_sexp_direct X.t_of_sexp sexp ~comparator:X.comparator
+end
+
+module%template.portable
+  [@modality p] Make_tree (Elt : sig
+    type t [@@deriving sexp]
+
+    include Comparator.S with type t := t
+  end) =
+struct
+  include Make_tree_plain [@modality p] (Elt)
+  include Provide_of_sexp_tree [@modality p] (Elt)
+end
+
+module%template.portable Provide_hash (Elt : sig
+    type t
+
+    include Hasher.S with type t := t
+  end) =
+struct
+  let hash_fold_t state t = Using_comparator.hash_fold_direct Elt.hash_fold_t state t
+
+  let hash t =
+    Ppx_hash_lib.Std.Hash.get_hash_value (hash_fold_t (Ppx_hash_lib.Std.Hash.create ()) t)
+  ;;
 end
 
 (* Don't use [of_sorted_array] to avoid the allocation of an intermediate array *)
@@ -262,40 +310,47 @@ let init_for_bin_prot ~len ~f ~comparator =
 
 module Poly = struct
   module Elt = Comparator.Poly
-  include Creators (Elt)
+
+  include%template Creators [@modality portable] (Elt)
 
   type nonrec 'a t = ('a, Elt.comparator_witness) t
 
   include Accessors
 
-  let compare _ t1 t2 = compare_direct t1 t2
+  let%template compare _ t1 t2 = (compare_direct [@mode m]) t1 t2
+  [@@mode m = (global, local)]
+  ;;
+
   let sexp_of_t sexp_of_k t = sexp_of_t sexp_of_k [%sexp_of: _] t
 
   let t_sexp_grammar elt_grammar =
     Sexplib.Sexp_grammar.coerce (List.t_sexp_grammar elt_grammar)
   ;;
 
-  include Bin_prot.Utils.Make_iterable_binable1 (struct
-    type nonrec 'a t = 'a t
-    type 'a el = 'a [@@deriving bin_io]
+  include%template Bin_prot.Utils.Make_iterable_binable1 [@modality portable] (struct
+      type nonrec 'a t = 'a t
+      type 'a el = 'a [@@deriving bin_io]
 
-    let _ = bin_el
+      let _ = bin_el
 
-    let caller_identity =
-      Bin_prot.Shape.Uuid.of_string "88bcc478-4992-11e6-a95d-ff4831acf410"
-    ;;
+      let caller_identity =
+        Bin_prot.Shape.Uuid.of_string "88bcc478-4992-11e6-a95d-ff4831acf410"
+      ;;
 
-    let module_name = Some "Core.Set"
-    let length = length
-    let iter t ~f = iter ~f:(fun key -> f key) t
+      let module_name = Some "Core.Set"
+      let length = length
+      let[@inline always] iter t ~f = iter ~f:(fun key -> f key) t [@nontail]
 
-    let init ~len ~next =
-      init_for_bin_prot ~len ~f:(fun _ -> next ()) ~comparator:Comparator.Poly.comparator
-    ;;
-  end)
+      let init ~len ~next =
+        init_for_bin_prot
+          ~len
+          ~f:(fun _ -> next ())
+          ~comparator:Comparator.Poly.comparator
+      ;;
+    end)
 
   module Tree = struct
-    include Make_tree_S1 (Comparator.Poly)
+    include%template Make_tree_S1 [@modality portable] (Comparator.Poly)
 
     type 'elt t = ('elt, Comparator.Poly.comparator_witness) tree
 
@@ -309,36 +364,36 @@ module Poly = struct
   end
 end
 
-module type S_plain = S_plain
-module type S = S
-module type S_binable = S_binable
-
 module Elt_bin_io = Elt_bin_io
 
-module Provide_bin_io (Elt : Elt_bin_io.S) = Bin_prot.Utils.Make_iterable_binable (struct
-  type nonrec t = (Elt.t, Elt.comparator_witness) t
-  type el = Elt.t [@@deriving bin_io]
+module%template.portable [@modality p] Provide_bin_io (Elt : Elt_bin_io.S) = struct
+  include Bin_prot.Utils.Make_iterable_binable [@modality p] (struct
+      type nonrec t = (Elt.t, Elt.comparator_witness) t
+      type el = Elt.t [@@deriving bin_io]
 
-  let _ = bin_el
+      let _ = bin_el
 
-  let caller_identity =
-    Bin_prot.Shape.Uuid.of_string "8989278e-4992-11e6-8f4a-6b89776b1e53"
-  ;;
+      let caller_identity =
+        Bin_prot.Shape.Uuid.of_string "8989278e-4992-11e6-8f4a-6b89776b1e53"
+      ;;
 
-  let module_name = Some "Core.Set"
-  let length = length
-  let iter t ~f = iter ~f:(fun key -> f key) t
+      let module_name = Some "Core.Set"
+      let length = length
+      let[@inline always] iter t ~f = iter ~f:(fun key -> f key) t [@nontail]
 
-  let init ~len ~next =
-    init_for_bin_prot ~len ~f:(fun _ -> next ()) ~comparator:Elt.comparator
-  ;;
-end)
+      let init ~len ~next =
+        init_for_bin_prot ~len ~f:(fun _ -> next ()) ~comparator:Elt.comparator
+      ;;
+    end)
+
+  let[@mode local] bin_size_t t = bin_size_t (Base.Set.globalize0 t)
+  let[@mode local] bin_write_t buf ~pos t = bin_write_t buf ~pos (Base.Set.globalize0 t)
+end
 
 module Provide_stable_witness (Elt : sig
-  type t [@@deriving stable_witness]
-
-  include Comparator.S with type t := t
-end) =
+    type t [@@deriving stable_witness]
+    type comparator_witness
+  end) =
 struct
   (* The binary representation of set is used in the stable modules below, so it's
      assumed to be stable (if the elt is stable). *)
@@ -348,22 +403,26 @@ struct
   ;;
 end
 
-module Make_plain_using_comparator (Elt : sig
-  type t [@@deriving sexp_of]
+module%template.portable
+  [@modality p] Make_plain_using_comparator (Elt : sig
+    type t [@@deriving sexp_of]
 
-  include Comparator.S with type t := t
-end) =
+    include Comparator.S [@modality p] with type t := t
+  end) =
 struct
   module Elt = Elt
-  module Elt_S1 = Comparator.S_to_S1 (Elt)
-  include Creators (Elt_S1)
+  module Elt_S1 = Comparator.S_to_S1 [@modality p] (Elt)
+  include Creators [@modality p] (Elt_S1)
 
   type ('a, 'b) set = ('a, 'b) t
   type t = (Elt.t, Elt.comparator_witness) set
 
   include Accessors
 
-  let compare t1 t2 = compare_direct t1 t2
+  let%template compare t1 t2 = (compare_direct [@mode m]) t1 t2
+  [@@mode m = (local, global)]
+  ;;
+
   let sexp_of_t t = sexp_of_t Elt.sexp_of_t [%sexp_of: _] t
 
   module Diff = struct
@@ -375,84 +434,63 @@ struct
     let of_list_exn = Diffable.Set_diff.of_list_exn
   end
 
-  module Provide_of_sexp
-    (Elt : sig
-      type t [@@deriving of_sexp]
-    end
-    with type t := Elt.t) =
-  struct
-    let t_of_sexp sexp = t_of_sexp Elt.t_of_sexp sexp
-
-    module Diff = struct
-      include Diff
-
-      let t_of_sexp sexp = Diffable.Set_diff.t_of_sexp Elt.t_of_sexp sexp
-    end
-  end
-
-  module Provide_hash (Elt : Hasher.S with type t := Elt.t) = struct
-    let hash_fold_t state t = Using_comparator.hash_fold_direct Elt.hash_fold_t state t
-
-    let hash t =
-      Ppx_hash_lib.Std.Hash.get_hash_value
-        (hash_fold_t (Ppx_hash_lib.Std.Hash.create ()) t)
-    ;;
-  end
-
-  module Provide_bin_io
-    (Elt' : sig
-      type t [@@deriving bin_io]
-    end
-    with type t := Elt.t) =
-  Provide_bin_io (struct
-    include Elt
-    include Elt'
-  end)
-
-  module Provide_stable_witness
-    (Elt' : sig
-      type t [@@deriving stable_witness]
-    end
-    with type t := Elt.t) =
-  Provide_stable_witness (struct
-    include Elt
-    include Elt'
-  end)
-
   let quickcheck_observer = quickcheck_observer
   let quickcheck_shrinker = quickcheck_shrinker
 end
 
-module Make_plain (Elt : Elt_plain) = Make_plain_using_comparator (struct
-  include Elt
-  include Comparator.Make (Elt)
-end)
+module%template.portable [@modality p] Make_plain (Elt : Elt_plain) =
+Make_plain_using_comparator [@modality p] (struct
+    include Elt
+    include Comparator.Make [@modality p] (Elt)
+  end)
 
-module Make_using_comparator (Elt_sexp : sig
-  type t [@@deriving sexp]
+module%template.portable Provide_of_sexp (Elt : sig
+    type t [@@deriving of_sexp]
 
-  include Comparator.S with type t := t
-end) =
+    include Comparator.S with type t := t
+  end) =
 struct
-  include Make_plain_using_comparator (Elt_sexp)
-  module Elt = Elt_sexp
-  include Provide_of_sexp (Elt)
+  let t_of_sexp sexp =
+    of_tree
+      (module Elt)
+      (Tree.t_of_sexp_direct Elt.t_of_sexp sexp ~comparator:Elt.comparator)
+  ;;
 end
 
-module Make (Elt : Elt) = Make_using_comparator (struct
-  include Elt
-  include Comparator.Make (Elt)
-end)
+module%template.portable
+  [@modality p] Make_using_comparator (Elt_sexp : sig
+    type t [@@deriving sexp]
 
-module Make_binable_using_comparator (Elt_bin_sexp : sig
-  type t [@@deriving bin_io, sexp]
-
-  include Comparator.S with type t := t
-end) =
+    include Comparator.S [@modality p] with type t := t
+  end) =
 struct
-  include Make_using_comparator (Elt_bin_sexp)
+  include Make_plain_using_comparator [@modality p] (Elt_sexp)
+  module Elt = Elt_sexp
+  include Provide_of_sexp [@modality p] (Elt)
+
+  module Diff = struct
+    include Diff
+
+    let t_of_sexp sexp = Diffable.Set_diff.t_of_sexp Elt.t_of_sexp sexp
+  end
+end
+
+module%template.portable [@modality p] Make (Elt : Elt) =
+Make_using_comparator [@modality p] (struct
+    include Elt
+    include Comparator.Make [@modality p] (Elt)
+  end)
+
+module%template.portable
+  [@modality p] Make_binable_using_comparator (Elt_bin_sexp : sig
+    type t [@@deriving bin_io, sexp]
+
+    include Comparator.S [@modality p] with type t := t
+  end) =
+struct
+  include Make_using_comparator [@modality p] (Elt_bin_sexp)
   module Elt = Elt_bin_sexp
-  include Provide_bin_io (Elt)
+  include Provide_bin_io [@modality p] (Elt)
 
   module Diff = struct
     include Diff
@@ -461,38 +499,65 @@ struct
   end
 end
 
-module Make_binable (Elt : Elt_binable) = Make_binable_using_comparator (struct
-  include Elt
-  include Comparator.Make (Elt)
-end)
+module%template.portable [@modality p] Make_binable (Elt : Elt_binable) =
+Make_binable_using_comparator [@modality p] (struct
+    include Elt
+    include Comparator.Make [@modality p] (Elt)
+  end)
 
 module For_deriving = struct
   module M = Set.M
 
-  let bin_shape_m__t (type t c) (m : (t, c) Elt_bin_io.t) =
-    let module M = Provide_bin_io ((val m)) in
-    M.bin_shape_t
-  ;;
+  include struct
+    let bin_shape_m__t (type t c) (m : (t, c) Elt_bin_io.t) =
+      let module M = Provide_bin_io ((val m)) in
+      M.bin_shape_t
+    ;;
 
-  let bin_size_m__t (type t c) (m : (t, c) Elt_bin_io.t) =
-    let module M = Provide_bin_io ((val m)) in
-    M.bin_size_t
-  ;;
+    let bin_size_m__t (type t c) (m : (t, c) Elt_bin_io.t) =
+      let module M = Provide_bin_io ((val m)) in
+      M.bin_size_t
+    ;;
 
-  let bin_write_m__t (type t c) (m : (t, c) Elt_bin_io.t) =
-    let module M = Provide_bin_io ((val m)) in
-    M.bin_write_t
-  ;;
+    let bin_write_m__t (type t c) (m : (t, c) Elt_bin_io.t) =
+      let module M = Provide_bin_io ((val m)) in
+      M.bin_write_t
+    ;;
 
-  let bin_read_m__t (type t c) (m : (t, c) Elt_bin_io.t) =
-    let module M = Provide_bin_io ((val m)) in
-    M.bin_read_t
-  ;;
+    let bin_read_m__t (type t c) (m : (t, c) Elt_bin_io.t) =
+      let module M = Provide_bin_io ((val m)) in
+      M.bin_read_t
+    ;;
 
-  let __bin_read_m__t__ (type t c) (m : (t, c) Elt_bin_io.t) =
-    let module M = Provide_bin_io ((val m)) in
-    M.__bin_read_t__
-  ;;
+    let __bin_read_m__t__ (type t c) (m : (t, c) Elt_bin_io.t) =
+      let module M = Provide_bin_io ((val m)) in
+      M.__bin_read_t__
+    ;;
+
+    type binio =
+      { bin_shape_m__t : 'a 'c. ('a, 'c) Elt_bin_io.t -> Bin_shape.t
+      ; bin_size_m__t : 'a 'c. ('a, 'c) Elt_bin_io.t -> ('a, 'c) t Bin_prot.Size.sizer
+      ; bin_write_m__t : 'a 'c. ('a, 'c) Elt_bin_io.t -> ('a, 'c) t Bin_prot.Write.writer
+      ; bin_read_m__t : 'a 'c. ('a, 'c) Elt_bin_io.t -> ('a, 'c) t Bin_prot.Read.reader
+      ; __bin_read_m__t__ :
+          'a 'c. ('a, 'c) Elt_bin_io.t -> ('a, 'c) t Bin_prot.Read.vtag_reader
+      }
+
+    let binio =
+      { bin_shape_m__t; bin_size_m__t; bin_write_m__t; bin_read_m__t; __bin_read_m__t__ }
+      |> Portability_hacks.magic_portable__needs_portable_functors
+    ;;
+
+    let { bin_shape_m__t
+        ; bin_size_m__t
+        ; bin_write_m__t
+        ; bin_read_m__t
+        ; __bin_read_m__t__
+        }
+      =
+      binio
+    ;;
+  end
 
   module type Quickcheck_generator_m = sig
     include Comparator.S
@@ -535,7 +600,12 @@ module For_deriving = struct
 
   module type For_deriving = Set.For_deriving
 
-  include (Set : For_deriving with type ('a, 'b) t := ('a, 'b) t)
+  include (
+    Set :
+    sig
+    @@ portable
+      include For_deriving with type ('a, 'b) t := ('a, 'b) t
+    end)
 end
 
 module For_deriving_stable = struct
@@ -552,6 +622,19 @@ module For_deriving_stable = struct
     let module M = Provide_stable_witness (Elt) in
     M.stable_witness
   ;;
+
+  type stable =
+    { stable_witness_m__t :
+        'a 'c.
+        (module Stable_witness_m with type t = 'a and type comparator_witness = 'c)
+        -> ('a, 'c) t Stable_witness.t
+    }
+
+  let stable =
+    { stable_witness_m__t } |> Portability_hacks.magic_portable__needs_portable_functors
+  ;;
+
+  let { stable_witness_m__t } = stable
 end
 
 include For_deriving
@@ -565,7 +648,8 @@ module Stable = struct
       type elt_comparator_witness
       type nonrec t = (elt, elt_comparator_witness) t
 
-      include Stable_module_types.S0_without_comparator with type t := t
+      include%template
+        Stable_module_types.S0_without_comparator [@mode local] with type t := t
 
       include
         Diffable.S with type t := t and type Diff.t = elt Diffable.Set_diff.Stable.V1.t
@@ -573,7 +657,12 @@ module Stable = struct
 
     include For_deriving
     include For_deriving_stable
-    module Make (Elt : Stable_module_types.S0) = Make_binable_using_comparator (Elt)
+
+    module%template.portable
+      [@modality p] Make
+        (Elt : Stable_module_types.S0
+      [@modality p]) =
+      Make_binable_using_comparator [@modality p] (Elt)
 
     module With_stable_witness = struct
       module type S = sig
@@ -582,8 +671,12 @@ module Stable = struct
         val stable_witness : t Stable_witness.t
       end
 
-      module Make (Elt_stable : Stable_module_types.With_stable_witness.S0) = struct
-        include Make_binable_using_comparator (Elt_stable)
+      module%template.portable
+        [@modality p] Make
+          (Elt_stable : Stable_module_types.With_stable_witness.S0
+        [@modality p]) =
+      struct
+        include Make_binable_using_comparator [@modality p] (Elt_stable)
         include Provide_stable_witness (Elt_stable)
       end
     end

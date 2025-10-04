@@ -5,14 +5,16 @@ let selectors_are_mandatory = ref false
 
 module Per_field = struct
   type t =
+    | Local_getters
     | Getters
     | Setters
     | Names
     | Fields
 
-  let all = [ Getters; Setters; Names; Fields ]
+  let all = [ Local_getters; Getters; Setters; Names; Fields ]
 
   let to_flag_name = function
+    | Local_getters -> "local_getters"
     | Getters -> "getters"
     | Setters -> "setters"
     | Names -> "names"
@@ -21,6 +23,7 @@ module Per_field = struct
 
   let to_expression t ~loc =
     match t with
+    | Local_getters -> [%expr Local_getters]
     | Getters -> [%expr Getters]
     | Setters -> [%expr Setters]
     | Names -> [%expr Names]
@@ -148,11 +151,11 @@ let of_string string =
 ;;
 
 include Sexpable.Of_stringable (struct
-  type nonrec t = t
+    type nonrec t = t
 
-  let of_string = of_string
-  let to_string = to_string
-end)
+    let of_string = of_string
+    let to_string = to_string
+  end)
 
 let compare = (Poly.compare : t -> t -> int)
 let equal = (Poly.equal : t -> t -> bool)
@@ -171,7 +174,7 @@ let to_expression t ~loc =
 ;;
 
 let direct_dependencies = function
-  | Per_field (Getters | Setters | Names) -> []
+  | Per_field (Local_getters | Getters | Setters | Names) -> []
   | Per_field Fields -> [ Per_field Getters; Per_field Setters ]
   | Iterator _ | Direct_iterator _ -> [ Per_field Fields ]
 ;;
@@ -213,8 +216,13 @@ let select_id (type a) (module M : S with type t = a) ~arg_name ~f expr =
 
 let select_id_tuple m ~arg_name ~f expr =
   Result.bind
-    (match expr.pexp_desc with
-     | Pexp_tuple tuple -> Ok tuple
+    (match
+       Ppxlib_jane.Shim.Expression_desc.of_parsetree expr.pexp_desc ~loc:expr.pexp_loc
+     with
+     | Pexp_tuple labeled_exprs ->
+       (match Ppxlib_jane.as_unlabeled_tuple labeled_exprs with
+        | Some exprs -> Ok exprs
+        | None -> Error [ expr.pexp_loc, "does not accept labeled tuples" ])
      | Pexp_ident _ -> Ok [ expr ]
      | _ ->
        Error [ expr.pexp_loc, "expected a variable name or a tuple of variable names" ])
@@ -255,6 +263,7 @@ let select_one x expr =
 ;;
 
 let select_getters = select_one Getters
+let select_local_getters = select_one Local_getters
 let select_setters = select_one Setters
 let select_names = select_one Names
 let select_fields = select_one Fields
@@ -285,46 +294,6 @@ let docs_url =
   "https://github.com/janestreet/ppx_fields_conv/blob/master/README.md#selecting-definitions"
 ;;
 
-let no_definitions_error_message =
-  String.concat
-    ~sep:" "
-    [ "No definitions selected."
-    ; "See the \"Selecting definitions\" section of the documentation:"
-    ; docs_url
-    ]
-;;
-
-let generator ~add_dependencies f =
-  Deriving.Generator.V2.make
-    (let open Deriving.Args in
-     empty
-     +> arg "fold_right" (map1 __ ~f:select_fold_right)
-     +> arg "getters" (map1 __ ~f:select_getters)
-     +> arg "setters" (map1 __ ~f:select_setters)
-     +> arg "names" (map1 __ ~f:select_names)
-     +> arg "fields" (map1 __ ~f:select_fields)
-     +> arg "iterators" (map1 __ ~f:select_iterators)
-     +> arg "direct_iterators" (map1 __ ~f:select_direct_iterators))
-    (fun ~ctxt ast arg1 arg2 arg3 arg4 arg5 arg6 arg7 ->
-      let loc = Expansion_context.Deriver.derived_item_loc ctxt in
-      let results =
-        match List.filter_opt [ arg1; arg2; arg3; arg4; arg5; arg6; arg7 ] with
-        | [] ->
-          [ (if !selectors_are_mandatory
-             then Error [ loc, no_definitions_error_message ]
-             else Ok default_selectors)
-          ]
-        | _ :: _ as non_empty -> non_empty
-      in
-      let selection =
-        Result.combine_errors results
-        |> Result.map ~f:List.concat
-        |> Result.map ~f:(selection ~add_dependencies)
-        |> Result.map_error ~f:(error_of_alists ~loc)
-      in
-      f ~ctxt ast selection)
-;;
-
 let deriving_clause ~loc list =
   let open Ast_builder.Default in
   if List.is_empty list
@@ -333,9 +302,9 @@ let deriving_clause ~loc list =
     let per_field, iterators, direct_iterators =
       List.dedup_and_sort list ~compare
       |> List.partition3_map ~f:(function
-           | Per_field x -> `Fst x
-           | Iterator x -> `Snd x
-           | Direct_iterator x -> `Trd x)
+        | Per_field x -> `Fst x
+        | Iterator x -> `Snd x
+        | Direct_iterator x -> `Trd x)
     in
     let per_field =
       List.map per_field ~f:(fun x ->
@@ -368,6 +337,68 @@ let deriving_clause ~loc list =
          ~loc
          [%expr fields]
          (List.concat [ per_field; iterators; direct_iterators ])))
+;;
+
+let no_definitions_error_message =
+  lazy
+    (let module Format = Stdlib.Format in
+    let buffer = Buffer.create 1024 in
+    let fmt = Format.formatter_of_buffer buffer in
+    Format.pp_set_margin fmt 60;
+    Format.fprintf
+      fmt
+      "No definitions selected. See the \"Selecting definitions\" section of the \
+       documentation: %s\n\
+       Here is an example with some commonly used selectors, although not generally in \
+       this combination:@ @,\
+       @[<2>[%@%@deriving@ "
+      docs_url;
+    Pprintast.expression
+      fmt
+      (Option.value_exn
+         (deriving_clause
+            ~loc:Ppxlib.Location.none
+            [ Per_field Getters
+            ; Per_field Names
+            ; Iterator Create
+            ; Iterator Iter
+            ; Direct_iterator Set_all_mutable_fields
+            ]));
+    Format.fprintf fmt "]@]";
+    Format.pp_print_flush fmt ();
+    Buffer.contents buffer)
+;;
+
+let generator ~add_dependencies f =
+  Deriving.Generator.V2.make
+    (let open Deriving.Args in
+     empty
+     +> arg "fold_right" (map1 __ ~f:select_fold_right)
+     +> arg "getters" (map1 __ ~f:select_getters)
+     +> arg "local_getters" (map1 __ ~f:select_local_getters)
+     +> arg "setters" (map1 __ ~f:select_setters)
+     +> arg "names" (map1 __ ~f:select_names)
+     +> arg "fields" (map1 __ ~f:select_fields)
+     +> arg "iterators" (map1 __ ~f:select_iterators)
+     +> arg "direct_iterators" (map1 __ ~f:select_direct_iterators))
+    (fun ~ctxt ast arg1 arg2 arg3 arg4 arg5 arg6 arg7 arg8 ->
+      let loc = Expansion_context.Deriver.derived_item_loc ctxt in
+      let results =
+        match List.filter_opt [ arg1; arg2; arg3; arg4; arg5; arg6; arg7; arg8 ] with
+        | [] ->
+          [ (if !selectors_are_mandatory
+             then Error [ loc, force no_definitions_error_message ]
+             else Ok default_selectors)
+          ]
+        | _ :: _ as non_empty -> non_empty
+      in
+      let selection =
+        Result.combine_errors results
+        |> Result.map ~f:List.concat
+        |> Result.map ~f:(selection ~add_dependencies)
+        |> Result.map_error ~f:(error_of_alists ~loc)
+      in
+      f ~ctxt ast selection)
 ;;
 
 let () =

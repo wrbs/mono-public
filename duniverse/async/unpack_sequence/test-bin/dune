@@ -1,12 +1,13 @@
 (rule
- (alias runtest)
  (deps qtest.exe)
  (action
-  (bash ./qtest.exe)))
+  (bash ./qtest.exe))
+ (alias runtest))
 
 (executables
  (modes byte exe)
  (names qtest)
- (libraries unpack_sequence qtest_deprecated)
+ (libraries unpack_sequence async core qtest_deprecated
+   core_kernel.unpack_buffer)
  (preprocess
   (pps ppx_jane)))

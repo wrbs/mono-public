@@ -10,10 +10,16 @@ let is_leap_year ~year = (year mod 4 = 0 && not (year mod 100 = 0)) || year mod 
 module Stable = struct
   module V1 = struct
     module Without_comparable = struct
-      module T : sig
-        type t
-        [@@immediate]
-        [@@deriving bin_io ~localize, compare, equal, hash, typerep, stable_witness]
+      module T : sig @@ portable
+        type t : immediate
+        [@@deriving
+          bin_io ~localize
+          , compare ~localize
+          , equal ~localize
+          , globalize
+          , hash
+          , typerep
+          , stable_witness]
 
         val create_exn : y:int -> m:Month.Stable.V1.t -> d:int -> t
         val year : t -> int
@@ -39,8 +45,9 @@ module Stable = struct
         *)
         type t = int
         [@@deriving
-          compare
-          , equal
+          compare ~localize
+          , equal ~localize
+          , globalize
           , hash
           , typerep
           , bin_shape ~basetype:"899ee3e0-490a-11e6-a10a-a3734f733566"
@@ -277,13 +284,21 @@ module Stable = struct
       end
 
       include Sexpable
-      include (val Comparator.Stable.V1.make ~compare ~sexp_of_t)
+
+      include%template
+        (val (Comparator.Stable.V1.make [@mode portable]) ~compare ~sexp_of_t)
     end
 
     include Without_comparable
-    include Comparable.Stable.V1.With_stable_witness.Make (Without_comparable)
-    include Hashable.Stable.V1.With_stable_witness.Make (Without_comparable)
-    include Diffable.Atomic.Make (Without_comparable)
+
+    include%template
+      Comparable.Stable.V1.With_stable_witness.Make [@modality portable]
+        (Without_comparable)
+
+    include%template
+      Hashable.Stable.V1.With_stable_witness.Make [@modality portable] (Without_comparable)
+
+    include%template Diffable.Atomic.Make [@modality portable] (Without_comparable)
   end
 
   module Option = struct
@@ -292,8 +307,9 @@ module Stable = struct
       [@@deriving
         bin_io ~localize
         , bin_shape ~basetype:"826a3e79-3321-451a-9707-ed6c03b84e2f"
-        , compare
-        , equal
+        , compare ~localize
+        , equal ~localize
+        , globalize
         , hash
         , typerep
         , stable_witness]
@@ -303,7 +319,7 @@ module Stable = struct
       let is_some t = not (is_none t)
       let some_is_representable _ = true
       let some t = V1.to_int t
-      let unchecked_value = V1.of_int_unchecked
+      let unchecked_value t = V1.of_int_unchecked t
       let to_option t = if is_some t then Some (unchecked_value t) else None
 
       let of_option opt =
@@ -336,34 +352,46 @@ end
 
 module Without_comparable = Stable.V1.Without_comparable
 include Without_comparable
-module C = Comparable.Make_binable_using_comparator (Without_comparable)
+
+module%template C =
+  Comparable.Make_binable_using_comparator [@mode local] [@modality portable]
+    (Without_comparable)
+
 include C
 
-include Diffable.Atomic.Make (struct
-  include Without_comparable
-  include C
-end)
+include%template Diffable.Atomic.Make [@modality portable] (struct
+    include Without_comparable
+    include C
+  end)
 
 module O = struct
-  include (C : Comparable.Infix with type t := t)
+  include (
+    C :
+    sig
+    @@ portable
+      include Comparable.Infix with type t := t
+    end)
 end
 
-include (
-  Hashable.Make_binable (struct
+include%template (
+  Hashable.Make_binable [@modality portable] (struct
     include T
     include Sexpable
     include Binable
 
     let compare (a : t) (b : t) = compare a b
   end) :
-    Hashable.S_binable with type t := t)
+  sig
+  @@ portable
+    include Hashable.S_binable with type t := t
+  end)
 
-include Pretty_printer.Register (struct
-  type nonrec t = t
+include%template Pretty_printer.Register [@modality portable] (struct
+    type nonrec t = t
 
-  let module_name = "Core.Date"
-  let to_string = to_string
-end)
+    let module_name = "Core.Date"
+    let to_string = to_string
+  end)
 
 let unix_epoch = create_exn ~y:1970 ~m:Jan ~d:1
 
@@ -375,17 +403,17 @@ let unix_epoch = create_exn ~y:1970 ~m:Jan ~d:1
 
    note: unit tests are in lib_test/time_test.ml
 *)
-module Days : sig
-  type date = t
-  type t [@@immediate]
+module Days : sig @@ portable
+    type date = t
+    type t : immediate
 
-  val of_date : date -> t
-  val to_date : t -> date
-  val diff : t -> t -> int
-  val add_days : t -> int -> t
-  val unix_epoch : t
-end
-with type date := t = struct
+    val of_date : date -> t
+    val to_date : t -> date
+    val diff : t -> t -> int
+    val add_days : t -> int -> t
+    val unix_epoch : t
+  end
+  with type date := t = struct
   open Int
 
   type t = int
@@ -454,23 +482,32 @@ let add_years t n = add_months t (n * 12)
    note: unit tests in lib_test/time_test.ml
 *)
 let day_of_week =
-  let table = [| 0; 3; 2; 5; 0; 3; 5; 1; 4; 6; 2; 4 |] in
+  let table =
+    Iarray.unsafe_of_array__promise_no_mutation [| 0; 3; 2; 5; 0; 3; 5; 1; 4; 6; 2; 4 |]
+  in
   fun t ->
     let m = Month.to_int (month t) in
     let y = if Int.( < ) m 3 then year t - 1 else year t in
     Day_of_week.of_int_exn
-      ((y + (y / 4) - (y / 100) + (y / 400) + table.(m - 1) + day t) % 7)
+      ((y + (y / 4) - (y / 100) + (y / 400) + table.:(m - 1) + day t) % 7)
 ;;
 
 (* http://en.wikipedia.org/wiki/Ordinal_date *)
-let non_leap_year_table = [| 0; 31; 59; 90; 120; 151; 181; 212; 243; 273; 304; 334 |]
-let leap_year_table = [| 0; 31; 60; 91; 121; 152; 182; 213; 244; 274; 305; 335 |]
+let non_leap_year_table =
+  Iarray.unsafe_of_array__promise_no_mutation
+    [| 0; 31; 59; 90; 120; 151; 181; 212; 243; 273; 304; 334 |]
+;;
+
+let leap_year_table =
+  Iarray.unsafe_of_array__promise_no_mutation
+    [| 0; 31; 60; 91; 121; 152; 182; 213; 244; 274; 305; 335 |]
+;;
 
 let ordinal_date t =
   let table =
     if is_leap_year ~year:(year t) then leap_year_table else non_leap_year_table
   in
-  let offset = table.(Month.to_int (month t) - 1) in
+  let offset = table.:(Month.to_int (month t) - 1) in
   day t + offset
 ;;
 
@@ -505,7 +542,10 @@ let week_number_and_year t = call_with_week_and_year t ~f:(fun ~week ~year -> we
 let week_number t = call_with_week_and_year t ~f:(fun ~week ~year:_ -> week)
 let is_weekend t = Day_of_week.is_sun_or_sat (day_of_week t)
 let is_weekday t = not (is_weekend t)
-let is_business_day t ~is_holiday = is_weekday t && not (is_holiday t)
+
+let is_business_day ?(is_weekday = Day_of_week.is_weekday) t ~is_holiday =
+  is_weekday (day_of_week t) && not (is_holiday t)
+;;
 
 let rec diff_weekend_days t1 t2 =
   if t1 < t2
@@ -551,12 +591,12 @@ let previous_weekday t = next_day_satisfying t ~step:(-1) ~condition:is_weekday
 let round_forward_to_weekday t = first_day_satisfying t ~step:1 ~condition:is_weekday
 let round_backward_to_weekday t = first_day_satisfying t ~step:(-1) ~condition:is_weekday
 
-let round_forward_to_business_day t ~is_holiday =
-  first_day_satisfying t ~step:1 ~condition:(is_business_day ~is_holiday)
+let round_forward_to_business_day ?(is_weekday = Day_of_week.is_weekday) t ~is_holiday =
+  first_day_satisfying t ~step:1 ~condition:(is_business_day ~is_weekday ~is_holiday)
 ;;
 
-let round_backward_to_business_day t ~is_holiday =
-  first_day_satisfying t ~step:(-1) ~condition:(is_business_day ~is_holiday)
+let round_backward_to_business_day ?(is_weekday = Day_of_week.is_weekday) t ~is_holiday =
+  first_day_satisfying t ~step:(-1) ~condition:(is_business_day ~is_weekday ~is_holiday)
 ;;
 
 let add_weekdays t n = add_days_skipping t ~skip:is_weekend n
@@ -570,20 +610,34 @@ let add_weekdays_rounding_backward t n =
   add_days_skipping (round_backward_to_weekday t) ~skip:is_weekend n
 ;;
 
-let add_business_days t ~is_holiday n =
-  add_days_skipping t n ~skip:(fun d -> is_weekend d || is_holiday d)
+let add_business_days t ?(is_weekday = Day_of_week.is_weekday) ~is_holiday n =
+  add_days_skipping t n ~skip:(fun d -> not (is_business_day ~is_weekday ~is_holiday d))
 ;;
 
 let add_business_days_rounding_in_direction_of_step = add_business_days
 
-let add_business_days_rounding_forward t ~is_holiday n =
-  add_days_skipping (round_forward_to_business_day ~is_holiday t) n ~skip:(fun d ->
-    not (is_business_day ~is_holiday d))
+let add_business_days_rounding_forward
+  t
+  ?(is_weekday = Day_of_week.is_weekday)
+  ~is_holiday
+  n
+  =
+  add_days_skipping
+    (round_forward_to_business_day ~is_holiday ~is_weekday t)
+    n
+    ~skip:(fun d -> not (is_business_day ~is_weekday ~is_holiday d))
 ;;
 
-let add_business_days_rounding_backward t ~is_holiday n =
-  add_days_skipping (round_backward_to_business_day ~is_holiday t) n ~skip:(fun d ->
-    not (is_business_day ~is_holiday d))
+let add_business_days_rounding_backward
+  t
+  ?(is_weekday = Day_of_week.is_weekday)
+  ~is_holiday
+  n
+  =
+  add_days_skipping
+    (round_backward_to_business_day ~is_weekday ~is_holiday t)
+    n
+    ~skip:(fun d -> not (is_business_day ~is_weekday ~is_holiday d))
 ;;
 
 let dates_between ~min:t1 ~max:t2 =
@@ -591,7 +645,7 @@ let dates_between ~min:t1 ~max:t2 =
   loop t2 []
 ;;
 
-let weekdays_between ~min ~max =
+let weekdays_between_with_weekday_override ~min ~max ~is_weekday =
   let all_dates = dates_between ~min ~max in
   Option.value_map (List.hd all_dates) ~default:[] ~f:(fun first_date ->
     (* to avoid a system call on every date, we just get the weekday for the first
@@ -601,11 +655,20 @@ let weekdays_between ~min ~max =
       List.mapi all_dates ~f:(fun i date -> date, Day_of_week.shift first_weekday i)
     in
     List.filter_map date_and_weekdays ~f:(fun (date, weekday) ->
-      if Day_of_week.is_sun_or_sat weekday then None else Some date))
+      if is_weekday weekday then Some date else None))
 ;;
 
-let business_dates_between ~min ~max ~is_holiday =
-  weekdays_between ~min ~max |> List.filter ~f:(fun d -> not (is_holiday d))
+let weekdays_between =
+  weekdays_between_with_weekday_override ~is_weekday:Day_of_week.is_weekday
+;;
+
+let business_dates_between_with_weekday_override ~min ~max ~is_holiday ~is_weekday =
+  weekdays_between_with_weekday_override ~min ~max ~is_weekday
+  |> List.filter ~f:(fun d -> not (is_holiday d))
+;;
+
+let business_dates_between =
+  business_dates_between_with_weekday_override ~is_weekday:Day_of_week.is_weekday
 ;;
 
 let first_strictly_after t ~on:dow =
@@ -616,10 +679,20 @@ let first_strictly_after t ~on:dow =
   add_days tplus1 diff
 ;;
 
-module For_quickcheck = struct
-  open Quickcheck
+let last_date_in_month ~year ~month =
+  create_exn ~y:year ~m:month ~d:(days_in_month ~year ~month)
+;;
 
-  let gen_uniform_incl d1 d2 =
+let all_dates_in_month ~year ~month =
+  dates_between
+    ~min:(create_exn ~y:year ~m:month ~d:1)
+    ~max:(last_date_in_month ~year ~month)
+;;
+
+module For_quickcheck = struct
+  open Base_quickcheck
+
+  let%template gen_uniform_incl d1 d2 =
     if d1 > d2
     then
       raise_s
@@ -627,17 +700,26 @@ module For_quickcheck = struct
           "Date.gen_uniform_incl: bounds are crossed"
             ~lower_bound:(d1 : t)
             ~upper_bound:(d2 : t)];
-    Generator.map (Int.gen_uniform_incl 0 (diff d2 d1)) ~f:(fun days -> add_days d1 days)
+    (Generator.map [@mode portable])
+      (Generator.int_uniform_inclusive 0 (diff d2 d1))
+      ~f:(fun days -> add_days d1 days)
   ;;
 
-  let gen_incl d1 d2 =
-    Generator.weighted_union
-      [ 1., Generator.return d1; 1., Generator.return d2; 18., gen_uniform_incl d1 d2 ]
+  let%template gen_incl d1 d2 =
+    (Generator.weighted_union [@mode portable])
+      [ 1., (Generator.return [@mode portable]) d1
+      ; 1., (Generator.return [@mode portable]) d2
+      ; 18., gen_uniform_incl d1 d2
+      ]
   ;;
 
   let quickcheck_generator = gen_incl (of_string "1900-01-01") (of_string "2100-01-01")
-  let quickcheck_observer = Observer.create (fun t ~size:_ ~hash -> hash_fold_t hash t)
-  let quickcheck_shrinker = Shrinker.empty ()
+
+  let%template quickcheck_observer =
+    (Observer.create [@mode portable]) (fun t ~size:_ ~hash -> hash_fold_t hash t)
+  ;;
+
+  let quickcheck_shrinker = Shrinker.atomic
 end
 
 let quickcheck_generator = For_quickcheck.quickcheck_generator
@@ -658,32 +740,29 @@ module Option = struct
 
   module Optional_syntax = struct
     module Optional_syntax = struct
-      let is_none = is_none
-      let unsafe_value = unchecked_value
+      let[@zero_alloc] is_none t = is_none t
+      let[@zero_alloc] unsafe_value t = unchecked_value t
     end
   end
 
-  let quickcheck_generator =
-    Quickcheck.Generator.map
-      (Option.quickcheck_generator quickcheck_generator)
+  let%template quickcheck_generator =
+    (Quickcheck.Generator.map [@mode portable])
+      ((Option.quickcheck_generator [@mode portable]) quickcheck_generator)
       ~f:of_option
   ;;
 
-  let quickcheck_shrinker =
-    Quickcheck.Shrinker.map
-      (Option.quickcheck_shrinker quickcheck_shrinker)
+  let%template quickcheck_shrinker =
+    (Quickcheck.Shrinker.map [@mode portable])
+      ((Option.quickcheck_shrinker [@mode portable]) quickcheck_shrinker)
       ~f:of_option
       ~f_inverse:to_option
   ;;
 
-  let quickcheck_observer =
-    Quickcheck.Observer.of_hash
-      (module struct
-        type nonrec t = t [@@deriving hash]
-      end)
+  let%template quickcheck_observer =
+    (Base_quickcheck.Observer.of_hash_fold [@mode portable]) hash_fold_t
   ;;
 
-  include Comparable.Make_plain (struct
-    type nonrec t = t [@@deriving compare, sexp_of]
-  end)
+  include%template Comparable.Make_plain [@mode local] [@modality portable] (struct
+      type nonrec t = t [@@deriving compare ~localize, sexp_of]
+    end)
 end

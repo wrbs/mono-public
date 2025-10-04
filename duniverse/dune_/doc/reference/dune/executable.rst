@@ -14,12 +14,15 @@ executable stanzas is as follows:
 There can be additional modules in the current directory; you only need to
 specify the entry point. Given an ``executable`` stanza with ``(name <name>)``,
 Dune will know how to build ``<name>.exe``. If requested, it will also know how
-to build ``<name>.bc`` and ``<name>.bc.js`` (Dune 2.0 and up also need specific
-configuration (see the ``modes`` optional field below)).
+to build ``<name>.bc``, ``<name>.bc.js`` and ``<name>.bc.wasm.js`` (Dune 2.0
+and up also needs specific configuration (see the ``modes`` optional field
+below)).
 
 ``<name>.exe`` is a native code executable, ``<name>.bc`` is a bytecode
-executable which requires ``ocamlrun`` to run, and ``<name>.bc.js`` is a
-JavaScript generated using ``js_of_ocaml``.
+executable which requires ``ocamlrun`` to run, ``<name>.bc.js`` is a
+JavaScript generated using ``js_of_ocaml``, and ``<name>.bc.wasm.js`` is a
+Wasm loader script generated using ``wasm_of_ocaml`` (the Wasm modules are included in
+directory ``<name>.bc.wasm.assets``).
 
 Please note: in case native compilation is not available, ``<name>.exe`` will be
 a custom bytecode executable, in the sense of ``ocamlc -custom``. This means
@@ -87,10 +90,11 @@ files for executables. See
 - ``(preprocess <preprocess-spec>)`` is the same as the ``(preprocess ...)``
   field of :doc:`library`.
 
-  ``(preprocessor_deps ...)`` field of :doc:`library`.
-- ``(preprocessor_deps (<deps-conf list>))`` is the same as the
+- ``(preprocessor_deps (<deps-conf list>))`` is the same as the ``(preprocessor_deps ...)`` field of :doc:`library`.
 
 - ``js_of_ocaml``: See the section about :ref:`jsoo-field`
+
+- ``wasm_of_ocaml``: See the section about :ref:`wasmoo-field`
 
 - ``flags``, ``ocamlc_flags``, and ``ocamlopt_flags``: See
   :doc:`/concepts/ocaml-flags`.
@@ -114,11 +118,11 @@ files for executables. See
 
 - ``(foreign_stubs <foreign-stubs-spec>)`` specifies foreign source files, e.g.,
   C or C++ stubs, to be linked into the executable. See
-  :doc:`/reference/foreign` for more details.
+  :doc:`/reference/foreign-stubs` for more details.
 
 - ``(foreign_archives <foreign-archives-list>)`` specifies archives of foreign
   object files to be linked into the executable. See the section
-  :ref:`foreign-archives` for more details.
+  :doc:`/reference/foreign-archives` for more details.
 
 - ``(forbidden_libraries <libraries>)`` ensures that the given libraries are not
   linked in the resulting executable. If they end up being pulled in, either
@@ -166,6 +170,7 @@ available.
   non-OCaml application.
 - ``js`` for producing JavaScript from bytecode executables, see
   :doc:`/reference/dune-project/explicit_js_mode`.
+- ``wasm`` for producing JavaScript from bytecode executables.
 - ``plugin`` for producing a plugin (``.cmxs`` if native or ``.cma`` if
   bytecode).
 
@@ -187,6 +192,7 @@ Additionally, you can use the following shorthands:
 - ``byte`` for ``(byte exe)``
 - ``native`` for ``(native exe)``
 - ``js`` for ``(byte js)``
+- ``wasm`` for ``(byte wasm)``
 - ``plugin`` for ``(best plugin)``
 
 For instance, the following ``modes`` fields are all equivalent:
@@ -217,6 +223,7 @@ The extensions for the various linking modes are chosen as follows:
 .. (native/best shared_object) %{ext_dll}
 .. c                           .bc.c
 .. js                          .bc.js
+.. wasm                        .bc.wasm.js
 .. (best plugin)               %{ext_plugin}
 .. (byte plugin)               .cma
 .. (native plugin)             .cmxs
@@ -242,7 +249,7 @@ contains C stubs you may want to use ``(modes exe)``.
 js_of_ocaml
 ~~~~~~~~~~~
 
-In ``library`` and ``executables`` stanzas, you can specify ``js_of_ocaml``
+In ``library`` and ``executable`` stanzas, you can specify ``js_of_ocaml``
 options using ``(js_of_ocaml (<js_of_ocaml-options>))``.
 
 ``<js_of_ocaml-options>`` are all optional:
@@ -259,13 +266,43 @@ options using ``(js_of_ocaml (<js_of_ocaml-options>))``.
 - ``(javascript_files (<files-list>))`` to specify ``js_of_ocaml`` JavaScript
   runtime files.
 
-``<flags>`` is specified in the :doc:`/reference/ordered-set-language`.
+- ``(compilation_mode <mode>)`` where ``<mode>>`` is either ``whole_program`` or ``separate``.
+  This is only available inside ``executable`` stanzas.
 
-The default value for ``(flags ...)`` depends on the selected build profile. The
-build profile ``dev`` (the default) will enable sourcemap and the pretty
+- ``(sourcemap <config>)`` where ``<config>>`` is one of ``no``, ``file`` or ``inline``.
+  This is only available inside ``executable`` stanzas.
+
+- ``(enabled_if <blang expression>)`` to specify whether the ``js`` mode is enabled. It is enabled by default.
+  This is only available inside ``executable`` stanzas.
+
+``<flags>`` is specified in the :doc:`/reference/ordered-set-language`.
+``<blang expression>`` is specified using the :doc:`/reference/boolean-language`,
+
+The default values for ``flags``, ``compilation_mode`` and ``sourcemap`` depend on the selected build profile. The
+build profile ``dev`` (the default) will enable inline sourcemap, separate compilation and pretty
 JavaScript output.
 
 See :ref:`jsoo` for more information.
+
+.. _wasmoo-field:
+
+wasm_of_ocaml
+~~~~~~~~~~~~~
+
+In ``library`` and ``executable`` stanzas, you can specify ``wasm_of_ocaml``
+options using ``(wasm_of_ocaml (<wasm_of_ocaml-options>))``.
+
+``<wasm_of_ocaml-options>`` are all optional. They are the same as the ``<js_of_ocaml-options>`` above plus:
+
+- ``(wasm_files (<files-list>))`` to specify ``wasm_of_ocaml``
+  Wasm runtime files.
+
+For the ``(sourcemap <config>)`` option, ``<config>`` must be one of ``no`` or ``inline``. Source maps are put within the ``.bc.wasm.assets``  directory.
+
+The default values for ``flags``, ``compilation_mode`` and ``sourcemap`` depend on the selected build profile. The
+build profile ``dev`` (the default) will enable sourcemaps, separate compilation and pretty Wasm output.
+
+See :ref:`wasmoo` for more information.
 
 executables
 -----------

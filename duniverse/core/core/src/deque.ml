@@ -203,13 +203,13 @@ let clear t =
 (* We have to be careful here, importing all of Container.Make would change the runtime of
    some functions ([length] minimally) silently without changing the semantics.  We get
    around that by importing things explicitly.  *)
-module C = Container.Make (struct
-  type nonrec 'a t = 'a t
+module%template C = Container.Make [@modality portable] (struct
+    type nonrec 'a t = 'a t
 
-  let fold = fold
-  let iter = `Custom iter
-  let length = `Custom length
-end)
+    let fold = fold
+    let iter = `Custom iter
+    let length = `Custom length
+  end)
 
 let count = C.count
 let sum = C.sum
@@ -435,7 +435,7 @@ let to_array t =
       (fold t ~init:0 ~f:(fun i v ->
          arr.(i) <- v;
          i + 1)
-        : int);
+       : int);
     arr
 ;;
 
@@ -445,27 +445,27 @@ let of_array arr =
   t
 ;;
 
-include Bin_prot.Utils.Make_iterable_binable1 (struct
-  type nonrec 'a t = 'a t
-  type 'a el = 'a [@@deriving bin_io]
+include%template Bin_prot.Utils.Make_iterable_binable1 [@modality portable] (struct
+    type nonrec 'a t = 'a t
+    type 'a el = 'a [@@deriving bin_io]
 
-  let caller_identity =
-    Bin_prot.Shape.Uuid.of_string "34c1e9ca-4992-11e6-a686-8b4bd4f87796"
-  ;;
+    let caller_identity =
+      Bin_prot.Shape.Uuid.of_string "34c1e9ca-4992-11e6-a686-8b4bd4f87796"
+    ;;
 
-  let module_name = Some "Core.Deque"
-  let length = length
-  let iter t ~f = iter t ~f
+    let module_name = Some "Core.Deque"
+    let length = length
+    let iter t ~f = iter t ~f
 
-  let init ~len ~next =
-    let t = create ~initial_length:len () in
-    for _i = 0 to len - 1 do
-      let x = next () in
-      enqueue_back t x
-    done;
-    t
-  ;;
-end)
+    let init ~len ~next =
+      let t = create ~initial_length:len () in
+      for _i = 0 to len - 1 do
+        let x = next () in
+        enqueue_back t x
+      done;
+      t
+    ;;
+  end)
 
 let t_of_sexp f sexp = of_array (Array.t_of_sexp f sexp)
 let sexp_of_t f t = Array.sexp_of_t f (to_array t)
@@ -473,6 +473,16 @@ let sexp_of_t f t = Array.sexp_of_t f (to_array t)
 let t_sexp_grammar elt_grammar =
   Sexplib.Sexp_grammar.coerce (Array.t_sexp_grammar elt_grammar)
 ;;
+
+include%template
+  Quickcheckable.Of_quickcheckable1 [@modality portable]
+    (Array)
+    (struct
+      type nonrec 'a t = 'a t
+
+      let to_quickcheckable = to_array
+      let of_quickcheckable = of_array
+    end)
 
 (* re-expose these here under a different name to avoid internal confusion *)
 let back_index = apparent_back_index
@@ -488,16 +498,17 @@ let front_index_exn t =
   apparent_front_index_when_not_empty t
 ;;
 
-module Binary_searchable = Test_binary_searchable.Make1_and_test (struct
-  type nonrec 'a t = 'a t
+module%template Binary_searchable =
+Test_binary_searchable.Make1_and_test [@modality portable] (struct
+    type nonrec 'a t = 'a t
 
-  let get t i = get t (front_index_exn t + i)
-  let length = length
+    let get t i = get t (front_index_exn t + i)
+    let length = length
 
-  module For_test = struct
-    let of_array = of_array
-  end
-end)
+    module For_test = struct
+      let of_array = of_array
+    end
+  end)
 
 (* The "stable" indices used in this module make the application of the
    [Binary_searchable] functor awkward.  We need to be sure to translate incoming

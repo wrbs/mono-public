@@ -43,14 +43,24 @@ module List = struct
   let iteri ~how t ~f =
     match how with
     | (`Parallel | `Max_concurrent_jobs _) as how ->
-      all_unit (List.mapi t ~f:(unstage (Throttle.monad_sequence_how2 ~how ~f)))
+      all_unit
+        (List.mapi
+           t
+           ~f:
+             (unstage
+                (Throttle.monad_sequence_how2 ~on_error:(`Abort `Never_return) ~how ~f)))
     | `Sequential -> foldi t ~init:() ~f:(fun i () x -> f i x)
   ;;
 
   let mapi ~how t ~f =
     match how with
     | (`Parallel | `Max_concurrent_jobs _) as how ->
-      all (List.mapi t ~f:(unstage (Throttle.monad_sequence_how2 ~how ~f)))
+      all
+        (List.mapi
+           t
+           ~f:
+             (unstage
+                (Throttle.monad_sequence_how2 ~on_error:(`Abort `Never_return) ~how ~f)))
     | `Sequential -> seqmapi t ~f
   ;;
 

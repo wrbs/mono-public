@@ -1,4 +1,4 @@
-# Serial multipler example
+# 6.2 Serial Multipler
 
 <!--
 ```ocaml
@@ -7,23 +7,23 @@
 ```
 -->
 
-We now show a complete example which implements a bit-serial unsigned
-multiplier. We will both implement the design and show how to test it.
+We now show a complete example which implements a bit-serial unsigned multiplier. We will
+both implement the design and show how to test it.
 
 # Algorithm
 
-Given two input numbers of bit-widths `N` and `M`, a bit serial
-multiplier will produce a result of size `M+N` every M clock cycles.
+Given two input numbers of bit-widths `N` and `M`, a bit serial multiplier will produce a
+result of size `M+N` every M clock cycles.
 
-Given two input values `a` and `b`, we consider each bit of `b` in turn
-and form a partial product.
+Given two input values `a` and `b`, we consider each bit of `b` in turn and form a partial
+product.
 
 ```
 if b[i] then (a << i) else 0
 ```
 
-This then gets added to a running sum. Let's start with a simple OCaml
-implementation of this algorithm.
+This then gets added to a running sum. Let's start with a simple OCaml implementation of
+this algorithm.
 
 ```ocaml
 # open Base
@@ -39,38 +39,36 @@ val umul : int -> int -> int = <fun>
 - : int = 9900
 ```
 
-Note that we do not explicitly track the iteration number. Rather we
-detect when to stop by shifting `b` down on each iteration and
-checking if it is `0`. Similarly, the partial product term `a << i` is
-computed by shifting up by one each iteration. A similar set of tricks
-will be used to define an efficient hardware implementation.
+Note that we do not explicitly track the iteration number. Rather we detect when to stop
+by shifting `b` down on each iteration and checking if it is `0`. Similarly, the partial
+product term `a << i` is computed by shifting up by one each iteration. A similar set of
+tricks will be used to define an efficient hardware implementation.
 
-Before we turn fully to the hardware implementation, let's try to port
-the above code to the Hardcaml `Bits` type.
+Before we turn fully to the hardware implementation, let's try to port the above code to
+the Hardcaml `Bits` type.
 
 ```ocaml
 # open Hardcaml
 # open Hardcaml.Bits
 # let rec umul a b =
-  if to_int b = 0 then zero (width a)
+  if to_unsigned_int b = 0 then zero (width a)
   else
     let partial_product = mux2 b.:[0,0] a (zero (width a)) in
-    partial_product +: umul (sll a 1) (srl b 1)
+    partial_product +: umul (sll a ~by:1) (srl b ~by:1)
 val umul : t -> t -> t = <fun>
-# to_int (umul (of_int ~width:2 3) (of_int ~width:3 5))
+# to_unsigned_int (umul (of_unsigned_int ~width:2 3) (of_unsigned_int ~width:3 5))
 - : int = 3
 ```
 
-The reason this hasn't worked is we are computing the running sum and
-partial product terms using the bit-width of `a`. We need to
-also include the width of `b`.
+The reason this hasn't worked is we are computing the running sum and partial product
+terms using the bit-width of `a`. We need to also include the width of `b`.
 
 ```ocaml
-# let umul a b = umul (uresize a (width a + width b)) b
+# let umul a b = umul (uresize a ~width:(width a + width b)) b
 val umul : t -> t -> t = <fun>
-# to_int (umul (of_int ~width:2 3) (of_int ~width:3 5))
+# to_unsigned_int (umul (of_unsigned_int ~width:2 3) (of_unsigned_int ~width:3 5))
 - : int = 15
-# to_int (umul (of_int ~width:7 100) (of_int ~width:7 99))
+# to_unsigned_int (umul (of_unsigned_int ~width:7 100) (of_unsigned_int ~width:7 99))
 - : int = 9900
 ```
 
@@ -89,14 +87,12 @@ val partial_product : Type.t -> Type.t -> Type.t = <fun>
 val running_sum : Type.t -> Type.t -> Type.t -> Type.t -> Type.t = <fun>
 ```
 
-The `running_sum` function takes a new argument called `first`. This
-is used to indicate when we are processing bit `0` of `b` and clears
-the initial sum to `0`.
+The `running_sum` function takes a new argument called `first`. This is used to indicate
+when we are processing bit `0` of `b` and clears the initial sum to `0`.
 
-The inputs to the addition in `running_sum` are of `width a` and are
-zero-extended by the `ue` function to produce a result of `width a +
-1`. Didn't we need more precision than this in the `Bits`
-implementation? We will avoid this by outputting a fully computed bit
+The inputs to the addition in `running_sum` are of `width a` and are zero-extended by the
+`ue` function to produce a result of `width a + 1`. Didn't we need more precision than
+this in the `Bits` implementation? We will avoid this by outputting a fully computed bit
 at each iteration.
 
 ```ocaml
@@ -108,10 +104,10 @@ at each iteration.
     let running_sum = msbs running_sum in
     (* Register the sum *)
     let sum = reg spec ~enable:vdd running_sum in
-    sum_w <== sum;
+    sum_w <-- sum;
     sum, running_sum_bit_out
 val running_sum_reg :
-  Type.register -> Type.t -> Type.t -> Type.t -> Type.t * Type.t = <fun>
+  Reg_spec.t -> Type.t -> Type.t -> Type.t -> Type.t * Type.t = <fun>
 ```
 
 We also need to store the computed bits in a register.
@@ -119,7 +115,7 @@ We also need to store the computed bits in a register.
 ```ocaml
 # let computed_bits spec width bit =
    reg_fb spec ~width ~f:(fun d -> bit @: msbs d)
-val computed_bits : Type.register -> int -> Type.t -> Type.t = <fun>
+val computed_bits : Reg_spec.t -> int -> Type.t -> Type.t = <fun>
 ```
 
 The final implementation just needs to put these functions together.
@@ -150,8 +146,8 @@ We will now test our multiplier. First, let's create the required
 val create_circuit : int -> int -> Circuit.t = <fun>
 ```
 
-We can now create a simulation and waveform and get a handle on the
-input and output ports.
+We can now create a simulation and waveform and get a handle on the input and output
+ports.
 
 ```ocaml
 # module Waveform = Hardcaml_waveterm.Waveform
@@ -167,12 +163,11 @@ module Waveform = Hardcaml_waveterm.Waveform
 val create_sim :
   Circuit.t ->
   Waveform.t * (Cyclesim.Port_list.t, Cyclesim.Port_list.t) Cyclesim.t *
-  Bits.t ref * Bits.t ref * Bits.t ref * Bits.t ref = <fun>
+  Binary.t ref * Binary.t ref * Binary.t ref * Binary.t ref = <fun>
 ```
 
-The following testbench will take `a` and `b` and create a circuit
-adapted to their bit widths. It will then perform `width b` iterations
-and return the final result.
+The following testbench will take `a` and `b` and create a circuit adapted to their bit
+widths. It will then perform `width b` iterations and return the final result.
 
 ```ocaml
 # let test a_in b_in =
@@ -194,19 +189,19 @@ and return the final result.
     let result = !result in
     Cyclesim.cycle sim;
     waves, result
-val test : Bits.t -> Bits.t -> Waveform.t * Bits.t = <fun>
+val test : Binary.t -> Binary.t -> Waveform.t * Binary.t = <fun>
 ```
 
 Let's test our running examples of multiplying `3*5` and `100*99`.
 
 ```ocaml
-# let waves, result = test (Bits.of_int ~width:2 3) (Bits.of_int ~width:3 5)
+# let waves, result = test (Bits.of_unsigned_int ~width:2 3) (Bits.of_unsigned_int ~width:3 5)
 val waves : Waveform.t = <abstr>
-val result : Bits.t = 01111
-# Stdio.printf "%i" (Bits.to_int result)
+val result : Binary.t = 01111
+# Stdio.printf "%i" (Bits.to_unsigned_int result)
 15
 - : unit = ()
-# Waveform.print ~display_height:25 waves
+# Waveform.print waves
 ┌Signals────────┐┌Waves──────────────────────────────────────────────┐
 │clock          ││┌───┐   ┌───┐   ┌───┐   ┌───┐   ┌───┐   ┌───┐   ┌──│
 │               ││    └───┘   └───┘   └───┘   └───┘   └───┘   └───┘  │
@@ -228,14 +223,11 @@ val result : Bits.t = 01111
 │               ││────────┬───────┬───────┬───────                   │
 │running_sum_nex││ 3      │1      │3      │4                         │
 │               ││────────┴───────┴───────┴───────                   │
-│vdd            ││────────────────────────────────                   │
-│               ││                                                   │
-│               ││                                                   │
 └───────────────┘└───────────────────────────────────────────────────┘
 - : unit = ()
-# let _, result = test (Bits.of_int ~width:7 100) (Bits.of_int ~width:7 99)
-val result : Bits.t = 10011010101100
-# Stdio.printf "%i" (Bits.to_int result)
+# let _, result = test (Bits.of_unsigned_int ~width:7 100) (Bits.of_unsigned_int ~width:7 99)
+val result : Binary.t = 10011010101100
+# Stdio.printf "%i" (Bits.to_unsigned_int result)
 9900
 - : unit = ()
 ```

@@ -62,8 +62,8 @@ module Response = struct
 
     include
       Polling_state_rpc.Response
-        with type t = Unstable.t
-         and type Update.t = Unstable.Update.t
+      with type t = Unstable.t
+       and type Update.t = Unstable.Update.t
   end
 end
 
@@ -72,9 +72,9 @@ module type Versioned_polling_state_rpc = sig
   module Response = Response
 
   module Make_stable_query
-    (Unstable : Query.Unstable)
-    (Stable : Query.Stable)
-    (Conv : Query.Conv with module Unstable := Unstable and module Stable := Stable) :
+      (Unstable : Query.Unstable)
+      (Stable : Query.Stable)
+      (Conv : Query.Conv with module Unstable := Unstable and module Stable := Stable) :
     Query.S with type t = Unstable.t
 
   (** Here is how [Make_stable_response] works, from the client's perspective:
@@ -101,15 +101,16 @@ module type Versioned_polling_state_rpc = sig
       └−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−┘
       v}
 
-      Importantly, stable responses and diffs are what get sent over the wire, but they are
-      immediately converted to unstable responses and diffs before applying the diffs.  This
-      performs well when the responses are large relative to the diffs (which is expected to
-      be the common case).  Small diffs are sent over the wire, converted to the unstable
-      diff type, and then applied to the previous (possibly very large) response. *)
+      Importantly, stable responses and diffs are what get sent over the wire, but they
+      are immediately converted to unstable responses and diffs before applying the diffs.
+      This performs well when the responses are large relative to the diffs (which is
+      expected to be the common case). Small diffs are sent over the wire, converted to
+      the unstable diff type, and then applied to the previous (possibly very large)
+      response. *)
   module Make_stable_response
-    (Unstable : Response.Unstable)
-    (Stable : Response.Stable)
-    (Conv : Response.Conv with module Unstable := Unstable and module Stable := Stable) :
+      (Unstable : Response.Unstable)
+      (Stable : Response.Stable)
+      (Conv : Response.Conv with module Unstable := Unstable and module Stable := Stable) :
     Response.S with module Unstable := Unstable
 
   module Client : sig
@@ -117,9 +118,9 @@ module type Versioned_polling_state_rpc = sig
         each representing a single Polling_state_rpc.t. *)
     type ('query, 'response) caller =
       (?initial_query:'query -> unit -> ('query, 'response) Polling_state_rpc.Client.t)
-      Babel.Caller.t
+        Babel.Caller.t
 
-    (** Create a [caller] from a single Polling_state_rpc.t.  Callers can be combined in
+    (** Create a [caller] from a single Polling_state_rpc.t. Callers can be combined in
         the typical babel way, e.g. using [Babel.Caller.of_list_decreasing_preference]. *)
     val create_caller
       :  ('query, 'response) Polling_state_rpc.t

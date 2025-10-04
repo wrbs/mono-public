@@ -49,33 +49,33 @@ module type S = sig
 
     (* Create string with embedded formatting codes *)
 
-    val string_with_attr : attr list -> string -> string
+    val string_with_attr : attr list -> string -> string @@ portable
   end
 
   val is_color_tty : unit -> bool io
 
-  (** The width in characters of the current output. Returns [`Not_a_tty] if
-      stdout is not connected to a tty.*)
+  (** The width in characters of the current output. Returns [`Not_a_tty] if stdout is not
+      connected to a tty. *)
   val width : unit -> [ `Cols of int | `Not_a_tty | `Not_available ] io
 
   (** print a list in a columnize way (like the output of ls) *)
   val print_list : out_channel -> (string * Ansi.attr list) list -> unit io
 end
 
-(** Color printing in terminals  *)
+(** Color printing in terminals *)
 module type Console = sig
   module type Io = Io
   module type S = S
 
   module Make (Io : Io) :
     S
-      with type 'a io := 'a Io.t
-       and type 'a io_fmt := 'a Io.fmt
-       and type out_channel := Io.out_channel
+    with type 'a io := 'a Io.t
+     and type 'a io_fmt := 'a Io.fmt
+     and type out_channel := Io.out_channel
 
   include
     S
-      with type 'a io := 'a
-       and type 'a io_fmt := ('a, Out_channel.t, unit) format
-       and type out_channel := Out_channel.t
+    with type 'a io := 'a
+     and type 'a io_fmt := ('a, Out_channel.t, unit) format
+     and type out_channel := Out_channel.t
 end

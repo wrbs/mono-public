@@ -46,8 +46,8 @@ module Version = struct
   ;;
 
   let can_read
-    ~parser_version:(parser_major, parser_minor)
-    ~data_version:(data_major, data_minor)
+        ~parser_version:(parser_major, parser_minor)
+        ~data_version:(data_major, data_minor)
     =
     let open Int.Infix in
     parser_major = data_major && parser_minor >= data_minor
@@ -115,7 +115,7 @@ end = struct
      {[ (Version.t Int.Map.t) Int.Map.t ]} which is a list of major versions
      paired with lists of minor versions paires with a dune_lang version. *)
   let make
-    (versions : (Version.t * [ `Since of Version.t | `Deleted_in of Version.t ]) list)
+        (versions : (Version.t * [ `Since of Version.t | `Deleted_in of Version.t ]) list)
     : t
     =
     let version_map, deleted_in =
@@ -222,6 +222,13 @@ and key =
       ; dune_lang_ver : Version.t
       }
 
+module Map = Map.Make (struct
+    type nonrec t = t
+
+    let to_dyn = Dyn.opaque
+    let compare (x : t) y = String.compare x.name y.name
+  end)
+
 let to_dyn { name; desc; key = _; supported_versions; experimental } =
   let open Dyn in
   record
@@ -250,18 +257,22 @@ module Key = struct
 end
 
 module Error_msg = struct
-  let since t ver ~what =
-    let lang_or_using = if t.name = "dune" then "lang" else "using" in
+  let fmt_error_msg t ver ~what ~file =
+    let lang_or_using name = if name = "dune" then "lang" else "using" in
     Printf.sprintf
-      "%s is only available since version %s of %s. Please update your dune-project file \
-       to have (%s %s %s)."
+      "%s is only available since version %s of %s. Please update your %s file to have \
+       (%s %s %s)."
       what
       (Version.to_string ver)
       t.desc
-      lang_or_using
+      file
+      (lang_or_using t.name)
       t.name
       (Version.to_string ver)
   ;;
+
+  let since t ver ~what = fmt_error_msg t ver ~what ~file:"dune-project"
+  let since_config t ver ~what = fmt_error_msg t ver ~what ~file:"dune config"
 end
 
 module Error = struct
@@ -520,16 +531,20 @@ let renamed_in t ver ~to_ =
     Error.renamed_in loc t ver ~what ~to_
 ;;
 
-let since ?what ?(fatal = true) t ver =
+let since_fmt ?(fatal = true) ~fmt t ver loc =
   let open Version.Infix in
   let* current_ver = get_exn t in
   if current_ver >= ver
   then return ()
-  else
-    let* loc, what_ctx = desc () in
-    let what = Option.value what ~default:what_ctx in
+  else (
     if fatal
-    then Error.since loc t ver ~what
-    else User_warning.emit ~loc [ Pp.text (Error_msg.since t ver ~what) ];
-    return ()
+    then User_error.raise ~loc [ Pp.text (fmt t ver) ]
+    else User_warning.emit ~loc [ Pp.text (fmt t ver) ];
+    return ())
+;;
+
+let since ?what ?(fatal = true) t ver =
+  let* loc, what_ctx = desc () in
+  let what = Option.value what ~default:what_ctx in
+  since_fmt ~fatal ~fmt:(Error_msg.since ~what) t ver loc
 ;;

@@ -17,13 +17,13 @@ val debug_fs_cache : bool ref
 (** Print debug info when loading rules in directories *)
 val debug_load_dir : bool ref
 
-(** Command to use to diff things *)
-val diff_command : string option ref
-
 module Promote : sig
   type t =
     | Automatically
     | Never
+
+  val equal : t -> t -> bool
+  val to_dyn : t -> Dyn.t
 end
 
 (** explicit promotion mode is set *)
@@ -37,3 +37,6 @@ val always_show_command_line : bool ref
 
 (** The display mode *)
 val display : Display.t ref
+
+(** Whether actions are cacheable by default, default [false] *)
+val can_go_in_shared_cache_default : bool ref

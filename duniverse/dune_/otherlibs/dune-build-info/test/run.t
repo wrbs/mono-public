@@ -12,6 +12,8 @@ Test embedding of build information
   > EOF
   >   (cd $i;
   >    git init -q;
+  >    git config user.name "Test Name"
+  >    git config user.email "test@example.com"
   >    git add .;
   >    git commit -q -m _;
   >    git tag -a 1.0+$i -m _)
@@ -132,7 +134,7 @@ craft an example with a single placeholder to make the output stable:
   $ dune build d/d.install
   $ dune install d --prefix _install --debug-artifact-substitution
   Found placeholder in _build/install/default/bin/d:
-  - placeholder: Vcs_describe In_source_tree "d"
+  - placeholder: Vcs_describe (In_source_tree "d")
   - evaluates to: "1.0+d"
 
 Test substitution when promoting

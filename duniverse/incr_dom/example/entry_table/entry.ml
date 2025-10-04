@@ -26,7 +26,7 @@ module Model = struct
     ;;
   end
 
-  (** The part of the model that changes rarely.  We've segmented this into a separate
+  (** The part of the model that changes rarely. We've segmented this into a separate
       record to make it more efficient to recognize that nothing here has changed. *)
   module Basic = struct
     type t =
@@ -208,8 +208,8 @@ let header ~collapsed ~set_inner_focus focus =
      @ live_header)
 ;;
 
-(** Computes the header and the data corresponding to the slow changing part of the
-    view.  Note that the code here doesn't depend on the live part of the model, which is
+(** Computes the header and the data corresponding to the slow changing part of the view.
+    Note that the code here doesn't depend on the live part of the model, which is
     important for performance reasons. *)
 let basic_data_and_header ~set_inner_focus ~focus (basic : Model.Basic.t) =
   (* Note that the returned incremental only fully fires when the field in question
@@ -250,7 +250,7 @@ let live_data visible live =
   Incr.if_
     visible
     ~then_:
-      (let%map live = live in
+      (let%map live in
        [ td [] [ Node.text (Float.to_string_12 live.buy) ]
        ; td [] [ Node.text (Float.to_string_12 live.sell) ]
        ])
@@ -271,9 +271,9 @@ let view
   let live = m >>| Model.live in
   let basic = m >>| Model.basic in
   let live_data = live_data visible live in
-  let%bind focus = focus in
+  let%bind focus in
   let%map basic_data, header = basic >>| basic_data_and_header ~set_inner_focus ~focus
-  and live_data = live_data in
+  and live_data in
   let data = Node.tr (basic_data @ live_data) in
   let table =
     let focused =

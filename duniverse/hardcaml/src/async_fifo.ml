@@ -1,60 +1,22 @@
 open Base
 open Signal
 
-let gray_inc_mux_arg bits =
-  List.init (1 lsl bits) ~f:(fun i ->
-    let i = Bits.of_int ~width:bits i in
-    Bits.(binary_to_gray i, binary_to_gray (i +:. 1)))
-;;
-
-let%expect_test "binary_to_gray" =
-  let to_str x = Bits.to_string x in
-  List.iter (gray_inc_mux_arg 4) ~f:(fun (i, b) ->
-    Stdio.printf "%s -> %s\n" (to_str i) (to_str b));
-  [%expect
-    {|
-    0000 -> 0001
-    0001 -> 0011
-    0011 -> 0010
-    0010 -> 0110
-    0110 -> 0111
-    0111 -> 0101
-    0101 -> 0100
-    0100 -> 1100
-    1100 -> 1101
-    1101 -> 1111
-    1111 -> 1110
-    1110 -> 1010
-    1010 -> 1011
-    1011 -> 1001
-    1001 -> 1000
-    1000 -> 0000
-    |}]
-;;
-
-let gray_inc bits =
-  let gray_inc_mux_arg =
-    gray_inc_mux_arg bits
-    |> List.sort ~compare:(fun (a, _) (b, _) -> Bits.compare a b)
-    |> List.map ~f:snd
-    |> List.map ~f:(fun x -> Signal.of_constant (Bits.to_constant x))
-  in
-  fun x -> mux x gray_inc_mux_arg
+let gray_inc_mux_inputs (type a) (module Comb : Comb.S with type t = a) width ~by : a list
+  =
+  List.init (1 lsl width) ~f:(fun i ->
+    Comb.of_unsigned_int ~width i |> Comb.gray_increment ~by)
 ;;
 
 module type S = sig
   val width : int
   val log2_depth : int
+  val optimize_for_same_clock_rate_and_always_reading : bool
 end
 
-module Make (M : sig
-  val width : int
-  val log2_depth : int
-end) =
-struct
+module Make (M : S) = struct
   let address_width = M.log2_depth
   let fifo_capacity = 1 lsl address_width
-  let gray_inc = gray_inc address_width
+  let gray_inc ~by x = mux x (gray_inc_mux_inputs (module Signal) address_width ~by)
 
   module I = struct
     type 'a t =
@@ -95,7 +57,7 @@ struct
       let write_data = Signal.wire M.width in
       let write_address = Signal.wire address_width in
       let read_address = Signal.wire address_width in
-      let write_enable = Always.Variable.wire ~default:Signal.gnd in
+      let write_enable = Always.Variable.wire ~default:Signal.gnd () in
       let multiport_mem =
         Signal.multiport_memory
           ~name
@@ -126,7 +88,7 @@ struct
       assert (width address = address_width);
       if t.is_read then raise_s [%message "Async_ram has already previously been read"];
       t.is_read <- true;
-      t.read_address <== address;
+      t.read_address <-- address;
       t.multiport_mem
     ;;
 
@@ -136,13 +98,24 @@ struct
       if t.is_written
       then raise_s [%message "Async_ram has already previously been written"];
       t.is_written <- true;
-      t.write_address <== address;
-      t.write_data <== data;
+      t.write_address <-- address;
+      t.write_data <-- data;
       Always.(t.write_enable <--. 1)
     ;;
   end
 
-  let create ?(use_negedge_sync_chain = false) ?(sync_stages = 2) ?scope (i : _ I.t) =
+  type raddr_wd =
+    { raddr_wd : Always.Variable.t
+    ; raddr_wd_ffs : Always.Variable.t array
+    }
+
+  let create_internal
+    ?(use_synchronous_clear_semantics = false)
+    ?(use_negedge_sync_chain = false)
+    ?(sync_stages = 2)
+    ?scope
+    (i : _ I.t)
+    =
     if sync_stages < 2
     then raise_s [%message "[sync_stages] must be >= 2!" (sync_stages : int)];
     if use_negedge_sync_chain && sync_stages % 2 = 1
@@ -154,19 +127,24 @@ struct
       | Some scope -> Scope.naming scope
       | None -> ( -- )
     in
+    let reg_spec ~clock ~reset =
+      if use_synchronous_clear_semantics
+      then Reg_spec.create ~clock ~clear:reset ()
+      else Reg_spec.create ~clock ~reset ()
+    in
     let async_reg_var ?clock_edge () ~name ~clock ~reset ~width =
-      let spec = Reg_spec.create ~clock ~reset () |> Reg_spec.override ?clock_edge in
+      let spec = reg_spec ~clock ~reset |> Reg_spec.override ?clock_edge in
       let var = Always.Variable.reg spec ~enable:vdd ~width in
       ignore
         (Signal.add_attribute var.value (Rtl_attribute.Vivado.async_reg true) -- name
-          : Signal.t);
+         : Signal.t);
       var
     in
     let reg_var ~name ~clock ~reset ~width =
-      let var =
-        Always.Variable.reg (Reg_spec.create ~clock ~reset ()) ~enable:vdd ~width
-      in
-      ignore (var.value -- name : Signal.t);
+      let var = Always.Variable.reg (reg_spec ~clock ~reset) ~enable:vdd ~width in
+      ignore
+        (Signal.add_attribute var.value (Rtl_attribute.Vivado.dont_touch true) -- name
+         : Signal.t);
       var
     in
     let waddr_rd =
@@ -214,31 +192,45 @@ struct
         ~width:address_width
         ~name:"waddr_wd"
     in
-    let raddr_wd_ffs =
-      Array.init (sync_stages - 1) ~f:(fun idx ->
-        async_reg_var
-          ~clock_edge:(clock_edge_of_sync_chain idx)
-          ()
-          ~name:[%string "raddr_wd_ff_%{idx#Int}"]
-          ~clock:i.clock_write
-          ~reset:i.reset_write
-          ~width:address_width)
-    in
     let raddr_wd =
-      async_reg_var
-        ()
-        ~clock:i.clock_write
-        ~reset:i.reset_write
-        ~width:address_width
-        ~name:"raddr_wd"
+      if M.optimize_for_same_clock_rate_and_always_reading
+      then None
+      else (
+        let raddr_wd =
+          async_reg_var
+            ()
+            ~clock:i.clock_write
+            ~reset:i.reset_write
+            ~width:address_width
+            ~name:"raddr_wd"
+        in
+        let raddr_wd_ffs =
+          Array.init (sync_stages - 1) ~f:(fun idx ->
+            async_reg_var
+              ~clock_edge:(clock_edge_of_sync_chain idx)
+              ()
+              ~name:[%string "raddr_wd_ff_%{idx#Int}"]
+              ~clock:i.clock_write
+              ~reset:i.reset_write
+              ~width:address_width)
+        in
+        Some { raddr_wd; raddr_wd_ffs })
     in
-    let full = gray_inc waddr_wd.value ==: raddr_wd.value in
+    let full =
+      match raddr_wd with
+      | None -> gnd
+      | Some { raddr_wd; _ } -> gray_inc ~by:1 waddr_wd.value ==: raddr_wd.value
+    in
     let vld = waddr_rd.value <>: raddr_rd.value in
     let almost_empty =
-      waddr_rd.value
-      ==: raddr_rd.value
-      |: (waddr_rd.value ==: gray_inc raddr_rd.value)
-      |: (waddr_rd.value ==: gray_inc (gray_inc raddr_rd.value))
+      let current = waddr_rd.value ==: raddr_rd.value in
+      let one_ahead = waddr_rd.value ==: gray_inc ~by:1 raddr_rd.value in
+      let two_ahead_if_possible =
+        if address_width = 1
+        then gnd (* fifo not large enough to look this far ahead *)
+        else waddr_rd.value ==: gray_inc ~by:2 raddr_rd.value
+      in
+      current |: one_ahead |: two_ahead_if_possible
     in
     let ram =
       Async_distributed_ram.create
@@ -246,7 +238,10 @@ struct
         ~clock_write:i.clock_write
     in
     let raddr_rd_next =
-      mux2 (i.read_enable &: vld) (gray_inc raddr_rd.value) raddr_rd.value
+      let read_enable =
+        if M.optimize_for_same_clock_rate_and_always_reading then vdd else i.read_enable
+      in
+      mux2 (read_enable &: vld) (gray_inc ~by:1 raddr_rd.value) raddr_rd.value
     in
     Always.(
       compile
@@ -257,20 +252,25 @@ struct
             else waddr_rd_ffs.(idx) <-- waddr_rd_ffs.(idx - 1).value)
           |> Array.to_list
           |> proc
-        ; waddr_rd <-- (Array.last waddr_rd_ffs).value
+        ; waddr_rd <-- (Array.last_exn waddr_rd_ffs).value
         ; (* @(posedge clk_write) *)
-          Array.init (Array.length raddr_wd_ffs) ~f:(fun idx ->
-            if idx = 0
-            then raddr_wd_ffs.(idx) <-- raddr_rd.value
-            else raddr_wd_ffs.(idx) <-- raddr_wd_ffs.(idx - 1).value)
-          |> Array.to_list
-          |> proc
-        ; raddr_wd <-- (Array.last raddr_wd_ffs).value
+          (match raddr_wd with
+           | Some { raddr_wd_ffs; raddr_wd } ->
+             proc
+               [ Array.init (Array.length raddr_wd_ffs) ~f:(fun idx ->
+                   if idx = 0
+                   then raddr_wd_ffs.(idx) <-- raddr_rd.value
+                   else raddr_wd_ffs.(idx) <-- raddr_wd_ffs.(idx - 1).value)
+                 |> Array.to_list
+                 |> proc
+               ; raddr_wd <-- (Array.last_exn raddr_wd_ffs).value
+               ]
+           | None -> proc [])
         ; (* @(posedge clk_write) *)
           when_
             (i.write_enable &: ~:full)
             [ Async_distributed_ram.write ram ~address:waddr_wd.value ~data:i.data_in
-            ; waddr_wd <-- gray_inc waddr_wd.value
+            ; waddr_wd <-- gray_inc ~by:1 waddr_wd.value
             ]
         ; (* @(posedge clk_read) *)
           data_out <-- Async_distributed_ram.read ram ~address:raddr_rd_next
@@ -279,6 +279,8 @@ struct
         ]);
     { O.full; data_out = data_out.value; valid = vld; almost_empty }
   ;;
+
+  let create = create_internal ~use_synchronous_clear_semantics:false
 
   let create_with_delay ?(delay = 0) scope (i : _ I.t) =
     let ( -- ) = Scope.naming scope in
@@ -299,7 +301,7 @@ struct
               (mux2 (delay_cnt_wire ==:. delay) d (d +:. 1))
               (zero min_bits))
         in
-        delay_cnt_wire <== delay_cnt;
+        delay_cnt_wire <-- delay_cnt;
         delay_cnt ==:. delay)
     in
     let async_fifo =
@@ -311,7 +313,7 @@ struct
         ; data_in = i.data_in -- "data_in"
         }
     in
-    async_fifo_has_valid_value <== async_fifo.valid;
+    async_fifo_has_valid_value <-- async_fifo.valid;
     { O.full = async_fifo.full -- "full"
     ; data_out = async_fifo.data_out
     ; valid = async_fifo.valid &: delay_val
@@ -337,4 +339,14 @@ struct
     let module H = Hierarchy.In_scope (I) (O) in
     H.hierarchical ~name ~scope (create_with_delay ?delay) i
   ;;
+
+  module For_testing = struct
+    let create_with_synchronous_clear_semantics_for_simulation_only =
+      create_internal ~use_synchronous_clear_semantics:true
+    ;;
+  end
+end
+
+module For_testing = struct
+  let gray_inc_mux_inputs = gray_inc_mux_inputs
 end

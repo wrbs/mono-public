@@ -5,19 +5,21 @@ module Stable = struct
   module V1 = struct
     include Base.Bytes
 
-    type t = bytes [@@deriving bin_io ~localize, quickcheck, typerep, stable_witness]
+    type t = bytes
+    [@@deriving bin_io ~localize, globalize, quickcheck, stable_witness, typerep]
   end
 end
 
 include Stable.V1
-include Comparable.Validate (Base.Bytes)
 
-include Hexdump.Of_indexable (struct
-  type t = bytes
+include%template Comparable.Validate [@modality portable] (Base.Bytes)
 
-  let length = length
-  let get = get
-end)
+include%template Hexdump.Of_indexable [@modality portable] (struct
+    type t = bytes
+
+    let length = length
+    let get t i = get t i
+  end)
 
 let gen' char_gen = String.gen' char_gen |> Quickcheck.Generator.map ~f:of_string
 

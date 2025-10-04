@@ -21,20 +21,20 @@ include struct
 end
 
 module Cached_digest = Dune_digest.Cached_digest
-module Execution_env = Dune_util.Execution_env
+
+include struct
+  open Source
+  module Source_tree = Source_tree
+  module Source_dir_status = Source_dir_status
+  module Workspace = Workspace
+end
 
 include struct
   open Dune_rules
   module Super_context = Super_context
   module Context = Context
-  module Workspace = Workspace
-  module Package = Package
-  module Dune_project = Dune_project
-  module Dune_project_name = Dune_project_name
   module Dune_package = Dune_package
   module Resolve = Resolve
-  module Source_dir_status = Source_dir_status
-  module Source_tree = Source_tree
   module Dune_file = Dune_file
   module Library = Library
   module Melange = Melange
@@ -68,10 +68,13 @@ include struct
   module Profile = Profile
   module Lib_name = Lib_name
   module Package_name = Package_name
+  module Package = Package
   module Package_version = Package_version
   module Source_kind = Source_kind
   module Package_info = Package_info
   module Section = Section
+  module Dune_project_name = Dune_project_name
+  module Dune_project = Dune_project
 end
 
 module Log = Dune_util.Log
@@ -186,7 +189,7 @@ module Scheduler = struct
     }
   ;;
 
-  let go ~(common : Common.t) ~config:dune_config f =
+  let go_without_rpc_server ~(common : Common.t) ~config:dune_config f =
     let stats = Common.stats common in
     let config =
       let watch_exclusions = Common.watch_exclusions common in
@@ -196,18 +199,23 @@ module Scheduler = struct
         ~print_ctrl_c_warning:true
         ~watch_exclusions
     in
+    Dune_rules.Clflags.concurrency := config.concurrency;
+    Run.go config ~on_event:(on_event dune_config) f
+  ;;
+
+  let go_with_rpc_server ~common ~config f =
     let f =
       match Common.rpc common with
       | `Allow server -> fun () -> Dune_engine.Rpc.with_background_rpc (rpc server) f
       | `Forbid_builds -> f
     in
-    Run.go config ~on_event:(on_event dune_config) f
+    go_without_rpc_server ~common ~config f
   ;;
 
   let go_with_rpc_server_and_console_status_reporting
-    ~(common : Common.t)
-    ~config:dune_config
-    run
+        ~(common : Common.t)
+        ~config:dune_config
+        run
     =
     let server =
       match Common.rpc common with
@@ -223,6 +231,7 @@ module Scheduler = struct
         ~print_ctrl_c_warning:true
         ~watch_exclusions
     in
+    Dune_rules.Clflags.concurrency := config.concurrency;
     let file_watcher = Common.file_watcher common in
     let run () =
       let open Fiber.O in
@@ -235,15 +244,13 @@ module Scheduler = struct
   ;;
 end
 
-let restore_cwd_and_execve (common : Common.t) prog argv env =
-  let prog =
-    if Filename.is_relative prog
-    then (
-      let root = Common.root common in
-      Filename.concat root.dir prog)
-    else prog
-  in
-  Proc.restore_cwd_and_execve prog argv ~env
+let string_path_relative_to_specified_root (root : Workspace_root.t) path =
+  if Filename.is_relative path then Filename.concat root.dir path else path
+;;
+
+let restore_cwd_and_execve root prog args env =
+  let prog = string_path_relative_to_specified_root root prog in
+  Proc.restore_cwd_and_execve prog args ~env
 ;;
 
 (* Adapted from
@@ -263,4 +270,19 @@ let command_alias ?orig_name cmd term name =
     ]
   in
   Cmd.v (Cmd.info name ~docs:"COMMAND ALIASES" ~doc ~man) term
+;;
+
+(* The build system has some global state which makes it unsafe for
+   multiple instances of it to be executed concurrently, so we ensure
+   serialization by holding this mutex while running the build system. *)
+let build_system_mutex = Fiber.Mutex.create ()
+
+let build f =
+  Hooks.End_of_build.once Promote.Diff_promotion.finalize;
+  Fiber.Mutex.with_lock build_system_mutex ~f:(fun () -> Build_system.run f)
+;;
+
+let build_exn f =
+  Hooks.End_of_build.once Promote.Diff_promotion.finalize;
+  Fiber.Mutex.with_lock build_system_mutex ~f:(fun () -> Build_system.run_exn f)
 ;;

@@ -1,12 +1,15 @@
+module Atomic_ = Atomic
 open! Core
+module Atomic = Atomic_
 
 module Make_plain
-  (S : Legacy_diffable_intf.S_plain) (X : sig
-    type t
+    (S : Legacy_diffable_intf.S_plain)
+    (X : sig
+       type t
 
-    val forwards : S.t -> t
-    val backwards : t -> S.t
-  end) =
+       val forwards : S.t -> t
+       val backwards : t -> S.t
+     end) =
 struct
   module Update = S.Update
 
@@ -23,12 +26,13 @@ struct
 end
 
 module Make
-  (S : Legacy_diffable_intf.S) (X : sig
-    type t
+    (S : Legacy_diffable_intf.S)
+    (X : sig
+       type t
 
-    val forwards : S.t -> t
-    val backwards : t -> S.t
-  end) =
+       val forwards : S.t -> t
+       val backwards : t -> S.t
+     end) =
 struct
   module Plain = Make_plain (S) (X)
   module Update = S.Update
@@ -41,43 +45,41 @@ struct
       with module Update := Plain.Update)
 end
 
-let%test_module "tests" =
-  (module struct
-    module Diffable_float = struct
-      module T = struct
-        type t = string [@@deriving bin_io, equal, sexp]
-      end
-
-      include T
-      include Atomic.Make (T)
+module%test [@name "tests"] _ = struct
+  module Diffable_float = struct
+    module T = struct
+      type t = string [@@deriving bin_io, equal, sexp]
     end
 
-    module U = struct
-      type t = int [@@deriving sexp]
+    include T
+    include Atomic.Make (T)
+  end
 
-      let forwards = Int.of_string
-      let backwards = Int.to_string
-    end
+  module U = struct
+    type t = int [@@deriving sexp]
 
-    include U
-    include Make (Diffable_float) (U)
+    let forwards = Int.of_string
+    let backwards = Int.to_string
+  end
 
-    let%test_unit "iso round-trip works" =
-      Quickcheck.test
-        Int.quickcheck_generator
-        ~shrinker:Int.quickcheck_shrinker
-        ~sexp_of:[%sexp_of: t]
-        ~f:(fun t -> [%test_result: int] ~expect:t (of_diffs (to_diffs t)))
-    ;;
+  include U
+  include Make (Diffable_float) (U)
 
-    let%test_unit "iso diff/update works" =
-      let open Quickcheck in
-      Quickcheck.test
-        (Generator.tuple2 Int.quickcheck_generator Int.quickcheck_generator)
-        ~shrinker:(Shrinker.tuple2 Int.quickcheck_shrinker Int.quickcheck_shrinker)
-        ~sexp_of:[%sexp_of: t * t]
-        ~f:(fun (from, to_) ->
+  let%test_unit "iso round-trip works" =
+    Quickcheck.test
+      Int.quickcheck_generator
+      ~shrinker:Int.quickcheck_shrinker
+      ~sexp_of:[%sexp_of: t]
+      ~f:(fun t -> [%test_result: int] ~expect:t (of_diffs (to_diffs t)))
+  ;;
+
+  let%test_unit "iso diff/update works" =
+    let open Quickcheck in
+    Quickcheck.test
+      (Generator.tuple2 Int.quickcheck_generator Int.quickcheck_generator)
+      ~shrinker:(Shrinker.tuple2 Int.quickcheck_shrinker Int.quickcheck_shrinker)
+      ~sexp_of:[%sexp_of: t * t]
+      ~f:(fun (from, to_) ->
         [%test_result: int] ~expect:to_ (update from (diffs ~from ~to_)))
-    ;;
-  end)
-;;
+  ;;
+end

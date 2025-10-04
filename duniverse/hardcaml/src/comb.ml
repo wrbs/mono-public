@@ -3,6 +3,15 @@
 open Base
 include Comb_intf
 
+module Gen_cases_from_mux (Comb : Comb_intf.Gen_cases_from_mux) = struct
+  open Comb
+
+  let cases ~default select cases =
+    List.fold_right ~init:default cases ~f:(fun (match_with, value) acc ->
+      mux (select ==: match_with) [ acc; value ])
+  ;;
+end
+
 module Make_primitives (Gates : Gates) = struct
   include Gates
 
@@ -12,14 +21,11 @@ module Make_primitives (Gates : Gates) = struct
 
   let bits_lsb x =
     let w = width x in
-    Array.to_list (Array.init w ~f:(fun i -> select x i i))
+    List.init w ~f:(fun i -> select x ~high:i ~low:i)
   ;;
 
   let reduce_bits def op a = List.fold (bits_lsb a) ~init:def ~f:op
-
-  let repeat s n =
-    if n <= 0 then empty else concat_msb (Array.to_list (Array.init n ~f:(fun _ -> s)))
-  ;;
+  let repeat s n = if n <= 0 then empty else concat_msb (List.init n ~f:(fun _ -> s))
 
   let concat_msb_e l =
     let x = List.filter l ~f:(fun t -> not (is_empty t)) in
@@ -65,7 +71,7 @@ module Make_primitives (Gates : Gates) = struct
   (** signed multiplication *)
   let ( *+ ) a b =
     let last = width b - 1 in
-    let msb x = select x (width x - 1) (width x - 1) in
+    let msb x = select x ~high:(width x - 1) ~low:(width x - 1) in
     let _, r =
       List.fold
         (bits_lsb b)
@@ -89,7 +95,7 @@ module Make_primitives (Gates : Gates) = struct
     let w = width a in
     let a, b = concat_msb [ gnd; a ], concat_msb [ gnd; b ] in
     let d = a -: b in
-    select d w w
+    select d ~high:w ~low:w
   ;;
 
   (** multiplexer *)
@@ -119,6 +125,13 @@ module Make_primitives (Gates : Gates) = struct
     in
     build (bits_lsb s) d
   ;;
+
+  include Gen_cases_from_mux (struct
+      type nonrec t = t
+
+      let mux = mux
+      let ( ==: ) = ( ==: )
+    end)
 end
 
 type nonrec ('a, 'b) with_valid2 = ('a, 'b) with_valid2 =
@@ -134,7 +147,7 @@ module Make (Prims : Primitives) = struct
   let equal = Prims.equal
   let empty = Prims.empty
   let is_empty = Prims.is_empty
-  let ( -- ) a b = Prims.( -- ) a b
+  let ( -- ) ~(loc : [%call_pos]) a b = Prims.( -- ) ~loc a b
   let width = Prims.width
 
   let[@cold] raise_arg_greater_than_zero fn x =
@@ -197,20 +210,90 @@ module Make (Prims : Primitives) = struct
     Prims.of_constant (Constant.of_binary_string b)
   ;;
 
-  let of_int ~width v =
+  let of_int_trunc ~width v =
     if width <= 0 then raise_const_width_greater_than_zero (module Int) width v;
     of_constant (Constant.of_int ~width v)
   ;;
 
-  let of_int32 ~width v =
+  let of_int = of_int_trunc
+
+  let of_unsigned
+    (type a)
+    (module Int : Int.S with type t = a)
+    (f : width:int -> a -> t)
+    ~width
+    x
+    =
+    if Int.( < ) x Int.zero
+    then raise_s [%message "[of_unsigned_int] input value is less than 0" (x : Int.t)];
+    let max_value =
+      if width >= Int.num_bits - 1
+      then Int.max_value
+      else Int.((Int.one lsl width) - Int.one)
+    in
+    if Int.( > ) x max_value
+    then
+      raise_s
+        [%message
+          "[of_unsigned_int] input value is too large for given width"
+            (width : int)
+            (max_value : Int.t)
+            (x : Int.t)];
+    f ~width x
+  ;;
+
+  let of_signed
+    (type a)
+    (module Int : Int.S with type t = a)
+    (f : width:int -> a -> t)
+    ~width
+    x
+    =
+    let max_value, min_value =
+      if width >= Int.num_bits
+      then Int.max_value, Int.min_value
+      else (
+        let width = width - 1 in
+        Int.((Int.one lsl width) - Int.one), Int.(-(Int.one lsl width)))
+    in
+    if Int.( > ) x max_value
+    then
+      raise_s
+        [%message
+          "[of_signed_int] input value is too large for given width"
+            (width : int)
+            (max_value : Int.t)
+            (x : Int.t)];
+    if Int.( < ) x min_value
+    then
+      raise_s
+        [%message
+          "[of_signed_int] input value is too small for given width"
+            (width : int)
+            (min_value : Int.t)
+            (x : Int.t)];
+    f ~width x
+  ;;
+
+  let of_int32_trunc ~width v =
     if width <= 0 then raise_const_width_greater_than_zero (module Int32) width v;
     of_constant (Constant.of_int32 ~width v)
   ;;
 
-  let of_int64 ~width v =
+  let of_int32 = of_int32_trunc
+
+  let of_int64_trunc ~width v =
     if width <= 0 then raise_const_width_greater_than_zero (module Int64) width v;
     of_constant (Constant.of_int64 ~width v)
   ;;
+
+  let of_int64 = of_int64_trunc
+  let of_unsigned_int = of_unsigned (module Int) of_int_trunc
+  let of_unsigned_int32 = of_unsigned (module Int32) of_int32_trunc
+  let of_unsigned_int64 = of_unsigned (module Int64) of_int64_trunc
+  let of_signed_int = of_signed (module Int) of_int_trunc
+  let of_signed_int32 = of_signed (module Int32) of_int32_trunc
+  let of_signed_int64 = of_signed (module Int64) of_int64_trunc
 
   let of_hex ?(signedness = Signedness.Unsigned) ~width v =
     if width <= 0 then raise_const_width_greater_than_zero (module String) width v;
@@ -222,7 +305,7 @@ module Make (Prims : Primitives) = struct
     of_constant (Constant.of_octal_string ~signedness ~width v)
   ;;
 
-  let of_z ~width v = of_constant (Constant.of_z ~width v)
+  let of_bigint ~width v = of_constant (Constant.of_bigint ~width v)
 
   let of_bit_list b =
     if List.length b = 0
@@ -236,7 +319,7 @@ module Make (Prims : Primitives) = struct
     of_constant (Constant.of_bit_list b)
   ;;
 
-  let of_char c = of_int ~width:8 (Char.to_int c)
+  let of_char c = of_int_trunc ~width:8 (Char.to_int c)
 
   let[@cold] raise_concat_empty s =
     raise_s
@@ -262,18 +345,32 @@ module Make (Prims : Primitives) = struct
 
   let concat_lsb s = concat_msb (List.rev s)
   let ( @: ) a b = concat_msb [ a; b ]
-  let concat_msb_e s = concat_msb (List.filter s ~f:(fun b -> not (Prims.is_empty b)))
-  let concat_lsb_e s = concat_lsb (List.filter s ~f:(fun b -> not (Prims.is_empty b)))
   let vdd = of_bit_string "1" -- "vdd"
   let gnd = of_bit_string "0" -- "gnd"
   let is_vdd t = equal t vdd
   let is_gnd t = equal t gnd
-  let zero w = if w = 0 then empty else of_bit_string (String.init w ~f:(fun _ -> '0'))
-  let ones w = if w = 0 then empty else of_bit_string (String.init w ~f:(fun _ -> '1'))
+
+  let[@cold] raise_zero_width fn =
+    raise_s
+      [%message.omit_nil
+        "" ~_:(fn ^ " has zero width") ~loc:(Caller_id.get () : Caller_id.t option)]
+  ;;
+
+  let zero w =
+    if w = 0
+    then raise_zero_width "[zero]"
+    else of_bit_string (String.init w ~f:(fun _ -> '0'))
+  ;;
+
+  let ones w =
+    if w = 0
+    then raise_zero_width "[ones]"
+    else of_bit_string (String.init w ~f:(fun _ -> '1'))
+  ;;
 
   let one w =
     match w with
-    | 0 -> empty
+    | 0 -> raise_zero_width "[one]"
     | 1 -> vdd
     | _ -> zero (w - 1) @: vdd
   ;;
@@ -297,40 +394,35 @@ module Make (Prims : Primitives) = struct
           ~loc:(Caller_id.get () : Caller_id.t option)]
   ;;
 
-  let select a hi lo =
+  let select a ~high:hi ~low:lo =
     if hi < lo then raise_select_hi_lo hi lo;
     if hi >= width a || lo >= width a || hi < 0 || lo < 0
     then raise_select_out_of_bounds a hi lo;
-    if lo = 0 && hi = width a - 1 then a else Prims.select a hi lo
+    if lo = 0 && hi = width a - 1 then a else Prims.select a ~high:hi ~low:lo
   ;;
 
-  let select_e a hi lo =
-    try select a hi lo with
-    | _ -> Prims.empty
-  ;;
-
-  let msb a = select a (width a - 1) (width a - 1)
-  let lsbs a = select a (width a - 2) 0
-  let lsb a = select a 0 0
-  let msbs a = select a (width a - 1) 1
-  let bit s n = select s n n
-  let drop_bottom x n = select x (width x - 1) n
-  let drop_top x n = select x (width x - 1 - n) 0
-  let sel_bottom x n = select x (n - 1) 0
-  let sel_top x n = select x (width x - 1) (width x - n)
-  let ( .:() ) x i = bit x i
-  let ( .:[] ) x (hi, lo) = select x hi lo
+  let msb a = select a ~high:(width a - 1) ~low:(width a - 1)
+  let lsbs a = select a ~high:(width a - 2) ~low:0
+  let lsb a = select a ~high:0 ~low:0
+  let msbs a = select a ~high:(width a - 1) ~low:1
+  let bit s ~pos:n = select s ~high:n ~low:n
+  let drop_bottom x ~width:n = select x ~high:(width x - 1) ~low:n
+  let drop_top x ~width:n = select x ~high:(width x - 1 - n) ~low:0
+  let sel_bottom x ~width:n = select x ~high:(n - 1) ~low:0
+  let sel_top x ~width:n = select x ~high:(width x - 1) ~low:(width x - n)
+  let ( .:() ) x i = bit x ~pos:i
+  let ( .:[] ) x (high, low) = select x ~high ~low
 
   let ( .:+[] ) x (lsb, w) =
     match w with
-    | None -> drop_bottom x lsb
-    | Some width -> select x (lsb + width - 1) lsb
+    | None -> drop_bottom x ~width:lsb
+    | Some width -> select x ~high:(lsb + width - 1) ~low:lsb
   ;;
 
   let ( .:-[] ) x (msb, w) =
     match msb with
-    | None -> sel_top x w
-    | Some msb -> select x msb (msb - w + 1)
+    | None -> sel_top x ~width:w
+    | Some msb -> select x ~high:msb ~low:(msb - w + 1)
   ;;
 
   let[@cold] raise_insert_below_0 at_offset =
@@ -361,10 +453,13 @@ module Make (Prims : Primitives) = struct
     else if wt = wf && at_offset = 0
     then f
     else if at_offset = 0
-    then select t (wt - 1) wf @: f
+    then select t ~high:(wt - 1) ~low:wf @: f
     else if wt = wf + at_offset
-    then f @: select t (wt - wf - 1) 0
-    else select t (wt - 1) (wf + at_offset) @: f @: select t (at_offset - 1) 0
+    then f @: select t ~high:(wt - wf - 1) ~low:0
+    else
+      select t ~high:(wt - 1) ~low:(wf + at_offset)
+      @: f
+      @: select t ~high:(at_offset - 1) ~low:0
   ;;
 
   let[@cold] raise_assert_widths_same_not_empty function_ =
@@ -381,7 +476,7 @@ module Make (Prims : Primitives) = struct
         ""
           ~_:
             (String.concat [ "["; function_; "] got inputs of different widths" ]
-              : string)
+             : string)
           ~_:(inputs : Prims.t list)
           ~loc:(Caller_id.get () : Caller_id.t option)]
   ;;
@@ -406,7 +501,7 @@ module Make (Prims : Primitives) = struct
         ""
           ~_:
             (String.concat [ "["; function_; "] got inputs of different widths" ]
-              : string)
+             : string)
           ~_:(inputs : Prims.t list)
           ~loc:(Caller_id.get () : Caller_id.t option)]
   ;;
@@ -423,7 +518,32 @@ module Make (Prims : Primitives) = struct
   ;;
 
   let assert_width_one t msg = if not (width t = 1) then raise_width_not_one msg
-  let op_int_right op a b = op a (of_int ~width:(width a) b)
+
+  let op_int_right_unsigned op_name op left right =
+    match Or_error.try_with (fun () -> of_unsigned_int ~width:(width left) right) with
+    | Ok right -> op left right
+    | Error conversion_error ->
+      raise_s
+        [%message
+          "Failed to perform unsigned integer conversion on dotted operator"
+            (op_name : string)
+            (conversion_error : Error.t)]
+  ;;
+
+  let op_int_right_signed op_name op left right =
+    match Or_error.try_with (fun () -> of_signed_int ~width:(width left) right) with
+    | Ok right -> op left right
+    | Error conversion_error ->
+      raise_s
+        [%message
+          "Failed to perform signed integer conversion on dotted operator"
+            (op_name : string)
+            (conversion_error : Error.t)]
+  ;;
+
+  let op_int_right op_name op_unsigned op_signed =
+    op_int_right_unsigned op_name op_unsigned, op_int_right_signed op_name op_signed
+  ;;
 
   let[@cold] raise_mux_too_many_inputs inputs_provided maximum_expected =
     raise_s
@@ -442,22 +562,59 @@ module Make (Prims : Primitives) = struct
           ~loc:(Caller_id.get () : Caller_id.t option)]
   ;;
 
+  let[@cold] raise_mux_no_inputs () =
+    raise_s
+      [%message.omit_nil
+        "[mux] got no data inputs" ~loc:(Caller_id.get () : Caller_id.t option)]
+  ;;
+
+  let[@cold] raise_mux_not_exact width_of_sel number_of_data_elements =
+    raise_s
+      [%message.omit_nil
+        "[mux] select does not exactly index the number of data elements"
+          (width_of_sel : int)
+          (number_of_data_elements : int)
+          ~loc:(Caller_id.get () : Caller_id.t option)]
+  ;;
+
   (* mux *)
   let mux sel l =
-    let els = List.length l in
-    let max_els = 1 lsl width sel in
+    let number_of_data_elements = List.length l in
+    let max_number_of_data_elements = 1 lsl width sel in
     assert_widths_same "mux" l;
-    if els > max_els then raise_mux_too_many_inputs els max_els;
-    if els < 2 then raise_mux_too_few_inputs els;
-    Prims.mux sel l
+    if number_of_data_elements > max_number_of_data_elements
+    then raise_mux_too_many_inputs number_of_data_elements max_number_of_data_elements;
+    match number_of_data_elements with
+    | 0 -> raise_mux_no_inputs ()
+    | 1 -> List.hd_exn l
+    | _ -> Prims.mux sel l
+  ;;
+
+  let mux_strict sel l =
+    let number_of_data_elements = List.length l in
+    (match number_of_data_elements with
+     | 0 | 1 -> raise_mux_too_few_inputs number_of_data_elements
+     | _ ->
+       if 1 lsl width sel <> number_of_data_elements
+       then raise_mux_not_exact (width sel) number_of_data_elements);
+    mux sel l
   ;;
 
   let mux2 sel a b =
-    assert_width_one sel "[mux] got select argument that is not one bit";
+    assert_width_one sel "[mux2] got select argument that is not one bit";
     mux sel [ b; a ]
   ;;
 
-  let mux_init sel n ~f = mux sel (Array.to_list (Array.init n ~f))
+  let mux_init sel n ~f = mux sel (List.init n ~f)
+
+  let cases ~default select cases =
+    if List.length cases = 0 then raise_s [%message "[cases] no cases specified]"];
+    assert_widths_same "cases" (default :: List.map cases ~f:snd);
+    List.iter cases ~f:(fun (match_width, _) ->
+      if width match_width <> width select
+      then raise_s [%message "[cases] match width is not equal to select width"]);
+    Prims.cases ~default select cases
+  ;;
 
   (* logical *)
   let ( &: ) a b =
@@ -476,9 +633,9 @@ module Make (Prims : Primitives) = struct
   ;;
 
   let ( ~: ) = Prims.( ~: )
-  let ( &:. ) a b = op_int_right ( &: ) a b
-  let ( |:. ) a b = op_int_right ( |: ) a b
-  let ( ^:. ) a b = op_int_right ( ^: ) a b
+  let ( &:. ), ( &+. ) = op_int_right "and" ( &: ) ( &: )
+  let ( |:. ), ( |+. ) = op_int_right "or" ( |: ) ( |: )
+  let ( ^:. ), ( ^+. ) = op_int_right "xor" ( ^: ) ( ^: )
 
   (* arithmetic *)
   let ( +: ) a b =
@@ -491,8 +648,8 @@ module Make (Prims : Primitives) = struct
     Prims.( -: ) a b
   ;;
 
-  let ( +:. ) a b = op_int_right ( +: ) a b
-  let ( -:. ) a b = op_int_right ( -: ) a b
+  let ( +:. ), ( ++. ) = op_int_right "add" ( +: ) ( +: )
+  let ( -:. ), ( -+. ) = op_int_right "sub" ( -: ) ( -: )
   let negate a = zero (width a) -: a
   let ( *: ) = Prims.( *: )
   let ( *+ ) = Prims.( *+ )
@@ -538,28 +695,25 @@ module Make (Prims : Primitives) = struct
     if width a = 1 then ~:(a <+ b) else f a >=: f b
   ;;
 
-  let ( ==:. ) a b = op_int_right ( ==: ) a b
-  let ( <>:. ) a b = op_int_right ( <>: ) a b
-  let ( <:. ) a b = op_int_right ( <: ) a b
-  let ( >:. ) a b = op_int_right ( >: ) a b
-  let ( <=:. ) a b = op_int_right ( <=: ) a b
-  let ( >=:. ) a b = op_int_right ( >=: ) a b
-  let ( <+. ) a b = op_int_right ( <+ ) a b
-  let ( >+. ) a b = op_int_right ( >+ ) a b
-  let ( <=+. ) a b = op_int_right ( <=+ ) a b
-  let ( >=+. ) a b = op_int_right ( >=+ ) a b
+  let ( ==:. ), ( ==+. ) = op_int_right "equals" ( ==: ) ( ==: )
+  let ( <>:. ), ( <>+. ) = op_int_right "not equals" ( <>: ) ( <>: )
+  let ( <:. ), ( <+. ) = op_int_right "less than" ( <: ) ( <+ )
+  let ( >:. ), ( >+. ) = op_int_right "greater than" ( >: ) ( >+ )
+  let ( <=:. ), ( <=+. ) = op_int_right "less than or equal" ( <=: ) ( <=+ )
+  let ( >=:. ), ( >=+. ) = op_int_right "greater than or equal" ( >=: ) ( >=+ )
 
   (* propositional logic implication *)
   let ( -->: ) a b = ~:a |: b
   let to_string a = Prims.to_string a
-  let to_int a = to_constant a |> Constant.to_int
+  let to_int_trunc a = to_constant a |> Constant.to_int
+  let to_int = to_int_trunc
   let to_bstr a = to_constant a |> Constant.to_binary_string
   let sexp_of_t = Prims.sexp_of_t
-  let bits_lsb s = List.init (width s) ~f:(bit s)
+  let bits_lsb s = List.init (width s) ~f:(fun pos -> s.:(pos))
   let bits_msb s = bits_lsb s |> List.rev
   let to_array b = Array.of_list (bits_lsb b)
   let of_array l = concat_lsb (Array.to_list l)
-  let to_z b = to_constant b |> Constant.to_z
+  let to_bigint b = to_constant b |> Constant.to_bigint
   let of_bool b = if b then vdd else gnd
 
   (* {[
@@ -571,30 +725,57 @@ module Make (Prims : Primitives) = struct
          else concat [ s; repeat s (n-1) ]
      ]} *)
 
+  let[@cold] raise_repeat_negative_times () =
+    raise_s
+      [%message.omit_nil
+        "Cannot [repeat] negative times" ~loc:(Caller_id.get () : Caller_id.t option)]
+  ;;
+
+  let[@cold] raise_repeat_zero_times () =
+    raise_s
+      [%message.omit_nil
+        "Cannot [repeat] zero times" ~loc:(Caller_id.get () : Caller_id.t option)]
+  ;;
+
+  let[@cold] raise_repeat_empty_signal () =
+    raise_s
+      [%message.omit_nil
+        "Cannot [repeat] empty signal" ~loc:(Caller_id.get () : Caller_id.t option)]
+  ;;
+
   (* a smarter repeat function which generates log2 as much code *)
-  let repeat s n =
-    match n with
-    | 0 -> empty
-    | 1 -> s
-    | _ ->
-      let rec build pwr rep_s res_s n =
-        if n = 0
-        then res_s
-        else if pwr land n <> 0
-        then build (pwr * 2) (rep_s @: rep_s) (concat_msb_e [ rep_s; res_s ]) (n - pwr)
-        else build (pwr * 2) (rep_s @: rep_s) res_s n
-      in
-      build 1 s empty n
+  let repeat s ~count:n =
+    if is_empty s
+    then raise_repeat_empty_signal ()
+    else (
+      match n with
+      | _ when n < 0 -> raise_repeat_negative_times ()
+      | 0 -> raise_repeat_zero_times ()
+      | 1 -> s
+      | n ->
+        let cat t s =
+          match t, s with
+          | t, None -> Some t
+          | t, Some s -> Some (t @: s)
+        in
+        let rec build pwr rep_s res_s n =
+          if n = 0
+          then Option.value_exn res_s
+          else if pwr land n <> 0
+          then build (pwr * 2) (rep_s @: rep_s) (cat rep_s res_s) (n - pwr)
+          else build (pwr * 2) (rep_s @: rep_s) res_s n
+        in
+        build 1 s None n)
   ;;
 
   let split_in_half_msb ?msbs s =
     let msbs = Option.value msbs ~default:((width s + 1) / 2) in
-    sel_top s msbs, drop_top s msbs
+    sel_top s ~width:msbs, drop_top s ~width:msbs
   ;;
 
   let split_in_half_lsb ?lsbs s =
     let lsbs = Option.value lsbs ~default:((width s + 1) / 2) in
-    drop_bottom s lsbs, sel_bottom s lsbs
+    drop_bottom s ~width:lsbs, sel_bottom s ~width:lsbs
   ;;
 
   let[@cold] raise_split_empty_input () =
@@ -628,7 +809,7 @@ module Make (Prims : Primitives) = struct
       if width t < part_width && exact then raise_split_inexact_split t_in part_width t;
       if width t <= part_width
       then [ t ]
-      else sel t part_width :: split (drop t part_width)
+      else sel t ~width:part_width :: split (drop t ~width:part_width)
     in
     split t_in
   ;;
@@ -657,86 +838,112 @@ module Make (Prims : Primitives) = struct
           ~loc:(Caller_id.get () : Caller_id.t option)]
   ;;
 
-  let sll a shift =
+  let sll a ~by:shift =
     if shift < 0 then raise_shift_negative "[sll]" shift;
     if shift = 0
     then a
     else if shift >= width a
     then zero (width a)
-    else concat_msb [ select a (width a - 1 - shift) 0; zero shift ]
+    else concat_msb [ select a ~high:(width a - 1 - shift) ~low:0; zero shift ]
   ;;
 
-  let srl a shift =
+  let srl a ~by:shift =
     if shift < 0 then raise_shift_negative "[srl]" shift;
     if shift = 0
     then a
     else if shift >= width a
     then zero (width a)
-    else concat_msb [ zero shift; select a (width a - 1) shift ]
+    else concat_msb [ zero shift; select a ~high:(width a - 1) ~low:shift ]
   ;;
 
-  let sra a shift =
+  let sra a ~by:shift =
     if shift < 0 then raise_shift_negative "[sra]" shift;
     if shift = 0
     then a
     else if shift >= width a
-    then repeat (msb a) (width a)
-    else concat_msb [ repeat (msb a) shift; select a (width a - 1) shift ]
+    then repeat (msb a) ~count:(width a)
+    else
+      concat_msb [ repeat (msb a) ~count:shift; select a ~high:(width a - 1) ~low:shift ]
   ;;
 
-  let rec rotl d shift =
+  let rec rotl d ~by:shift =
     let width = width d in
     if shift < 0
     then raise_shift_negative "[rotl]" shift
     else if shift = 0
     then d
     else if shift >= width
-    then rotl d (shift % width)
-    else select d (width - shift - 1) 0 @: select d (width - 1) (width - shift)
+    then rotl d ~by:(shift % width)
+    else
+      select d ~high:(width - shift - 1) ~low:0
+      @: select d ~high:(width - 1) ~low:(width - shift)
   ;;
 
-  let rec rotr d shift =
+  let rec rotr d ~by:shift =
     let width = width d in
     if shift < 0
     then raise_shift_negative "[rotr]" shift
     else if shift = 0
     then d
     else if shift >= width
-    then rotr d (shift % width)
-    else select d (shift - 1) 0 @: select d (width - 1) shift
+    then rotr d ~by:(shift % width)
+    else select d ~high:(shift - 1) ~low:0 @: select d ~high:(width - 1) ~low:shift
   ;;
 
-  let log_shift op a b =
+  let log_shift ~f:op a ~by:b =
     let rec sft a n =
       if n = width b
       then a
       else (
-        let s = mux2 (bit b n) (op a (1 lsl n)) a in
+        let s = mux2 b.:(n) (op a ~by:(1 lsl n)) a in
         sft s (n + 1))
     in
     sft a 0
   ;;
 
-  let uresize s w =
+  let uresize s ~width:w =
     let x = width s in
     if w = x
     then s
     else if w > x
-    then concat_msb [ repeat gnd (w - x); s ]
-    else select s (w - 1) 0
+    then concat_msb [ repeat gnd ~count:(w - x); s ]
+    else select s ~high:(w - 1) ~low:0
   ;;
 
-  let sresize s w =
+  let sresize s ~width:w =
     let x = width s in
     if w = x
     then s
     else if w > x
-    then concat_msb [ repeat (msb s) (w - x); s ]
-    else select s (w - 1) 0
+    then concat_msb [ repeat (msb s) ~count:(w - x); s ]
+    else select s ~high:(w - 1) ~low:0
   ;;
 
-  let ue s = uresize s (width s + 1)
-  let se s = sresize s (width s + 1)
+  let[@cold] raise_extend_tried_to_shrink op signal_width width =
+    raise_s
+      [%message.omit_nil
+        (op ^ " got a width smaller than the original signal width")
+          (signal_width : int)
+          (width : int)
+          ~loc:(Caller_id.get () : Caller_id.t option)]
+  ;;
+
+  let uextend s ~width:w =
+    let x = width s in
+    if w < x
+    then raise_extend_tried_to_shrink "[uextend]" x w
+    else (uresize [@inlined hint]) s ~width:w
+  ;;
+
+  let sextend s ~width:w =
+    let x = width s in
+    if w < x
+    then raise_extend_tried_to_shrink "[sextend]" x w
+    else (sresize [@inlined hint]) s ~width:w
+  ;;
+
+  let ue s = uresize s ~width:(width s + 1)
+  let se s = sresize s ~width:(width s + 1)
 
   let resize_list ~resize l =
     let w = List.fold l ~init:0 ~f:(fun w e -> max (width e) w) in
@@ -748,8 +955,6 @@ module Make (Prims : Primitives) = struct
     let a, b = resize a w, resize b w in
     f a b
   ;;
-
-  let to_sint a = to_int (sresize a Int.num_bits)
 
   let[@cold] raise_reduce_empty_list () =
     raise_s
@@ -782,7 +987,7 @@ module Make (Prims : Primitives) = struct
     then raise_mod_counter_limit max counter_max_value
     else if counter_max_value = max
     then c +: one w
-    else mux2 (c ==: of_int ~width:w max) (zero w) (c +: one w)
+    else mux2 (c ==: of_int_trunc ~width:w max) (zero w) (c +: one w)
   ;;
 
   let compute_arity ~steps num_leaves =
@@ -825,15 +1030,8 @@ module Make (Prims : Primitives) = struct
 
   let rec tree ~arity ~f l =
     if arity <= 1 then raise_tree_invalid_arity ();
-    let split l n =
-      let lh, ll, _ =
-        List.fold l ~init:([], [], 0) ~f:(fun (l0, l1, m) e ->
-          if m < n then e :: l0, l1, m + 1 else l0, e :: l1, m + 1)
-      in
-      List.rev lh, List.rev ll
-    in
     let rec t0 l =
-      let l0, l1 = split l arity in
+      let l0, l1 = List.split_n l arity in
       if List.is_empty l1 then [ f l0 ] else f l0 :: t0 l1
     in
     match l with
@@ -876,7 +1074,7 @@ module Make (Prims : Primitives) = struct
   ;;
 
   let onehot_select ?branching_factor (ts : t with_valid list) =
-    List.map ts ~f:(fun d -> sresize d.valid (width d.value) &: d.value)
+    List.map ts ~f:(fun d -> sresize d.valid ~width:(width d.value) &: d.value)
     |> tree_or_reduce_binary_operator ?branching_factor ~f:( |: )
   ;;
 
@@ -893,15 +1091,15 @@ module Make (Prims : Primitives) = struct
     tree_or_reduce_binary_operator
       ?branching_factor
       ~f:( +: )
-      (List.map (bits_msb t) ~f:(fun d -> uresize d result_width))
+      (List.map (bits_msb t) ~f:(fun d -> uresize d ~width:result_width))
   ;;
 
   let leading_zeros_of_bits_list ?branching_factor d =
     let result_width = num_bits_to_represent (List.length d) in
-    List.mapi d ~f:(fun i valid -> { valid; value = of_int ~width:result_width i })
+    List.mapi d ~f:(fun i valid -> { valid; value = of_int_trunc ~width:result_width i })
     |> priority_select_with_default
          ?branching_factor
-         ~default:(of_int ~width:result_width (List.length d))
+         ~default:(of_int_trunc ~width:result_width (List.length d))
   ;;
 
   let leading_ones ?branching_factor t =
@@ -935,7 +1133,9 @@ module Make (Prims : Primitives) = struct
     let leading_zeros = leading_zeros t ?branching_factor in
     let result_width = max 1 (Int.ceil_log2 width) in
     { valid = t <>:. 0
-    ; value = of_int ~width:result_width (width - 1) -: uresize leading_zeros result_width
+    ; value =
+        of_int_trunc ~width:result_width (width - 1)
+        -: uresize leading_zeros ~width:result_width
     }
   ;;
 
@@ -986,7 +1186,7 @@ module Make (Prims : Primitives) = struct
     then raise_s [%message "[binary_to_gray] width < 1"]
     else if width b = 1
     then b
-    else b ^: srl b 1
+    else b ^: srl b ~by:1
   ;;
 
   let gray_to_binary b =
@@ -995,13 +1195,15 @@ module Make (Prims : Primitives) = struct
     else if width b = 1
     then b
     else (
-      let ue x = uresize x (width b) in
+      let ue x = uresize x ~width:(width b) in
       let rec f b mask =
         let b = b ^: ue mask in
         if width mask = 1 then b else f b (msbs mask)
       in
       f b (msbs b))
   ;;
+
+  let gray_increment g ~by = binary_to_gray (gray_to_binary g +:. by)
 
   let[@cold] raise_of_decimal_string_empty_string () =
     raise_s
@@ -1014,7 +1216,7 @@ module Make (Prims : Primitives) = struct
   let of_decimal_string ~width v =
     if String.is_empty v
     then raise_of_decimal_string_empty_string ()
-    else of_z ~width (Zarith.Z.of_string v)
+    else of_bigint ~width (Bigint.of_string v)
   ;;
 
   let[@cold] raise_of_verilog_format_missing_tick s =
@@ -1113,29 +1315,229 @@ module Make (Prims : Primitives) = struct
 
   let rec random ~width =
     if width <= 16
-    then of_int ~width (Random.int (1 lsl width))
-    else of_int ~width:16 (Random.int (1 lsl 16)) @: random ~width:(width - 16)
+    then of_int_trunc ~width (Random.int (1 lsl width))
+    else of_int_trunc ~width:16 (Random.int (1 lsl 16)) @: random ~width:(width - 16)
   ;;
-
-  let to_int32 c = to_constant c |> Constant.to_int64 |> Int64.to_int32_trunc
-  let to_sint32 c = sresize c Int32.num_bits |> to_constant |> Constant.to_int32
-  let to_int64 c = to_constant c |> Constant.to_int64
-  let to_sint64 c = sresize c Int64.num_bits |> to_constant |> Constant.to_int64
 
   let to_bool c =
     if width c <> 1
     then raise_s [%message "Cannot convert a multi-bit value to a bool" (c : t)];
-    to_int c <> 0
+    to_int_trunc c <> 0
+  ;;
+
+  let rec to_signed ~num_bits ~to_int_type_trunc t =
+    if width t > num_bits
+    then (
+      let top = drop_bottom t ~width:(num_bits - 1) in
+      if to_bool (top ==+. -1) || to_bool (top ==:. 0)
+      then to_signed ~num_bits ~to_int_type_trunc (sresize t ~width:num_bits)
+      else raise_s [%message "Failed to convert value to signed integer type"])
+    else to_int_type_trunc (sresize t ~width:num_bits)
+  ;;
+
+  let rec to_unsigned ~num_bits ~to_int_type_trunc t =
+    if width t > num_bits
+    then (
+      let top = drop_bottom t ~width:num_bits in
+      if to_bool (top ==:. 0)
+      then to_unsigned ~num_bits ~to_int_type_trunc (uresize t ~width:num_bits)
+      else raise_s [%message "Failed to convert value to unsigned integer type"])
+    else to_int_type_trunc t
+  ;;
+
+  let to_signed_int = to_signed ~num_bits:Int.num_bits ~to_int_type_trunc:to_int_trunc
+
+  let to_unsigned_int =
+    to_unsigned ~num_bits:(Int.num_bits - 1) ~to_int_type_trunc:to_int_trunc
+  ;;
+
+  let to_int32_trunc c = to_constant c |> Constant.to_int64 |> Int64.to_int32_trunc
+  let to_int32 = to_int32_trunc
+
+  let to_signed_int32 =
+    to_signed ~num_bits:Int32.num_bits ~to_int_type_trunc:to_int32_trunc
+  ;;
+
+  let to_unsigned_int32 =
+    to_unsigned ~num_bits:(Int32.num_bits - 1) ~to_int_type_trunc:to_int32_trunc
+  ;;
+
+  let to_int64_trunc c = to_constant c |> Constant.to_int64
+  let to_int64 = to_int64_trunc
+
+  let to_signed_int64 =
+    to_signed ~num_bits:Int64.num_bits ~to_int_type_trunc:to_int64_trunc
+  ;;
+
+  let to_unsigned_int64 =
+    to_unsigned ~num_bits:(Int64.num_bits - 1) ~to_int_type_trunc:to_int64_trunc
   ;;
 
   let to_char x =
     let actual_width = width x in
     if actual_width <> 8
     then raise_s [%message "[to_char] signal must be 8 bits wide" (actual_width : int)];
-    Char.of_int_exn (to_int x)
+    Char.of_int_exn (to_int_trunc x)
   ;;
 
+  module With_zero_width = struct
+    type non_zero_width = t [@@deriving sexp_of]
+    type t = non_zero_width option [@@deriving sexp_of]
+
+    let of_non_zero_width t =
+      if is_empty t
+      then raise_s [%message "[With_zero_width.of_non_zero_width] empty is not allowed"];
+      Some t
+    ;;
+
+    let to_non_zero_width ?default t =
+      match default, t with
+      | None, None ->
+        raise_s [%message "[With_zero_width.to_non_zero_width] cannot convert 0 width"]
+      | Some default, None -> default
+      | (None | Some _), Some t -> t
+    ;;
+
+    let zero_width = None
+
+    let[@cold] raise_const_width_less_than_zero m requested_width =
+      raise_s
+        [%message
+          (m ^ " requires width greater than or equal to 0") (requested_width : int)]
+    ;;
+
+    let zero = function
+      | 0 -> None
+      | x when x < 0 -> raise_const_width_less_than_zero "[zero]" x
+      | x -> Some (zero x)
+    ;;
+
+    let one = function
+      | 0 -> None
+      | x when x < 0 -> raise_const_width_less_than_zero "[one]" x
+      | x -> Some (one x)
+    ;;
+
+    let ones = function
+      | 0 -> None
+      | x when x < 0 -> raise_const_width_less_than_zero "[ones]" x
+      | x -> Some (ones x)
+    ;;
+
+    let concat_msb t =
+      match List.filter_opt t with
+      | [] -> None
+      | l -> Some (concat_msb l)
+    ;;
+
+    let concat_lsb t =
+      match List.filter_opt t with
+      | [] -> None
+      | l -> Some (concat_lsb l)
+    ;;
+
+    let select t ~high:hi ~low:lo =
+      match t with
+      | None ->
+        raise_s
+          [%message
+            "Cannot select a non-zero width into zero width signal" (hi : int) (lo : int)]
+      | Some t ->
+        if hi - lo = -1
+        then
+          (* zero width result. Ensure the indices are within bounds. We allow selection 0
+             bits below or above the given signal. So one of lo or hi should be within the
+             signal. *)
+          if lo < 0 || lo > width t
+          then
+            raise_s
+              [%message
+                "[With_zero_width.select] indices are out of bound" (hi : int) (lo : int)]
+          else None
+        else Some (select t ~high:hi ~low:lo)
+    ;;
+
+    let lsbs = function
+      | None -> raise_s [%message "cannot take lsbs of zero width signal"]
+      | Some t when width t = 1 -> None
+      | Some t -> Some (lsbs t)
+    ;;
+
+    let msbs = function
+      | None -> raise_s [%message "cannot take msbs of zero width signal"]
+      | Some t when width t = 1 -> None
+      | Some t -> Some (msbs t)
+    ;;
+
+    let drop_bottom t ~width:n =
+      match t, n with
+      | None, 0 -> None
+      | None, _ ->
+        raise_s
+          [%message
+            "Cannot [drop_bottom] non-zero bits from a zero width signal" (n : int)]
+      | Some t, n when width t = n -> None
+      | Some t, _ -> Some (drop_bottom t ~width:n)
+    ;;
+
+    let drop_top t ~width:n =
+      match t, n with
+      | None, 0 -> None
+      | None, _ ->
+        raise_s
+          [%message "Cannot [drop_top] non-zero bits from a zero width signal" (n : int)]
+      | Some t, n when width t = n -> None
+      | Some t, _ -> Some (drop_top t ~width:n)
+    ;;
+
+    let sel_bottom t ~width:n =
+      match t, n with
+      | _, 0 -> None
+      | None, _ ->
+        raise_s
+          [%message
+            "Cannot [sel_bottom] non-zero bits from a zero width signal" (n : int)]
+      | Some t, _ -> Some (sel_bottom t ~width:n)
+    ;;
+
+    let sel_top t ~width:n =
+      match t, n with
+      | _, 0 -> None
+      | None, _ ->
+        raise_s
+          [%message "Cannot [sel_top] non-zero bits from a zero width signal" (n : int)]
+      | Some t, _ -> Some (sel_top t ~width:n)
+    ;;
+
+    let repeat t ~count:n =
+      match t, n with
+      | None, _ -> None
+      | _, 0 -> None
+      | Some t, n -> Some (repeat t ~count:n)
+    ;;
+
+    let raise_too_many_mux_inputs () =
+      raise_s
+        [%message
+          "[With_zero_width.mux] select is 0 width but there is more than 1 input"]
+    ;;
+
+    let mux sel l =
+      match sel with
+      | None ->
+        (match l with
+         | [] -> raise_mux_no_inputs ()
+         | [ h ] -> h
+         | _ -> raise_too_many_mux_inputs ())
+      | Some sel -> mux sel l
+    ;;
+  end
+
   module type Typed_math = Typed_math with type t := t
+
+  let any_bit_set t = if width t = 1 then t else t <>:. 0
+  let all_bits_set t = if width t = 1 then t else t ==+. -1
+  let no_bits_set t = if width t = 1 then ~:t else t ==:. 0
 
   (* General arithmetic on unsigned signals.  Operands and results are resized to fit a
      appropriate. *)
@@ -1144,7 +1546,7 @@ module Make (Prims : Primitives) = struct
 
     let of_signal s = s
     let to_signal s = s
-    let resize s i = uresize s i
+    let resize s i = uresize s ~width:i
 
     let re size op a b =
       let wa, wb = width a, width b in
@@ -1171,7 +1573,7 @@ module Make (Prims : Primitives) = struct
 
     let of_signal s = s
     let to_signal s = s
-    let resize s i = sresize s i
+    let resize s i = sresize s ~width:i
 
     let re size op a b =
       let wa, wb = width a, width b in
@@ -1195,4 +1597,8 @@ module Make (Prims : Primitives) = struct
 
   module Uop = Unsigned
   module Sop = Signed
+end
+
+module Expert = struct
+  module Gen_cases_from_mux = Gen_cases_from_mux
 end

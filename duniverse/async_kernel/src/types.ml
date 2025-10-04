@@ -76,7 +76,7 @@ end =
 and Monitor : sig
   type t =
     { name : Info.t
-    ; here : Source_code_position.t option
+    ; here : Source_code_position.t
     ; id : int
     ; mutable next_error : exn Ivar.t
     ; mutable handlers_for_all_errors : (Execution_context.t * (exn -> unit)) Bag.t
@@ -107,8 +107,8 @@ module Bvar : sig
   type ('a, -'permission) t
 
   (** [repr] exists so that we may hide the implementation of a [Bvar.t], and then add a
-      phantom type to it upstream.  Without this, the phantom type variable would allow
-      for anything to be coerced in and out, since it is unused. *)
+      phantom type to it upstream. Without this, the phantom type variable would allow for
+      anything to be coerced in and out, since it is unused. *)
   type 'a repr =
     { mutable has_any_waiters : bool
     ; mutable ivar : 'a Ivar.t
@@ -155,7 +155,14 @@ end =
   Event
 
 and External_job : sig
-  type t = T : Execution_context.t * ('a -> unit) * 'a -> t
+  type 'a inner =
+    { execution_context : Execution_context.t
+    ; f : 'a -> unit
+    ; a : 'a
+    }
+
+  type t' = T : 'a inner -> t' [@@unboxed]
+  type t : value mod contended portable = t' Capsule.Initial.Data.t
 end =
   External_job
 
@@ -205,7 +212,7 @@ and Scheduler : sig
     ; normal_priority_jobs : Job_queue.t
     ; low_priority_jobs : Job_queue.t
     ; very_low_priority_workers : Very_low_priority_worker.t Deque.t
-    ; mutable main_execution_context : Execution_context.t
+    ; main_execution_context : Execution_context.t
     ; mutable current_execution_context : Execution_context.t
     ; mutable uncaught_exn : (Exn.t * Sexp.t) option
     ; mutable cycle_count : int
@@ -217,10 +224,11 @@ and Scheduler : sig
     ; run_every_cycle_end_state : (Cycle_hook_handle.t, Cycle_hook.t) Hashtbl.t
     ; mutable last_cycle_time : Time_ns.Span.t
     ; mutable last_cycle_num_jobs : int
+    ; job_infos_for_cycle : Job_infos_for_cycle.t
     ; mutable total_cycle_time : Time_ns.Span.t
     ; mutable time_source : read_write Time_source.t1
-    ; external_jobs : External_job.t Thread_safe_queue.t
-    ; mutable thread_safe_external_job_hook : unit -> unit
+    ; external_jobs : External_job.t Mpsc_queue.t
+    ; thread_safe_external_job_hook : (unit -> unit) Atomic.t
     ; mutable job_queued_hook : (Priority.t -> unit) option
     ; mutable event_added_hook : (Time_ns.t -> unit) option
     ; mutable yield : (unit, read_write) Bvar.t
@@ -228,6 +236,7 @@ and Scheduler : sig
     ; mutable check_invariants : bool
     ; mutable max_num_jobs_per_priority_per_cycle : Max_num_jobs_per_priority_per_cycle.t
     ; mutable record_backtraces : bool
+    ; mutable reset_in_forked_process : bool
     }
 end =
   Scheduler

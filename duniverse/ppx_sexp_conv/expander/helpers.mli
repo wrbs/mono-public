@@ -1,4 +1,4 @@
-open! Base
+open! Stdppx
 open! Ppxlib
 
 (** Constructs a branch of a [match] or [function] expression with no guard. *)
@@ -12,8 +12,10 @@ val constrained_function_binding
   :  location (** location to use for the binding *)
   -> type_declaration (** type declaration used to derive the function *)
   -> core_type (** type of the function *)
-  -> tps:string loc list (** names of type parameters in the declaration *)
+  -> tps:(string loc * Ppxlib_jane.Shim.jkind_annotation option) list
+       (** names and jkinds of type parameters in the declaration *)
   -> func_name:string (** name to bind the function to *)
+  -> portable:bool (** Whether the function should be marked as portable. *)
   -> expression (** expression representing the function *)
   -> value_binding
 
@@ -38,4 +40,4 @@ val is_value_expression : expression -> bool
     attribute. *)
 val really_recursive_respecting_opaque : rec_flag -> type_declaration list -> rec_flag
 
-val strip_attributes : Ast_traverse.map
+val strip_attributes : Ppxlib_jane.Ast_traverse.map

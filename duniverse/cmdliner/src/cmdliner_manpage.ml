@@ -1,6 +1,6 @@
 (*---------------------------------------------------------------------------
    Copyright (c) 2011 The cmdliner programmers. All rights reserved.
-   Distributed under the ISC license, see terms at the end of the file.
+   SPDX-License-Identifier: ISC
   ---------------------------------------------------------------------------*)
 
 (* Manpages *)
@@ -30,7 +30,7 @@ let s_exit_status_intro = `P "$(iname) exits with:"
 
 let s_environment = "ENVIRONMENT"
 let s_environment_intro =
-  `P "These environment variables affect the execution of $(tname):"
+  `P "These environment variables affect the execution of $(iname):"
 
 let s_files = "FILES"
 let s_examples = "EXAMPLES"
@@ -444,12 +444,17 @@ let tmp_file_for_pager () =
   with Sys_error _ -> None
 
 let find_cmd cmds =
-  let test, null = match Sys.os_type with
-  | "Win32" -> "where", " NUL"
-  | _ -> "command -v", "/dev/null"
+  let find_win32 (cmd, _args) =
+    (* `where` does not support full path lookups *)
+    if String.equal (Filename.basename cmd) cmd
+    then (Sys.command (strf "where %s 1> NUL 2> NUL" cmd) = 0)
+    else Sys.file_exists cmd
   in
-  let cmd (c, _) = Sys.command (strf "%s %s 1>%s 2>%s" test c null null) = 0 in
-  try Some (List.find cmd cmds) with Not_found -> None
+  let find_posix (cmd, _args) =
+    Sys.command (strf "command -v %s 1>/dev/null 2>/dev/null" cmd) = 0
+  in
+  let find = if Sys.win32 then find_win32 else find_posix in
+  try Some (List.find find cmds) with Not_found -> None
 
 let pp_to_pager print ppf v =
   let pager =
@@ -505,29 +510,18 @@ let pp_to_pager print ppf v =
 type format = [ `Auto | `Pager | `Plain | `Groff ]
 
 let rec print
-    ?(errs = Format.err_formatter)
-    ?(subst = fun x -> None) fmt ppf page =
+    ?(errs = Format.err_formatter) ?(subst = fun x -> None) fmt ppf page
+  =
   match fmt with
   | `Pager -> pp_to_pager (print ~errs ~subst) ppf page
   | `Plain -> pp_plain_page ~errs subst ppf page
   | `Groff -> pp_groff_page ~errs subst ppf page
   | `Auto ->
-      match try (Some (Sys.getenv "TERM")) with Not_found -> None with
-      | None | Some "dumb" -> print ~errs ~subst `Plain ppf page
-      | Some _ -> print ~errs ~subst `Pager ppf page
-
-(*---------------------------------------------------------------------------
-   Copyright (c) 2011 The cmdliner programmers
-
-   Permission to use, copy, modify, and/or distribute this software for any
-   purpose with or without fee is hereby granted, provided that the above
-   copyright notice and this permission notice appear in all copies.
-
-   THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-   WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-   MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-   ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-   WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-   ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-  ---------------------------------------------------------------------------*)
+      let fmt =
+        match Sys.getenv "TERM" with
+        | exception Not_found when Sys.win32 -> `Pager
+        | exception Not_found -> `Plain
+        | "dumb" -> `Plain
+        | _ -> `Pager
+      in
+      print ~errs ~subst fmt ppf page

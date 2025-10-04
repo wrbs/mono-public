@@ -1,23 +1,15 @@
 open! Import
-include Array0
+include Array_intf.Definitions
+module Array = Array0
+include Array
 
-type 'a t = 'a array [@@deriving_inline compare ~localize, globalize, sexp, sexp_grammar]
+type ('a : any_non_null) t = 'a array
 
-let compare__local : 'a. ('a -> 'a -> int) -> 'a t -> 'a t -> int = compare_array__local
-let compare : 'a. ('a -> 'a -> int) -> 'a t -> 'a t -> int = compare_array
+[%%rederive.portable
+  type nonrec 'a t = 'a array
+  [@@deriving compare ~localize, globalize, sexp ~localize, sexp_grammar]]
 
-let globalize : 'a. ('a -> 'a) -> 'a t -> 'a t =
-  fun (type a__009_) : ((a__009_ -> a__009_) -> a__009_ t -> a__009_ t) -> globalize_array
-;;
-
-let t_of_sexp : 'a. (Sexplib0.Sexp.t -> 'a) -> Sexplib0.Sexp.t -> 'a t = array_of_sexp
-let sexp_of_t : 'a. ('a -> Sexplib0.Sexp.t) -> 'a t -> Sexplib0.Sexp.t = sexp_of_array
-
-let t_sexp_grammar : 'a. 'a Sexplib0.Sexp_grammar.t -> 'a t Sexplib0.Sexp_grammar.t =
-  fun _'a_sexp_grammar -> array_sexp_grammar _'a_sexp_grammar
-;;
-
-[@@@end]
+[@@@warning "-incompatible-with-upstream"]
 
 (* This module implements a new in-place, constant heap sorting algorithm to replace the
    one used by the standard libraries.  Its only purpose is to be faster (hopefully
@@ -47,13 +39,14 @@ let t_sexp_grammar : 'a. 'a Sexplib0.Sexp_grammar.t -> 'a t Sexplib0.Sexp_gramma
      Slides at http://www.cs.princeton.edu/~rs/talks/QuicksortIsOptimal.pdf
    - http://www.sorting-algorithms.com/quick-sort-3-way *)
 
-module Sorter (S : sig
-  type 'a t
+module%template.portable
+  [@kind k = (value, immediate, immediate64)] [@modality p] Sorter (S : sig
+    type ('a : k) t
 
-  val get : 'a t -> int -> 'a
-  val set : 'a t -> int -> 'a -> unit
-  val length : 'a t -> int
-end) =
+    val get : local_ 'a t -> int -> 'a
+    val set : local_ 'a t -> int -> 'a -> unit
+    val length : local_ 'a t -> int
+  end) =
 struct
   include S
 
@@ -63,10 +56,10 @@ struct
     set arr j tmp
   ;;
 
-  module type Sort = sig
+  module type Sort = sig @@ p
     val sort
-      :  'a t
-      -> compare:('a -> 'a -> int)
+      :  local_ 'a t
+      -> compare:local_ ('a -> 'a -> int)
       -> left:int (* leftmost index of sub-array to sort *)
       -> right:int (* rightmost index of sub-array to sort *)
       -> unit
@@ -146,12 +139,12 @@ struct
   end
 
   (* http://en.wikipedia.org/wiki/Introsort *)
-  module Intro_sort : sig
+  module Intro_sort : sig @@ p
     include Sort
 
     val five_element_sort
-      :  'a t
-      -> compare:('a -> 'a -> int)
+      :  local_ 'a t
+      -> compare:local_ ('a -> 'a -> int)
       -> int
       -> int
       -> int
@@ -159,7 +152,7 @@ struct
       -> int
       -> unit
   end = struct
-    let five_element_sort arr ~(compare : _ -> _ -> _) m1 m2 m3 m4 m5 =
+    let five_element_sort arr ~(local_ compare : _ -> _ -> _) m1 m2 m3 m4 m5 =
       let compare_and_swap i j =
         if compare (get arr i) (get arr j) > 0 then swap arr i j
       in
@@ -195,7 +188,7 @@ struct
          by itself
          To this end we look at the center 3 elements of the 5 and return pairs of equal
          elements or the widest range *)
-    let choose_pivots arr ~(compare : _ -> _ -> _) ~left ~right =
+    let choose_pivots arr ~(local_ compare : _ -> _ -> _) ~left ~right =
       let sixth = (right - left) / 6 in
       let m1 = left + sixth in
       let m2 = m1 + sixth in
@@ -213,7 +206,7 @@ struct
       else m2_val, m4_val, false
     ;;
 
-    let dual_pivot_partition arr ~(compare : _ -> _ -> _) ~left ~right =
+    let dual_pivot_partition arr ~(local_ compare : _ -> _ -> _) ~left ~right =
       let pivot1, pivot2, pivots_equal = choose_pivots arr ~compare ~left ~right in
       (* loop invariants:
          1.  left <= l < r <= right
@@ -283,7 +276,7 @@ struct
     ;;
   end
 
-  let sort ?pos ?len arr ~(compare : _ -> _ -> _) =
+  let sort ?pos ?len arr ~(local_ compare : _ -> _ -> _) =
     let pos, len =
       Ordered_collection_common.get_pos_len_exn () ?pos ?len ~total_length:(length arr)
     in
@@ -292,13 +285,14 @@ struct
 end
 [@@inline]
 
-module Sort = Sorter (struct
-  type nonrec 'a t = 'a t
+module%template [@kind k = (value, immediate, immediate64)] Sort =
+Sorter [@kind k] [@modality portable] (struct
+    type nonrec ('a : k) t = 'a t
 
-  let get = unsafe_get
-  let set = unsafe_set
-  let length = length
-end)
+    let get = unsafe_get
+    let set = unsafe_set
+    let length = length
+  end)
 
 let sort = Sort.sort
 let of_array t = t
@@ -328,6 +322,11 @@ let is_sorted_strictly t ~compare =
   done;
   !result
 ;;
+
+(* This implementation initializes the output only once, based on the primitive
+   [caml_array_sub]. Other approaches, like [init] or [map], first initialize with a fixed
+   value, then blit from the source. *)
+let copy t = sub t ~pos:0 ~len:(length t)
 
 let merge a1 a2 ~compare =
   let l1 = Array.length a1 in
@@ -364,14 +363,15 @@ let merge a1 a2 ~compare =
     merged)
 ;;
 
-let copy_matrix = map ~f:copy
+let copy_matrix tt = map ~f:copy tt
 
 let folding_map t ~init ~f =
   let acc = ref init in
   map t ~f:(fun x ->
     let new_acc, y = f !acc x in
     acc := new_acc;
-    y) [@nontail]
+    y)
+  [@nontail]
 ;;
 
 let fold_map t ~init ~f =
@@ -393,7 +393,7 @@ let[@inline always] extremal_element t ~compare ~keep_left_if =
   if is_empty t
   then None
   else (
-    let result = ref (unsafe_get t 0) in
+    let local_ result = ref (unsafe_get t 0) in
     for i = 1 to length t - 1 do
       let x = unsafe_get t i in
       result := Bool.select ((keep_left_if [@inlined]) (compare x !result)) x !result
@@ -419,12 +419,28 @@ let foldi t ~init ~f =
   !acc
 ;;
 
+let%template foldi_right (t @ local) ~(init @ m) ~(f @ local) =
+  (let rec (aux @ local) (t @ local) ~idx ~(acc @ m) ~(f @ local) =
+     (if idx < 0
+      then acc
+      else (
+        (* [unsafe_get] is safe, since [idx >= 0 && idx < Array.length t] *)
+        let acc = f idx (unsafe_get t idx) acc in
+        aux t ~idx:(idx - 1) ~acc ~f))
+     [@exclave_if_stack a]
+   in
+   aux t ~idx:(length t - 1) ~acc:init ~f [@nontail])
+  [@exclave_if_stack a]
+[@@alloc a @ m = (stack_local, heap_global)]
+;;
+
 let folding_mapi t ~init ~f =
   let acc = ref init in
   mapi t ~f:(fun i x ->
     let new_acc, y = f i !acc x in
     acc := new_acc;
-    y) [@nontail]
+    y)
+  [@nontail]
 ;;
 
 let fold_mapi t ~init ~f =
@@ -438,16 +454,16 @@ let fold_mapi t ~init ~f =
   !acc, result
 ;;
 
-let count t ~f =
-  let result = ref 0 in
+let count t ~(local_ f) =
+  let local_ result = ref 0 in
   for i = 0 to Array.length t - 1 do
     result := !result + (f (Array.unsafe_get t i) |> Bool.to_int)
   done;
   !result
 ;;
 
-let counti t ~f =
-  let result = ref 0 in
+let counti t ~(local_ f) =
+  let local_ result = ref 0 in
   for i = 0 to Array.length t - 1 do
     result := !result + (f i (Array.unsafe_get t i) |> Bool.to_int)
   done;
@@ -552,8 +568,8 @@ let filter_map t ~f = filter_mapi t ~f:(fun _i a -> f a) [@nontail]
 let filter_opt t = filter_map t ~f:Fn.id
 
 let raise_length_mismatch name n1 n2 =
-  invalid_argf "length mismatch in %s: %d <> %d" name n1 n2 ()
-  [@@cold] [@@inline never] [@@local never] [@@specialise never]
+  Printf.invalid_argf "length mismatch in %s: %d <> %d" name n1 n2 ()
+[@@cold]
 ;;
 
 let check_length2_exn name t1 t2 =
@@ -714,7 +730,8 @@ let find_map_exn =
   let not_found = Not_found_s (Atom "Array.find_map_exn: not found") in
   let find_map_exn t ~f =
     match find_map t ~f with
-    | None -> raise not_found
+    | None ->
+      raise (Portability_hacks.magic_uncontended__promise_deeply_immutable not_found)
     | Some x -> x
   in
   (* named to preserve symbol in compiled binary *)
@@ -740,7 +757,8 @@ let find_mapi_exn =
   let not_found = Not_found_s (Atom "Array.find_mapi_exn: not found") in
   let find_mapi_exn t ~f =
     match find_mapi t ~f with
-    | None -> raise not_found
+    | None ->
+      raise (Portability_hacks.magic_uncontended__promise_deeply_immutable not_found)
     | Some x -> x
   in
   (* named to preserve symbol in compiled binary *)
@@ -787,13 +805,13 @@ let reduce_exn t ~f =
 
 let permute = Array_permute.permute
 
-let random_element_exn ?(random_state = Random.State.default) t =
+let random_element_exn ?(random_state = Random.State.get_default ()) t =
   if is_empty t
   then failwith "Array.random_element_exn: empty array"
   else t.(Random.State.int random_state (length t))
 ;;
 
-let random_element ?(random_state = Random.State.default) t =
+let random_element ?(random_state = Random.State.get_default ()) t =
   try Some (random_element_exn ~random_state t) with
   | _ -> None
 ;;
@@ -851,7 +869,8 @@ let partitioni_tf t ~f =
 
 let partition_map t ~f = partition_mapi t ~f:(fun _ x -> f x) [@nontail]
 let partition_tf t ~f = partitioni_tf t ~f:(fun _ x -> f x) [@nontail]
-let last t = t.(length t - 1)
+let last_exn t = t.(length t - 1)
+let last = last_exn
 
 (* Convert to a sequence but does not attempt to protect against modification
    in the array. *)
@@ -898,32 +917,47 @@ let transpose_exn tt =
   | Some tt' -> tt'
 ;;
 
-include Binary_searchable.Make1 (struct
-  type nonrec 'a t = 'a t
+[@@@warning "-incompatible-with-upstream"]
 
-  let get = get
-  let length = length
-end)
+let%template[@kind
+              ki = (value, float64, bits32, bits64, word, immediate, immediate64)
+              , ko = (value, float64, bits32, bits64, word, immediate, immediate64)] map
+  t
+  ~f
+  =
+  (map [@kind ki ko]) t ~f
+;;
 
-include Blit.Make1 (struct
-  type nonrec 'a t = 'a t
+include%template Binary_searchable.Make1 [@modality portable] (struct
+    type nonrec 'a t = 'a t
 
-  let length = length
+    let get = get
+    let length = length
+  end)
 
-  let create_like ~len t =
-    if len = 0
-    then [||]
-    else (
-      assert (length t > 0);
-      create ~len t.(0))
-  ;;
+let blito ~src ?(src_pos = 0) ?(src_len = length src - src_pos) ~dst ?(dst_pos = 0) () =
+  blit ~src ~src_pos ~len:src_len ~dst ~dst_pos
+;;
 
-  let unsafe_blit = unsafe_blit
-end)
+let subo ?(pos = 0) ?len src =
+  sub
+    src
+    ~pos
+    ~len:
+      (match len with
+       | Some i -> i
+       | None -> length src - pos)
+;;
 
+let sub t ~pos ~len = sub t ~pos ~len
 let invariant invariant_a t = iter t ~f:invariant_a
 
 module Private = struct
-  module Sort = Sort
-  module Sorter = Sorter
+  module%template [@kind k = (value, immediate, immediate64)] Sort = Sort [@kind k]
+
+  module%template.portable
+    [@kind k = (value, immediate, immediate64)] [@modality p] Sorter =
+    Sorter
+    [@kind k]
+    [@modality p]
 end

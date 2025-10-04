@@ -1,4 +1,4 @@
-open Base
+open Stdppx
 open Ppxlib
 open Ast_builder.Default
 
@@ -197,10 +197,10 @@ let make_type_rigid ~type_name =
                  ())
             | _ -> ()
           in
-          match ty.ptyp_desc with
-          | Ptyp_var s ->
+          match Ppxlib_jane.Shim.Core_type_desc.of_parsetree ty.ptyp_desc with
+          | Ptyp_var (s, _) ->
             Ptyp_constr (Located.lident ~loc:ty.ptyp_loc (rigid_type_var ~type_name s), [])
-          | desc -> super#core_type_desc desc
+          | _ -> super#core_type_desc ty.ptyp_desc
         in
         { ty with ptyp_desc }
     end
@@ -218,7 +218,7 @@ let with_tuple loc (value : expr) xs (f : (expr * core_type) list -> Hsv_expr.t)
   let names = List.mapi ~f:(fun i lt -> Printf.sprintf "e%d" i, lt) xs in
   let pattern =
     let l = List.map ~f:(fun (n, (lbl, _)) -> lbl, pvar ~loc n) names in
-    Ppxlib_jane.Jane_syntax.Pattern.pat_of ~loc ~attrs:[] (Jpat_tuple (l, Closed))
+    Ppxlib_jane.Ast_builder.Default.ppat_tuple ~loc l Closed
   in
   let e = f (List.map ~f:(fun (n, (_lbl, t)) -> evar ~loc n, t) names) in
   let binding = value_binding ~loc ~pat:pattern ~expr:value in
@@ -254,7 +254,7 @@ and hash_fold_of_tuple ~loc tys value =
       elems1
       ~init:(Hsv_expr.identity ~loc)
       ~f:(fun (v, t) (result : Hsv_expr.t) ->
-      Hsv_expr.compose ~loc (hash_fold_of_ty t v) result))
+        Hsv_expr.compose ~loc (hash_fold_of_ty t v) result))
 
 and hash_variant ~loc row_fields value =
   let map row =
@@ -299,8 +299,12 @@ and branch_of_sum hsv ~loc cd =
   | Pcstr_tuple [] ->
     let pcnstr = pconstruct cd None in
     Hsv_expr.case ~guard:None ~lhs:pcnstr ~rhs:hsv
-  | Pcstr_tuple tps ->
-    let ids_ty = List.mapi tps ~f:(fun i ty -> Printf.sprintf "_a%d" i, ty) in
+  | Pcstr_tuple args ->
+    let ids_ty =
+      List.mapi args ~f:(fun i arg ->
+        let ty = Ppxlib_jane.Shim.Pcstr_tuple_arg.to_core_type arg in
+        Printf.sprintf "_a%d" i, ty)
+    in
     let lpatt = List.map ids_ty ~f:(fun (l, _ty) -> pvar ~loc l) |> ppat_tuple ~loc
     and body =
       List.fold_left ids_ty ~init:(Hsv_expr.identity ~loc) ~f:(fun expr (l, ty) ->
@@ -370,21 +374,16 @@ and hash_fold_of_ty ty value =
   if core_type_is_ignored ty
   then hash_ignore ~loc value
   else (
-    match Ppxlib_jane.Jane_syntax.Core_type.of_ast ty with
-    | Some (Jtyp_tuple fields, _attrs) -> hash_fold_of_tuple ~loc fields value
-    | Some (Jtyp_layout _, _) | None ->
-      (match ty.ptyp_desc with
-       | Ptyp_constr _ -> hash_applied ty value
-       | Ptyp_tuple tys ->
-         hash_fold_of_tuple ~loc (List.map ~f:(fun t -> None, t) tys) value
-       | Ptyp_var name ->
-         Hsv_expr.invoke_hash_fold_t ~loc ~hash_fold_t:(evar ~loc (tp_name name)) ~t:value
-       | Ptyp_arrow _ ->
-         Hsv_expr.compile_error ~loc "ppx_hash: functions can not be hashed."
-       | Ptyp_variant (row_fields, Closed, _) -> hash_variant ~loc row_fields value
-       | _ ->
-         let s = string_of_core_type ty in
-         Hsv_expr.compile_error ~loc (Printf.sprintf "ppx_hash: unsupported type: %s" s)))
+    match Ppxlib_jane.Shim.Core_type_desc.of_parsetree ty.ptyp_desc with
+    | Ptyp_constr _ -> hash_applied ty value
+    | Ptyp_tuple tys -> hash_fold_of_tuple ~loc tys value
+    | Ptyp_var (name, _) ->
+      Hsv_expr.invoke_hash_fold_t ~loc ~hash_fold_t:(evar ~loc (tp_name name)) ~t:value
+    | Ptyp_arrow _ -> Hsv_expr.compile_error ~loc "ppx_hash: functions can not be hashed."
+    | Ptyp_variant (row_fields, Closed, _) -> hash_variant ~loc row_fields value
+    | _ ->
+      let s = string_of_core_type ty in
+      Hsv_expr.compile_error ~loc (Printf.sprintf "ppx_hash: unsupported type: %s" s))
 
 and hash_fold_of_ty_fun ~type_constraint ty =
   let loc = { ty.ptyp_loc with loc_ghost = true } in
@@ -443,9 +442,8 @@ let hash_fold_of_abstract ~loc type_name value =
       failwith [%e estring ~loc str]]
 ;;
 
-(** this does not change behavior (keeps the expression side-effect if any),
-    but it can make the compiler happy when the expression occurs on the rhs
-    of an [let rec] binding. *)
+(** this does not change behavior (keeps the expression side-effect if any), but it can
+    make the compiler happy when the expression occurs on the rhs of an [let rec] binding. *)
 let eta_expand ~loc f =
   [%expr
     let func = [%e f] in
@@ -478,7 +476,7 @@ let hash_of_ty_fun ~special_case_simple_types ~type_constraint ty =
            [%e hsv_expr])]
 ;;
 
-let hash_structure_item_of_td td =
+let hash_structure_item_of_td td ~portable =
   let loc = td.ptype_loc in
   match td.ptype_params with
   | _ :: _ -> []
@@ -507,18 +505,25 @@ let hash_structure_item_of_td td =
                ; ptyp_desc = Ptyp_constr ({ loc; txt = Lident td.ptype_name.txt }, [])
                } )
        in
-       expected_scope, value_binding ~loc ~pat ~expr:(eta_expand ~loc expr))
+       ( expected_scope
+       , Ppxlib_jane.Ast_builder.Default.value_binding
+           ~loc
+           ~pat
+           ~expr:(eta_expand ~loc expr)
+           ~modes:(if portable then [ { loc; txt = Mode "portable" } ] else []) ))
     ]
 ;;
 
-let hash_fold_structure_item_of_td td ~rec_flag =
+let hash_fold_structure_item_of_td td ~rec_flag ~portable =
   let loc = { td.ptype_loc with loc_ghost = true } in
   let arg = "arg" in
   let body =
     let v = evar ~loc arg in
-    match td.ptype_kind with
+    match Ppxlib_jane.Shim.Type_kind.of_parsetree td.ptype_kind with
     | Ptype_variant cds -> hash_sum ~loc cds v
     | Ptype_record lds -> hash_fold_of_record ~loc lds v
+    | Ptype_record_unboxed_product _ ->
+      Hsv_expr.compile_error ~loc "ppx_hash: unboxed record types are not supported"
     | Ptype_open -> Hsv_expr.compile_error ~loc "ppx_hash: open types are not supported"
     | Ptype_abstract ->
       (match td.ptype_manifest with
@@ -558,7 +563,11 @@ let hash_fold_structure_item_of_td td ~rec_flag =
         ~init:(pexp_constraint ~loc expr (make_type_rigid ~type_name scheme)))
     else expr
   in
-  value_binding ~loc ~pat ~expr
+  Ppxlib_jane.Ast_builder.Default.value_binding
+    ~loc
+    ~pat
+    ~expr
+    ~modes:(if portable then [ { txt = Mode "portable"; loc } ] else [])
 ;;
 
 let pstr_value ~loc rec_flag bindings =
@@ -569,7 +578,7 @@ let pstr_value ~loc rec_flag bindings =
     [ pstr_value ~loc rec_flag nonempty_bindings ]
 ;;
 
-let str_type_decl ~loc ~path:_ (rec_flag, tds) =
+let str_type_decl ~loc ~path:_ (rec_flag, tds) ~portable =
   let tds = List.map tds ~f:name_type_params_in_td in
   let rec_flag =
     (object
@@ -585,8 +594,12 @@ let str_type_decl ~loc ~path:_ (rec_flag, tds) =
       #go
       ()
   in
-  let hash_fold_bindings = List.map ~f:(hash_fold_structure_item_of_td ~rec_flag) tds in
-  let hash_bindings = List.concat (List.map ~f:hash_structure_item_of_td tds) in
+  let hash_fold_bindings =
+    List.map ~f:(hash_fold_structure_item_of_td ~rec_flag ~portable) tds
+  in
+  let hash_bindings =
+    List.concat (List.map ~f:(hash_structure_item_of_td ~portable) tds)
+  in
   match rec_flag with
   | Recursive ->
     (* if we wanted to maximize the scope hygiene here this would be, in this order:
@@ -597,15 +610,17 @@ let str_type_decl ~loc ~path:_ (rec_flag, tds) =
     pstr_value ~loc Recursive (hash_fold_bindings @ List.map ~f:snd hash_bindings)
   | Nonrecursive ->
     let rely_on_hash_fold_t, use_rhs =
-      List.partition_map hash_bindings ~f:(function
-        | `uses_hash_fold_t_being_defined, binding -> First binding
-        | `uses_rhs, binding -> Second binding)
+      List.partition_map
+        (function
+          | `uses_hash_fold_t_being_defined, binding -> Left binding
+          | `uses_rhs, binding -> Right binding)
+        hash_bindings
     in
     pstr_value ~loc Nonrecursive (hash_fold_bindings @ use_rhs)
     @ pstr_value ~loc Nonrecursive rely_on_hash_fold_t
 ;;
 
-let mk_sig ~loc:_ ~path:_ (_rec_flag, tds) =
+let mk_sig ~loc:_ ~path:_ (_rec_flag, tds) ~portable =
   List.concat
     (List.map tds ~f:(fun td ->
        let monomorphic = List.is_empty td.ptype_params in
@@ -618,10 +633,11 @@ let mk_sig ~loc:_ ~path:_ (_rec_flag, tds) =
          let loc = td.ptype_loc in
          psig_value
            ~loc
-           (value_description
+           (Ppxlib_jane.Ast_builder.Default.value_description
               ~loc
               ~name:{ td.ptype_name with txt = name }
               ~type_
+              ~modalities:(if portable then [ Ppxlib_jane.Modality "portable" ] else [])
               ~prim:[])
        in
        List.concat
@@ -630,7 +646,7 @@ let mk_sig ~loc:_ ~path:_ (_rec_flag, tds) =
          ]))
 ;;
 
-let sig_type_decl ~loc ~path (rec_flag, tds) =
+let sig_type_decl ~loc ~path (rec_flag, tds) ~portable =
   match
     mk_named_sig
       ~loc
@@ -638,8 +654,14 @@ let sig_type_decl ~loc ~path (rec_flag, tds) =
       ~handle_polymorphic_variant:true
       tds
   with
-  | Some include_info -> [ psig_include ~loc include_info ]
-  | None -> mk_sig ~loc ~path (rec_flag, tds)
+  | Some include_info ->
+    [ Ppxlib_jane.Ast_builder.Default.psig_include
+        ~loc
+        ~modalities:
+          (if portable then [ Loc.make ~loc (Ppxlib_jane.Modality "portable") ] else [])
+        include_info
+    ]
+  | None -> mk_sig ~loc ~path (rec_flag, tds) ~portable
 ;;
 
 let hash_fold_core_type ty = hash_fold_of_ty_fun ~type_constraint:true ty

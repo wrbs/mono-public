@@ -15,8 +15,7 @@ let%expect_test "digest_bin_prot" =
     |}]
 ;;
 
-let%test_module "Md5.As_binary_string.V1" =
-  (module Stable_unit_test.Make (struct
+module%test [@name "Md5.As_binary_string.V1"] _ = Stable_unit_test.Make (struct
     include As_binary_string.Stable.V1
 
     let equal = [%compare.equal: t]
@@ -30,11 +29,9 @@ let%test_module "Md5.As_binary_string.V1" =
         , "\016\157\212\228a&\140\1284\245\200VN\021\\g\166" )
       ]
     ;;
-  end))
-;;
+  end)
 
-let%test_module "Md5.V1" =
-  (module Stable_unit_test.Make (struct
+module%test [@name "Md5.V1"] _ = Stable_unit_test.Make (struct
     include Stable.V1
 
     let equal = [%compare.equal: t]
@@ -48,8 +45,7 @@ let%test_module "Md5.V1" =
         , "\157\212\228a&\140\1284\245\200VN\021\\g\166" )
       ]
     ;;
-  end))
-;;
+  end)
 
 let%test_unit "Md5.digest_file_blocking" =
   let cwd = Stdlib.Sys.getcwd () in

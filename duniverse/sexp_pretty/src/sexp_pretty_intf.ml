@@ -16,7 +16,7 @@ module type S = sig
 
   val pp_buffer : Buffer.t writer
   val pp_out_channel : Stdlib.out_channel writer
-  val pp_blit : (string, unit) Blit.sub writer
+  val pp_blit : (string, unit) Blit.sub_global writer
 
   (** [pretty_string] needs to allocate. If you care about performance, using one of the
       [pp_*] functions above is advised. *)
@@ -53,5 +53,8 @@ module type Sexp_pretty = sig
     val of_sexp_or_comment : Config.t -> Sexplib.Sexp.With_layout.t_or_comment -> t
   end
 
-  val sexp_to_sexp_or_comment : Sexp.t -> Sexplib.Sexp.With_layout.t_or_comment
+  val sexp_to_sexp_or_comment
+    :  Config.t
+    -> Sexp.t
+    -> Sexplib.Sexp.With_layout.t_or_comment
 end

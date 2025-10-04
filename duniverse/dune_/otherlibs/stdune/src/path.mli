@@ -66,11 +66,14 @@ module Local : sig
   val split_first_component : t -> (Filename.t * t) option
   val explode : t -> Filename.t list
   val descendant : t -> of_:t -> t option
+
+  module Table : Hashtbl.S with type key = t
 end
 
 module External : sig
   include Path_intf.S
 
+  val root : t
   val initial_cwd : t
   val cwd : unit -> t
   val relative : t -> string -> t
@@ -228,6 +231,7 @@ module Table : sig
 end
 
 val equal : t -> t -> bool
+val as_outside_build_dir : t -> Outside_build_dir.t option
 val as_outside_build_dir_exn : t -> Outside_build_dir.t
 val destruct_build_dir : t -> [ `Inside of Build.t | `Outside of Outside_build_dir.t ]
 val outside_build_dir : Outside_build_dir.t -> t
@@ -313,9 +317,6 @@ val drop_optional_sandbox_root : t -> t
 (** Drop the "_build/blah" prefix if present, return [t] if it's a source file,
     otherwise fail. *)
 val drop_optional_build_context_src_exn : t -> Source.t
-
-val explode : t -> Filename.t list option
-val explode_exn : t -> Filename.t list
 
 (** The build directory *)
 val build_dir : t
@@ -412,24 +413,18 @@ val rename : t -> t -> unit
     you need to modify existing permissions in a non-trivial way. *)
 val chmod : t -> mode:int -> unit
 
-(** Attempts to resolve a symlink. Returns:
-
-    - [Ok path] with the resolved destination
-    - [Error Not_a_symlink] if the path isn't a symlink
-    - [Error Max_depth_exceeded] if the function reached the maximum symbolic
-      link depth
-    - [Error (Unix_error _)] with the underlying syscall error. *)
-val follow_symlink : t -> (t, Fpath.follow_symlink_error) result
-
 (** [drop_prefix_exn t ~prefix] drops the [prefix] from a path, including any
-    leftover `/` prefix. Raises a [Code_error.t] if the prefix wasn't found. *)
+    leftover directory separator prefix. Raises a [Code_error.t] if the prefix
+    wasn't found. *)
 val drop_prefix_exn : t -> prefix:t -> Local.t
 
 (** [drop_prefix t ~prefix] drops the [prefix] from a path, including any
-    leftover `/` prefix. Returns [None] if the prefix wasn't found. *)
+    leftover directory separator prefix. Returns [None] if the prefix wasn't
+    found. *)
 val drop_prefix : t -> prefix:t -> Local.t option
 
 val make_local_path : Local.t -> t
+val is_broken_symlink : t -> bool
 
 module Expert : sig
   (** Attempt to convert external paths to source/build paths. Don't use this

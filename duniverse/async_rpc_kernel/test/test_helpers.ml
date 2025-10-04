@@ -73,7 +73,10 @@ end
 
 let implementations =
   [ Rpc.Rpc.implement rpc (fun () payload -> return payload)
-  ; Rpc.One_way.implement one_way_rpc (fun () _message -> ())
+  ; Rpc.One_way.implement
+      one_way_rpc
+      (fun () _message -> ())
+      ~on_exception:Close_connection
   ; Rpc.Pipe_rpc.implement pipe_rpc (fun () _query ->
       Deferred.Or_error.return
         (Pipe.create_reader ~close_on_exception:true (fun writer ->
@@ -121,9 +124,10 @@ module Tap = struct
   let print_header t =
     t (fun buf ~pos ~len:_ ->
       Binio_printer_helper.parse_and_print
-        [%bin_shape:
-          Async_rpc_kernel.Async_rpc_kernel_private.Connection.For_testing.Header.t
-          Binio_printer_helper.With_length64.t]
+        [ [%bin_shape:
+            Async_rpc_kernel.Async_rpc_kernel_private.Connection.For_testing.Header.t
+              Binio_printer_helper.With_length64.t]
+        ]
         buf
         ~pos)
   ;;
@@ -138,12 +142,12 @@ module Tap = struct
   let message_shape bin_shape_payload =
     [%bin_shape:
       payload Binio_printer_helper.With_length.t
-      Async_rpc_kernel.Async_rpc_kernel_private.Protocol.Message.maybe_needs_length
-      Binio_printer_helper.With_length64.t]
+        Async_rpc_kernel.Async_rpc_kernel_private.Protocol.Message.maybe_needs_length
+        Binio_printer_helper.With_length64.t]
   ;;
 
-  let print_messages t payload_shape =
-    let message_shape = message_shape payload_shape in
+  let print_messages t payload_shapes =
+    let message_shapes = Nonempty_list.map payload_shapes ~f:message_shape in
     t (fun buf ~pos ~len ->
       let stop = pos + len in
       let rec loop pos =
@@ -151,7 +155,10 @@ module Tap = struct
         then ()
         else (
           let message_len = 8 + Bigstring.get_int64_le_exn buf ~pos in
-          Binio_printer_helper.parse_and_print message_shape buf ~pos;
+          Binio_printer_helper.parse_and_print
+            message_shapes
+            (Bigstring.sub_shared ~pos ~len:message_len buf)
+            ~pos:0;
           let next = pos + message_len in
           if next <> stop then print_endline "";
           loop next)
@@ -159,11 +166,11 @@ module Tap = struct
       loop pos)
   ;;
 
-  let print_messages_bidirectional payload_shape ~s_to_c ~c_to_s =
+  let print_messages_bidirectional payload_shapes ~s_to_c ~c_to_s =
     print_endline "---   client -> server:   ---";
-    print_messages c_to_s payload_shape;
+    print_messages c_to_s payload_shapes;
     print_endline "---   server -> client:   ---";
-    print_messages s_to_c payload_shape
+    print_messages s_to_c payload_shapes
   ;;
 end
 
@@ -226,13 +233,13 @@ let tap_server (serv : (Socket.Address.Inet.t, int) Tcp.Server.t) =
       ~on_handler_error:`Raise
       Tcp.Where_to_listen.of_port_chosen_by_os
       (fun (_addr : Socket.Address.Inet.t) from_client to_client ->
-      let tap_server_to_client, record_chunk_s2c = Tap.create () in
-      let tap_client_to_server, record_chunk_c2s = Tap.create () in
-      let%bind (_ : _ Socket.t), from_server, to_server = Tcp.connect upstream in
-      copy_and_tap ~source:from_client ~sink:to_server ~record_chunk:record_chunk_c2s;
-      copy_and_tap ~source:from_server ~sink:to_client ~record_chunk:record_chunk_s2c;
-      Queue.enqueue conns (tap_server_to_client, tap_client_to_server);
-      Writer.close_finished to_server)
+         let tap_server_to_client, record_chunk_s2c = Tap.create () in
+         let tap_client_to_server, record_chunk_c2s = Tap.create () in
+         let%bind (_ : _ Socket.t), from_server, to_server = Tcp.connect upstream in
+         copy_and_tap ~source:from_client ~sink:to_server ~record_chunk:record_chunk_c2s;
+         copy_and_tap ~source:from_server ~sink:to_client ~record_chunk:record_chunk_s2c;
+         Queue.enqueue conns (tap_server_to_client, tap_client_to_server);
+         Writer.close_finished to_server)
   in
   conns, server
 ;;
@@ -247,7 +254,10 @@ let with_circular_connection ?lift_implementation ~header ~f () =
       | None -> implementations
       | Some lift_implementation -> List.map implementations ~f:lift_implementation
     in
-    Rpc.Implementations.create_exn ~implementations ~on_unknown_rpc:`Raise
+    Rpc.Implementations.create_exn
+      ~implementations
+      ~on_unknown_rpc:`Raise
+      ~on_exception:Log_on_background_exn
   in
   let%bind conn =
     with_handshake_header header ~f:(fun () ->
@@ -266,14 +276,18 @@ let only_heartbeat_once_at_the_beginning =
     ()
 ;;
 
-let with_rpc_server_connection ~server_header ~client_header ~f =
+let with_rpc_server_connection ?provide_rpc_shapes () ~server_header ~client_header ~f =
   let server_ivar = Ivar.create () in
   let%bind server =
     with_handshake_header server_header ~f:(fun () ->
       Rpc.Connection.serve
+        ?provide_rpc_shapes
         ~heartbeat_config:only_heartbeat_once_at_the_beginning
         ~implementations:
-          (Rpc.Implementations.create_exn ~implementations ~on_unknown_rpc:`Raise)
+          (Rpc.Implementations.create_exn
+             ~implementations
+             ~on_unknown_rpc:`Raise
+             ~on_exception:Log_on_background_exn)
         ~initial_connection_state:(fun _ conn ->
           Ivar.fill_exn server_ivar conn;
           ())
@@ -301,4 +315,79 @@ let with_rpc_server_connection ~server_header ~client_header ~f =
   let%bind () = Tcp.Server.close server in
   let%bind () = Tcp.Server.close server_proxy in
   return result
+;;
+
+let establish_connection
+  transport
+  time_source
+  description
+  ~heartbeat_timeout
+  ~heartbeat_every
+  =
+  let open Expect_test_helpers_core in
+  (* Slightly changes the format of print_s to be easier to read in tests *)
+  let module Time_ns = Core.Core_private.Time_ns_alternate_sexp in
+  (* Prints Time_ns in UTC *)
+  let conn =
+    Async_rpc_kernel.Rpc.Connection.create
+      ~connection_state:(fun _ -> ())
+      ~heartbeat_config:
+        (Async_rpc_kernel.Rpc.Connection.Heartbeat_config.create
+           ~timeout:heartbeat_timeout
+           ~send_every:heartbeat_every
+           ())
+      ~description
+      ~time_source
+      transport
+  in
+  Deferred.upon conn (fun conn ->
+    let conn = Result.ok_exn conn in
+    let () =
+      Deferred.upon
+        (Async_rpc_kernel.Rpc.Connection.close_reason conn ~on_close:`started)
+        (fun reason ->
+           print_s
+             [%message
+               "connection closed"
+                 ~now:(Synchronous_time_source.now time_source : Time_ns.t)
+                 (description : Info.t)
+                 (reason : Info.t)])
+    in
+    let () =
+      Async_rpc_kernel.Rpc.Connection.add_heartbeat_callback conn (fun () ->
+        print_endline
+          (Sexp.to_string_mach
+             [%message
+               "received heartbeat"
+                 ~now:(Synchronous_time_source.now time_source : Time_ns.t)
+                 (description : Info.t)]))
+    in
+    ());
+  conn >>| Result.ok_exn
+;;
+
+let setup_server_and_client_connection ~heartbeat_timeout ~heartbeat_every =
+  let server_time_source = Synchronous_time_source.create ~now:Time_ns.epoch () in
+  let client_time_source = Synchronous_time_source.create ~now:Time_ns.epoch () in
+  let client_transport, server_transport =
+    Async_rpc_kernel.Pipe_transport.(create_pair Kind.bigstring)
+  in
+  let server_conn =
+    establish_connection
+      server_transport
+      (Synchronous_time_source.read_only server_time_source)
+      (Info.of_string "server")
+      ~heartbeat_timeout
+      ~heartbeat_every
+  in
+  let client_conn =
+    establish_connection
+      client_transport
+      (Synchronous_time_source.read_only client_time_source)
+      (Info.of_string "client")
+      ~heartbeat_timeout
+      ~heartbeat_every
+  in
+  let%map server_conn, client_conn = Deferred.both server_conn client_conn in
+  `Server (server_time_source, server_conn), `Client (client_time_source, client_conn)
 ;;

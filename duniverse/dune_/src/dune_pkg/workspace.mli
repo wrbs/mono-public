@@ -9,12 +9,14 @@ module Repository : sig
   val equal : t -> t -> bool
   val upstream : t
   val overlay : t
+  val binary_packages : t
   val decode : t Decoder.t
 
   module Name : sig
     type t
 
     val equal : t -> t -> bool
+    val compare : t -> t -> ordering
     val pp : t -> 'a Pp.t
 
     include Stringlike with type t := t

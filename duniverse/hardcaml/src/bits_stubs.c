@@ -28,6 +28,7 @@ CAMLprim intnat hardcaml_bits_uint64_compare(uint64_t a, uint64_t b) {
   intnat ltu, gtu;
   ltu = a < b;
   gtu = a > b;
+
   return gtu - ltu;
 }
 
@@ -38,8 +39,8 @@ CAMLprim intnat hardcaml_bits_uint64_compare_bc(value va, value vb) {
 /* Add two multiword [Bits.t].  The widths of the arguments and results are the
    same. Currently done with 128 bit arithmetic (giving 64 bits per iteration,
    plus the carry bit).  64 bit may actually be faster. */
-static inline void hardcaml_bits_add_inner(uint64_t *dst, uint64_t *a,
-                                           uint64_t *b, intnat width) {
+static inline void hardcaml_bits_add_inner(uint64_t *dst, uint64_t *a, uint64_t *b,
+                                           intnat width) {
   __uint128_t carry = 0;
   int index = 0;
 
@@ -81,8 +82,8 @@ CAMLprim value hardcaml_bits_packed_add(value t_, value dst, value a, value b,
 }
 
 /* Multiword subtraction.  Arguments and result are the same width. */
-static inline void hardcaml_bits_sub_inner(uint64_t *dst, uint64_t *a,
-                                           uint64_t *b, intnat width) {
+static inline void hardcaml_bits_sub_inner(uint64_t *dst, uint64_t *a, uint64_t *b,
+                                           intnat width) {
   __uint128_t borrow = 0;
   int index = 0;
 
@@ -165,7 +166,7 @@ static void mulu(uint32_t *w, uint32_t *u, uint32_t *v, int m, int n) {
  *
  * Arguments are the same as [mulu].
  * */
-void muls(uint32_t *w, uint32_t *u, uint32_t *v, int m, int n) {
+static void muls(uint32_t *w, uint32_t *u, uint32_t *v, int m, int n) {
   uint64_t t, b;
   int i, j;
 
@@ -173,6 +174,7 @@ void muls(uint32_t *w, uint32_t *u, uint32_t *v, int m, int n) {
 
   if ((int32_t)u[m - 1] < 0) {
     b = 0;
+
     for (j = 0; j < n; j++) {
       t = (uint64_t)w[j + m] - (uint64_t)v[j] - b;
       w[j + m] = t;
@@ -181,9 +183,12 @@ void muls(uint32_t *w, uint32_t *u, uint32_t *v, int m, int n) {
   }
   if ((int32_t)v[n - 1] < 0) {
     b = 0;
+
     for (i = 0; i < m; i++) {
       t = (uint64_t)w[i + n] - (uint64_t)u[i] - b;
+
       w[i + n] = t;
+
       b = t >> 63;
     }
   }
@@ -193,9 +198,8 @@ void muls(uint32_t *w, uint32_t *u, uint32_t *v, int m, int n) {
 /* Unsigned multiplication.  Result is computed in a temporary array on the
  * stack as the output width may not be exactly the width required for the
  * computation. */
-static inline void hardcaml_bits_umul_i(uint64_t *dst, uint64_t *_a,
-                                        uint64_t *_b, intnat width_a,
-                                        intnat width_b) {
+static inline void hardcaml_bits_umul_i(uint64_t *dst, uint64_t *_a, uint64_t *_b,
+                                        intnat width_a, intnat width_b) {
   intnat words_a = (width_a + 63) >> 6;
   intnat words_b = (width_b + 63) >> 6;
   intnat words_r = words_a + words_b;
@@ -209,8 +213,7 @@ static inline void hardcaml_bits_umul_i(uint64_t *dst, uint64_t *_a,
 
   memset(r, 0, bytes_r);
 
-  mulu((uint32_t *)r, (uint32_t *)_a, (uint32_t *)_b, bytes_a >> 2,
-       bytes_b >> 2);
+  mulu((uint32_t *)r, (uint32_t *)_a, (uint32_t *)_b, bytes_a >> 2, bytes_b >> 2);
 
   memcpy(dst, r, sizeof(uint64_t) * words_dst);
 }
@@ -224,22 +227,27 @@ CAMLprim value hardcaml_bits_umul(value dst, value a, value b) {
 CAMLprim value hardcaml_bits_packed_umul(value t_, value dst, value a, value b,
                                          value a_width, value b_width) {
   uint64_t *t = Bits_packed_data_val(t_);
-  hardcaml_bits_umul_i(t + Int_val(dst), t + Int_val(a), t + Int_val(b),
-                       Int_val(a_width), Int_val(b_width));
+  hardcaml_bits_umul_i(t + Int_val(dst), t + Int_val(a), t + Int_val(b), Int_val(a_width),
+                       Int_val(b_width));
   return Val_unit;
 }
 
 CAMLprim value hardcaml_bits_packed_umul_bc(value *args, value n_args) {
   (void)n_args;
-  return hardcaml_bits_packed_umul(args[0], args[1], args[2], args[3], args[4],
-                                   args[5]);
+  return hardcaml_bits_packed_umul(args[0], args[1], args[2], args[3], args[4], args[5]);
 }
+
+// We need this in order to avoid running afoul of strict aliasing rules in
+// [hardcaml_bits_smul_i] below.
+union variable_size_uint {
+  uint32_t as_uint32;
+  uint64_t as_uint64;
+};
 
 /* Signed multiplication. Arguments are copied to temporary arrays so they can
    be modified for signed extension as necesseary. */
-static inline void hardcaml_bits_smul_i(uint64_t *dst, uint64_t *_a,
-                                        uint64_t *_b, intnat width_a,
-                                        intnat width_b) {
+static inline void hardcaml_bits_smul_i(uint64_t *dst, uint64_t *_a, uint64_t *_b,
+                                        intnat width_a, intnat width_b) {
   intnat words_a = (width_a + 63) >> 6;
   intnat words_b = (width_b + 63) >> 6;
   intnat words_r = words_a + words_b;
@@ -249,23 +257,23 @@ static inline void hardcaml_bits_smul_i(uint64_t *dst, uint64_t *_a,
   intnat bytes_a = sizeof(uint64_t) * words_a;
   intnat bytes_b = sizeof(uint64_t) * words_b;
   intnat bytes_r = sizeof(uint64_t) * words_r;
-  uint64_t *a = alloca(bytes_a);
-  uint64_t *b = alloca(bytes_b);
-  uint64_t *r = alloca(bytes_r);
+  union variable_size_uint *a = alloca(bytes_a);
+  union variable_size_uint *b = alloca(bytes_b);
+  union variable_size_uint *r = alloca(bytes_r);
 
   uint64_t sign_mask_a;
   uint64_t sign_mask_b;
 
   memset(r, 0, bytes_r);
   memcpy(a, _a, bytes_a);
-  sign_mask_a = sign_mask(width_a, a);
-  a[words_a - 1] = a[words_a - 1] | sign_mask_a;
+  sign_mask_a = sign_mask(width_a, &a[0].as_uint64);
+  a[words_a - 1].as_uint64 = a[words_a - 1].as_uint64 | sign_mask_a;
 
   memcpy(b, _b, bytes_b);
-  sign_mask_b = sign_mask(width_b, b);
-  b[words_b - 1] = b[words_b - 1] | sign_mask_b;
+  sign_mask_b = sign_mask(width_b, &b->as_uint64);
+  b[words_b - 1].as_uint64 = b[words_b - 1].as_uint64 | sign_mask_b;
 
-  muls((uint32_t *)r, (uint32_t *)a, (uint32_t *)b, bytes_a >> 2, bytes_b >> 2);
+  muls(&r[0].as_uint32, &a[0].as_uint32, &b[0].as_uint32, bytes_a >> 2, bytes_b >> 2);
 
   memcpy(dst, r, sizeof(uint64_t) * words_dst);
 }
@@ -279,13 +287,12 @@ CAMLprim value hardcaml_bits_smul(value dst, value a, value b) {
 CAMLprim value hardcaml_bits_packed_smul(value t_, value dst, value a, value b,
                                          value a_width, value b_width) {
   uint64_t *t = Bits_packed_data_val(t_);
-  hardcaml_bits_smul_i(t + Int_val(dst), t + Int_val(a), t + Int_val(b),
-                       Int_val(a_width), Int_val(b_width));
+  hardcaml_bits_smul_i(t + Int_val(dst), t + Int_val(a), t + Int_val(b), Int_val(a_width),
+                       Int_val(b_width));
   return Val_unit;
 }
 
 CAMLprim value hardcaml_bits_packed_smul_bc(value *args, int n_args) {
   (void)n_args;
-  return hardcaml_bits_packed_smul(args[0], args[1], args[2], args[3], args[4],
-                                   args[5]);
+  return hardcaml_bits_packed_smul(args[0], args[1], args[2], args[3], args[4], args[5]);
 }

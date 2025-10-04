@@ -20,7 +20,7 @@ module Make (X : X) = struct
       (match Helpers.if_module_dot_t_then_module core_type with
        | None -> None
        | Some module_longident_loc ->
-         (match Helpers.split_longident module_longident_loc.txt with
+         (match%bind Helpers.split_longident module_longident_loc with
           | `prefix (Some prefix), `last last when String.(last = X.Submodule_form.name)
             ->
             assert_arity_is_expected
@@ -37,7 +37,7 @@ module Make (X : X) = struct
     | Ptyp_constr (longident_loc, type_parameters) ->
       (match
          Helpers.longident_is_like_t
-           longident_loc.txt
+           longident_loc
            ~primitive_name:None
            ~first_module_name:X.Parameterized_form.name
        with
@@ -58,12 +58,27 @@ module Make (X : X) = struct
     | _ -> None
   ;;
 
+  let match_on_m_module_form ~core_type =
+    match core_type.ptyp_desc with
+    | Ptyp_constr (longident_loc, type_parameters) ->
+      let%bind key_longident =
+        Helpers.if_module_dot_m_then_arg
+          longident_loc.txt
+          ~module_name:X.M_module_form.name
+      in
+      let children_types = X.M_module_form.value_types ~type_parameters in
+      Some (key_longident, children_types)
+    | _ -> None
+  ;;
+
   let maybe_match type_ (_ : Ctx.t) =
     let%bind core_type = Type_.match_core_type type_ in
     let%map atomic_longident, children_types =
-      Option.first_some
-        (match_on_submodule_form ~core_type)
-        (match_on_parameterized_form ~core_type)
+      [ match_on_submodule_form ~core_type
+      ; match_on_parameterized_form ~core_type
+      ; match_on_m_module_form ~core_type
+      ]
+      |> List.find_map ~f:Fn.id
     in
     ({ children = List.map children_types ~f:Type_.core_type
      ; apply_functor =
@@ -74,6 +89,6 @@ module Make (X : X) = struct
              ~functor_name:[%string "Of_%{String.lowercase X.Parameterized_form.name}"]
              ~arguments:(pmod_ident ~loc (Loc.make ~loc atomic_longident) :: children))
      }
-      : Clause.Match.t)
+     : Clause.Match.t)
   ;;
 end

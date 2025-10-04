@@ -1,14 +1,13 @@
 open! Import
 open Sexpable
 
-let%test_module "Of_stringable" =
-  (module struct
-    module Doubled_string = struct
-      (* Example module with a partial [of_string] function *)
+module%test Of_stringable = struct
+  module Doubled_string = struct
+    (* Example module with a partial [of_string] function *)
 
-      type t = Double of string [@@deriving quickcheck]
+    type t = Double of string [@@deriving quickcheck]
 
-      include Of_stringable (struct
+    include Of_stringable (struct
         type nonrec t = t
 
         let to_string (Double x) = x ^ x
@@ -22,13 +21,10 @@ let%test_module "Of_stringable" =
           else failwith [%string "Invalid doubled string %{x}"]
         ;;
       end)
-    end
+  end
 
-    let%expect_test "validate sexp grammar" =
-      require_ok
-        [%here]
-        (Sexp_grammar_validation.validate_grammar (module Doubled_string));
-      [%expect {| String |}]
-    ;;
-  end)
-;;
+  let%expect_test "validate sexp grammar" =
+    require_ok (Sexp_grammar_validation.validate_grammar (module Doubled_string));
+    [%expect {| String |}]
+  ;;
+end

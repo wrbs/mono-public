@@ -21,6 +21,7 @@ module Public = struct
     let diagnostics = Procedures.Public.diagnostics.decl
     let format_dune_file = Procedures.Public.format_dune_file.decl
     let promote = Procedures.Public.promote.decl
+    let promote_many = Procedures.Public.promote_many.decl
     let build_dir = Procedures.Public.build_dir.decl
   end
 
@@ -215,7 +216,8 @@ module Client = struct
           ( Id.t
             , [ `Cancelled
               | `Pending of
-                [ `Completed of Response.t | `Connection_dead | `Cancelled ] Fiber.Ivar.t
+                  [ `Completed of Response.t | `Connection_dead | `Cancelled ]
+                    Fiber.Ivar.t
               ] )
             Table.t
       ; initialize : Initialize.Request.t
@@ -253,20 +255,20 @@ module Client = struct
         Fiber.fork_and_join_unit
           (fun () -> Chan.write t.chan None)
           (fun () ->
-            Fiber.parallel_iter ivars ~f:(fun status ->
-              match status with
-              | `Cancelled -> Fiber.return ()
-              | `Pending ivar -> Fiber.Ivar.fill ivar `Connection_dead))
+             Fiber.parallel_iter ivars ~f:(fun status ->
+               match status with
+               | `Cancelled -> Fiber.return ()
+               | `Pending ivar -> Fiber.Ivar.fill ivar `Connection_dead))
     ;;
 
     let terminate_with_error t message info =
       Fiber.fork_and_join_unit
         (fun () -> terminate t)
         (fun () ->
-          (* TODO stop using code error here. If [terminate_with_error] is
+           (* TODO stop using code error here. If [terminate_with_error] is
              called, it's because the other side is doing something unexpected,
              not because we have a bug *)
-          Code_error.raise message info)
+           Code_error.raise message info)
     ;;
 
     let send conn (packet : Packet.t list option) =
@@ -374,11 +376,11 @@ module Client = struct
     ;;
 
     let make_notification
-      (type a)
-      t
-      ({ encode } : a Versioned.notification)
-      (n : a)
-      (k : Call.t -> 'a)
+          (type a)
+          t
+          ({ encode } : a Versioned.notification)
+          (n : a)
+          (k : Call.t -> 'a)
       : 'a
       =
       let call = encode n in
@@ -511,11 +513,11 @@ module Client = struct
       ;;
 
       let request
-        (type a b)
-        ?id
-        t
-        ({ encode_req; decode_resp } : (a, b) Versioned.request)
-        (req : a)
+            (type a b)
+            ?id
+            t
+            ({ encode_req; decode_resp } : (a, b) Versioned.request)
+            (req : a)
         : (b, _) result Fiber.t
         =
         let* () = Fiber.return () in
@@ -545,8 +547,9 @@ module Client = struct
       let* () =
         Fiber.parallel_iter packets ~f:(function
           | Packet.Notification n ->
-            if String.equal n.method_ Procedures.Server_side.abort.decl.method_
-               && not t.handler_initialized
+            if
+              String.equal n.method_ Procedures.Server_side.abort.decl.method_
+              && not t.handler_initialized
             then (
               match
                 Conv.of_sexp ~version:t.initialize.dune_version Message.sexp n.params
@@ -640,6 +643,7 @@ module Client = struct
       Builder.declare_notification t Procedures.Public.shutdown;
       Builder.declare_request t Procedures.Public.format_dune_file;
       Builder.declare_request t Procedures.Public.promote;
+      Builder.declare_request t Procedures.Public.promote_many;
       Builder.declare_request t Procedures.Public.build_dir;
       Builder.implement_notification t Procedures.Server_side.abort (fun () ->
         handler.abort);
@@ -660,11 +664,11 @@ module Client = struct
     ;;
 
     let connect_raw
-      chan
-      (initialize : Initialize.Request.t)
-      ~(private_menu : proc list)
-      ~(handler : Handler.t)
-      ~f
+          chan
+          (initialize : Initialize.Request.t)
+          ~(private_menu : proc list)
+          ~(handler : Handler.t)
+          ~f
       =
       let packets () =
         let+ read = Chan.read chan in

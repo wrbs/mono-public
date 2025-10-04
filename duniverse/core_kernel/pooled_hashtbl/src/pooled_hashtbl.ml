@@ -71,7 +71,7 @@ end = struct
 end
 
 type ('k, 'd) hashtbl =
-  { hashable : 'k Hashable.t
+  { hashable : 'k Hashable.t @@ global
   ; growth_allowed : bool
   ; mutable length : int
   ; mutable capacity : int
@@ -95,7 +95,7 @@ let ensure_mutation_allowed t =
   if not t.mutation_allowed then failwith "Hashtbl: mutation not allowed during iteration"
 ;;
 
-let without_mutating t f v =
+let without_mutating t (f @ local) v =
   if t.mutation_allowed
   then (
     t.mutation_allowed <- false;
@@ -154,6 +154,7 @@ let hashable_s t = Hashable.to_key t.hashable
 let slot t key = hash_key t key land (t.capacity - 1)
 let length t = t.length
 let capacity t = t.capacity
+let growth_allowed t = t.growth_allowed
 let is_empty t = t.length = 0
 
 let clear =
@@ -212,12 +213,12 @@ let resize =
 let on_grow ~before ~after =
   let old_before = !on_grow in
   on_grow
-    := fun () ->
-         let old_after = Staged.unstage (old_before ()) in
-         let v = before () in
-         Staged.stage (fun ~old_capacity ~new_capacity ->
-           old_after ~old_capacity ~new_capacity;
-           after v ~old_capacity ~new_capacity)
+  := fun () ->
+       let old_after = Staged.unstage (old_before ()) in
+       let v = before () in
+       Staged.stage (fun ~old_capacity ~new_capacity ->
+         old_after ~old_capacity ~new_capacity;
+         after v ~old_capacity ~new_capacity)
 ;;
 
 let rec find_entry t ~key ~it =
@@ -322,7 +323,7 @@ let find_or_add =
   fun t key ~default -> find_or_add_impl t key ~without_mutating_make_default ~default
 ;;
 
-let find t key =
+let%template[@mode m = (local, global)] find (t @ m) key =
   let index = slot t key in
   let it = table_get t.table index in
   let e = find_entry t ~key ~it in
@@ -568,14 +569,14 @@ let remove_multi t key =
   | Some (_ :: tl) -> replace t ~key ~data:tl
 ;;
 
-let iteri =
+let%template iteri =
   let rec loop t f e =
     if not (Entry.is_null e)
     then (
       f ~key:(Entry.key t.entries e) ~data:(Entry.data t.entries e);
       loop t f (Entry.next t.entries e))
   in
-  fun t ~f ->
+  fun (t @ m) ~f ->
     if t.length = 0
     then ()
     else (
@@ -590,23 +591,44 @@ let iteri =
       | exception exn ->
         t.mutation_allowed <- m;
         raise exn)
+[@@mode m = (local, global)]
 ;;
 
 let iter t ~f = iteri t ~f:(fun ~key:_ ~data -> f data) [@nontail]
 let iter_keys t ~f = iteri t ~f:(fun ~key ~data:_ -> f key) [@nontail]
 
-let rec choose_nonempty t i =
+let%template rec choose_nonempty t i =
   let entry = table_get t.table i in
   if Entry.is_null entry
-  then choose_nonempty t ((i + 1) land (t.capacity - 1))
-  else Entry.key t.entries entry, Entry.data t.entries entry
+  then (choose_nonempty [@mode m]) t ((i + 1) land (t.capacity - 1))
+  else
+    ( Modes.Global.wrap (Entry.key t.entries entry)
+    , Modes.Global.wrap (Entry.data t.entries entry) )
+[@@mode m = local]
 ;;
 
-let choose t = if t.length = 0 then None else Some (choose_nonempty t 0)
+let%template rec choose_nonempty t i =
+  let entry = table_get t.table i in
+  if Entry.is_null entry
+  then (choose_nonempty [@mode m]) t ((i + 1) land (t.capacity - 1))
+  else Entry.key t.entries entry, Entry.data t.entries entry
+[@@mode m = global]
+;;
 
-let choose_exn t =
+let%template choose t = exclave_
+  if t.length = 0 then None else Some ((choose_nonempty [@mode m]) t 0)
+[@@mode m = local]
+;;
+
+let%template choose t =
+  if t.length = 0 then None else Some ((choose_nonempty [@mode m]) t 0)
+[@@mode m = global]
+;;
+
+let%template choose_exn t =
   if t.length = 0 then raise_s [%message "[Pooled_hashtbl.choose_exn] of empty hashtbl"];
-  choose_nonempty t 0
+  (choose_nonempty [@mode m]) t 0 [@exclave_if_local m]
+[@@mode m = (local, global)]
 ;;
 
 let choose_randomly_nonempty ~random_state t =
@@ -681,7 +703,8 @@ let sexp_of_t sexp_of_k sexp_of_d t =
 let existsi t ~f =
   with_return (fun r ->
     iteri t ~f:(fun ~key ~data -> if f ~key ~data then r.return true);
-    false) [@nontail]
+    false)
+  [@nontail]
 ;;
 
 let exists t ~f = existsi t ~f:(fun ~key:_ ~data -> f data) [@nontail]
@@ -689,8 +712,8 @@ let for_alli t ~f = not (existsi t ~f:(fun ~key ~data -> not (f ~key ~data)))
 let for_all t ~f = not (existsi t ~f:(fun ~key:_ ~data -> not (f data)))
 
 let counti t ~f =
-  fold t ~init:0 ~f:(fun ~key ~data acc -> if f ~key ~data then acc + 1 else acc) [@nontail
-                                                                                    ]
+  fold t ~init:0 ~f:(fun ~key ~data acc -> if f ~key ~data then acc + 1 else acc)
+  [@nontail]
 ;;
 
 let count t ~f =
@@ -744,7 +767,7 @@ let partition_mapi t ~f =
 let partition_map t ~f = partition_mapi t ~f:(fun ~key:_ ~data -> f data) [@nontail]
 
 let partitioni_tf t ~f =
-  partition_mapi t ~f:(fun ~key ~data -> if f ~key ~data then First data else Second data) 
+  partition_mapi t ~f:(fun ~key ~data -> if f ~key ~data then First data else Second data)
   [@nontail]
 ;;
 
@@ -809,6 +832,11 @@ let of_alist_multi ?growth_allowed ?size ~hashable lst =
   create_mapped_multi ?growth_allowed ?size ~hashable ~get_key:fst ~get_data:snd lst
 ;;
 
+let t_of_sexp ~hashable k_of_sexp d_of_sexp sexp =
+  let alist = list_of_sexp (pair_of_sexp k_of_sexp d_of_sexp) sexp in
+  of_alist_exn ~hashable alist ~size:(List.length alist)
+;;
+
 let to_alist t = fold ~f:(fun ~key ~data list -> (key, data) :: list) ~init:[] t
 let validate ~name f t = Validate.alist ~name f (to_alist t)
 let keys t = fold t ~init:[] ~f:(fun ~key ~data:_ acc -> key :: acc)
@@ -823,7 +851,8 @@ let add_to_groups groups ~get_key ~get_data ~combine ~rows =
       | None -> data
       | Some old -> combine old data
     in
-    replace groups ~key ~data) [@nontail]
+    replace groups ~key ~data)
+  [@nontail]
 ;;
 
 let group ?growth_allowed ?size ~hashable ~get_key ~get_data ~combine rows =
@@ -881,7 +910,8 @@ let merge =
               match find t_left key with
               | None -> maybe_set new_t ~key ~f (`Right right)
               | Some _ -> ()
-              (* already done above *)) [@nontail])
+              (* already done above *))
+            [@nontail])
           () [@nontail])
       ();
     new_t
@@ -896,8 +926,8 @@ let merge_into ~src ~dst ~f =
     | Set_to data ->
       (match dst_data with
        | None -> replace dst ~key ~data
-       | Some dst_data -> if not (phys_equal dst_data data) then replace dst ~key ~data)) [@nontail
-                                                                                          ]
+       | Some dst_data -> if not (phys_equal dst_data data) then replace dst ~key ~data))
+  [@nontail]
 ;;
 
 let filteri_inplace t ~f =
@@ -929,16 +959,18 @@ let mapi_inplace t ~f =
 
 let map_inplace t ~f = mapi_inplace t ~f:(fun ~key:_ ~data -> f data) [@nontail]
 
-let equal equal t t' =
+let%template equal equal (t @ m) (t' @ m) =
   length t = length t'
-  && with_return (fun r ->
-       iteri t ~f:(fun ~key ~data ->
-         match find t' key with
-         | None -> r.return false
-         | Some data' ->
-           if not (without_mutating t' (fun () -> equal data data') ())
-           then r.return false);
-       true)
+  && (with_return (fun r ->
+        (iteri [@mode m]) t ~f:(fun ~key ~data ->
+          match (find [@mode m]) t' key with
+          | None -> r.return false
+          | Some data' ->
+            if not (without_mutating t' (fun () -> equal data data') ())
+            then r.return false);
+        true)
+  [@nontail])
+[@@mode m = (local, global)]
 ;;
 
 let similar = equal
@@ -962,8 +994,13 @@ let copy t =
 ;;
 
 module Accessors = struct
-  let choose = choose
-  let choose_exn = choose_exn
+  [%%template
+  [@@@mode.default m = (global, local)]
+
+  let choose = (choose [@mode m])
+  let choose_exn = (choose_exn [@mode m])
+  let equal = (equal [@mode m])]
+
   let choose_randomly = choose_randomly
   let choose_randomly_exn = choose_randomly_exn
   let clear = clear
@@ -982,7 +1019,7 @@ module Accessors = struct
   let mem = mem
   let iter_keys = iter_keys
   let iter = iter
-  let iteri = iteri
+  let iteri t ~f = iteri t ~f
   let exists = exists
   let existsi = existsi
   let for_all = for_all
@@ -992,6 +1029,7 @@ module Accessors = struct
   let fold = fold
   let length = length
   let capacity = capacity
+  let growth_allowed = growth_allowed
   let is_empty = is_empty
   let map = map
   let mapi = mapi
@@ -1006,7 +1044,7 @@ module Accessors = struct
   let partitioni_tf = partitioni_tf
   let find_or_add = find_or_add
   let findi_or_add = findi_or_add
-  let find = find
+  let find t x = find t x
   let find_exn = find_exn
   let find_and_call = find_and_call
   let findi_and_call = findi_and_call
@@ -1028,34 +1066,36 @@ module Accessors = struct
   let mapi_inplace = mapi_inplace
   let filter_map_inplace = filter_map_inplace
   let filter_mapi_inplace = filter_mapi_inplace
-  let equal = equal
+  let%template equal = (equal [@mode m]) [@@mode m = (local, global)]
   let similar = similar
   let incr = incr
   let decr = decr
   let sexp_of_key = sexp_of_key
 end
 
-module type Key_plain = Key_plain
-module type Key = Key
-module type Key_binable = Key_binable
-module type Key_stable = Key_stable
+[%%template
+[@@@mode.default m = (local, global)]
+
+module type Key_plain = Key_plain [@mode m]
+module type Key = Key [@mode m]
+module type Key_binable = Key_binable [@mode m]
+module type Key_stable = Key_stable [@mode m]]
+
 module type For_deriving = For_deriving
 
 module Creators (Key : sig
-  type 'a t
+    type 'a t
 
-  val hashable : 'a t Hashable.t
-end) : sig
+    val hashable : 'a t Hashable.t
+  end) : sig
   type ('a, 'b) t_ = ('a Key.t, 'b) t
-
-  val t_of_sexp : (Sexp.t -> 'a Key.t) -> (Sexp.t -> 'b) -> Sexp.t -> ('a, 'b) t_
 
   include
     Creators
-      with type ('a, 'b) t := ('a, 'b) t_
-      with type 'a key := 'a Key.t
-      with type ('key, 'data, 'a) create_options :=
-        ('key, 'data, 'a) create_options_without_hashable
+    with type ('a, 'b) t := ('a, 'b) t_
+    with type 'a key := 'a Key.t
+    with type ('key, 'data, 'a) create_options :=
+      ('key, 'data, 'a) create_options_without_hashable
 end = struct
   let hashable = Key.hashable
 
@@ -1074,11 +1114,6 @@ end = struct
 
   let of_alist_exn ?growth_allowed ?size l =
     of_alist_exn ?growth_allowed ~hashable ?size l
-  ;;
-
-  let t_of_sexp k_of_sexp d_of_sexp sexp =
-    let alist = [%of_sexp: (k * d) list] sexp in
-    of_alist_exn alist ~size:(List.length alist)
   ;;
 
   let of_alist_multi ?growth_allowed ?size l =
@@ -1114,50 +1149,90 @@ module Poly = struct
   let invariant = invariant
 
   include Creators (struct
-    type 'a t = 'a
+      type 'a t = 'a
 
-    let hashable = hashable
-  end)
+      let hashable = hashable
+    end)
 
   include Accessors
 
   let sexp_of_t = sexp_of_t
+
+  let t_of_sexp key_of_sexp value_of_sexp sexp =
+    t_of_sexp ~hashable key_of_sexp value_of_sexp sexp
+  ;;
 
   let t_sexp_grammar k_grammar v_grammar =
     Sexplib.Sexp_grammar.coerce (List.Assoc.t_sexp_grammar k_grammar v_grammar)
   ;;
 
   include Bin_prot.Utils.Make_iterable_binable2 (struct
-    type ('a, 'b) z = ('a, 'b) t
-    type ('a, 'b) t = ('a, 'b) z
-    type ('a, 'b) el = 'a * 'b [@@deriving bin_io]
+      type ('a, 'b) z = ('a, 'b) t
+      type ('a, 'b) t = ('a, 'b) z
+      type ('a, 'b) el = 'a * 'b [@@deriving bin_io]
+
+      let caller_identity =
+        Bin_prot.Shape.Uuid.of_string "a9b0d5e8-4992-11e6-a717-dfe192342aee"
+      ;;
+
+      let module_name = Some "Pooled_hashtbl"
+      let length = length
+
+      let[@inline always] iter t ~f =
+        iteri t ~f:(fun ~key ~data -> f (key, data)) [@nontail]
+      ;;
+
+      let init ~len ~next =
+        let t = create ~size:len () in
+        for _i = 0 to len - 1 do
+          let key, data = next () in
+          match find t key with
+          | None -> replace t ~key ~data
+          | Some _ -> failwith "Pooled_hashtbl.bin_read_t_: duplicate key"
+        done;
+        t
+      ;;
+    end)
+end
+
+module Provide_bin_io (Key : sig
+    type t [@@deriving bin_io]
+
+    include Key_plain with type t := t
+  end) =
+Bin_prot.Utils.Make_iterable_binable1 (struct
+    type nonrec 'v t = (Key.t, 'v) t
+    type 'v el = Key.t * 'v [@@deriving bin_io]
 
     let caller_identity =
-      Bin_prot.Shape.Uuid.of_string "a9b0d5e8-4992-11e6-a717-dfe192342aee"
+      Bin_prot.Shape.Uuid.of_string "aa942e1a-4992-11e6-8f73-876922b0953c"
     ;;
 
     let module_name = Some "Pooled_hashtbl"
     let length = length
-    let iter t ~f = iteri t ~f:(fun ~key ~data -> f (key, data))
+
+    let[@inline always] iter t ~f =
+      iteri t ~f:(fun ~key ~data -> f (key, data)) [@nontail]
+    ;;
 
     let init ~len ~next =
-      let t = create ~size:len () in
+      let t = create ~size:len ~hashable:(Hashable.of_key (module Key)) () in
       for _i = 0 to len - 1 do
         let key, data = next () in
         match find t key with
         | None -> replace t ~key ~data
-        | Some _ -> failwith "Pooled_hashtbl.bin_read_t_: duplicate key"
+        | Some _ ->
+          failwiths "Pooled_hashtbl.bin_read_t: duplicate key" key [%sexp_of: Key.t]
       done;
       t
     ;;
   end)
-end
 
 module Make_plain_with_hashable (T : sig
-  module Key : Key_plain
+    module Key : Key_plain
 
-  val hashable : Key.t Hashable.t
-end) =
+    val hashable : Key.t Hashable.t
+  end) =
 struct
   let hashable = T.hashable
 
@@ -1169,125 +1244,81 @@ struct
   let invariant invariant_data t = invariant ignore invariant_data t
 
   include Creators (struct
-    type 'a t = T.Key.t
+      type 'a t = T.Key.t
 
-    let hashable = hashable
-  end)
+      let hashable = hashable
+    end)
 
   include Accessors
 
   let sexp_of_t sexp_of_v t = Poly.sexp_of_t T.Key.sexp_of_t sexp_of_v t
+end
 
-  module Provide_of_sexp
-    (X : sig
-      type t [@@deriving of_sexp]
-    end
-    with type t := key) =
-  struct
-    let t_of_sexp v_of_sexp sexp = t_of_sexp X.t_of_sexp v_of_sexp sexp
-  end
+module Provide_of_sexp (Elt : Hashtbl.M_of_sexp) = struct
+  let t_of_sexp v_of_sexp sexp =
+    t_of_sexp ~hashable:(Hashable.of_key (module Elt)) Elt.t_of_sexp v_of_sexp sexp
+  ;;
+end
 
-  module Provide_bin_io
-    (X : sig
-      type t [@@deriving bin_io]
-    end
-    with type t := key) =
-  Bin_prot.Utils.Make_iterable_binable1 (struct
-    module Key = struct
-      include T.Key
-      include X
-    end
+module Provide_stable_witness (Key : sig
+    type t [@@deriving stable_witness]
+  end) =
+struct
+  (* I'm not sure whether it makes sense for pooled hashtbl to be used as a stable type,
+     since pooling seems like an in-process thing, but in order to satisfy the entire
+     [Hashtbl_intf.Hashtbl] module type, we need to provide a stable witness.
 
-    type nonrec 'a t = 'a t
-    type 'a el = Key.t * 'a [@@deriving bin_io]
-
-    let caller_identity =
-      Bin_prot.Shape.Uuid.of_string "aa942e1a-4992-11e6-8f73-876922b0953c"
-    ;;
-
-    let module_name = Some "Pooled_hashtbl"
-    let length = length
-    let iter t ~f = iteri t ~f:(fun ~key ~data -> f (key, data))
-
-    let init ~len ~next =
-      let t = create ~size:len () in
-      for _i = 0 to len - 1 do
-        let key, data = next () in
-        match find t key with
-        | None -> replace t ~key ~data
-        | Some _ ->
-          failwiths
-            ~here:[%here]
-            "Pooled_hashtbl.bin_read_t: duplicate key"
-            key
-            [%sexp_of: Key.t]
-      done;
-      t
-    ;;
-  end)
-
-  module Provide_stable_witness
-    (Key' : sig
-      type t [@@deriving stable_witness]
-    end
-    with type t := key) =
-  struct
-    (* I'm not sure whether it makes sense for pooled hashtbl to be used as a stable type,
-       since pooling seems like an in-process thing, but in order to satisfy the entire
-       [Hashtbl_intf.Hashtbl] module type, we need to provide a stable witness.
-
-       The implementation and comment from hashtbl.ml is copied below.
-    *)
-    (* The binary representation of hashtbl is relied on by stable modules
-       (e.g. Hashtable.Stable) and is therefore assumed to be stable.  So, if the key and
-       data can provide a stable witnesses, then we can safely say the hashtbl is also
-       stable. *)
-    let stable_witness (type data) (_data_stable_witness : data Stable_witness.t)
-      : data t Stable_witness.t
-      =
-      let (_ : key Stable_witness.t) = Key'.stable_witness in
-      Stable_witness.assert_stable
-    ;;
-  end
+     The implementation and comment from hashtbl.ml is copied below.
+  *)
+  (* The binary representation of hashtbl is relied on by stable modules
+     (e.g. Hashtable.Stable) and is therefore assumed to be stable.  So, if the key and
+     data can provide a stable witnesses, then we can safely say the hashtbl is also
+     stable. *)
+  let stable_witness (type data) (_data_stable_witness : data Stable_witness.t)
+    : (Key.t, data) t Stable_witness.t
+    =
+    let (_ : Key.t Stable_witness.t) = Key.stable_witness in
+    Stable_witness.assert_stable
+  ;;
 end
 
 module Make_with_hashable (T : sig
-  module Key : Key
+    module Key : Key
 
-  val hashable : Key.t Hashable.t
-end) =
+    val hashable : Key.t Hashable.t
+  end) =
 struct
   include Make_plain_with_hashable (T)
   include Provide_of_sexp (T.Key)
 end
 
 module Make_binable_with_hashable (T : sig
-  module Key : Key_binable
+    module Key : Key_binable
 
-  val hashable : Key.t Hashable.t
-end) =
+    val hashable : Key.t Hashable.t
+  end) =
 struct
   include Make_with_hashable (T)
   include Provide_bin_io (T.Key)
 end
 
 module Make_stable_with_hashable (T : sig
-  module Key : Key_stable
+    module Key : Key_stable
 
-  val hashable : Key.t Hashable.t
-end) =
+    val hashable : Key.t Hashable.t
+  end) =
 struct
   include Make_binable_with_hashable (T)
   include Provide_stable_witness (T.Key)
 end
 
 module Make_plain (Key : Key_plain) = Make_plain_with_hashable (struct
-  module Key = Key
+    module Key = Key
 
-  let hashable =
-    { Hashable.hash = Key.hash; compare = Key.compare; sexp_of_t = Key.sexp_of_t }
-  ;;
-end)
+    let hashable =
+      { Hashable.hash = Key.hash; compare = Key.compare; sexp_of_t = Key.sexp_of_t }
+    ;;
+  end)
 
 module Make (Key : Key) = struct
   include Make_plain (Key)
@@ -1295,9 +1326,9 @@ module Make (Key : Key) = struct
 end
 
 module Make_binable (Key : sig
-  include Key
-  include Binable.S with type t := t
-end) =
+    include Key
+    include Binable.S with type t := t
+  end) =
 struct
   include Make (Key)
   include Provide_bin_io (Key)
@@ -1407,7 +1438,7 @@ let group ?growth_allowed ?size m ~get_key ~get_data ~combine l =
   group ~hashable:(Hashable.of_key m) ?growth_allowed ?size ~get_key ~get_data ~combine l
 ;;
 
-module type M_quickcheck = M_quickcheck
+module type%template M_quickcheck = M_quickcheck [@mode m] [@@mode m = (local, global)]
 
 let of_alist_option m alist = Result.ok (of_alist_or_error m alist)
 
@@ -1436,3 +1467,31 @@ let quickcheck_shrinker_m__t
   [%quickcheck.shrinker: (Key.t * data) List.t]
   |> Quickcheck.Shrinker.filter_map ~f:(of_alist_option (module Key)) ~f_inverse:to_alist
 ;;
+
+let bin_shape_m__t (type t) (module Key : Key_binable with type t = t) =
+  let module M = Provide_bin_io (Key) in
+  M.bin_shape_t
+;;
+
+let bin_size_m__t (type t) (module Key : Key_binable with type t = t) =
+  let module M = Provide_bin_io (Key) in
+  M.bin_size_t
+;;
+
+let bin_write_m__t (type t) (module Key : Key_binable with type t = t) =
+  let module M = Provide_bin_io (Key) in
+  M.bin_write_t
+;;
+
+let bin_read_m__t (type t) (module Key : Key_binable with type t = t) =
+  let module M = Provide_bin_io (Key) in
+  M.bin_read_t
+;;
+
+let __bin_read_m__t__ (type t) (module Key : Key_binable with type t = t) =
+  let module M = Provide_bin_io (Key) in
+  M.__bin_read_t__
+;;
+
+let iteri t ~f = iteri t ~f
+let find (t @ global) x = find t x

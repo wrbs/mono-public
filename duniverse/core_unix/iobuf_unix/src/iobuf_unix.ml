@@ -31,6 +31,28 @@ let read t fd =
     Eof
 ;;
 
+let really_read t fd =
+  let len = length t in
+  match Bigstring_unix.really_read fd (Expert.buf t) ~pos:(Expert.lo t) ~len with
+  | () ->
+    unsafe_advance t len;
+    Ok
+  | exception Bigstring_unix.IOError (n, End_of_file) ->
+    unsafe_advance t n;
+    Eof
+;;
+
+let really_pread t fd ~offset =
+  let len = length t in
+  match Bigstring_unix.really_pread fd (Expert.buf t) ~offset ~pos:(Expert.lo t) ~len with
+  | () ->
+    unsafe_advance t len;
+    Ok
+  | exception Bigstring_unix.IOError (n, End_of_file) ->
+    unsafe_advance t n;
+    Eof
+;;
+
 let read_assume_fd_is_nonblocking t fd =
   let nread =
     Bigstring_unix.read_assume_fd_is_nonblocking
@@ -85,7 +107,7 @@ module Recvmmsg_context = struct
       raise_s
         [%sexp
           "Recvmmsg_context.create: all buffers must be reset"
-          , (ts : (_, _) t_with_shallow_sexp array)]
+          , (ts : (_, _) With_shallow_sexp.t array)]
   ;;
 
   (* we retain a reference to the underlying bigstrings, in the event that callers
@@ -109,7 +131,7 @@ external unsafe_recvmmsg_assume_fd_is_nonblocking
   -> Recvmmsg_context.ctx
   -> Unix.Syscall_result.Int.t
   = "iobuf_recvmmsg_assume_fd_is_nonblocking_stub"
-  [@@noalloc]
+[@@noalloc]
 
 let recvmmsg_assume_fd_is_nonblocking fd { Recvmmsg_context.iobufs; ctx; _ } =
   unsafe_recvmmsg_assume_fd_is_nonblocking fd iobufs ctx
@@ -183,6 +205,10 @@ module Peek = struct
     Bigstring_unix.write fd (Expert.buf t) ~pos:(Expert.lo t) ~len:(length t)
   ;;
 
+  let really_write t fd =
+    Bigstring_unix.really_write fd (Expert.buf t) ~pos:(Expert.lo t) ~len:(length t)
+  ;;
+
   let write_assume_fd_is_nonblocking t fd =
     (* This is safe because of the invariant of [t] that the window is within the buffer
        (unless the user has violated the invariant with an unsafe operation). *)
@@ -202,6 +228,11 @@ let output t ch =
 let write t fd =
   let nwritten = Peek.write t fd in
   unsafe_advance t nwritten
+;;
+
+let really_write t fd =
+  Peek.really_write t fd;
+  unsafe_advance t (length t)
 ;;
 
 let write_assume_fd_is_nonblocking t fd =
@@ -229,7 +260,7 @@ module Expert = struct
     -> (float[@unboxed])
     -> int
     = "iobuf_unsafe_pokef_double_bytecode" "iobuf_unsafe_pokef_double"
-    [@@noalloc]
+  [@@noalloc]
 
   let fillf_float t ~c_format value =
     let limit = length t in
@@ -248,85 +279,5 @@ module Expert = struct
       Ordered_collection_common.get_pos_len_exn () ?pos ?len ~total_length:(length t)
     in
     Unix.IOVec.of_bigstring (Expert.buf t) ~pos:(Expert.lo t + pos) ~len
-  ;;
-end
-
-module In_channel_optimized = struct
-  let next_newline buf =
-    let len = Iobuf.length buf in
-    Iobuf.Unsafe.Peek.index_or_neg ~pos:0 buf ~len '\n'
-  ;;
-
-  let present_line ~fix_win_eol ~acc ~f buf ~len =
-    let len_of_line =
-      if fix_win_eol
-         && len > 0
-         && Char.equal '\r' (Iobuf.Unsafe.Peek.char ~pos:(len - 1) buf)
-      then len - 1
-      else len
-    in
-    Iobuf.unsafe_resize buf ~len:len_of_line;
-    f acc buf
-  ;;
-
-  let rec fold_full_lines_in_buf ~fix_win_eol ~acc ~f buf =
-    let len = next_newline buf in
-    if len >= 0
-    then (
-      let hi = Iobuf.Expert.hi buf in
-      let lo = Iobuf.Expert.lo buf in
-      let next_line_starts_at = lo + len + 1 in
-      (* [present_line] modifies [hi] and [lo], so we must cache and restore them. *)
-      let acc = present_line ~acc ~f ~fix_win_eol buf ~len in
-      Iobuf.Expert.set_lo buf next_line_starts_at;
-      Iobuf.Expert.set_hi buf hi;
-      fold_full_lines_in_buf ~fix_win_eol ~acc ~f buf)
-    else acc
-  ;;
-
-  let fold_lines_raw ?(fix_win_eol = true) ?(buf = Iobuf.create ~len:1024) ch ~init ~f =
-    Iobuf.reset buf;
-    let acc = ref init in
-    while
-      let result = input buf ch in
-      Iobuf.flip_lo buf;
-      acc := fold_full_lines_in_buf ~fix_win_eol ~acc:!acc ~f buf;
-      let length = Iobuf.length buf in
-      let capacity = Iobuf.capacity buf in
-      if length = capacity
-      then (
-        let new_capacity = max 1024 (capacity * 2) in
-        let str = Bigstring.create new_capacity in
-        Iobuf.Consume.To_bigstring.blito ~src:(Iobuf.read_only buf) ~dst:str ();
-        Iobuf.Expert.reinitialize_of_bigstring ~pos:0 ~len:new_capacity buf str;
-        Iobuf.resize buf ~len:length);
-      Iobuf.compact buf;
-      match result with
-      | Ok -> true
-      | Eof -> false
-    do
-      ()
-    done;
-    if Iobuf.length buf < Iobuf.capacity buf
-    then (
-      Iobuf.flip_lo buf;
-      acc := present_line ~fix_win_eol ~acc:!acc ~f buf ~len:(Iobuf.length buf));
-    !acc
-  ;;
-
-  let fold_lines ?fix_win_eol ?buf ch ~init ~f =
-    fold_lines_raw ?fix_win_eol ?buf ch ~init ~f:(fun acc buf ->
-      Iobuf.Unsafe.Peek.stringo buf ~pos:0 |> f acc)
-  ;;
-
-  let iter_lines ?fix_win_eol ?buf ch ~f =
-    fold_lines ?fix_win_eol ?buf ch ~init:() ~f:(fun () s -> f s)
-  ;;
-
-  let input_lines ?fix_win_eol ?buf ch =
-    (* Vec is not usable as a dependency. *)
-    let v = Queue.create () in
-    iter_lines ?fix_win_eol ?buf ch ~f:(fun str -> Queue.enqueue v str);
-    Queue.to_array v
   ;;
 end

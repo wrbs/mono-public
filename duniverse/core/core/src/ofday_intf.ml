@@ -1,7 +1,7 @@
 open! Import
 open Std_internal
 
-module type S = sig
+module type S = sig @@ portable
   (** Time of day.
 
       [t] represents a clock-face time of day. Usually this is equivalent to a time-offset
@@ -16,28 +16,48 @@ module type S = sig
       There is one nonstandard representable value, [start_of_next_day], which can be
       thought of as "24:00:00" in 24-hour time. It is essentially "00:00:00" on the next
       day. By having this value, we allow comparisons against a strict upper bound on [t]
-      values. However, it has some odd properties; for example, [Time.of_date_ofday ~zone
-      date start_of_next_day |> Time.to_date ~zone] yields a different date.
+      values. However, it has some odd properties; for example,
+      [Time.of_date_ofday ~zone date start_of_next_day |> Time.to_date ~zone] yields a
+      different date.
 
       Any [ofday] will satisfy [start_of_day <= ofday <= start_of_next_day]. *)
-  type underlying
+  type underlying : value mod contended many portable stateless unyielding
 
-  type t = private underlying [@@deriving bin_io, sexp, sexp_grammar, typerep]
+  type t = private underlying
+  [@@deriving
+    bin_io ~localize
+    , compare ~localize
+    , equal ~localize
+    , globalize
+    , sexp
+    , sexp_grammar
+    , typerep]
 
-  include Comparable_binable with type t := t
+  include%template Comparable_binable [@mode local] with type t := t
+
   include Hashable_binable with type t := t
   include Diffable.S_atomic with type t := t
   include Pretty_printer.S with type t := t
   include Robustly_comparable with type t := t
-  include Quickcheck.S_range with type t := t
+
+  include%template Quickcheck.S_range [@mode portable] with type t := t
+
   module Span : Span_intf.S
 
-  (** [of_string] supports and correctly interprets 12h strings with the following suffixes:
+  module O : sig
+    (** alias for [create ~hr ~min ()], e.g. [18 ^: 00]. *)
+    val ( ^: ) : int -> int -> t
+
+    include Comparisons.Infix with type t := t
+  end
+
+  (** [of_string] supports and correctly interprets 12h strings with the following
+      suffixes:
 
       {v
       "A", "AM", "A.M.", "A.M"
       "P", "PM", "P.M.", "P.M"
-    v}
+      v}
 
       as well as the lowercase and space-prefixed versions of these suffixes.
 
@@ -55,6 +75,9 @@ module type S = sig
     -> ?ns:int
     -> unit
     -> t
+
+  (** alias for [create ~hr ~min ()], e.g. [18 ^: 00]. *)
+  val ( ^: ) : int -> int -> t
 
   val to_parts : t -> Span.Parts.t
 
@@ -83,7 +106,7 @@ module type S = sig
   val of_span_since_start_of_day_exn : Span.t -> t
 
   val of_span_since_start_of_day : Span.t -> t
-    [@@deprecated "[since 2018-04] use [of_span_since_start_of_day_exn] instead"]
+  [@@deprecated "[since 2018-04] use [of_span_since_start_of_day_exn] instead"]
 
   (** Reports whether a span represents a valid time since the start of the day, i.e.
       whether [of_span_since_start_of_day_exn span] would succeed. *)
@@ -96,7 +119,7 @@ module type S = sig
       segfault), if the input does not satisfy [span_since_start_of_day_is_valid]. *)
   val of_span_since_start_of_day_unchecked : Span.t -> t
 
-  (** [add t s] shifts the time of day [t] by the span [s].  It returns [None] if the
+  (** [add t s] shifts the time of day [t] by the span [s]. It returns [None] if the
       result is not in the same 24-hour day. *)
   val add : t -> Span.t -> t option
 
@@ -132,5 +155,5 @@ module type S = sig
   val to_millisecond_string : t -> string
 
   val to_millisec_string : t -> string
-    [@@deprecated "[since 2018-04] use [to_millisecond_string] instead"]
+  [@@deprecated "[since 2018-04] use [to_millisecond_string] instead"]
 end

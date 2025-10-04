@@ -1,7 +1,8 @@
 (* WARNING: never accept the corrected output for this file, it must never change! *)
 
-open Core
+open Base
 open Poly
+open Stdio
 open Bigarray
 open Import
 
@@ -17,10 +18,18 @@ open Import
 module Read = Bin_prot.Read
 module Write = Bin_prot.Write
 
-type 'a to_test =
+module Reader_local = struct
+  type%template 'a t =
+    { reader_local : ('a Read.reader[@mode local])
+    ; globalize : local_ 'a -> 'a
+    }
+end
+
+type%template 'a to_test =
   { writer : 'a Write.writer
-  ; writer_local : 'a Write.writer_local option
+  ; writer_local : ('a Write.writer[@mode local]) option
   ; reader : 'a Read.reader
+  ; reader_local : 'a Reader_local.t option
   ; values : 'a list
   ; equal : 'a -> 'a -> bool
   ; sexp_of : 'a -> Sexp.t (* Bounds on the bin_protted size *)
@@ -32,13 +41,26 @@ module Vec = struct
   let mk_gen_float tp n =
     let vec = Array1.create tp fortran_layout n in
     for i = 1 to n do
-      vec.{i} <- float i
+      vec.{i} <- Float.of_int i
     done;
     vec
   ;;
 
   let mk_float32 = mk_gen_float float32
   let mk_float64 = mk_gen_float float64
+
+  external dim : local_ ('a, 'b, 'c) Array1.t -> int = "%caml_ba_dim_1"
+  external kind : local_ ('a, 'b, 'c) Array1.t -> ('a, 'b) kind = "caml_ba_kind"
+  external get : local_ ('a, 'b, 'c) Array1.t -> int -> 'a = "%caml_ba_ref_1"
+
+  let globalize t =
+    let copy = Array1.create (kind t) Bigarray.fortran_layout (dim t) in
+    for i = 1 to dim t do
+      copy.{i} <- get t i
+    done;
+    copy
+  ;;
+
   let to_array t = Array.init (Array1.dim t) ~f:(fun i -> t.{i + 1})
   let sexp_of_t t = [%sexp_of: float array] (to_array t)
   let equal t1 t2 = Array.equal Float.equal (to_array t1) (to_array t2)
@@ -47,11 +69,11 @@ end
 module Mat = struct
   let mk_gen_float tp m n =
     let mat = Array2.create tp fortran_layout m n in
-    let fn = float m in
+    let fn = Float.of_int m in
     for c = 1 to n do
-      let ofs = float (c - 1) *. fn in
+      let ofs = Float.of_int (c - 1) *. fn in
       for r = 1 to m do
-        mat.{r, c} <- ofs +. float r
+        mat.{r, c} <- ofs +. Float.of_int r
       done
     done;
     mat
@@ -59,6 +81,21 @@ module Mat = struct
 
   let mk_float32 = mk_gen_float float32
   let mk_float64 = mk_gen_float float64
+
+  external dim1 : local_ ('a, 'b, 'c) Array2.t -> int = "%caml_ba_dim_1"
+  external dim2 : local_ ('a, 'b, 'c) Array2.t -> int = "%caml_ba_dim_2"
+  external kind : local_ ('a, 'b, 'c) Array2.t -> ('a, 'b) kind = "caml_ba_kind"
+  external get : local_ ('a, 'b, 'c) Array2.t -> int -> int -> 'a = "%caml_ba_ref_2"
+
+  let globalize t =
+    let copy = Array2.create (kind t) Bigarray.fortran_layout (dim1 t) (dim2 t) in
+    for i = 1 to dim1 t do
+      for j = 1 to dim2 t do
+        copy.{i, j} <- get t i j
+      done
+    done;
+    copy
+  ;;
 
   let to_array t =
     Array.init (Array2.dim1 t) ~f:(fun i ->
@@ -69,12 +106,17 @@ module Mat = struct
   let equal t1 t2 = Array.equal (Array.equal Float.equal) (to_array t1) (to_array t2)
 end
 
-module Tests = struct
+module%template Tests = struct
   (* max and min *)
   let unit =
     { writer = Write.bin_write_unit
-    ; writer_local = Some Write.bin_write_unit__local
+    ; writer_local = Some (Write.bin_write_unit [@mode local])
     ; reader = Read.bin_read_unit
+    ; reader_local =
+        Some
+          { reader_local = Read.bin_read_unit [@mode local]
+          ; globalize = [%globalize: unit]
+          }
     ; values = [ () ]
     ; equal = Unit.equal
     ; sexp_of = [%sexp_of: unit]
@@ -85,8 +127,13 @@ module Tests = struct
 
   let bool =
     { writer = Write.bin_write_bool
-    ; writer_local = Some Write.bin_write_bool__local
+    ; writer_local = Some (Write.bin_write_bool [@mode local])
     ; reader = Read.bin_read_bool
+    ; reader_local =
+        Some
+          { reader_local = Read.bin_read_bool [@mode local]
+          ; globalize = [%globalize: bool]
+          }
     ; values = [ true; false ]
     ; equal = Bool.equal
     ; sexp_of = [%sexp_of: bool]
@@ -97,8 +144,13 @@ module Tests = struct
 
   let char =
     { writer = Write.bin_write_char
-    ; writer_local = Some Write.bin_write_char__local
+    ; writer_local = Some (Write.bin_write_char [@mode local])
     ; reader = Read.bin_read_char
+    ; reader_local =
+        Some
+          { reader_local = Read.bin_read_char [@mode local]
+          ; globalize = [%globalize: char]
+          }
     ; values = [ '\x00'; 'A'; 'z'; ';'; '\xFF' ]
     ; equal = Char.equal
     ; sexp_of = [%sexp_of: char]
@@ -109,8 +161,13 @@ module Tests = struct
 
   let digest =
     { writer = Write.bin_write_md5
-    ; writer_local = Some Write.bin_write_md5__local
+    ; writer_local = Some (Write.bin_write_md5 [@mode local])
     ; reader = Read.bin_read_md5
+    ; reader_local =
+        Some
+          { reader_local = Read.bin_read_md5 [@mode local]
+          ; globalize = [%globalize: Md5_lib.t]
+          }
     ; values = [ Md5_lib.of_hex_exn "0123456789abcdef0123456789ABCDEF" ]
     ; equal = (fun d1 d2 -> Md5_lib.compare d1 d2 = 0)
     ; sexp_of = (fun md5 -> Atom (Md5_lib.to_hex md5))
@@ -121,8 +178,13 @@ module Tests = struct
 
   let float =
     { writer = Write.bin_write_float
-    ; writer_local = Some Write.bin_write_float__local
+    ; writer_local = Some (Write.bin_write_float [@mode local])
     ; reader = Read.bin_read_float
+    ; reader_local =
+        Some
+          { reader_local = Read.bin_read_float [@mode local]
+          ; globalize = [%globalize: float]
+          }
     ; values =
         [ Float.epsilon_float
         ; Float.infinity
@@ -134,7 +196,7 @@ module Tests = struct
         ; Float.minus_one
         ; Float.neg_infinity
         ; Float.one
-        ; Float.robust_comparison_tolerance
+        ; 1E-7
         ; Float.zero
         ]
     ; equal = (fun a b -> (Float.is_nan a && Float.is_nan b) || Float.equal a b)
@@ -149,8 +211,13 @@ module Tests = struct
   (* min only *)
   let vec =
     { writer = Write.bin_write_vec
-    ; writer_local = Some Write.bin_write_vec__local
+    ; writer_local = Some (Write.bin_write_vec [@mode local])
     ; reader = Read.bin_read_vec
+    ; reader_local =
+        Some
+          { reader_local = Read.bin_read_vec [@mode local]
+          ; globalize = [%globalize: Vec.t]
+          }
     ; values = [ Vec.mk_float64 0; Vec.mk_float64 1 ]
     ; equal = Vec.equal
     ; sexp_of = [%sexp_of: Vec.t]
@@ -161,8 +228,13 @@ module Tests = struct
 
   let float32_vec =
     { writer = Write.bin_write_float32_vec
-    ; writer_local = Some Write.bin_write_float32_vec__local
+    ; writer_local = Some (Write.bin_write_float32_vec [@mode local])
     ; reader = Read.bin_read_float32_vec
+    ; reader_local =
+        Some
+          { reader_local = Read.bin_read_float32_vec [@mode local]
+          ; globalize = [%globalize: Vec.t]
+          }
     ; values = [ Vec.mk_float32 0; Vec.mk_float32 1 ]
     ; equal = Vec.equal
     ; sexp_of = [%sexp_of: Vec.t]
@@ -173,8 +245,13 @@ module Tests = struct
 
   let float64_vec =
     { writer = Write.bin_write_float64_vec
-    ; writer_local = Some Write.bin_write_float64_vec__local
+    ; writer_local = Some (Write.bin_write_float64_vec [@mode local])
     ; reader = Read.bin_read_float64_vec
+    ; reader_local =
+        Some
+          { reader_local = Read.bin_read_float64_vec [@mode local]
+          ; globalize = [%globalize: Vec.t]
+          }
     ; values = [ Vec.mk_float64 0; Vec.mk_float64 1 ]
     ; equal = Vec.equal
     ; sexp_of = [%sexp_of: Vec.t]
@@ -185,8 +262,13 @@ module Tests = struct
 
   let mat =
     { writer = Write.bin_write_mat
-    ; writer_local = Some Write.bin_write_mat__local
+    ; writer_local = Some (Write.bin_write_mat [@mode local])
     ; reader = Read.bin_read_mat
+    ; reader_local =
+        Some
+          { reader_local = Read.bin_read_mat [@mode local]
+          ; globalize = [%globalize: Mat.t]
+          }
     ; values = [ Mat.mk_float64 0 0; Mat.mk_float64 1 1 ]
     ; equal = Mat.equal
     ; sexp_of = [%sexp_of: Mat.t]
@@ -197,8 +279,13 @@ module Tests = struct
 
   let float32_mat =
     { writer = Write.bin_write_float32_mat
-    ; writer_local = Some Write.bin_write_float32_mat__local
+    ; writer_local = Some (Write.bin_write_float32_mat [@mode local])
     ; reader = Read.bin_read_float32_mat
+    ; reader_local =
+        Some
+          { reader_local = Read.bin_read_float32_mat [@mode local]
+          ; globalize = [%globalize: Mat.t]
+          }
     ; values = [ Mat.mk_float32 0 0; Mat.mk_float32 1 1 ]
     ; equal = Mat.equal
     ; sexp_of = [%sexp_of: Mat.t]
@@ -209,8 +296,13 @@ module Tests = struct
 
   let float64_mat =
     { writer = Write.bin_write_float64_mat
-    ; writer_local = Some Write.bin_write_float64_mat__local
+    ; writer_local = Some (Write.bin_write_float64_mat [@mode local])
     ; reader = Read.bin_read_float64_mat
+    ; reader_local =
+        Some
+          { reader_local = Read.bin_read_float64_mat [@mode local]
+          ; globalize = [%globalize: Mat.t]
+          }
     ; values = [ Mat.mk_float64 0 0; Mat.mk_float64 1 1 ]
     ; equal = Mat.equal
     ; sexp_of = [%sexp_of: Mat.t]
@@ -221,12 +313,18 @@ module Tests = struct
 
   let bigstring =
     { writer = Write.bin_write_bigstring
-    ; writer_local = Some Write.bin_write_bigstring__local
+    ; writer_local = Some (Write.bin_write_bigstring [@mode local])
     ; reader = Read.bin_read_bigstring
-    ; values = [ Bigstring.of_string ""; Bigstring.of_string "hello" ]
+    ; reader_local =
+        Some
+          { reader_local = Read.bin_read_bigstring [@mode local]
+          ; globalize = [%globalize: Base_bigstring.t]
+          }
+    ; values = [ Base_bigstring.of_string ""; Base_bigstring.of_string "hello" ]
     ; equal =
-        (fun s1 s2 -> String.equal (Bigstring.to_string s1) (Bigstring.to_string s2))
-    ; sexp_of = [%sexp_of: Bigstring.t]
+        (fun s1 s2 ->
+          String.equal (Base_bigstring.to_string s1) (Base_bigstring.to_string s2))
+    ; sexp_of = [%sexp_of: Base_bigstring.t]
     ; hi_bound = None
     ; lo_bound = Minimum.bin_size_bigstring
     }
@@ -234,8 +332,9 @@ module Tests = struct
 
   let floatarray =
     { writer = Write.bin_write_floatarray
-    ; writer_local = Some Write.bin_write_floatarray__local
+    ; writer_local = Some (Write.bin_write_floatarray [@mode local])
     ; reader = Read.bin_read_floatarray
+    ; reader_local = None
     ; values = [ Float_array.empty; Float_array.create ~len:1 0.0 ]
     ; equal = Float_array.equal Float.equal
     ; sexp_of = [%sexp_of: Float_array.t]
@@ -246,8 +345,14 @@ module Tests = struct
 
   let ref =
     { writer = Write.bin_write_ref Write.bin_write_int32
-    ; writer_local = Some (Write.bin_write_ref__local Write.bin_write_int32__local)
+    ; writer_local =
+        Some ((Write.bin_write_ref [@mode local]) (Write.bin_write_int32 [@mode local]))
     ; reader = Read.bin_read_ref Read.bin_read_int32
+    ; reader_local =
+        Some
+          { reader_local = (Read.bin_read_ref [@mode local]) Read.bin_read_int32
+          ; globalize = [%globalize: int32 ref]
+          }
     ; values = [ ref 0l; ref 1l; ref (-1l); ref Int32.max_value; ref Int32.min_value ]
     ; equal = (fun v1 v2 -> !v1 = !v2)
     ; sexp_of = [%sexp_of: int32 ref]
@@ -258,8 +363,10 @@ module Tests = struct
 
   let lazy_t =
     { writer = Write.bin_write_lazy Write.bin_write_int32
-    ; writer_local = Some (Write.bin_write_lazy__local Write.bin_write_int32__local)
+    ; writer_local =
+        Some ((Write.bin_write_lazy [@mode local]) (Write.bin_write_int32 [@mode local]))
     ; reader = Read.bin_read_lazy Read.bin_read_int32
+    ; reader_local = None
     ; values =
         [ lazy 0l; lazy 1l; lazy (-1l); lazy Int32.max_value; lazy Int32.min_value ]
     ; equal = (fun v1 v2 -> force v1 = force v2)
@@ -271,8 +378,16 @@ module Tests = struct
 
   let option =
     { writer = Write.bin_write_option Write.bin_write_int32
-    ; writer_local = Some (Write.bin_write_option__local Write.bin_write_int32__local)
+    ; writer_local =
+        Some
+          ((Write.bin_write_option [@mode local]) (Write.bin_write_int32 [@mode local]))
     ; reader = Read.bin_read_option Read.bin_read_int32
+    ; reader_local =
+        Some
+          { reader_local =
+              (Read.bin_read_option [@mode local]) (Read.bin_read_int32 [@mode local])
+          ; globalize = [%globalize: int32 option]
+          }
     ; values =
         [ None; Some 0l; Some 1l; Some (-1l); Some Int32.max_value; Some Int32.min_value ]
     ; equal = Option.equal Int32.equal
@@ -286,10 +401,18 @@ module Tests = struct
     { writer = Write.bin_write_pair Write.bin_write_int32 Write.bin_write_int32
     ; writer_local =
         Some
-          (Write.bin_write_pair__local
-             Write.bin_write_int32__local
-             Write.bin_write_int32__local)
+          ((Write.bin_write_pair [@mode local])
+             (Write.bin_write_int32 [@mode local])
+             (Write.bin_write_int32 [@mode local]))
     ; reader = Read.bin_read_pair Read.bin_read_int32 Read.bin_read_int32
+    ; reader_local =
+        Some
+          { reader_local =
+              (Read.bin_read_pair [@mode local])
+                (Read.bin_read_int32 [@mode local])
+                (Read.bin_read_int32 [@mode local])
+          ; globalize = [%globalize: int32 * int32]
+          }
     ; values =
         [ 0l, 0l
         ; 1l, 1l
@@ -297,7 +420,7 @@ module Tests = struct
         ; Int32.max_value, Int32.max_value
         ; Int32.min_value, Int32.min_value
         ]
-    ; equal = Tuple2.equal ~eq1:Int32.equal ~eq2:Int32.equal
+    ; equal = [%equal: Int32.t * Int32.t]
     ; sexp_of = [%sexp_of: int32 * int32]
     ; hi_bound = None
     ; lo_bound = Minimum.bin_size_pair
@@ -312,12 +435,21 @@ module Tests = struct
           Write.bin_write_int32
     ; writer_local =
         Some
-          (Write.bin_write_triple__local
-             Write.bin_write_int32__local
-             Write.bin_write_int32__local
-             Write.bin_write_int32__local)
+          ((Write.bin_write_triple [@mode local])
+             (Write.bin_write_int32 [@mode local])
+             (Write.bin_write_int32 [@mode local])
+             (Write.bin_write_int32 [@mode local]))
     ; reader =
         Read.bin_read_triple Read.bin_read_int32 Read.bin_read_int32 Read.bin_read_int32
+    ; reader_local =
+        Some
+          { reader_local =
+              (Read.bin_read_triple [@mode local])
+                (Read.bin_read_int32 [@mode local])
+                (Read.bin_read_int32 [@mode local])
+                (Read.bin_read_int32 [@mode local])
+          ; globalize = [%globalize: int32 * int32 * int32]
+          }
     ; values =
         [ 0l, 0l, 0l
         ; 1l, 1l, 1l
@@ -325,7 +457,7 @@ module Tests = struct
         ; Int32.max_value, Int32.max_value, Int32.max_value
         ; Int32.min_value, Int32.min_value, Int32.min_value
         ]
-    ; equal = Tuple3.equal ~eq1:Int32.equal ~eq2:Int32.equal ~eq3:Int32.equal
+    ; equal = [%equal: Int32.t * Int32.t * Int32.t]
     ; sexp_of = [%sexp_of: int32 * int32 * int32]
     ; hi_bound = None
     ; lo_bound = Minimum.bin_size_triple
@@ -334,8 +466,15 @@ module Tests = struct
 
   let list =
     { writer = Write.bin_write_list Write.bin_write_int32
-    ; writer_local = Some (Write.bin_write_list__local Write.bin_write_int32__local)
+    ; writer_local =
+        Some ((Write.bin_write_list [@mode local]) (Write.bin_write_int32 [@mode local]))
     ; reader = Read.bin_read_list Read.bin_read_int32
+    ; reader_local =
+        Some
+          { reader_local =
+              (Read.bin_read_list [@mode local]) (Read.bin_read_int32 [@mode local])
+          ; globalize = [%globalize: int32 list]
+          }
     ; values =
         [ []
         ; [ 0l ]
@@ -353,8 +492,14 @@ module Tests = struct
 
   let array =
     { writer = Write.bin_write_array Write.bin_write_int32
-    ; writer_local = Some (Write.bin_write_array__local Write.bin_write_int32__local)
+    ; writer_local =
+        Some ((Write.bin_write_array [@mode local]) (Write.bin_write_int32 [@mode local]))
     ; reader = Read.bin_read_array Read.bin_read_int32
+    ; reader_local =
+        Some
+          { reader_local = (Read.bin_read_array [@mode local]) Read.bin_read_int32
+          ; globalize = [%globalize: int32 array]
+          }
     ; values =
         [ [||]
         ; [| 0l |]
@@ -370,38 +515,35 @@ module Tests = struct
     }
   ;;
 
-  let hashtbl =
-    { writer = Write.bin_write_hashtbl Write.bin_write_int32 Write.bin_write_int32
-    ; writer_local = None
-    ; reader = Read.bin_read_hashtbl Read.bin_read_int32 Read.bin_read_int32
+  let iarray =
+    { writer = Write.bin_write_iarray Write.bin_write_int32
+    ; writer_local =
+        Some
+          ((Write.bin_write_iarray [@mode local]) (Write.bin_write_int32 [@mode local]))
+    ; reader = Read.bin_read_iarray Read.bin_read_int32
+    ; reader_local =
+        Some
+          { reader_local = (Read.bin_read_iarray [@mode local]) Read.bin_read_int32
+          ; globalize = [%globalize: int32 iarray]
+          }
     ; values =
-        List.map
-          [ []
-          ; [ 0l, 0l ]
-          ; [ 0l, 0l; 1l, 1l ]
-          ; [ 0l, 0l; Int32.max_value, Int32.max_value ]
-          ; [ -1l, -1l; Int32.min_value, Int32.min_value ]
-          ]
-          ~f:(fun l ->
-            let hashtbl = Stdlib.Hashtbl.create (List.length l) in
-            List.iter l ~f:(fun (key, data) -> Stdlib.Hashtbl.add hashtbl key data);
-            hashtbl)
-    ; equal =
-        (fun t1 t2 ->
-          let to_list tbl =
-            Stdlib.Hashtbl.fold (fun k v acc -> (k, v) :: acc) tbl []
-            |> List.sort ~compare
-          in
-          to_list t1 = to_list t2)
-    ; sexp_of = [%sexp_of: (int32, int32) Sexplib.Std.Hashtbl.t]
+        [ Iarray.empty
+        ; Iarray.of_list [ 0l ]
+        ; Iarray.of_list [ 0l; 1l ]
+        ; Iarray.of_list [ 1l; -1l ]
+        ; Iarray.of_list [ 0l; Int32.max_value ]
+        ; Iarray.of_list [ Int32.max_value; Int32.min_value ]
+        ]
+    ; equal = Iarray.equal Int32.equal
+    ; sexp_of = [%sexp_of: int32 iarray]
     ; hi_bound = None
-    ; lo_bound = Minimum.bin_size_hashtbl
+    ; lo_bound = Minimum.bin_size_iarray
     }
   ;;
 
   module R1 = struct
     type t =
-      { x : Int32.t
+      { x : int32
       ; y : float
       }
     [@@deriving bin_io ~localize, fields ~iterators:fold, sexp_of]
@@ -424,8 +566,9 @@ module Tests = struct
   let record1 =
     let open R1 in
     { writer = bin_write_t
-    ; writer_local = Some bin_write_t__local
+    ; writer_local = Some (bin_write_t [@mode local])
     ; reader = bin_read_t
+    ; reader_local = None
     ; values = [ { x = 0l; y = 0.0 }; { x = Int32.max_value; y = Float.max_value } ]
     ; equal = ( = )
     ; sexp_of = [%sexp_of: t]
@@ -436,8 +579,8 @@ module Tests = struct
 
   module R2 = struct
     type inner =
-      { w : Int64.t
-      ; x : Int32.t
+      { w : int64
+      ; x : int32
       }
     [@@deriving bin_io ~localize, fields ~iterators:fold, sexp_of]
 
@@ -479,8 +622,9 @@ module Tests = struct
   let record2 =
     let open R2 in
     { writer = bin_write_t
-    ; writer_local = Some bin_write_t__local
+    ; writer_local = Some (bin_write_t [@mode local])
     ; reader = bin_read_t
+    ; reader_local = None
     ; values =
         [ { y = { w = 0L; x = 0l }; z = () }
         ; { y = { w = Int64.max_value; x = Int32.max_value }; z = () }
@@ -495,8 +639,8 @@ module Tests = struct
   module Inline_record = struct
     type inner =
       | Inner of
-          { w : Int64.t
-          ; x : Int32.t
+          { w : int64
+          ; x : int32
           }
       | Inner_other of unit
     [@@deriving bin_io ~localize, sexp_of, variants]
@@ -547,8 +691,9 @@ module Tests = struct
   let inline_record =
     let open Inline_record in
     { writer = bin_write_t
-    ; writer_local = Some bin_write_t__local
+    ; writer_local = Some (bin_write_t [@mode local])
     ; reader = bin_read_t
+    ; reader_local = None
     ; values =
         [ Outer { y = Inner { w = 0L; x = 0l }; z = () }
         ; Outer { y = Inner { w = Int64.max_value; x = Int32.max_value }; z = () }
@@ -563,18 +708,18 @@ module Tests = struct
   ;;
 end
 
-let buf = Bigstring.create 1024
+let buf = Base_bigstring.create 1024
 
 let gen_tests t =
   let bin_protted_values =
     List.map t.values ~f:(fun v ->
       let len = t.writer buf ~pos:0 v in
-      let str = Bigstring.To_string.sub buf ~pos:0 ~len in
+      let str = Base_bigstring.To_string.sub buf ~pos:0 ~len in
       (match t.writer_local with
        | None -> ()
        | Some writer_local ->
          let len = writer_local buf ~pos:0 v in
-         let str_local = Bigstring.To_string.sub buf ~pos:0 ~len in
+         let str_local = Base_bigstring.To_string.sub buf ~pos:0 ~len in
          if String.( <> ) str str_local
          then
            printf ", write_local output (%s) differs from write output (%s)" str_local str);
@@ -589,24 +734,35 @@ let gen_tests t =
       bin_protted_values
       ~init:(Int.max_value, 0)
       ~f:(fun (min, max) v s ->
-      let len = String.length s in
-      printf !"%s -> %{Sexp}" (to_hex s hex_size) (t.sexp_of v);
-      Bigstring.From_string.blito ~src:s ~dst:buf ();
-      let pos_ref = ref 0 in
-      let v' = t.reader buf ~pos_ref in
-      let len' = !pos_ref in
-      let hi_bound = Option.value t.hi_bound ~default:Int.max_value in
-      if len < t.lo_bound || len > hi_bound
-      then printf ", bin_size outside of range %d..%d: %d" t.lo_bound hi_bound len;
-      if (not (t.equal v v')) || len <> len'
-      then
-        printf
-          !", read test failed: read %d byte%s as %{Sexp}"
-          len'
-          (if len' = 1 then "" else "s")
-          (t.sexp_of v');
-      Out_channel.output_char stdout '\n';
-      Int.min min len, Int.max max len)
+        let len = String.length s in
+        printf !"%s -> %{Sexp}" (to_hex s hex_size) (t.sexp_of v);
+        Base_bigstring.From_string.blito ~src:s ~dst:buf ();
+        let pos_ref = ref 0 in
+        let v' = t.reader buf ~pos_ref in
+        let len' = !pos_ref in
+        (match t.reader_local with
+         | Some { reader_local; globalize } ->
+           let pos_ref = ref 0 in
+           let v'_local = reader_local buf ~pos_ref |> globalize in
+           if not (t.equal v' v'_local)
+           then
+             printf
+               !", read_local output (%{Sexp}) differs from read output (%{Sexp})"
+               (t.sexp_of v'_local)
+               (t.sexp_of v')
+         | None -> ());
+        let hi_bound = Option.value t.hi_bound ~default:Int.max_value in
+        if len < t.lo_bound || len > hi_bound
+        then printf ", bin_size outside of range %d..%d: %d" t.lo_bound hi_bound len;
+        if (not (t.equal v v')) || len <> len'
+        then
+          printf
+            !", read test failed: read %d byte%s as %{Sexp}"
+            len'
+            (if len' = 1 then "" else "s")
+            (t.sexp_of v');
+        Out_channel.output_char stdout '\n';
+        Int.min min len, Int.max max len)
   in
   match t.hi_bound with
   | None ->
@@ -621,7 +777,8 @@ let%expect_test "Non-integer bin_prot size tests" =
   gen_tests Tests.unit;
   [%expect {| 00 -> () |}];
   gen_tests Tests.bool;
-  [%expect {|
+  [%expect
+    {|
     01 -> true
     00 -> false
     |}];
@@ -666,7 +823,8 @@ let%expect_test "Non-integer bin_prot size tests" =
     3f f0 00 00 00 00 00 00 01 -> (1)
     |}];
   gen_tests Tests.float32_vec;
-  [%expect {|
+  [%expect
+    {|
     .. .. .. .. 00 -> ()
     3f 80 00 00 01 -> (1)
     |}];
@@ -683,7 +841,8 @@ let%expect_test "Non-integer bin_prot size tests" =
     3f f0 00 00 00 00 00 00 01 01 -> ((1))
     |}];
   gen_tests Tests.float32_mat;
-  [%expect {|
+  [%expect
+    {|
     .. .. .. .. 00 00 -> ()
     3f 80 00 00 01 01 -> ((1))
     |}];
@@ -694,7 +853,8 @@ let%expect_test "Non-integer bin_prot size tests" =
     3f f0 00 00 00 00 00 00 01 01 -> ((1))
     |}];
   gen_tests Tests.bigstring;
-  [%expect {|
+  [%expect
+    {|
     .. .. .. .. .. 00 -> ""
     6f 6c 6c 65 68 05 -> hello
     |}];
@@ -770,6 +930,16 @@ let%expect_test "Non-integer bin_prot size tests" =
     .. .. .. .. 7f ff ff ff fd 00 02 -> (0 2147483647)
     80 00 00 00 fd 7f ff ff ff fd 02 -> (2147483647 -2147483648)
     |}];
+  gen_tests Tests.iarray;
+  [%expect
+    {|
+    .. .. .. .. .. .. .. .. .. .. 00 -> ()
+    .. .. .. .. .. .. .. .. .. 00 01 -> (0)
+    .. .. .. .. .. .. .. .. 01 00 02 -> (0 1)
+    .. .. .. .. .. .. .. ff ff 01 02 -> (1 -1)
+    .. .. .. .. 7f ff ff ff fd 00 02 -> (0 2147483647)
+    80 00 00 00 fd 7f ff ff ff fd 02 -> (2147483647 -2147483648)
+    |}];
   gen_tests Tests.record1;
   [%expect
     {|
@@ -789,19 +959,5 @@ let%expect_test "Non-integer bin_prot size tests" =
     00 7f ff ff ff fd 7f ff ff ff ff ff ff ff fc 00 01 -> (Outer(y(Inner(w 9223372036854775807)(x 2147483647)))(z()))
     .. .. .. .. .. .. .. .. .. .. .. .. .. 00 00 01 01 -> (Outer(y(Inner_other()))(z()))
     .. .. .. .. .. .. .. .. .. .. .. .. .. .. .. 00 00 -> (Outer_other())
-    |}]
-;;
-
-(* Polymorphic hash is not the same when running in javascript.
-   This makes the test fail because of different ordering. *)
-let%expect_test ("Non-integer bin_prot size tests (no js)" [@tags "no-js"]) =
-  gen_tests Tests.hashtbl;
-  [%expect
-    {|
-    .. .. .. .. .. .. .. .. .. .. .. .. .. .. 00 -> ()
-    .. .. .. .. .. .. .. .. .. .. .. .. 00 00 01 -> ((0 0))
-    .. .. .. .. .. .. .. .. .. .. 00 00 01 01 02 -> ((0 0)(1 1))
-    .. .. 00 00 7f ff ff ff fd 7f ff ff ff fd 02 -> ((0 0)(2147483647 2147483647))
-    80 00 00 00 fd 80 00 00 00 fd ff ff ff ff 02 -> ((-2147483648 -2147483648)(-1 -1))
     |}]
 ;;

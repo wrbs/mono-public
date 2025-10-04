@@ -1,7 +1,7 @@
 type 'a t = 'a list =
   | []
   | ( :: ) of 'a * 'a t
-[@@deriving equal]
+[@@deriving equal ~localize]
 
 open Base
 
@@ -12,6 +12,12 @@ let rev_map = List.rev_map
 let rev_filter_map = List.rev_filter_map
 let is_empty = List.is_empty
 let length = List.length
+
+module O = struct
+  type nonrec 'a t = 'a t =
+    | []
+    | ( :: ) of 'a * 'a t
+end
 
 module With_sexp_of = struct
   type nonrec 'a t = 'a t

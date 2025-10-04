@@ -1,32 +1,32 @@
 name: build
 on:
-  push:
-    branches:
-      - master
-  pull_request:
-    branches:
-      - master
+  - push
+  - pull_request
 jobs:
   run:
     name: Build
     strategy:
       matrix:
         os:
+          - macos-latest
           - ubuntu-latest
-            #- macos-latest
-            #- windows-latest
+#          - windows-latest
         ocaml-compiler:
-          - 4.08.x
-          - 4.14.x
+          - "4.14"
+          - "5.2"
+        include:
+          - os: ubuntu-24.04-arm
+            ocaml-compiler: "ocaml-variants.5.2.1+options,ocaml-option-tsan"
     runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v2
-    - uses: ocaml/setup-ocaml@v2
-      with:
-        ocaml-compiler: ${{ matrix.ocaml-compiler }}
-    - run: opam pin -n .
-    - run: opam depext -yt re
-    - run: opam install -t . --deps-only
-    - run: opam install -y core_bench core_unix
-    - run: opam exec -- dune build
-    - run: opam exec -- dune runtest
+      - uses: actions/checkout@v5
+      - run: |
+          sudo apt update
+          sudo apt install libunwind-dev
+        if: ${{ matrix.os == 'ubuntu-24.04-arm' }}
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ matrix.ocaml-compiler }}
+      - run: opam install . --deps-only --with-test
+      - run: opam exec -- dune build
+      - run: opam exec -- dune runtest

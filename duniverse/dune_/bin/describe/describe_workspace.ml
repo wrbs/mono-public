@@ -5,7 +5,7 @@ module Options = struct
   type t =
     { with_deps : bool (* whether to compute direct dependencies between modules *)
     ; with_pps : bool
-    (* whether to include the dependencies to ppx-rewriters (that are
+      (* whether to include the dependencies to ppx-rewriters (that are
        used at compile time) *)
     }
 
@@ -72,9 +72,9 @@ module Descr = struct
   module Mod_deps = struct
     type t =
       { for_intf : Dune_rules.Module_name.t list
-          (* direct module dependencies for the interface *)
+        (* direct module dependencies for the interface *)
       ; for_impl : Dune_rules.Module_name.t list
-      (* direct module dependencies for the implementation *)
+        (* direct module dependencies for the implementation *)
       }
 
     (* Conversion to the [Dyn.t] type *)
@@ -129,7 +129,7 @@ module Descr = struct
     type t =
       { names : string list (* names of the executable *)
       ; requires : Digest.t list
-          (* list of direct dependencies to libraries, identified by their
+        (* list of direct dependencies to libraries, identified by their
              digests *)
       ; modules : Mod.t list (* list of the modules the executable is composed of *)
       ; include_dirs : Path.t list (* list of include directories *)
@@ -157,10 +157,10 @@ module Descr = struct
       ; uid : Digest.t (* digest of the library *)
       ; local : bool (* whether this library is local *)
       ; requires : Digest.t list
-          (* list of direct dependendies to libraries, identified by their
+        (* list of direct dependendies to libraries, identified by their
              digests *)
       ; source_dir : Path.t
-          (* path to the directory that contains the sources of this library *)
+        (* path to the directory that contains the sources of this library *)
       ; modules : Mod.t list (* list of the modules the executable is composed of *)
       ; include_dirs : Path.t list (* list of include directories *)
       }
@@ -348,10 +348,10 @@ module Crawl = struct
 
   (* Builds the description of a module from a module and its object directory *)
   let module_
-    ~obj_dir
-    ~(deps_for_intf : Module.t list)
-    ~(deps_for_impl : Module.t list)
-    (m : Module.t)
+        ~obj_dir
+        ~(deps_for_intf : Module.t list)
+        ~(deps_for_impl : Module.t list)
+        (m : Module.t)
     : Descr.Mod.t
     =
     let source ml_kind = Option.map (Module.source m ~ml_kind) ~f:Module.File.path in
@@ -387,58 +387,64 @@ module Crawl = struct
   let executables sctx ~options ~project ~dir (exes : Executables.t)
     : (Descr.Item.t * Lib.Set.t) option Memo.t
     =
-    let first_exe = snd (Nonempty_list.hd exes.names) in
-    let* scope =
-      Scope.DB.find_by_project (Super_context.context sctx |> Context.name) project
-    in
-    let* modules_, obj_dir =
-      let+ modules_, obj_dir =
-        Dir_contents.get sctx ~dir
-        >>= Dir_contents.ocaml
-        >>= Ml_sources.modules_and_obj_dir
-              ~libs:(Scope.libs scope)
-              ~for_:(Exe { first_exe })
+    let* expander = Super_context.expander sctx ~dir in
+    Expander.eval_blang expander exes.enabled_if
+    >>= function
+    | false -> Memo.return None
+    | true ->
+      let first_exe = snd (Nonempty_list.hd exes.names) in
+      let* scope =
+        Scope.DB.find_by_project (Super_context.context sctx |> Context.name) project
       in
-      Modules.With_vlib.modules modules_, obj_dir
-    in
-    let* pp_map =
-      let+ version =
-        let+ ocaml = Super_context.context sctx |> Context.ocaml in
-        ocaml.version
+      let* modules_, obj_dir =
+        let+ modules_, obj_dir =
+          Dir_contents.get sctx ~dir
+          >>= Dir_contents.ocaml
+          >>= Ml_sources.modules_and_obj_dir
+                ~libs:(Scope.libs scope)
+                ~for_:(Exe { first_exe })
+        in
+        Modules.With_vlib.modules modules_, obj_dir
       in
-      Staged.unstage
-      @@ Pp_spec.pped_modules_map
-           (Preprocess.Per_module.without_instrumentation exes.buildable.preprocess)
-           version
-    in
-    let deps_of module_ =
-      let module_ = pp_map module_ in
-      immediate_deps_of_module ~options ~obj_dir ~modules:modules_ module_
-    in
-    let obj_dir = Obj_dir.of_local obj_dir in
-    let* modules_ = modules ~obj_dir ~deps_of modules_ in
-    let+ requires =
-      let* compile_info = Exe_rules.compile_info ~scope exes in
-      let open Resolve.Memo.O in
-      let* requires = Lib.Compile.direct_requires compile_info in
-      if options.with_pps
-      then
-        let+ pps = Lib.Compile.pps compile_info in
-        pps @ requires
-      else Resolve.Memo.return requires
-    in
-    match Resolve.peek requires with
-    | Error () -> None
-    | Ok libs ->
-      let include_dirs = Obj_dir.all_cmis obj_dir in
-      let exe_descr =
-        { Descr.Exe.names = List.map ~f:snd (Nonempty_list.to_list exes.names)
-        ; requires = List.map ~f:uid_of_library libs
-        ; modules = modules_
-        ; include_dirs
-        }
+      let* pp_map =
+        let+ version =
+          let+ ocaml = Super_context.context sctx |> Context.ocaml in
+          ocaml.version
+        in
+        Staged.unstage
+        @@ Pp_spec.pped_modules_map
+             (Dune_lang.Preprocess.Per_module.without_instrumentation
+                exes.buildable.preprocess)
+             version
       in
-      Some (Descr.Item.Executables exe_descr, Lib.Set.of_list libs)
+      let deps_of module_ =
+        let module_ = pp_map module_ in
+        immediate_deps_of_module ~options ~obj_dir ~modules:modules_ module_
+      in
+      let obj_dir = Obj_dir.of_local obj_dir in
+      let* modules_ = modules ~obj_dir ~deps_of modules_ in
+      let+ requires =
+        let* compile_info = Exe_rules.compile_info ~scope exes in
+        let open Resolve.Memo.O in
+        let* requires = Lib.Compile.direct_requires compile_info in
+        if options.with_pps
+        then
+          let+ pps = Lib.Compile.pps compile_info in
+          pps @ requires
+        else Resolve.Memo.return requires
+      in
+      (match Resolve.peek requires with
+       | Error () -> None
+       | Ok libs ->
+         let include_dirs = Obj_dir.all_cmis obj_dir in
+         let exe_descr =
+           { Descr.Exe.names = List.map ~f:snd (Nonempty_list.to_list exes.names)
+           ; requires = List.map ~f:uid_of_library libs
+           ; modules = modules_
+           ; include_dirs
+           }
+         in
+         Some (Descr.Item.Executables exe_descr, Lib.Set.of_list libs))
   ;;
 
   (* Builds a workspace item for the provided library object *)
@@ -476,7 +482,7 @@ module Crawl = struct
             in
             Staged.unstage
             @@ Pp_spec.pped_modules_map
-                 (Preprocess.Per_module.without_instrumentation
+                 (Dune_lang.Preprocess.Per_module.without_instrumentation
                     (Lib_info.preprocess info))
                  version
           in
@@ -537,10 +543,10 @@ module Crawl = struct
 
   (* Builds a workspace description for the provided dune setup and context *)
   let workspace
-    options
-    ({ Dune_rules.Main.contexts = _; scontexts } : Dune_rules.Main.build_system)
-    (context : Context.t)
-    dirs
+        options
+        ({ Dune_rules.Main.contexts = _; scontexts } : Dune_rules.Main.build_system)
+        (context : Context.t)
+        dirs
     : Descr.Workspace.t Memo.t
     =
     let context_name = Context.name context in
@@ -650,11 +656,11 @@ let term : unit Term.t =
     in
     Dune_lang.Decoder.parse parse Univ_map.empty ast
   in
-  Scheduler.go ~common ~config
+  Scheduler.go_with_rpc_server ~common ~config
   @@ fun () ->
   let open Fiber.O in
   let* setup = Import.Main.setup () in
-  Build_system.run_exn
+  build_exn
   @@ fun () ->
   let open Memo.O in
   let* setup = setup in

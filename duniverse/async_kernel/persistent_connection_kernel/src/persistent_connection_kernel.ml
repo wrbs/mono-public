@@ -83,6 +83,7 @@ module Make' (Conn_err : Connection_error) (Conn : Closable) = struct
       { get_address : unit -> ('address, conn_error) Result.t Deferred.t
       ; connect : 'address -> (Conn.t, conn_error) Result.t Deferred.t
       ; retry_delay : unit -> unit Deferred.t
+      ; time_source : Time_source.t
       ; mutable conn : [ `Ok of Conn.t | `Close_started ] Ivar.t
       ; mutable next_connect_result : (Conn.t, Conn_error_or_exception.t) Result.t Ivar.t
       ; event_handler : (Conn.t, conn_error, 'address) Event_handler.t
@@ -219,7 +220,8 @@ module Make' (Conn_err : Connection_error) (Conn : Closable) = struct
         { event_handler
         ; event_bus =
             Bus.create_exn
-              (if am_running_test then dummy_src_pos_that_shows_up_in_tests else [%here])
+              ~here:
+                (if am_running_test then dummy_src_pos_that_shows_up_in_tests else [%here])
               Arity1
               ~on_subscription_after_first_write:Allow_and_send_last_value
               ~on_callback_raise:ignore
@@ -227,6 +229,7 @@ module Make' (Conn_err : Connection_error) (Conn : Closable) = struct
         ; connect
         ; next_connect_result = Ivar.create ()
         ; retry_delay
+        ; time_source
         ; conn = Ivar.create ()
         ; close_started = Ivar.create ()
         ; close_finished = Ivar.create ()
@@ -239,36 +242,36 @@ module Make' (Conn_err : Connection_error) (Conn : Closable) = struct
          leave [t.conn] filled with [`Close_started]. *)
       don't_wait_for
       @@ Deferred.repeat_until_finished () (fun () ->
-           let%bind () = handle_event t Attempting_to_connect in
-           match%bind try_connecting_until_successful t with
-           | `Close_started -> return (`Finished ())
-           | `Don't_reconnect ->
-             abort_reconnecting_with_no_active_connection t;
-             return (`Finished ())
-           | `Ok (conn, ready_to_retry_connecting) ->
-             let%bind () = handle_event t (Connected conn) in
-             let%bind () = Conn.close_finished conn in
-             t.conn <- Ivar.create ();
-             let%bind () = handle_event t Disconnected in
-             (* waits until [retry_delay ()] time has passed since the time just before we last
+        let%bind () = handle_event t Attempting_to_connect in
+        match%bind try_connecting_until_successful t with
+        | `Close_started -> return (`Finished ())
+        | `Don't_reconnect ->
+          abort_reconnecting_with_no_active_connection t;
+          return (`Finished ())
+        | `Ok (conn, ready_to_retry_connecting) ->
+          let%bind () = handle_event t (Connected conn) in
+          let%bind () = Conn.close_finished conn in
+          t.conn <- Ivar.create ();
+          let%bind () = handle_event t Disconnected in
+          (* waits until [retry_delay ()] time has passed since the time just before we last
              tried to connect rather than the time we noticed being disconnected, so that if
              a long-lived connection dies, we will attempt to reconnect immediately. *)
-             let%map () =
-               Deferred.any
-                 [ ready_to_retry_connecting
-                 ; Ivar.read t.close_started
-                 ; Ivar.read t.don't_reconnect
-                 ]
-             in
-             if Ivar.is_full t.close_started
-             then (
-               Ivar.fill_exn t.conn `Close_started;
-               `Finished ())
-             else if Ivar.is_full t.don't_reconnect
-             then (
-               abort_reconnecting_with_no_active_connection t;
-               `Finished ())
-             else `Repeat ());
+          let%map () =
+            Deferred.any
+              [ ready_to_retry_connecting
+              ; Ivar.read t.close_started
+              ; Ivar.read t.don't_reconnect
+              ]
+          in
+          if Ivar.is_full t.close_started
+          then (
+            Ivar.fill_exn t.conn `Close_started;
+            `Finished ())
+          else if Ivar.is_full t.don't_reconnect
+          then (
+            abort_reconnecting_with_no_active_connection t;
+            `Finished ())
+          else `Repeat ());
       t
     ;;
 
@@ -297,8 +300,8 @@ module Make' (Conn_err : Connection_error) (Conn : Closable) = struct
         | None ->
           d
           >>= (function
-          | `Close_started -> Deferred.never ()
-          | `Ok conn -> return conn)
+           | `Close_started -> Deferred.never ()
+           | `Ok conn -> return conn)
         | Some `Close_started -> Deferred.never ()
         | Some (`Ok conn) ->
           if Conn.is_closed conn
@@ -357,6 +360,11 @@ module Make' (Conn_err : Connection_error) (Conn : Closable) = struct
     let close_when_current_connection_is_closed t =
       Ivar.fill_if_empty t.don't_reconnect ()
     ;;
+
+    module Expert = struct
+      let connection t = Ivar.read t.conn
+      let time_source t = t.time_source
+    end
   end
 
   type t = T : 'address Poly.t -> t [@@unboxed]
@@ -397,14 +405,18 @@ module Make' (Conn_err : Connection_error) (Conn : Closable) = struct
          ~address
          get_address)
   ;;
+
+  module Expert = struct
+    let connection (T t) = Poly.Expert.connection t
+    let time_source (T t) = Poly.Expert.time_source t
+  end
 end
 
-module Make (Conn : Closable) =
-  Make'
-    (struct
-      type t = Error.t [@@deriving equal, sexp_of]
+module Default_connection_error = struct
+  type t = Error.t [@@deriving equal, sexp_of]
 
-      let of_exception_error e = e
-      let to_error e = e
-    end)
-    (Conn)
+  let of_exception_error e = e
+  let to_error e = e
+end
+
+module Make (Conn : Closable) = Make' (Default_connection_error) (Conn)

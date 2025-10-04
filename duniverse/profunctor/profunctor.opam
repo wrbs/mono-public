@@ -1,5 +1,4 @@
 opam-version: "2.0"
-version: "v0.17.0"
 maintainer: "Jane Street developers"
 authors: ["Jane Street Group, LLC"]
 homepage: "https://github.com/janestreet/profunctor"
@@ -11,11 +10,11 @@ build: [
   ["dune" "build" "-p" name "-j" jobs]
 ]
 depends: [
-  "ocaml"          {>= "5.1.0"}
-  "base"           {>= "v0.17" & < "v0.18"}
-  "ppx_jane"       {>= "v0.17" & < "v0.18"}
-  "record_builder" {>= "v0.17" & < "v0.18"}
-  "dune"           {>= "3.11.0"}
+  "ocaml" {>= "5.1.0"}
+  "base"
+  "ppx_jane"
+  "record_builder"
+  "dune"           {>= "3.17.0"}
 ]
 available: arch != "arm32" & arch != "x86_32"
 synopsis: "A library providing a signature for simple profunctors and traversal of a record"

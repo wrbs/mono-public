@@ -38,14 +38,14 @@ let of_utf8 utf8 ~width ~prefer_split_on_spaces =
               match Uchar.equal space_uchar uchar with
               | true -> (start_pos + assumed_width_per_uchar) :: acc
               | false -> acc)
-            |> Set.of_list (module Int)
+            |> Int.Set.of_list
           in
           fun uchars_left ->
             List.take uchars_left width
             |> List.rev
             |> List.findi ~f:(fun _ pos -> Set.mem ends_of_spaces pos)
             |> Option.map ~f:(fun (uchars_after_last_space, _) ->
-                 width - uchars_after_last_space)
+              width - uchars_after_last_space)
             |> Option.value ~default:width
         in
         let rec chunks_split_on_spaces chunks num_uchars_left = function
@@ -65,11 +65,11 @@ let of_utf8 utf8 ~width ~prefer_split_on_spaces =
     let chunk_ends_before_pos = chunks |> List.map ~f:List.last_exn |> Sequence.of_list in
     chunk_ends_before_pos
     |> Sequence.unfold_with ~init:0 ~f:(fun start_at end_before ->
-         Yield
-           { value =
-               String.sub utf8 ~pos:start_at ~len:(end_before - start_at)
-               |> String.Utf8.of_string
-           ; state = end_before
-           })
+      Yield
+        { value =
+            String.sub utf8 ~pos:start_at ~len:(end_before - start_at)
+            |> String.Utf8.of_string
+        ; state = end_before
+        })
     |> Sequence.to_list
 ;;

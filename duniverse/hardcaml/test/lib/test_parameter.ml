@@ -14,7 +14,7 @@ let find_name_exn ts name =
   print_s
     [%sexp
       (try_with (fun () -> find_name_exn ts (Parameter_name.of_string name))
-        : Value.t Or_error.t)]
+       : Value.t Or_error.t)]
 ;;
 
 let t1 = { name = Parameter_name.of_string "N1"; value = Int 1 }
@@ -67,12 +67,14 @@ let%expect_test "[sort_by_name]" =
   sort_by_name [ t1 ];
   [%expect {| ((N1 (Int 1))) |}];
   sort_by_name [ t1; t2 ];
-  [%expect {|
+  [%expect
+    {|
     ((N1 (Int 1))
      (N2 (Int 2)))
     |}];
   sort_by_name [ t2; t1 ];
-  [%expect {|
+  [%expect
+    {|
     ((N1 (Int 1))
      (N2 (Int 2)))
     |}]
@@ -86,7 +88,6 @@ let%expect_test "std_logic rountrip" =
       [%message
         "" (std_logic : Std_logic.t) (char : char) (converted : Std_logic.t Or_error.t)];
     require
-      [%here]
       (match converted with
        | Error _ -> false
        | Ok x -> Std_logic.equal x std_logic)
@@ -166,7 +167,7 @@ let create_instantiation_test =
       ]
   in
   let inst hdl a =
-    Map.find_exn
+    Instantiation.output
       (Instantiation.create
          ()
          ~name:("test_parameters_" ^ hdl)
@@ -177,16 +178,17 @@ let create_instantiation_test =
     |> Signal.output ("b_" ^ hdl)
   in
   let a = Signal.input "a" 1 in
-  let circ hdl =
-    Circuit.create_exn
-      ~name:("test_parameter_instantiation_" ^ hdl)
-      [ inst "vhdl" a; inst "verilog" a ]
-  in
-  circ
+  let config = { Rtl.Config.default with backend = Modelsim } in
+  fun hdl ->
+    ( Circuit.create_exn
+        ~name:("test_parameter_instantiation_" ^ hdl)
+        [ inst "vhdl" a; inst "verilog" a ]
+    , config )
 ;;
 
 let%expect_test "instantiation in verilog" =
-  Rtl.print Verilog (create_instantiation_test "verilog");
+  let circ, config = create_instantiation_test "verilog" in
+  Rtl.print Verilog ~config circ;
   [%expect
     {|
     module test_parameter_instantiation_verilog (
@@ -199,9 +201,9 @@ let%expect_test "instantiation in verilog" =
         output [1:0] b_vhdl;
         output [1:0] b_verilog;
 
-        wire [1:0] _7;
+        wire [1:0] _6;
         wire [1:0] _1;
-        wire [1:0] _9;
+        wire [1:0] _7;
         wire [1:0] _4;
         test_parameters_verilog
             #( .an_int(7),
@@ -216,8 +218,8 @@ let%expect_test "instantiation in verilog" =
                .a_std_ulogic_vector(4'b1011) )
             the_test_parameters_verilog
             ( .a(a),
-              .b(_7[1:0]) );
-        assign _1 = _7;
+              .b(_6[1:0]) );
+        assign _1 = _6;
         test_parameters_vhdl
             #( .an_int(7),
                .a_bool(1'b1),
@@ -231,8 +233,8 @@ let%expect_test "instantiation in verilog" =
                .a_std_ulogic_vector(4'b1011) )
             the_test_parameters_vhdl
             ( .a(a),
-              .b(_9[1:0]) );
-        assign _4 = _9;
+              .b(_7[1:0]) );
+        assign _4 = _7;
         assign b_vhdl = _4;
         assign b_verilog = _1;
 
@@ -241,7 +243,8 @@ let%expect_test "instantiation in verilog" =
 ;;
 
 let%expect_test "instantiation in vhdl" =
-  Rtl.print Vhdl (create_instantiation_test "vhdl");
+  let circ, config = create_instantiation_test "vhdl" in
+  Rtl.print Vhdl ~config circ;
   [%expect
     {|
     library ieee;
@@ -258,21 +261,9 @@ let%expect_test "instantiation in vhdl" =
 
     architecture rtl of test_parameter_instantiation_vhdl is
 
-        -- conversion functions
-        function hc_uns(a : std_logic)        return unsigned         is variable b : unsigned(0 downto 0); begin b(0) := a; return b; end;
-        function hc_uns(a : std_logic_vector) return unsigned         is begin return unsigned(a); end;
-        function hc_sgn(a : std_logic)        return signed           is variable b : signed(0 downto 0); begin b(0) := a; return b; end;
-        function hc_sgn(a : std_logic_vector) return signed           is begin return signed(a); end;
-        function hc_sl (a : std_logic_vector) return std_logic        is begin return a(a'right); end;
-        function hc_sl (a : unsigned)         return std_logic        is begin return a(a'right); end;
-        function hc_sl (a : signed)           return std_logic        is begin return a(a'right); end;
-        function hc_sl (a : boolean)          return std_logic        is begin if a then return '1'; else return '0'; end if; end;
-        function hc_slv(a : std_logic_vector) return std_logic_vector is begin return a; end;
-        function hc_slv(a : unsigned)         return std_logic_vector is begin return std_logic_vector(a); end;
-        function hc_slv(a : signed)           return std_logic_vector is begin return std_logic_vector(a); end;
-        signal hc_7 : std_logic_vector(1 downto 0);
+        signal hc_6 : std_logic_vector(1 downto 0);
         signal hc_1 : std_logic_vector(1 downto 0);
-        signal hc_9 : std_logic_vector(1 downto 0);
+        signal hc_7 : std_logic_vector(1 downto 0);
         signal hc_4 : std_logic_vector(1 downto 0);
 
     begin
@@ -289,8 +280,8 @@ let%expect_test "instantiation in vhdl" =
                           a_std_logic_vector => std_logic_vector'("1010"),
                           a_std_ulogic_vector => std_ulogic_vector'("1011") )
             port map ( a => a,
-                       b => hc_7(1 downto 0) );
-        hc_1 <= hc_7;
+                       b => hc_6(1 downto 0) );
+        hc_1 <= hc_6;
         the_test_parameters_vhdl: entity work.test_parameters_vhdl (rtl)
             generic map ( an_int => 7,
                           a_bool => true,
@@ -303,8 +294,8 @@ let%expect_test "instantiation in vhdl" =
                           a_std_logic_vector => std_logic_vector'("1010"),
                           a_std_ulogic_vector => std_ulogic_vector'("1011") )
             port map ( a => a,
-                       b => hc_9(1 downto 0) );
-        hc_4 <= hc_9;
+                       b => hc_7(1 downto 0) );
+        hc_4 <= hc_7;
         b_vhdl <= hc_4;
         b_verilog <= hc_1;
 

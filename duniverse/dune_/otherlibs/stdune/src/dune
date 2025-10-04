@@ -8,12 +8,15 @@
   csexp
   (re_export ordering)
   (re_export dyn)
-  (re_export pp)
-  (re_export dune_filesystem_stubs))
+  (re_export pp))
  (library_flags
   (:include flags/sexp))
  (foreign_stubs
   (language c)
-  (names wait4_stubs platform_stubs copyfile_stubs signal_stubs))
- (instrumentation
-  (backend bisect_ppx)))
+  (names
+   dune_flock
+   readdir
+   wait4_stubs
+   platform_stubs
+   copyfile_stubs
+   signal_stubs)))

@@ -13,7 +13,7 @@ let rpc =
 let custom_metadata_local =
   Type_equal.Id.create
     ~name:"async rpc test metadata"
-    [%sexp_of: string * int * string option]
+    [%sexp_of: string * int * Async_rpc_kernel.Rpc_metadata.V1.t option]
 ;;
 
 let implementations =
@@ -22,19 +22,22 @@ let implementations =
       let part1 =
         match Async_rpc_kernel.Rpc_metadata.get () with
         | None -> "no legacy request id"
-        | Some rqid -> [%string "legacy request %{rqid}"]
+        | Some rqid -> [%string "legacy request %{rqid#Async_rpc_kernel.Rpc_metadata.V1}"]
       in
       let part2 =
         match Scheduler.find_local custom_metadata_local with
         | None -> "no custom request id"
         | Some x ->
-          [%string "custom metadata %{[%sexp (x:string * int* string option)]#Sexp}"]
+          [%string
+            "custom metadata %{[%sexp (x:string * int* \
+             Async_rpc_kernel.Rpc_metadata.V1.t option)]#Sexp}"]
       in
       return (part1 ^ "; " ^ part2))
   in
   Rpc.Implementations.create_exn
     ~implementations:[ implementation ]
     ~on_unknown_rpc:`Raise
+    ~on_exception:Log_on_background_exn
 ;;
 
 let with_rpc_server_connection ?(implementations = implementations) f ~on_client_connected
@@ -94,7 +97,9 @@ let%expect_test "dispatch with metadata" =
            Async_rpc_kernel.Async_rpc_kernel_private.Connection.set_metadata_hooks
              conn
              ~when_sending:(fun { name; version } ~query_id:_ ->
-               Some (name ^ ":" ^ Int.to_string version))
+               Some
+                 (name ^ ":" ^ Int.to_string version
+                  |> Async_rpc_kernel.Rpc_metadata.V1.of_string))
              ~on_receive:(fun _ ~query_id:_ _ ctx -> ctx)
          with
          | `Ok -> ()
@@ -115,12 +120,14 @@ let%expect_test "dispatch with metadata and implementation hook" =
            Async_rpc_kernel.Async_rpc_kernel_private.Connection.set_metadata_hooks
              conn
              ~when_sending:(fun { name; version } ~query_id:_ ->
-               Some (name ^ ":" ^ Int.to_string version))
+               Some
+                 (name ^ ":" ^ Int.to_string version
+                  |> Async_rpc_kernel.Rpc_metadata.V1.of_string))
              ~on_receive:(fun _ ~query_id:_ _ ctx -> ctx)
          with
          | `Ok -> ()
          | `Already_set -> failwith "Unexpected already set");
-        let%map without_md = without_md
+        let%map without_md
         and with_md = Rpc.Rpc.dispatch rpc conn () in
         [ `without_metadata, without_md; `with_metdata, with_md ])
       ~on_client_connected:(fun conn ->
@@ -156,26 +163,27 @@ let%expect_test "expert unknown rpc handler" =
       ~on_unknown_rpc:
         (`Expert
           (fun ()
-               ~rpc_tag
-               ~version
-               ~metadata
-               responder
-               (_ : Bigstring.t)
-               ~pos:(_ : int)
-               ~len ->
+            ~rpc_tag
+            ~version
+            ~metadata
+            responder
+            (_ : Bigstring.t)
+            ~pos:(_ : int)
+            ~len ->
             print_s
               [%message
                 "Unknown rpc handler called"
                   ~rpc_tag
                   (version : int)
-                  (metadata : string option)
+                  (metadata : Async_rpc_kernel.Rpc_metadata.V1.t option)
                   ~data_len:(len : int)
                   (Scheduler.find_local custom_metadata_local
-                    : (string * int * string option) option)];
+                   : (string * int * Async_rpc_kernel.Rpc_metadata.V1.t option) option)];
             Rpc.Rpc.Expert.Responder.write_error
               responder
               (Error.create_s [%message "example error"]);
             return ()))
+      ~on_exception:Log_on_background_exn
   in
   let%bind response =
     with_rpc_server_connection
@@ -185,7 +193,9 @@ let%expect_test "expert unknown rpc handler" =
            Async_rpc_kernel.Async_rpc_kernel_private.Connection.set_metadata_hooks
              conn
              ~when_sending:(fun { name; version } ~query_id:_ ->
-               Some (name ^ ":" ^ Int.to_string version))
+               Some
+                 (name ^ ":" ^ Int.to_string version
+                  |> Async_rpc_kernel.Rpc_metadata.V1.of_string))
              ~on_receive:(fun _ ~query_id:_ _ ctx -> ctx)
          with
          | `Ok -> ()
@@ -202,7 +212,7 @@ let%expect_test "expert unknown rpc handler" =
                   "on_receive: got metadata"
                     ~name
                     (version : int)
-                    (metadata : string option)];
+                    (metadata : Async_rpc_kernel.Rpc_metadata.V1.t option)];
               Async.Execution_context.with_local
                 ctx
                 custom_metadata_local

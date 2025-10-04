@@ -1,7 +1,9 @@
+@@ portable
+
 open! Import
 module Repr = Int63
 
-type t [@@deriving compare, hash, sexp_of, typerep] [@@immediate64]
+type t : immediate64 [@@deriving compare ~localize, hash, sexp_of, typerep]
 
 val to_string : t -> string
 val to_string_hum : t -> string

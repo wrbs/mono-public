@@ -1,6 +1,6 @@
 open! Import
 module Array = Array0
-include Indexed_container_intf
+include Indexed_container_intf.Definitions
 
 let with_return = With_return.with_return
 
@@ -9,7 +9,7 @@ let[@inline always] iteri ~fold t ~f =
     (fold t ~init:0 ~f:(fun i x ->
        f i x;
        i + 1)
-      : int)
+     : int)
 ;;
 
 let foldi ~fold t ~init ~f =
@@ -17,7 +17,8 @@ let foldi ~fold t ~init ~f =
   fold t ~init ~f:(fun acc v ->
     let acc = f !i acc v in
     i := !i + 1;
-    acc) [@nontail]
+    acc)
+  [@nontail]
 ;;
 
 let counti ~foldi t ~f =
@@ -27,13 +28,15 @@ let counti ~foldi t ~f =
 let existsi ~iteri c ~f =
   with_return (fun r ->
     iteri c ~f:(fun i x -> if f i x then r.return true);
-    false) [@nontail]
+    false)
+  [@nontail]
 ;;
 
 let for_alli ~iteri c ~f =
   with_return (fun r ->
     iteri c ~f:(fun i x -> if not (f i x) then r.return false);
-    true) [@nontail]
+    true)
+  [@nontail]
 ;;
 
 let find_mapi ~iteri t ~f =
@@ -42,25 +45,27 @@ let find_mapi ~iteri t ~f =
       match f i x with
       | None -> ()
       | Some _ as res -> r.return res);
-    None) [@nontail]
+    None)
+  [@nontail]
 ;;
 
 let findi ~iteri c ~f =
   with_return (fun r ->
     iteri c ~f:(fun i x -> if f i x then r.return (Some (i, x)));
-    None) [@nontail]
+    None)
+  [@nontail]
 ;;
 
 (* Allows [Make_gen] to share a [Container.Generic] implementation with, e.g.,
    [Container.Make_gen_with_creators]. *)
-module Make_gen_with_container
-  (T : Make_gen_arg)
-  (C : Container.Generic
+module%template.portable Make_gen_with_container
+    (T : Make_gen_arg)
+    (C : Container.Generic
          with type ('a, 'phantom1, 'phantom2) t := ('a, 'phantom1, 'phantom2) T.t
           and type 'a elt := 'a T.elt) :
   Generic
-    with type ('a, 'phantom1, 'phantom2) t := ('a, 'phantom1, 'phantom2) T.t
-     and type 'a elt := 'a T.elt = struct
+  with type ('a, 'phantom1, 'phantom2) t := ('a, 'phantom1, 'phantom2) T.t
+   and type 'a elt := 'a T.elt = struct
   include C
 
   let iteri =
@@ -83,46 +88,48 @@ module Make_gen_with_container
 end
 [@@inline always]
 
-module Make_gen (T : Make_gen_arg) :
+module%template.portable [@modality m] Make_gen (T : Make_gen_arg) :
   Generic
-    with type ('a, 'phantom1, 'phantom2) t := ('a, 'phantom1, 'phantom2) T.t
-     and type 'a elt := 'a T.elt = struct
-  module C = Container.Make_gen (T)
+  with type ('a, 'phantom1, 'phantom2) t := ('a, 'phantom1, 'phantom2) T.t
+   and type 'a elt := 'a T.elt = struct
+  module C = Container.Make_gen [@modality m] (T)
   include C
-  include Make_gen_with_container (T) (C)
+  include Make_gen_with_container [@modality m] (T) (C)
 end
 [@@inline always]
 
-module Make (T : Make_arg) = struct
-  include Make_gen (struct
-    include T
+module%template.portable [@modality m] Make (T : Make_arg) = struct
+  include Make_gen [@modality m] (struct
+      include T
 
-    type ('a, _, _) t = 'a T.t
-    type 'a elt = 'a
-  end)
+      type ('a, _, _) t = 'a T.t
+      type 'a elt = 'a
+    end)
 end
 [@@inline always]
 
-module Make0 (T : Make0_arg) = struct
-  include Make_gen (struct
-    include T
+module%template.portable [@modality m] Make0 (T : Make0_arg) = struct
+  include Make_gen [@modality m] (struct
+      include T
 
-    type (_, _, _) t = T.t
-    type 'a elt = T.Elt.t
-  end)
+      type (_, _, _) t = T.t
+      type 'a elt = T.Elt.t
+    end)
 
   let mem t x = mem t x ~equal:T.Elt.equal
 end
 
-module Make_gen_with_creators (T : Make_gen_with_creators_arg) :
+module%template.portable
+  [@modality m] Make_gen_with_creators
+    (T : Make_gen_with_creators_arg) :
   Generic_with_creators
-    with type ('a, 'phantom1, 'phantom2) t := ('a, 'phantom1, 'phantom2) T.t
-     and type 'a elt := 'a T.elt
-     and type ('a, 'phantom1, 'phantom2) concat := ('a, 'phantom1, 'phantom2) T.concat =
+  with type ('a, 'phantom1, 'phantom2) t := ('a, 'phantom1, 'phantom2) T.t
+   and type 'a elt := 'a T.elt
+   and type ('a, 'phantom1, 'phantom2) concat := ('a, 'phantom1, 'phantom2) T.concat =
 struct
-  module C = Container.Make_gen_with_creators (T)
+  module C = Container.Make_gen_with_creators [@modality m] (T)
   include C
-  include Make_gen_with_container (T) (C)
+  include Make_gen_with_container [@modality m] (T) (C)
 
   let derived_init n ~f = of_array (Array.init n ~f)
 
@@ -144,7 +151,8 @@ struct
     concat_mapi t ~f:(fun i x ->
       match f i x with
       | None -> of_array [||]
-      | Some y -> of_array [| y |]) [@nontail]
+      | Some y -> of_array [| y |])
+    [@nontail]
   ;;
 
   let mapi t ~f = filter_mapi t ~f:(fun i x -> Some (f i x)) [@nontail]
@@ -152,30 +160,53 @@ struct
   let filteri t ~f =
     filter_mapi t ~f:(fun i x -> if f i x then Some x else None) [@nontail]
   ;;
+
+  let partition_mapi t ~f =
+    let array = Array.mapi (to_array t) ~f in
+    let xs =
+      Array.fold_right array ~init:[] ~f:(fun either acc ->
+        match (either : _ Either0.t) with
+        | First x -> x :: acc
+        | Second _ -> acc)
+    in
+    let ys =
+      Array.fold_right array ~init:[] ~f:(fun either acc ->
+        match (either : _ Either0.t) with
+        | First _ -> acc
+        | Second x -> x :: acc)
+    in
+    of_list xs, of_list ys
+  ;;
+
+  let partitioni_tf t ~f =
+    partition_mapi t ~f:(fun i x -> if f i x then First x else Second x) [@nontail]
+  ;;
 end
 
-module Make_with_creators (T : Make_with_creators_arg) = struct
-  include Make_gen_with_creators (struct
-    include T
+module%template.portable [@modality m] Make_with_creators (T : Make_with_creators_arg) =
+struct
+  include Make_gen_with_creators [@modality m] (struct
+      include T
 
-    type ('a, _, _) t = 'a T.t
-    type 'a elt = 'a
-    type ('a, _, _) concat = 'a T.t
+      type ('a, _, _) t = 'a T.t
+      type 'a elt = 'a
+      type ('a, _, _) concat = 'a T.t
 
-    let concat_of_array = of_array
-  end)
+      let concat_of_array = of_array
+    end)
 end
 
-module Make0_with_creators (T : Make0_with_creators_arg) = struct
-  include Make_gen_with_creators (struct
-    include T
+module%template.portable [@modality m] Make0_with_creators (T : Make0_with_creators_arg) =
+struct
+  include Make_gen_with_creators [@modality m] (struct
+      include T
 
-    type (_, _, _) t = T.t
-    type 'a elt = T.Elt.t
-    type ('a, _, _) concat = 'a list
+      type (_, _, _) t = T.t
+      type 'a elt = T.Elt.t
+      type ('a, _, _) concat = 'a list
 
-    let concat_of_array = Array.to_list
-  end)
+      let concat_of_array = Array.to_list
+    end)
 
   let mem t x = mem t x ~equal:T.Elt.equal
 end

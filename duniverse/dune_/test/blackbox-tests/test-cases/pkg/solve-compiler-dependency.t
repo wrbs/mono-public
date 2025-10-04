@@ -1,6 +1,5 @@
-Repro for https://github.com/ocaml/dune/issues/10592. Creates some packages
-that simulate some of the ocaml compiler packages and test solving a project
-that depends on "ocaml".
+Creates some packages that simulate some of the ocaml compiler
+packages and test solving a project that depends on "ocaml".
 
   $ . ./helpers.sh
   $ mkrepo
@@ -40,13 +39,13 @@ compiler also in the repo.
   > flags: [avoid-version]
   > EOF
 
-The alpha version of the compiler was chosen instead of the stable version.
-This would ideally be avoided due to the avoid-version flag, but this flag is
-ignored by dune.
+The alpha version of the compiler is not chosen here because dune's
+solver respects the avoid-version flag between multiple versions of
+the same package.
   $ solve ocaml
   Solution for dune.lock:
   - ocaml.5.2.0
-  - ocaml-base-compiler.5.2.0+alpha1
+  - ocaml-base-compiler.5.2.0
 
 Now release a new version of ocaml-variants and a new version of ocaml that
 uses it. The dependency specification for ocaml is based on how the package is
@@ -61,10 +60,34 @@ organized in the wild.
   > ]
   > EOF
 
-Here ocaml-variants is chosen despite its avoid-version flag. This is because
-dune currently ignores this flag. This is a problem because the chosen compiler
-is not officially released and possibly unstable.
+Note that dune didn't change the solution to include the newest
+release of the "ocaml" package, as doing so would cause a dependency
+on an unstable version of the compiler. Dune assumes that any version
+of compiler packages with a higher version number than the latest
+version of ocaml-base-compiler without the avoid-version flag is
+unstable.
   $ solve ocaml
   Solution for dune.lock:
+  - ocaml.5.2.0
+  - ocaml-base-compiler.5.2.0
+
+A package can still force an unstable version of the compiler by leaving no
+other choices:
+
+  $ mkpkg edgy 1.0 << EOF
+  > depends: [ "ocaml" {> "$CURRENT" } ]
+  > EOF
+  $ solve edgy
+  Solution for dune.lock:
+  - edgy.1.0
   - ocaml.5.3.0
-  - ocaml-variants.5.3.0+trunk
+  - ocaml-variants.5.3.0+trunk (this version should be avoided)
+
+  $ mkpkg edgy 1.0 << EOF
+  > depends: [ "ocaml" "ocaml-base-compiler" {> "$CURRENT" } ]
+  > EOF
+  $ solve edgy
+  Solution for dune.lock:
+  - edgy.1.0
+  - ocaml.5.2.0
+  - ocaml-base-compiler.5.2.0+alpha1 (this version should be avoided)

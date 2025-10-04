@@ -118,16 +118,36 @@ let%expect_test "[%lazy_message]" =
 let%expect_test "[%message] is not lazy" =
   let side_effect = ref false in
   let _ = [%message (side_effect := true : unit)] in
-  Expect_test_helpers_base.require [%here] !side_effect;
+  Expect_test_helpers_base.require !side_effect;
   [%expect {| |}]
 ;;
 
 let%expect_test "[%message_lazy] is lazy" =
   let side_effect = ref false in
   let lazy_message = [%lazy_message (side_effect := true : unit)] in
-  Expect_test_helpers_base.require_equal [%here] (module Bool) !side_effect false;
+  Expect_test_helpers_base.require_equal (module Bool) !side_effect false;
   [%expect {| |}];
   let _ = Lazy.force lazy_message in
-  Expect_test_helpers_base.require [%here] !side_effect;
+  Expect_test_helpers_base.require !side_effect;
   [%expect {| |}]
+;;
+
+let%expect_test "[%message] works with ppx_template" =
+  let open%template struct
+    [@@@kind.default k = (bits64, value)]
+
+    type ('a : k) t = T of 'a [@@deriving sexp_of]
+    type ('a : k) not_a_t = Not_t of 'a [@@deriving sexp_of]
+  end in
+  pr [%message "over values" (T 1 : int t) (Not_t 2 : int not_a_t)];
+  pr
+    [%message
+      "over bits64"
+        (T #1L : (Int64_u.t t[@kind bits64]))
+        (Not_t #2L : (Int64_u.t not_a_t[@kind bits64]))];
+  [%expect
+    {|
+    ("over values" ("T 1" (T 1)) ("Not_t 2" (Not_t 2)))
+    ("over bits64" ("T #1L" (T 1)) ("Not_t #2L" (Not_t 2)))
+    |}]
 ;;

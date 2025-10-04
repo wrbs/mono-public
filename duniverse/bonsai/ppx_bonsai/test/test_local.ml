@@ -4,13 +4,65 @@ module type S = sig
 
   module Let_syntax : sig
     val ( >>| ) : 'a t -> ('a -> 'b) -> 'b t
-    val return : 'a -> graph -> 'a t
+    val return : 'a -> local_ graph -> 'a t
 
     module Let_syntax : sig
-      val map : ?here:Lexing.position -> 'a t -> f:('a -> 'b) -> 'b t
+      val map : here:[%call_pos] -> 'a t -> f:('a -> 'b) -> 'b t
       val map2 : 'a t -> 'b t -> f:('a -> 'b -> 'c) -> 'c t
       val both : 'a t -> 'b t -> ('a * 'b) t
-      val arr : ?here:Lexing.position -> 'a t -> f:('a -> 'b) -> 'b t
+      val arr : here:[%call_pos] -> 'a t -> f:('a -> 'b) -> 'b t
+      val arr2 : here:[%call_pos] -> 'a1 t -> 'a2 t -> f:('a1 -> 'a2 -> 'b) -> 'b t
+
+      val arr3
+        :  here:[%call_pos]
+        -> 'a1 t
+        -> 'a2 t
+        -> 'a3 t
+        -> f:('a1 -> 'a2 -> 'a3 -> 'b)
+        -> 'b t
+
+      val arr4
+        :  here:[%call_pos]
+        -> 'a1 t
+        -> 'a2 t
+        -> 'a3 t
+        -> 'a4 t
+        -> f:('a1 -> 'a2 -> 'a3 -> 'a4 -> 'b)
+        -> 'b t
+
+      val arr5
+        :  here:[%call_pos]
+        -> 'a1 t
+        -> 'a2 t
+        -> 'a3 t
+        -> 'a4 t
+        -> 'a5 t
+        -> f:('a1 -> 'a2 -> 'a3 -> 'a4 -> 'a5 -> 'b)
+        -> 'b t
+
+      val arr6
+        :  here:[%call_pos]
+        -> 'a1 t
+        -> 'a2 t
+        -> 'a3 t
+        -> 'a4 t
+        -> 'a5 t
+        -> 'a6 t
+        -> f:('a1 -> 'a2 -> 'a3 -> 'a4 -> 'a5 -> 'a6 -> 'b)
+        -> 'b t
+
+      val arr7
+        :  here:[%call_pos]
+        -> 'a1 t
+        -> 'a2 t
+        -> 'a3 t
+        -> 'a4 t
+        -> 'a5 t
+        -> 'a6 t
+        -> 'a7 t
+        -> f:('a1 -> 'a2 -> 'a3 -> 'a4 -> 'a5 -> 'a6 -> 'a7 -> 'b)
+        -> 'b t
+
       val return : 'a t -> 'a t
       val cutoff : 'a t -> equal:('a -> 'a -> bool) -> 'a t
 
@@ -18,10 +70,10 @@ module type S = sig
         :  here:Lexing.position
         -> match_:int t
         -> branches:int
-        -> with_:(int -> 'a t)
+        -> with_:local_ (int -> 'a t)
         -> 'a t
 
-      val sub : ?here:_ -> 'a -> f:('a -> 'b) -> 'b
+      val sub : ?here:_ -> 'a -> f:local_ ('a -> 'b) -> 'b
     end
   end
 end
@@ -29,25 +81,25 @@ end
 module M (X : S) = struct
   open X.Let_syntax
 
-  let _arrow_example_1 a graph =
+  let _arrow_example_1 a (local_ graph) =
     match%sub a with
     | 0 -> return true graph
     | _ -> return false graph
   ;;
 
-  let _arrow_example_2 a graph =
+  let _arrow_example_2 a (local_ graph) =
     match%sub a with
     | 0 -> return true graph
     | b ->
-      let%map b = b in
+      let%map b in
       b = 1
   ;;
 
-  let _arrow_example_3 a graph =
+  let _arrow_example_3 a (local_ graph) =
     match%sub a with
     | 0 -> return true graph
     | _ as b ->
-      let%map b = b in
+      let%map b in
       b = 1
   ;;
 
@@ -58,12 +110,12 @@ module M (X : S) = struct
   let _arrow_example_4 a : _ X.t =
     match%sub a with
     | A b ->
-      let%map b = b in
+      let%map b in
       b = 1
   ;;
 
   let _arrow_example_5 (a : _ X.t) : _ X.t =
-    let%arr a = a in
+    let%arr a in
     a
   ;;
 
@@ -92,7 +144,7 @@ module M (X : S) = struct
   ;;
 
   let (_ : _) =
-    fun graph ->
+    fun (local_ graph) ->
     (* Use this code to test if :MerlinTypeOf behaves properly. In particular,
        you should be able to:
 
@@ -122,7 +174,7 @@ module M (X : S) = struct
   ;;
 
   let (_ : _) =
-    fun graph ->
+    fun (local_ graph) ->
     (* This code tests that the same annotations used on the match statement result in the
        same results doing :MerlinTypeOf. Sadly, an implementation that strips away all
        constraints would still pass this test, so try to swap [string X.t] with [int X.t]

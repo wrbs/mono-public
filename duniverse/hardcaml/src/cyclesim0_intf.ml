@@ -23,7 +23,9 @@ module type Private = sig
     -> cycle_at_clock_edge:task
     -> cycle_after_clock_edge:task
     -> traced:traced
+    -> lookup_node_by_id:(Signal.Type.Uid.t -> node option)
     -> lookup_node:(traced_internal_signal -> node option)
+    -> lookup_reg_by_id:(Signal.Type.Uid.t -> reg option)
     -> lookup_reg:(traced_internal_signal -> reg option)
     -> lookup_mem:(traced_internal_signal -> memory option)
     -> unit
@@ -80,6 +82,10 @@ module type Cyclesim0 = sig
   module Reg = Cyclesim_lookup.Reg
   module Memory = Cyclesim_lookup.Memory
 
+  module Traced_nodes : sig
+    val create : Circuit.t -> is_internal_port:(Signal.t -> bool) option -> Traced.t
+  end
+
   type task = unit -> unit
 
   type ('i, 'o) t =
@@ -95,7 +101,9 @@ module type Cyclesim0 = sig
     ; cycle_at_clock_edge : task
     ; cycle_after_clock_edge : task
     ; traced : Traced.t
+    ; lookup_node_by_id : Signal.Type.Uid.t -> Node.t option
     ; lookup_node : Traced.internal_signal -> Node.t option
+    ; lookup_reg_by_id : Signal.Type.Uid.t -> Reg.t option
     ; lookup_reg : Traced.internal_signal -> Reg.t option
     ; lookup_mem : Traced.internal_signal -> Memory.t option
     ; circuit : Circuit.t option
@@ -108,38 +116,64 @@ module type Cyclesim0 = sig
   type t_port_list = (Port_list.t, Port_list.t) t
 
   module Config : sig
+    (** Allow a simulation to randomly initialize the values of registers and/or memories
+        at simulation startup. *)
+    module Random_initializer : sig
+      type t =
+        { random_state : Splittable_random.t
+        ; initialize : Signal.t -> bool
+        }
+
+      (** Create the random initializer. Each register and memory signal in the simulation
+          is passed to the function which returns true if the value should be randomly
+          initialized.
+
+          The optional [random_state] argument can be used to seed the random number
+          generation. *)
+      val create : ?random_state:Splittable_random.t -> (Signal.t -> bool) -> t
+
+      val randomize_regs : Signal.t -> bool
+      val randomize_memories : Signal.t -> bool
+      val randomize_all : Signal.t -> bool
+    end
+
     type t =
       { is_internal_port : (Signal.t -> bool) option
-          (** Passed each signal in the design which has a name. Returns [true] if the
+      (** Passed each signal in the design which has a name. Returns [true] if the
           simulator should expose it for reading in the testbench (or display in a
           waveform). *)
       ; combinational_ops_database : Combinational_ops_database.t
-          (** Database of instantiations which may be replace by a combinational operation. *)
+      (** Database of instantiations which may be replace by a combinational operation. *)
       ; deduplicate_signals : bool
-          (** Perform a pass which finds structurally equal signals and shares them. *)
+      (** Perform a pass which finds structurally equal signals and shares them. *)
       ; store_circuit : bool
-          (** Stores the post-processed circuit that is used to compile the
-          simulation. This should generally be set to false, so that the Circuit
-          can be garbage collected once the simulation is constructed.
-      *)
+      (** Stores the post-processed circuit that is used to compile the simulation. This
+          should generally be set to false, so that the Circuit can be garbage collected
+          once the simulation is constructed. *)
+      ; random_initializer : Random_initializer.t option
+      (** How to initializer stateful circuit elements at the start of simulation. If not
+          configured, all state starts at [0]. *)
       }
 
     val default : t
     val trace : [ `Everything | `All_named | `Ports_only ] -> t
     val trace_all : t
+
+    (** Enable random initialization of state values at simulation startup. *)
+    val add_random_initialization : t -> Random_initializer.t -> t
   end
 
   module type Private = Private
 
   module Private :
     Private
-      with type ('i, 'o) t = ('i, 'o) t
-       and type port_list = Port_list.t
-       and type t_port_list = t_port_list
-       and type traced = Traced.t
-       and type traced_io_port = Traced.io_port
-       and type traced_internal_signal = Traced.internal_signal
-       and type node = Node.t
-       and type reg = Reg.t
-       and type memory = Memory.t
+    with type ('i, 'o) t = ('i, 'o) t
+     and type port_list = Port_list.t
+     and type t_port_list = t_port_list
+     and type traced = Traced.t
+     and type traced_io_port = Traced.io_port
+     and type traced_internal_signal = Traced.internal_signal
+     and type node = Node.t
+     and type reg = Reg.t
+     and type memory = Memory.t
 end

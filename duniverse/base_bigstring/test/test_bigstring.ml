@@ -3,6 +3,7 @@ open Base_bigstring
 
 let length = length
 let create = create
+let empty = empty
 
 module Bigstring_sequence = struct
   type nonrec t = t
@@ -17,7 +18,7 @@ module Bytes_sequence = struct
   type t = bytes [@@deriving sexp_of]
 
   let create ~len = Bytes.create len
-  let get = Bytes.get
+  let get t i = Bytes.get t i
   let set = Bytes.set
   let length = Bytes.length
 end
@@ -28,7 +29,12 @@ module Blit_elt = struct
   let of_bool b = if b then 'a' else 'b'
 end
 
-module Blit_s : Blit.S with type t := t = Base_bigstring
+module Blit_s : sig @@ portable
+    include Blit.S
+  end
+  with type t := t =
+  Base_bigstring
+
 include Blit_s
 include Base_for_tests.Test_blit.Test (Blit_elt) (Bigstring_sequence) (Blit_s)
 module From_bytes = From_bytes
@@ -47,8 +53,10 @@ module From_string = From_string
 module To_string = To_string
 
 let copy = copy
+let globalize = globalize
 
 let%test_unit "copy" =
+  assert (phys_equal copy globalize);
   let equal a b = String.equal (to_string a) (to_string b) in
   let a = create 1 in
   set a 0 'a';
@@ -76,6 +84,7 @@ let sexp_of_t = sexp_of_t
 let of_string = of_string
 let of_bytes = of_bytes
 let t_of_sexp = t_of_sexp
+let t_sexp_grammar = t_sexp_grammar
 
 let%test_unit "roundtrip" =
   let string_gen =
@@ -91,7 +100,8 @@ let%test_unit "roundtrip" =
     [%test_eq: t] bstr (t_of_sexp (sexp_of_t bstr)))
 ;;
 
-external is_mmapped : t_frozen -> bool = "bigstring_is_mmapped_stub" [@@noalloc]
+external is_mmapped : local_ t_frozen -> bool @@ portable = "bigstring_is_mmapped_stub"
+[@@noalloc]
 
 let%test "bigstring created with create are not mmapped" = not (is_mmapped (create 2))
 let init = init
@@ -121,9 +131,9 @@ let%expect_test "checking setters (should end in [_exn])" =
   let test setters z =
     try_setters z setters
     |> List.iteri ~f:(fun i -> function
-         | Ok bytes ->
-           raise_s [%message "didn't raise" (z : Int.Hex.t) (i : int) (bytes : int list)]
-         | Error _ -> ())
+      | Ok bytes ->
+        raise_s [%message "didn't raise" (z : Int.Hex.t) (i : int) (bytes : int list)]
+      | Error _ -> ())
   in
   test [ set_int8_exn ] 0x80;
   test [ set_uint8_exn ] (-1);
@@ -159,45 +169,45 @@ module Local = struct
   let unsafe_get_string = unsafe_get_string
 end
 
-let%test_module "truncating setters (should end in [_trunc] or begin with [unsafe_])" =
-  (module struct
-    let test setters z =
-      try_setters z setters
-      |> List.iter ~f:(fun t ->
-           Or_error.ok_exn t |> List.iter ~f:(printf "%x ");
-           printf "; ")
-    ;;
+module%test
+  [@name "truncating setters (should end in [_trunc] or begin with [unsafe_])"] _ =
+struct
+  let test setters z =
+    try_setters z setters
+    |> List.iter ~f:(fun t ->
+      Or_error.ok_exn t |> List.iter ~f:(printf "%x ");
+      printf "; ")
+  ;;
 
-    let%expect_test "all word sizes" =
-      test [ (fun buf ~pos value -> unsafe_set_int8 buf ~pos value) ] 0x9080;
-      [%expect {| 80 0 0 0 0 0 0 0 ; |}];
-      test [ (fun buf ~pos value -> unsafe_set_uint8 buf ~pos value) ] (-1);
-      [%expect {| ff 0 0 0 0 0 0 0 ; |}];
+  let%expect_test "all word sizes" =
+    test [ (fun buf ~pos value -> unsafe_set_int8 buf ~pos value) ] 0x9080;
+    [%expect {| 80 0 0 0 0 0 0 0 ; |}];
+    test [ (fun buf ~pos value -> unsafe_set_uint8 buf ~pos value) ] (-1);
+    [%expect {| ff 0 0 0 0 0 0 0 ; |}];
+    test
+      [ (fun buf ~pos value -> unsafe_set_int16_le buf ~pos value)
+      ; (fun buf ~pos value -> unsafe_set_int16_be buf ~pos value)
+      ]
+      0x90_8070;
+    [%expect {| 70 80 0 0 0 0 0 0 ; 80 70 0 0 0 0 0 0 ; |}];
+    test [ unsafe_set_uint16_le; unsafe_set_uint16_be ] (-1);
+    [%expect {| ff ff 0 0 0 0 0 0 ; ff ff 0 0 0 0 0 0 ; |}];
+    test [ unsafe_set_uint32_le; unsafe_set_uint32_be ] (-1);
+    [%expect {| ff ff ff ff 0 0 0 0 ; ff ff ff ff 0 0 0 0 ; |}];
+    test [ unsafe_set_uint64_le; unsafe_set_uint64_be ] (-1);
+    [%expect {| ff ff ff ff ff ff ff ff ; ff ff ff ff ff ff ff ff ; |}]
+  ;;
+
+  let%expect_test (_ [@tags "64-bits-only"]) =
+    Option.iter (Int64.to_int 0x90_8070_6050L) ~f:(fun z ->
       test
-        [ (fun buf ~pos value -> unsafe_set_int16_le buf ~pos value)
-        ; (fun buf ~pos value -> unsafe_set_int16_be buf ~pos value)
+        [ (fun buf ~pos value -> unsafe_set_int32_le buf ~pos value)
+        ; (fun buf ~pos value -> unsafe_set_int32_be buf ~pos value)
         ]
-        0x90_8070;
-      [%expect {| 70 80 0 0 0 0 0 0 ; 80 70 0 0 0 0 0 0 ; |}];
-      test [ unsafe_set_uint16_le; unsafe_set_uint16_be ] (-1);
-      [%expect {| ff ff 0 0 0 0 0 0 ; ff ff 0 0 0 0 0 0 ; |}];
-      test [ unsafe_set_uint32_le; unsafe_set_uint32_be ] (-1);
-      [%expect {| ff ff ff ff 0 0 0 0 ; ff ff ff ff 0 0 0 0 ; |}];
-      test [ unsafe_set_uint64_le; unsafe_set_uint64_be ] (-1);
-      [%expect {| ff ff ff ff ff ff ff ff ; ff ff ff ff ff ff ff ff ; |}]
-    ;;
-
-    let%expect_test (_ [@tags "64-bits-only"]) =
-      Option.iter (Int64.to_int 0x90_8070_6050L) ~f:(fun z ->
-        test
-          [ (fun buf ~pos value -> unsafe_set_int32_le buf ~pos value)
-          ; (fun buf ~pos value -> unsafe_set_int32_be buf ~pos value)
-          ]
-          z);
-      [%expect {| 50 60 70 80 0 0 0 0 ; 80 70 60 50 0 0 0 0 ; |}]
-    ;;
-  end)
-;;
+        z);
+    [%expect {| 50 60 70 80 0 0 0 0 ; 80 70 60 50 0 0 0 0 ; |}]
+  ;;
+end
 
 let getter_t ~first_byte = init 8 ~f:(fun i -> i + first_byte |> Char.of_int_exn)
 let get_int64_le_trunc = get_int64_le_trunc
@@ -205,102 +215,102 @@ let get_int64_be_trunc = get_int64_be_trunc
 let unsafe_get_int64_le_trunc = unsafe_get_int64_le_trunc
 let unsafe_get_int64_be_trunc = unsafe_get_int64_be_trunc
 
-let%test_module "truncating getters (should end in [_trunc] or begin with [unsafe_])" =
-  (module struct
-    let test getter =
-      List.iter
-        [ 0x81 (* positive if top bit truncated *)
-        ; 0xc1 (* negative if top bit truncated *)
-        ]
-        ~f:(fun first_byte ->
+module%test
+  [@name "truncating getters (should end in [_trunc] or begin with [unsafe_])"] _ =
+struct
+  let test getter =
+    List.iter
+      [ 0x81 (* positive if top bit truncated *)
+      ; 0xc1 (* negative if top bit truncated *)
+      ]
+      ~f:(fun first_byte ->
         let i = getter (getter_t ~first_byte) ~pos:0 in
         (* Signed hex is not clear; make sure the hex is unsigned.  Include the signed
              decimal form mainly to indicate the sign. *)
         printf !"0x%x (= %d)\n" i i)
-    ;;
+  ;;
 
-    let%expect_test ("63-bit int" [@tags "64-bits-only"]) =
-      test get_int64_le_trunc;
-      [%expect
-        {|
-        0x887868584838281 (= 614607782171345537)
-        0x48c7c6c5c4c3c2c1 (= -3978993193046523199)
-        |}];
-      test get_int64_be_trunc;
-      [%expect
-        {|
-        0x182838485868788 (= 108793946209421192)
-        0x41c2c3c4c5c6c7c8 (= -4484807029008447544)
-        |}];
-      test unsafe_get_int64_le_trunc;
-      [%expect
-        {|
-        0x887868584838281 (= 614607782171345537)
-        0x48c7c6c5c4c3c2c1 (= -3978993193046523199)
-        |}];
-      test unsafe_get_int64_be_trunc;
-      [%expect
-        {|
-        0x182838485868788 (= 108793946209421192)
-        0x41c2c3c4c5c6c7c8 (= -4484807029008447544)
-        |}]
-    ;;
+  let%expect_test ("63-bit int" [@tags "64-bits-only"]) =
+    test get_int64_le_trunc;
+    [%expect
+      {|
+      0x887868584838281 (= 614607782171345537)
+      0x48c7c6c5c4c3c2c1 (= -3978993193046523199)
+      |}];
+    test get_int64_be_trunc;
+    [%expect
+      {|
+      0x182838485868788 (= 108793946209421192)
+      0x41c2c3c4c5c6c7c8 (= -4484807029008447544)
+      |}];
+    test unsafe_get_int64_le_trunc;
+    [%expect
+      {|
+      0x887868584838281 (= 614607782171345537)
+      0x48c7c6c5c4c3c2c1 (= -3978993193046523199)
+      |}];
+    test unsafe_get_int64_be_trunc;
+    [%expect
+      {|
+      0x182838485868788 (= 108793946209421192)
+      0x41c2c3c4c5c6c7c8 (= -4484807029008447544)
+      |}]
+  ;;
 
-    let%expect_test ("31-bit int" [@tags "32-bits-only", "no-js"]) =
-      test get_int64_le_trunc;
-      [%expect
-        {|
-        0x4838281 (= 75727489)
-        0x44c3c2c1 (= -993803583)
-        |}];
-      test get_int64_be_trunc;
-      [%expect
-        {|
-        0x5868788 (= 92702600)
-        0x45c6c7c8 (= -976828472)
-        |}];
-      test unsafe_get_int64_le_trunc;
-      [%expect
-        {|
-        0x4838281 (= 75727489)
-        0x44c3c2c1 (= -993803583)
-        |}];
-      test unsafe_get_int64_be_trunc;
-      [%expect
-        {|
-        0x5868788 (= 92702600)
-        0x45c6c7c8 (= -976828472)
-        |}]
-    ;;
+  let%expect_test ("31-bit int" [@tags "wasm-only"]) =
+    test get_int64_le_trunc;
+    [%expect
+      {|
+      0x4838281 (= 75727489)
+      0x44c3c2c1 (= -993803583)
+      |}];
+    test get_int64_be_trunc;
+    [%expect
+      {|
+      0x5868788 (= 92702600)
+      0x45c6c7c8 (= -976828472)
+      |}];
+    test unsafe_get_int64_le_trunc;
+    [%expect
+      {|
+      0x4838281 (= 75727489)
+      0x44c3c2c1 (= -993803583)
+      |}];
+    test unsafe_get_int64_be_trunc;
+    [%expect
+      {|
+      0x5868788 (= 92702600)
+      0x45c6c7c8 (= -976828472)
+      |}]
+  ;;
 
-    let%expect_test ("32-bit int" [@tags "js-only"]) =
-      test get_int64_le_trunc;
-      [%expect
-        {|
-        0x84838281 (= -2071756159)
-        0xc4c3c2c1 (= -993803583)
-        |}];
-      test get_int64_be_trunc;
-      [%expect
-        {|
-        0x85868788 (= -2054781048)
-        0xc5c6c7c8 (= -976828472)
-        |}];
-      test unsafe_get_int64_le_trunc;
-      [%expect
-        {|
-        0x84838281 (= -2071756159)
-        0xc4c3c2c1 (= -993803583)
-        |}];
-      test unsafe_get_int64_be_trunc;
-      [%expect
-        {|
-        0x85868788 (= -2054781048)
-        0xc5c6c7c8 (= -976828472)
-        |}]
-    ;;
-  end)
-;;
+  let%expect_test ("32-bit int" [@tags "js-only", "no-wasm"]) =
+    test get_int64_le_trunc;
+    [%expect
+      {|
+      0x84838281 (= -2071756159)
+      0xc4c3c2c1 (= -993803583)
+      |}];
+    test get_int64_be_trunc;
+    [%expect
+      {|
+      0x85868788 (= -2054781048)
+      0xc5c6c7c8 (= -976828472)
+      |}];
+    test unsafe_get_int64_le_trunc;
+    [%expect
+      {|
+      0x84838281 (= -2071756159)
+      0xc4c3c2c1 (= -993803583)
+      |}];
+    test unsafe_get_int64_be_trunc;
+    [%expect
+      {|
+      0x85868788 (= -2054781048)
+      0xc5c6c7c8 (= -976828472)
+      |}]
+  ;;
+end
 
 let get_int64_le_exn = get_int64_le_exn
 let get_int64_be_exn = get_int64_be_exn
@@ -321,8 +331,8 @@ let%expect_test "checking getters (should end in [_exn])" =
   let test getters ~first_bigstring_byte =
     try_getters getters ~first_bigstring_byte
     |> List.iteri ~f:(fun i -> function
-         | Ok z -> raise_s [%message "didn't raise" (i : int) (z : Int.Hex.t)]
-         | Error _ -> ())
+      | Ok z -> raise_s [%message "didn't raise" (i : int) (z : Int.Hex.t)]
+      | Error _ -> ())
   in
   test
     (* These should check that the 64th bit in the string representation is redundant, so
@@ -535,49 +545,116 @@ let%expect_test "basic string getters" =
     |}]
 ;;
 
-external unsafe_find : t_frozen -> char -> pos:int -> len:int -> int = "bigstring_find"
-  [@@noalloc]
+external unsafe_find
+  :  local_ t_frozen
+  -> char
+  -> pos:int
+  -> len:int
+  -> int
+  @@ portable
+  = "bigstring_find"
+[@@noalloc]
 
 let%expect_test "basic unsafe_find" =
-  let t = of_string "abc" in
+  let t = of_string "abcba" in
   [%test_result: int] ~expect:1 (unsafe_find t 'b' ~pos:1 ~len:1);
   [%test_result: int] ~expect:1 (unsafe_find t 'b' ~pos:1 ~len:2);
+  [%test_result: int] ~expect:3 (unsafe_find t 'b' ~pos:2 ~len:2);
+  [%test_pred: int] Int.is_negative (unsafe_find t 'b' ~pos:2 ~len:1);
   [%test_pred: int] Int.is_negative (unsafe_find t 'd' ~pos:1 ~len:2)
 ;;
 
 let find = find
 
 let%expect_test "basic find" =
-  let t = of_string "abc" in
-  [%test_result: int option] ~expect:(Some 1) (find 'b' t ~pos:1 ~len:1);
+  let t = of_string "abcba" in
   [%test_result: int option] ~expect:None (find 'b' t ~pos:1 ~len:0);
-  require_does_raise [%here] (fun () -> find 'b' t ~len:4);
-  [%expect {| (Invalid_argument "Bigstring.find: length(bstr) < pos + len") |}];
-  require_does_raise [%here] (fun () -> find 'd' t ~len:4);
-  [%expect {| (Invalid_argument "Bigstring.find: length(bstr) < pos + len") |}];
+  [%test_result: int option] ~expect:(Some 1) (find 'b' t ~pos:1 ~len:1);
   [%test_result: int option] ~expect:(Some 1) (find 'b' t ~pos:1 ~len:2);
+  [%test_result: int option] ~expect:(Some 1) (find 'b' t ~pos:1 ~len:3);
+  [%test_result: int option] ~expect:(Some 1) (find 'b' t ~pos:1 ~len:4);
+  require_does_raise (fun () -> find 'b' t ~pos:1 ~len:5);
+  [%expect {| (Invalid_argument "Bigstring.find: length(bstr) < pos + len") |}];
+  require_does_raise (fun () -> find 'd' t ~len:6);
+  [%expect {| (Invalid_argument "Bigstring.find: length(bstr) < pos + len") |}];
+  [%test_result: int option] ~expect:None (find 'b' t ~pos:2 ~len:1);
+  [%test_result: int option] ~expect:(Some 3) (find 'b' t ~pos:2 ~len:2);
+  [%test_result: int option] ~expect:(Some 3) (find 'b' t ~pos:2 ~len:3);
   [%test_result: int option] ~expect:None (find 'd' t ~pos:1 ~len:2);
   [%test_result: int option] ~expect:None (find 'b' t ~len:1);
   [%test_result: int option] ~expect:(Some 1) (find 'b' t ~pos:1);
+  [%test_result: int option] ~expect:(Some 3) (find 'b' t ~pos:2);
+  [%test_result: int option] ~expect:(Some 3) (find 'b' t ~pos:3);
   [%test_result: int option] ~expect:None (find 'd' t);
-  require_does_raise [%here] (fun () -> find 'b' t ~pos:4);
+  require_does_raise (fun () -> find 'b' t ~pos:6);
   [%expect {| (Invalid_argument "find: len < 0") |}]
 ;;
 
+external unsafe_rfind
+  :  (t_frozen[@local_opt])
+  -> char
+  -> pos:int
+  -> len:int
+  -> int
+  @@ portable
+  = "bigstring_rfind"
+[@@noalloc]
+
+let%expect_test "basic unsafe_rfind" =
+  let t = of_string "abcba" in
+  [%test_result: int] ~expect:1 (unsafe_rfind t 'b' ~pos:1 ~len:1);
+  [%test_result: int] ~expect:1 (unsafe_rfind t 'b' ~pos:1 ~len:2);
+  [%test_result: int] ~expect:3 (unsafe_rfind t 'b' ~pos:1 ~len:3);
+  [%test_result: int] ~expect:3 (unsafe_rfind t 'b' ~pos:1 ~len:4);
+  [%test_result: int] ~expect:3 (unsafe_rfind t 'b' ~pos:3 ~len:1);
+  [%test_pred: int] Int.is_negative (unsafe_rfind t 'b' ~pos:4 ~len:1);
+  [%test_pred: int] Int.is_negative (unsafe_rfind t 'd' ~pos:1 ~len:2)
+;;
+
+let rfind = rfind
+
+let%expect_test "basic rfind" =
+  let t = of_string "abcba" in
+  [%test_result: int option] ~expect:None (rfind 'b' t ~pos:1 ~len:0);
+  [%test_result: int option] ~expect:(Some 1) (rfind 'b' t ~pos:1 ~len:1);
+  [%test_result: int option] ~expect:(Some 1) (rfind 'b' t ~pos:1 ~len:2);
+  [%test_result: int option] ~expect:(Some 3) (rfind 'b' t ~pos:1 ~len:3);
+  [%test_result: int option] ~expect:(Some 3) (rfind 'b' t ~pos:1 ~len:4);
+  require_does_raise (fun () -> rfind 'b' t ~pos:1 ~len:5);
+  [%expect {| (Invalid_argument "Bigstring.rfind: length(bstr) < pos + len") |}];
+  require_does_raise (fun () -> rfind 'd' t ~len:6);
+  [%expect {| (Invalid_argument "Bigstring.rfind: length(bstr) < pos + len") |}];
+  [%test_result: int option] ~expect:None (rfind 'b' t ~pos:2 ~len:1);
+  [%test_result: int option] ~expect:(Some 3) (rfind 'b' t ~pos:2 ~len:2);
+  [%test_result: int option] ~expect:(Some 3) (rfind 'b' t ~pos:2 ~len:3);
+  [%test_result: int option] ~expect:None (rfind 'd' t ~pos:1 ~len:2);
+  [%test_result: int option] ~expect:None (rfind 'b' t ~len:1);
+  [%test_result: int option] ~expect:(Some 3) (rfind 'b' t ~pos:1);
+  [%test_result: int option] ~expect:(Some 3) (rfind 'b' t ~pos:2);
+  [%test_result: int option] ~expect:(Some 3) (rfind 'b' t ~pos:3);
+  [%test_result: int option] ~expect:None (rfind 'd' t);
+  require_does_raise (fun () -> rfind 'b' t ~pos:6);
+  [%expect {| (Invalid_argument "rfind: len < 0") |}]
+;;
+
 external unsafe_memmem
-  :  haystack:t
-  -> needle:t
+  :  haystack:local_ t
+  -> needle:local_ t
   -> haystack_pos:int
   -> haystack_len:int
   -> needle_pos:int
   -> needle_len:int
   -> int
+  @@ portable
   = "bigstring_memmem_bytecode" "bigstring_memmem"
-  [@@noalloc]
+[@@noalloc]
 
 let%expect_test "basic unsafe_memmem" =
-  let haystack = "foo bar baz qwux" |> of_string in
+  let haystack = "foo bar baz qwux" in
+  let actual_haystack_len = String.length haystack in
+  let haystack = of_string haystack in
   let t ~haystack_pos ~haystack_len ~needle_pos ~needle_len needle =
+    assert (haystack_pos + haystack_len <= actual_haystack_len);
     let result =
       unsafe_memmem
         ~haystack
@@ -597,9 +674,9 @@ let%expect_test "basic unsafe_memmem" =
   [%expect {| -1 |}];
   t ~haystack_pos:0 ~haystack_len:16 ~needle_pos:1 ~needle_len:3 "ZfooZ";
   [%expect {| 0 |}];
-  t ~haystack_pos:1 ~haystack_len:16 ~needle_pos:1 ~needle_len:3 "ZfooZ";
+  t ~haystack_pos:1 ~haystack_len:15 ~needle_pos:1 ~needle_len:3 "ZfooZ";
   [%expect {| -1 |}];
-  t ~haystack_pos:1 ~haystack_len:16 ~needle_pos:1 ~needle_len:3 "Zoo Z";
+  t ~haystack_pos:1 ~haystack_len:15 ~needle_pos:1 ~needle_len:3 "Zoo Z";
   [%expect {| 1 |}]
 ;;
 
@@ -648,39 +725,74 @@ let memcmp = memcmp
 let memcmp_bytes = memcmp_bytes
 let memcmp_string = memcmp_string
 
-let%test_module "basic memcmp" =
-  (module struct
-    let s1 = "221007247563588720"
-    let s2 = "1650905272620466461"
+module%test [@name "basic memcmp"] _ = struct
+  let s1 = "221007247563588720"
+  let s2 = "1650905272620466461"
 
-    let test_memcmp ~memcmp t1 t2 =
-      [%test_result: int] ~expect:0 (memcmp t1 ~pos1:0 t2 ~pos2:0 ~len:0);
-      [%test_pred: int] Int.is_positive (memcmp t1 ~pos1:0 t2 ~pos2:0 ~len:3);
-      [%test_pred: int] Int.is_negative (memcmp t1 ~pos1:0 t2 ~pos2:1 ~len:3)
-    ;;
+  let test_memcmp ~memcmp t1 t2 =
+    [%test_result: int] ~expect:0 (memcmp t1 ~pos1:0 t2 ~pos2:0 ~len:0);
+    [%test_pred: int] Int.is_positive (memcmp t1 ~pos1:0 t2 ~pos2:0 ~len:3);
+    [%test_pred: int] Int.is_negative (memcmp t1 ~pos1:0 t2 ~pos2:1 ~len:3)
+  ;;
 
-    let%expect_test "bigstring to bigstring" =
-      test_memcmp ~memcmp (of_string s1) (of_string s2)
-    ;;
+  let%expect_test "bigstring to bigstring" =
+    test_memcmp ~memcmp (of_string s1) (of_string s2)
+  ;;
 
-    let%expect_test "bigstring to bytes" =
-      test_memcmp ~memcmp:memcmp_bytes (of_string s1) (Bytes.of_string s2)
-    ;;
+  let%expect_test "bigstring to bytes" =
+    test_memcmp ~memcmp:memcmp_bytes (of_string s1) (Bytes.of_string s2)
+  ;;
 
-    let%expect_test "bigstring to string" =
-      test_memcmp ~memcmp:memcmp_string (of_string s1) s2
-    ;;
-  end)
-;;
+  let%expect_test "bigstring to string" =
+    test_memcmp ~memcmp:memcmp_string (of_string s1) s2
+  ;;
+end
+
+external unsafe_strncmp
+  :  (t_frozen[@local_opt])
+  -> pos1:int
+  -> (t_frozen[@local_opt])
+  -> pos2:int
+  -> len:int
+  -> int
+  @@ portable
+  = "bigstring_strncmp"
+[@@noalloc]
+
+module%test [@name "unsafe_strncmp"] _ = struct
+  let test ?(pos1 = 0) ?(pos2 = 0) a b ~len =
+    let result = unsafe_strncmp (of_string a) ~pos1 (of_string b) ~pos2 ~len in
+    print_s [%sexp (result : int)]
+  ;;
+
+  let%expect_test "" =
+    test "ABC" "ABC" ~len:3;
+    [%expect {| 0 |}];
+    test "ABC" "ABD" ~len:3;
+    [%expect {| -1 |}];
+    test "ABC" "ABD" ~len:2;
+    [%expect {| 0 |}];
+    test "AB\000" "ABC" ~len:3;
+    [%expect {| -1 |}];
+    test "AB\000CD" "AB\000EF" ~len:3;
+    [%expect {| 0 |}];
+    test "AB\000CD" "AB\000EF" ~len:5;
+    [%expect {| 0 |}];
+    test "ABC" "DAB" ~len:2 ~pos1:1 ~pos2:1;
+    [%expect {| 1 |}];
+    test "CAB" "DAB" ~len:2 ~pos1:1 ~pos2:1;
+    [%expect {| 0 |}]
+  ;;
+end
 
 let memset = memset
 
-external set : t_frozen -> int -> char -> unit = "%caml_ba_set_1"
+external set : local_ t_frozen -> int -> char -> unit @@ portable = "%caml_ba_set_1"
 
 let%expect_test "basic char setters" =
   try_setters
     'x'
-    [ memset ~len:0; memset ~len:1; memset ~len:2; (fun t ~pos -> set t pos) ]
+    [ memset ~len:0; memset ~len:1; memset ~len:2; (fun t ~pos x -> set t pos x) ]
   |> printf !"%{sexp#hum:int list Or_error.t list}\n";
   [%expect
     {|
@@ -691,7 +803,13 @@ let%expect_test "basic char setters" =
 
 let unsafe_memset = unsafe_memset
 
-external unsafe_set : t_frozen -> int -> char -> unit = "%caml_ba_unsafe_set_1"
+external unsafe_set
+  :  local_ t_frozen
+  -> int
+  -> char
+  -> unit
+  @@ portable
+  = "%caml_ba_unsafe_set_1"
 
 let%expect_test "basic char unsafe setters" =
   try_setters
@@ -699,7 +817,7 @@ let%expect_test "basic char unsafe setters" =
     [ unsafe_memset ~len:0
     ; unsafe_memset ~len:1
     ; unsafe_memset ~len:2
-    ; (fun t ~pos -> unsafe_set t pos)
+    ; (fun t ~pos x -> unsafe_set t pos x)
     ]
   |> printf !"%{sexp#hum:int list Or_error.t list}\n";
   [%expect
@@ -709,7 +827,7 @@ let%expect_test "basic char unsafe setters" =
     |}]
 ;;
 
-external get : t_frozen -> int -> char = "%caml_ba_ref_1"
+external get : t_frozen @ local shared -> int -> char @@ portable = "%caml_ba_ref_1"
 
 let%expect_test "basic char getters" =
   try_getters ~first_bigstring_byte:1 [ (fun t ~pos -> get t pos) ]
@@ -717,7 +835,12 @@ let%expect_test "basic char getters" =
   [%expect {| ((Ok "\001")) |}]
 ;;
 
-external unsafe_get : t -> int -> char = "%caml_ba_unsafe_ref_1"
+external unsafe_get
+  :  t @ local shared
+  -> int
+  -> char
+  @@ portable
+  = "%caml_ba_unsafe_ref_1"
 
 let%expect_test "basic unsafe char getters" =
   try_getters ~first_bigstring_byte:1 [ (fun t ~pos -> unsafe_get t pos) ]
@@ -728,15 +851,13 @@ let%expect_test "basic unsafe char getters" =
 let check_args = check_args
 
 let%expect_test "basic check_args" =
-  require_does_raise [%here] (fun () ->
+  require_does_raise (fun () ->
     check_args ~loc:"LOC" ~pos:Int.max_value ~len:2 (of_string "abc"));
   [%expect {| (Invalid_argument "Bigstring.LOC: length(bstr) < pos + len") |}];
   check_args ~loc:"LOC" ~pos:0 ~len:0 (of_string "");
-  require_does_raise [%here] (fun () ->
-    check_args ~loc:"LOC" ~pos:1 ~len:0 (of_string ""));
+  require_does_raise (fun () -> check_args ~loc:"LOC" ~pos:1 ~len:0 (of_string ""));
   [%expect {| (Invalid_argument "Bigstring.LOC: length(bstr) < pos + len") |}];
-  require_does_raise [%here] (fun () ->
-    check_args ~loc:"LOC" ~pos:0 ~len:1 (of_string ""));
+  require_does_raise (fun () -> check_args ~loc:"LOC" ~pos:0 ~len:1 (of_string ""));
   [%expect {| (Invalid_argument "Bigstring.LOC: length(bstr) < pos + len") |}];
   check_args ~loc:"LOC" ~pos:0 ~len:0 (of_string "STRING")
 ;;
@@ -770,7 +891,9 @@ let%expect_test "basic concat" =
 ;;
 
 let equal = equal
+let equal__local = equal__local
 let compare = compare
+let compare__local = compare__local
 
 let%expect_test "basic equal" =
   let strings = [ ""; "a"; "aa"; "ab"; "b"; "ba"; "bb" ] in
@@ -779,13 +902,11 @@ let%expect_test "basic equal" =
     let test s2 =
       let t2 = of_string s2 in
       require_equal
-        [%here]
         (module Bool)
         (equal t1 t2)
         (String.equal s1 s2)
         ~if_false_then_print_s:(lazy [%message (s1 : string) (s2 : string)]);
       require_equal
-        [%here]
         (module Int)
         (compare t1 t2)
         (String.compare s1 s2)
@@ -797,11 +918,11 @@ let%expect_test "basic equal" =
 
 let%expect_test ("local allocation does not heap allocate" [@tags "64-bits-only"]) =
   let t = init 8 ~f:Char.of_int_exn in
-  Expect_test_helpers_core.require_no_allocation [%here] (fun () ->
+  Expect_test_helpers_core.require_no_allocation (fun () ->
     let x = Local.get_int64_t_be t ~pos:0 in
     set_int64_t_be t ~pos:0 x [@nontail]);
   [%expect ""];
-  Expect_test_helpers_core.require_no_allocation [%here] (fun () ->
+  Expect_test_helpers_core.require_no_allocation (fun () ->
     let x = Local.get_int64_t_le t ~pos:0 in
     set_int64_t_le t ~pos:0 x [@nontail]);
   [%expect ""]
@@ -814,15 +935,15 @@ let%expect_test "unsafe_get_int64_le_exn correctness" =
       set_int64_t_le t ~pos:0 i;
       let result = unsafe_get_int64_le_exn t ~pos:0 in
       let expected = Int.of_int64_trunc i in
-      require_equal here (module Int) expected result;
+      require_equal ~here (module Int) expected result;
       result
     in
     match behavior with
-    | `Fit -> require_does_not_raise here (fun () -> ignore (convert () : int))
+    | `Fit -> require_does_not_raise ~here (fun () -> ignore (convert () : int))
     | `Raise ->
       Or_error.try_with convert
-      |> require_error here (fun result ->
-           [%message "Unexpectedly successfully converted" (result : int)])
+      |> require_error ~here (fun result ->
+        [%message "Unexpectedly successfully converted" (result : int)])
   in
   let max_val = Int64.of_int Int.max_value in
   let min_val = Int64.of_int Int.min_value in
@@ -844,37 +965,36 @@ let%expect_test "unsafe_get_int64_le_exn correctness" =
     ]
 ;;
 
-let%bench_module "" =
-  (module struct
-    (* Copied some stuff so we could benchmark int64_to_int_exn different implementations.
-    *)
-    let arch_sixtyfour = Stdlib.Sys.word_size = 64
+module%bench _ = struct
+  (* Copied some stuff so we could benchmark int64_to_int_exn different implementations.
+  *)
+  let arch_sixtyfour = Stdlib.Sys.word_size = 64
 
-    external int64_to_int : int64 -> int = "%int64_to_int"
+  external int64_to_int : local_ int64 -> int = "%int64_to_int"
 
-    let int64_conv_error () =
-      failwith "unsafe_read_int64: value cannot be represented unboxed!"
-    ;;
+  let int64_conv_error () =
+    failwith "unsafe_read_int64: value cannot be represented unboxed!"
+  ;;
 
-    let some_int = 42L
+  let some_int = 42L
 
-    (* [Poly] is required so that we can compare unboxed [int64]. *)
-    let[@inline always] old_int64_to_int_exn n =
-      if arch_sixtyfour
-      then
-        if Poly.(n >= -0x4000_0000_0000_0000L && n < 0x4000_0000_0000_0000L)
-        then int64_to_int n
-        else int64_conv_error ()
-      else if Poly.(n >= -0x0000_0000_4000_0000L && n < 0x0000_0000_4000_0000L)
+  (* [Poly] is required so that we can compare unboxed [int64]. *)
+  let[@inline always] old_int64_to_int_exn (local_ n) =
+    if arch_sixtyfour
+    then
+      if Poly.(n >= -0x4000_0000_0000_0000L && n < 0x4000_0000_0000_0000L)
       then int64_to_int n
       else int64_conv_error ()
-    ;;
+    else if Poly.(n >= -0x0000_0000_4000_0000L && n < 0x0000_0000_4000_0000L)
+    then int64_to_int n
+    else int64_conv_error ()
+  ;;
 
-    let[@inline always] bit_manipulation_int64_to_int_exn n =
-      if arch_sixtyfour
-      then
-        (*
-           For positive int64, the bits must start with: 00...
+  let[@inline always] bit_manipulation_int64_to_int_exn (local_ n) =
+    if arch_sixtyfour
+    then
+      (*
+         For positive int64, the bits must start with: 00...
            and for negative ones, the bits must start with: 11...
            {v
                n           = 0bXY...
@@ -883,51 +1003,50 @@ let%bench_module "" =
                            = 0b01... if n = 0b01... or 0b10...
                            = 0b00... if n = 0b00... or 0b11...
              v}
-        *)
-        if Poly.(Int64.((n asr 1) lxor n) < 0x4000_0000_0000_0000L)
-        then int64_to_int n
-        else int64_conv_error ()
-      else if Poly.(n >= -0x0000_0000_4000_0000L && n < 0x0000_0000_4000_0000L)
+      *)
+      if Poly.(Int64.((n asr 1) lxor n) < 0x4000_0000_0000_0000L)
       then int64_to_int n
       else int64_conv_error ()
-    ;;
+    else if Poly.(n >= -0x0000_0000_4000_0000L && n < 0x0000_0000_4000_0000L)
+    then int64_to_int n
+    else int64_conv_error ()
+  ;;
 
-    let[@inline always] with_poly_eq_int64_to_int_exn n =
-      let n' = int64_to_int n in
-      if Poly.( = ) (Int64.of_int n') n then n' else int64_conv_error ()
-    ;;
+  let[@inline always] with_poly_eq_int64_to_int_exn (local_ n) =
+    let n' = int64_to_int n in
+    if Poly.( = ) (Int64.of_int n') n then n' else int64_conv_error ()
+  ;;
 
-    let%bench_fun "with_poly_eq (new implementation)" =
-      fun () ->
-      for _ = 1 to 1000 do
-        ignore
-          (Sys.opaque_identity
-             (with_poly_eq_int64_to_int_exn (Sys.opaque_identity some_int))
-            : int)
-      done
-    ;;
+  let%bench_fun "with_poly_eq (new implementation)" =
+    fun () ->
+    for _ = 1 to 1000 do
+      ignore
+        (Sys.opaque_identity
+           (with_poly_eq_int64_to_int_exn (Sys.opaque_identity some_int))
+         : int)
+    done
+  ;;
 
-    let%bench_fun "bit manipulation" =
-      fun () ->
-      for _ = 1 to 1000 do
-        ignore
-          (Sys.opaque_identity
-             (bit_manipulation_int64_to_int_exn (Sys.opaque_identity some_int))
-            : int)
-      done
-    ;;
+  let%bench_fun "bit manipulation" =
+    fun () ->
+    for _ = 1 to 1000 do
+      ignore
+        (Sys.opaque_identity
+           (bit_manipulation_int64_to_int_exn (Sys.opaque_identity some_int))
+         : int)
+    done
+  ;;
 
-    let%bench_fun "old implementation (doing range checks)" =
-      fun () ->
-      for _ = 1 to 1000 do
-        ignore
-          (Sys.opaque_identity (old_int64_to_int_exn (Sys.opaque_identity some_int))
-            : int)
-      done
-    ;;
+  let%bench_fun "old implementation (doing range checks)" =
+    fun () ->
+    for _ = 1 to 1000 do
+      ignore
+        (Sys.opaque_identity (old_int64_to_int_exn (Sys.opaque_identity some_int)) : int)
+    done
+  ;;
 
-    (*
-       Results:
+  (*
+     Results:
        ┌──────────────────────────────────────────────────────────────┬────────────┬────────────┐
        │ Name                                                         │   Time/Run │ Percentage │
        ├──────────────────────────────────────────────────────────────┼────────────┼────────────┤
@@ -935,12 +1054,13 @@ let%bench_module "" =
        │ [test_bigstring.ml:] bit manipulation                        │   985.03ns │     67.22% │
        │ [test_bigstring.ml:] old implementation (doing range checks) │ 1_465.38ns │    100.00% │
        └──────────────────────────────────────────────────────────────┴────────────┴────────────┘
-    *)
-  end)
-;;
+  *)
+end
 
 type nonrec t = t
-type nonrec t_frozen = t_frozen [@@deriving compare, hash, sexp]
+
+type nonrec t_frozen = t_frozen
+[@@deriving compare ~localize, globalize, hash, sexp, sexp_grammar]
 
 (* Effectively tested in lib/int_repr *)
 module Int_repr = Base_bigstring.Int_repr

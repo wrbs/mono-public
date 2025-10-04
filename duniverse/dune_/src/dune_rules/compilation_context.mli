@@ -30,7 +30,7 @@ val create
   -> ?preprocessing:Pp_spec.t
   -> opaque:opaque
   -> ?stdlib:Ocaml_stdlib.t
-  -> js_of_ocaml:Js_of_ocaml.In_context.t option
+  -> js_of_ocaml:Js_of_ocaml.In_context.t option Js_of_ocaml.Mode.Pair.t
   -> package:Package.t option
   -> melange_package_name:Lib_name.t option
   -> ?vimpl:Vimpl.t
@@ -55,12 +55,13 @@ val obj_dir : t -> Path.Build.t Obj_dir.t
 val modules : t -> Modules.With_vlib.t
 val flags : t -> Ocaml_flags.t
 val requires_link : t -> Lib.t list Resolve.Memo.t
+val requires_hidden : t -> Lib.t list Resolve.Memo.t
 val requires_compile : t -> Lib.t list Resolve.Memo.t
 val includes : t -> Command.Args.without_targets Command.Args.t Lib_mode.Cm_kind.Map.t
 val preprocessing : t -> Pp_spec.t
 val opaque : t -> bool
 val stdlib : t -> Ocaml_stdlib.t option
-val js_of_ocaml : t -> Js_of_ocaml.In_context.t option
+val js_of_ocaml : t -> Js_of_ocaml.In_context.t option Js_of_ocaml.Mode.Pair.t
 val sandbox : t -> Sandbox_config.t
 val set_sandbox : t -> Sandbox_config.t -> t
 val package : t -> Package.t option
@@ -85,7 +86,6 @@ val root_module_entries : t -> Module_name.t list Action_builder.t
 (** The dependency graph for the modules of the library. *)
 val dep_graphs : t -> Dep_graph.t Ml_kind.Dict.t
 
-val ocamldep_modules_data : t -> Ocamldep.Modules_data.t
 val loc : t -> Loc.t option
 val set_obj_dir : t -> Path.Build.t Obj_dir.t -> t
 val set_modes : t -> modes:Lib_mode.Map.Set.t -> t

@@ -5,10 +5,12 @@ let run
   (type a)
   ~here_pos
   ?(config : Base_quickcheck.Test.Config.t option)
+  ?(trials : int option)
   ~examples
   (module M : Base_quickcheck.Test.S with type t = a)
   ~(f : a -> unit Or_error.t Deferred.t)
   =
+  Printexc.record_backtrace true;
   let seed =
     Option.map config ~f:(fun config ->
       match config.Base_quickcheck.Test.Config.seed with
@@ -19,7 +21,7 @@ let run
     Option.map config ~f:(fun config -> config.Base_quickcheck.Test.Config.sizes)
   in
   let trials =
-    Option.map config ~f:(fun config -> config.Base_quickcheck.Test.Config.test_count)
+    Option.first_some trials (Option.map config ~f:(fun config -> config.test_count))
   in
   let shrink_attempts =
     Option.map config ~f:(fun config ->
@@ -34,16 +36,25 @@ let run
     ~shrinker:M.quickcheck_shrinker
     M.quickcheck_generator
     ~f:(fun elt ->
-    let%bind result = f elt in
-    Ppx_quick_test_runtime_lib.assert_no_expect_test_trailing_output
-      here_pos
-      M.sexp_of_t
-      elt;
-    return result)
+      let crs = Queue.create () in
+      Expect_test_helpers_async.set_temporarily_async
+        Expect_test_helpers_base.on_print_cr
+        (Queue.enqueue crs)
+        ~f:(fun () ->
+          let%bind result = f elt in
+          Ppx_quick_test_runtime_lib.assert_no_expect_test_trailing_output
+            here_pos
+            M.sexp_of_t
+            elt;
+          if Queue.is_empty crs
+          then return result
+          else
+            Deferred.Or_error.error_s
+              [%sexp ({ crs } : Ppx_quick_test_runtime_lib.Queue_of_crs_error.t)]))
 ;;
 
 module Ppx_quick_test_core = Ppx_quick_test_runtime_lib.Make (struct
-  module IO = Deferred
+    module IO = Deferred
 
-  let run = run
-end)
+    let run = run
+  end)

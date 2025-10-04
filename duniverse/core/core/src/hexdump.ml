@@ -9,9 +9,9 @@ let bytes_per_line = 16
 (* Initialize to enough lines to display 4096 bytes -- large enough that, for example, a
    complete Ethernet packet can always be displayed -- including the line containing the
    final index. *)
-let default_max_lines = ref ((4096 / bytes_per_line) + 1)
+let default_max_lines = Dynamic.make ((4096 / bytes_per_line) + 1)
 
-module Of_indexable2 (T : Indexable2) = struct
+module%template.portable Of_indexable3 (T : Indexable3) = struct
   module Hexdump = struct
     include T
 
@@ -47,6 +47,7 @@ module Of_indexable2 (T : Indexable2) = struct
       String.init (until - start) ~f:(fun i ->
         let char = get t (start + i) in
         if Char.is_print char then char else '.')
+      [@nontail]
     ;;
 
     let line t ~pos ~len ~line_index =
@@ -59,14 +60,14 @@ module Of_indexable2 (T : Indexable2) = struct
         (printable_string t ~start ~until)
     ;;
 
-    let to_sequence ?max_lines ?pos ?len t =
+    let create ~max_lines ~pos ~len t ~f =
       let (pos : int), (len : int) =
         Ordered_collection_common.get_pos_len_exn () ?pos ?len ~total_length:(length t)
       in
       let max_lines =
         match max_lines with
         | Some max_lines -> max_lines
-        | None -> !default_max_lines
+        | None -> Dynamic.get default_max_lines
       in
       (* always produce at least 3 lines: first line of hex, ellipsis, last line of hex *)
       let max_lines = max max_lines 3 in
@@ -80,6 +81,10 @@ module Of_indexable2 (T : Indexable2) = struct
          ellipsis line. *)
       let skip_from = (max_lines - 1) / 2 in
       let skip_to = unabridged_lines - (max_lines - skip_from) + 1 in
+      f t ~len ~max_lines ~pos ~skip_from ~skip_to ~unabridged_lines
+    ;;
+
+    let create_sequence t ~len ~max_lines ~pos ~skip_from ~skip_to ~unabridged_lines =
       Sequence.unfold_step ~init:0 ~f:(fun line_index ->
         if line_index >= unabridged_lines
         then Done
@@ -88,11 +93,31 @@ module Of_indexable2 (T : Indexable2) = struct
         else Yield { value = line t ~pos ~len ~line_index; state = line_index + 1 })
     ;;
 
-    let to_string_hum ?max_lines ?pos ?len t =
-      to_sequence ?max_lines ?pos ?len t |> Sequence.to_list |> String.concat ~sep:"\n"
+    let create_string t ~len ~max_lines ~pos ~skip_from ~skip_to ~unabridged_lines =
+      let lines =
+        if unabridged_lines <= max_lines
+        then
+          List.init unabridged_lines ~f:(fun line_index -> line t ~pos ~len ~line_index)
+        else
+          List.concat
+            [ List.init skip_from ~f:(fun line_index -> line t ~pos ~len ~line_index)
+            ; [ "..." ]
+            ; List.init (unabridged_lines - skip_to) ~f:(fun index ->
+                line t ~pos ~len ~line_index:(index + skip_to))
+            ]
+      in
+      String.concat lines ~sep:"\n"
     ;;
 
-    let sexp_of_t _ _ t = to_sequence t |> Sequence.to_list |> [%sexp_of: string list]
+    let to_sequence ?max_lines ?pos ?len t =
+      create ~max_lines ~pos ~len t ~f:(fun _ -> create_sequence t)
+    ;;
+
+    let to_string_hum ?max_lines ?pos ?len t =
+      create ~max_lines ~pos ~len t ~f:create_string
+    ;;
+
+    let sexp_of_t _ _ _ t = to_sequence t |> Sequence.to_list |> [%sexp_of: string list]
 
     module Pretty = struct
       include T
@@ -107,20 +132,43 @@ module Of_indexable2 (T : Indexable2) = struct
 
       let to_string t = String.init (length t) ~f:(fun pos -> get t pos)
 
-      let sexp_of_t sexp_of_a sexp_of_b t =
-        if printable t then [%sexp (to_string t : string)] else [%sexp (t : (a, b) t)]
+      let sexp_of_t sexp_of_a sexp_of_b sexp_of_c t =
+        if printable t then [%sexp (to_string t : string)] else [%sexp (t : (a, b, c) t)]
       ;;
     end
   end
 end
 
-module Of_indexable1 (T : Indexable1) = struct
-  module M = Of_indexable2 (struct
-    type ('a, _) t = 'a T.t
+module%template.portable [@modality p] Of_indexable2 (T : Indexable2) = struct
+  module M = Of_indexable3 [@modality p] (struct
+      type ('a, 'b, _) t = ('a, 'b) T.t
 
-    let length = T.length
-    let get = T.get
-  end)
+      let length = T.length
+      let get = T.get
+    end)
+
+  module Hexdump = struct
+    include T
+
+    let sexp_of_t x y t = M.Hexdump.sexp_of_t x y [%sexp_of: _] t
+    let to_sequence = M.Hexdump.to_sequence
+    let to_string_hum = M.Hexdump.to_string_hum
+
+    module Pretty = struct
+      include T
+
+      let sexp_of_t sexp_of_a sexp_of_b t = [%sexp (t : (a, b, _) M.Hexdump.Pretty.t)]
+    end
+  end
+end
+
+module%template.portable [@modality p] Of_indexable1 (T : Indexable1) = struct
+  module M = Of_indexable2 [@modality p] (struct
+      type ('a, _) t = 'a T.t
+
+      let length = T.length
+      let get = T.get
+    end)
 
   module Hexdump = struct
     include T
@@ -137,13 +185,13 @@ module Of_indexable1 (T : Indexable1) = struct
   end
 end
 
-module Of_indexable (T : Indexable) = struct
-  module M = Of_indexable1 (struct
-    type _ t = T.t
+module%template.portable [@modality p] Of_indexable (T : Indexable) = struct
+  module M = Of_indexable1 [@modality p] (struct
+      type _ t = T.t
 
-    let length = T.length
-    let get = T.get
-  end)
+      let length = T.length
+      let get = T.get
+    end)
 
   module Hexdump = struct
     include T

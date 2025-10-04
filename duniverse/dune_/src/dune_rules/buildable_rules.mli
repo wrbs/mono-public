@@ -15,7 +15,7 @@ val gen_select_rules : Super_context.t -> dir:Path.Build.t -> Lib.Compile.t -> u
 (** Generate the rules for the [(select ...)] forms in library dependencies *)
 val with_lib_deps
   :  Context.t
-  -> Lib.Compile.t
+  -> Merlin_ident.t
   -> dir:Path.Build.t
   -> f:(unit -> 'a Memo.t)
   -> 'a Memo.t
@@ -44,5 +44,5 @@ val modules_rules
 val ocaml_flags
   :  Super_context.t
   -> dir:Path.Build.t
-  -> Ocaml_flags.Spec.t
+  -> Dune_lang.Ocaml_flags.Spec.t
   -> Ocaml_flags.t Memo.t

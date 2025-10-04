@@ -1,10 +1,10 @@
 open Core
 
 module Make_plain (V : sig
-  type t [@@deriving sexp_of]
+    type t [@@deriving sexp_of]
 
-  val equal : t -> t -> bool
-end) =
+    val equal : t -> t -> bool
+  end) =
 struct
   module Update = struct
     module Diff = struct
@@ -37,10 +37,10 @@ struct
 end
 
 module Make (V : sig
-  type t [@@deriving bin_io, sexp]
+    type t [@@deriving bin_io, sexp]
 
-  val equal : t -> t -> bool
-end) =
+    val equal : t -> t -> bool
+  end) =
 struct
   module Plain = Make_plain (V)
 
@@ -67,31 +67,29 @@ struct
       with module Update := Plain.Update)
 end
 
-let%test_module "tests" =
-  (module struct
-    module T = struct
-      type t = int [@@deriving bin_io, equal, sexp]
-    end
+module%test [@name "tests"] _ = struct
+  module T = struct
+    type t = int [@@deriving bin_io, equal, sexp]
+  end
 
-    include T
-    include Make (T)
+  include T
+  include Make (T)
 
-    let%test_unit "atomic round-trip works" =
-      Quickcheck.test
-        Int.quickcheck_generator
-        ~shrinker:Int.quickcheck_shrinker
-        ~sexp_of:[%sexp_of: t]
-        ~f:(fun t -> [%test_result: t] ~expect:t (of_diffs (to_diffs t)))
-    ;;
+  let%test_unit "atomic round-trip works" =
+    Quickcheck.test
+      Int.quickcheck_generator
+      ~shrinker:Int.quickcheck_shrinker
+      ~sexp_of:[%sexp_of: t]
+      ~f:(fun t -> [%test_result: t] ~expect:t (of_diffs (to_diffs t)))
+  ;;
 
-    let%test_unit "atomic diff/update works" =
-      let open Quickcheck in
-      Quickcheck.test
-        (Generator.tuple2 Int.quickcheck_generator Int.quickcheck_generator)
-        ~shrinker:(Shrinker.tuple2 Int.quickcheck_shrinker Int.quickcheck_shrinker)
-        ~sexp_of:[%sexp_of: t * t]
-        ~f:(fun (from, to_) ->
+  let%test_unit "atomic diff/update works" =
+    let open Quickcheck in
+    Quickcheck.test
+      (Generator.tuple2 Int.quickcheck_generator Int.quickcheck_generator)
+      ~shrinker:(Shrinker.tuple2 Int.quickcheck_shrinker Int.quickcheck_shrinker)
+      ~sexp_of:[%sexp_of: t * t]
+      ~f:(fun (from, to_) ->
         [%test_result: t] ~expect:to_ (update from (diffs ~from ~to_)))
-    ;;
-  end)
-;;
+  ;;
+end

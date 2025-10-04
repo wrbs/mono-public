@@ -49,7 +49,7 @@ let rec core_to_ppx (core : unit core) ~builder =
   let open (val builder : Builder.S) in
   match core_kind with
   | Var v -> Var.core_type v ~builder
-  | Tuple l -> ptyp_tuple (List.map l ~f:(fun t -> core_to_ppx t ~builder))
+  | Tuple l -> ptyp_tuple (List.map l ~f:(core_to_ppx ~builder))
   | Constr { params; module_; type_name } ->
     let lident_helper =
       module_
@@ -75,14 +75,11 @@ let rec core_to_ppx (core : unit core) ~builder =
 let label_declarations record_fields ~builder =
   let open (val builder : Builder.S) in
   List.map record_fields ~f:(fun { field_name; field_type; mutable_; global } ->
-    let declaration =
-      label_declaration
-        ~name:(Located.mk (Record_field_name.to_string field_name))
-        ~type_:(core_to_ppx field_type ~builder)
-        ~mutable_:(if mutable_ then Mutable else Immutable)
-    in
-    let modality = if global then Some Global else None in
-    modality, declaration)
+    Jane_ast.label_declaration
+      ~name:(Located.mk (Record_field_name.to_string field_name))
+      ~type_:(core_to_ppx field_type ~builder)
+      ~mutable_:(if mutable_ then Mutable else Immutable)
+      ~modalities:(if global then [ Modality "global" ] else []))
 ;;
 
 let to_ppx_kind t ~builder =
@@ -91,7 +88,7 @@ let to_ppx_kind t ~builder =
   | Abstract -> Ptype_abstract, None
   | Core core -> Ptype_abstract, Some (core_to_ppx core ~builder)
   | Record { fields; local = (_ : bool); equal_to } ->
-    ( ptype_record (label_declarations fields ~builder)
+    ( Ptype_record (label_declarations fields ~builder)
     , Option.map equal_to ~f:(core_to_ppx ~builder) )
   | Variant { rows; equal_to } ->
     ( Ptype_variant
@@ -102,11 +99,13 @@ let to_ppx_kind t ~builder =
              ~args:
                (match row_type with
                 | None -> Pcstr_tuple []
-                | Some (Single type_) -> Pcstr_tuple [ core_to_ppx type_ ~builder ]
+                | Some (Single type_) ->
+                  Jane_ast.pcstr_tuple [ [], core_to_ppx type_ ~builder ]
                 | Some (Inlined_tuple l) ->
-                  Pcstr_tuple (List.map l ~f:(fun t -> core_to_ppx t ~builder))
+                  Jane_ast.pcstr_tuple
+                    (List.map l ~f:(fun x -> [], core_to_ppx x ~builder))
                 | Some (Inlined_record fields) ->
-                  pcstr_record (label_declarations fields ~builder))))
+                  Pcstr_record (label_declarations fields ~builder))))
     , Option.map equal_to ~f:(core_to_ppx ~builder) )
 ;;
 
@@ -140,7 +139,7 @@ let fold_record_fields l ~init ~f =
         ; mutable_ = (_ : bool)
         ; global = (_ : bool)
         }
-        -> fold_core field_type ~init:acc ~f)
+      -> fold_core field_type ~init:acc ~f)
 ;;
 
 let fold t ~init ~f =
@@ -255,9 +254,12 @@ let duplicate_how_to_diff how_to_diff1 how_to_diff2 ~builder =
 let rec create_core core_type ~builder : How_to_diff.t core =
   let how_to_diff = How_to_diff.Custom.of_core_type core_type ~builder in
   let kind : How_to_diff.t core_kind =
-    match core_type.ptyp_desc with
-    | Ptyp_var var -> Var (Var.of_string var)
-    | Ptyp_tuple types -> Tuple (List.map types ~f:(create_core ~builder))
+    match Ppxlib_jane.Shim.Core_type_desc.of_parsetree core_type.ptyp_desc with
+    | Ptyp_var (var, _) -> Var (Var.of_string var)
+    | Ptyp_tuple labeled_types ->
+      (match Ppxlib_jane.as_unlabeled_tuple labeled_types with
+       | Some types -> Tuple (List.map types ~f:(create_core ~builder))
+       | None -> not_supported builder "Labeled tuples")
     | Ptyp_constr (id, core_types) ->
       let open (val builder : Builder.S) in
       let longident_helper = Longident_helper.of_longident id.txt ~builder in
@@ -314,14 +316,8 @@ let rec create_core core_type ~builder : How_to_diff.t core =
                | _, _ :: _ :: _ -> not_supported builder "Multi-type polymorphic variant"
              in
              Variant_row_name.of_string variant_name, variant_type))
-    | Ptyp_any -> not_supported builder "Ptyp_any"
-    | Ptyp_arrow _ -> not_supported builder "Ptyp_arrow"
-    | Ptyp_object _ -> not_supported builder "Ptyp_object"
-    | Ptyp_class _ -> not_supported builder "Ptyp_class"
-    | Ptyp_alias _ -> not_supported builder "Ptyp_alias"
-    | Ptyp_poly _ -> not_supported builder "Ptyp_poly"
-    | Ptyp_package _ -> not_supported builder "Ptyp_package"
-    | Ptyp_extension _ -> not_supported builder "Ptyp_extension"
+    | desc ->
+      not_supported builder (Ppxlib_jane.Language_feature_name.of_core_type_desc desc)
   in
   kind, how_to_diff
 ;;
@@ -331,13 +327,13 @@ let core_of_ppx = create_core
 let create_record fields ~builder =
   let open (val builder : Builder.S) in
   List.map fields ~f:(fun (field : label_declaration) ->
-    let modality, field = get_label_declaration_modality field in
+    let modalities, field = Ppxlib_jane.Shim.Label_declaration.extract_modalities field in
     let global =
-      match modality with
-      | Some Global -> true
-      | None -> false
+      List.exists modalities ~f:(function
+        | Modality "global" -> true
+        | Modality _ -> false)
     in
-    let { pld_name; pld_mutable; pld_type; pld_loc = _; pld_attributes = _ } = field in
+    let { pld_name; pld_mutable; pld_type; pld_loc = _; pld_attributes = _; _ } = field in
     let field_type =
       let kind, how_to_diff = create_core pld_type ~builder in
       let how_to_diff =
@@ -364,7 +360,7 @@ let of_ppx_kind
   ~builder
   =
   let t =
-    match type_kind, core_type with
+    match Ppxlib_jane.Shim.Type_kind.of_parsetree type_kind, core_type with
     | Ptype_abstract, None -> Abstract
     | Ptype_abstract, Some core_type -> Core (create_core core_type ~builder)
     | Ptype_record fields, equal_to ->
@@ -373,6 +369,8 @@ let of_ppx_kind
         ; local = false
         ; equal_to = Option.map equal_to ~f:(create_core ~builder)
         }
+    | Ptype_record_unboxed_product _, _ ->
+      not_supported builder "Ptype_record_unboxed_product"
     | Ptype_variant rows, equal_to ->
       Variant
         { rows =
@@ -411,7 +409,8 @@ let of_ppx_kind
               let variant_type =
                 match pcd_args with
                 | Pcstr_tuple [] -> None
-                | Pcstr_tuple [ core_type ] ->
+                | Pcstr_tuple [ arg ] ->
+                  let core_type = Ppxlib_jane.Shim.Pcstr_tuple_arg.to_core_type arg in
                   let kind, core_how_to_diff = create_core core_type ~builder in
                   let how_to_diff =
                     Option.merge
@@ -423,9 +422,13 @@ let of_ppx_kind
                 | Pcstr_record record ->
                   error_if_custom_how_to_diff "inlined records";
                   Some (Inlined_record (create_record record ~builder))
-                | Pcstr_tuple types ->
+                | Pcstr_tuple args ->
                   error_if_custom_how_to_diff "inlined tuples";
-                  Some (Inlined_tuple (List.map types ~f:(create_core ~builder)))
+                  Some
+                    (Inlined_tuple
+                       (List.map args ~f:(fun arg ->
+                          Ppxlib_jane.Shim.Pcstr_tuple_arg.to_core_type arg
+                          |> create_core ~builder)))
               in
               Variant_row_name.of_string pcd_name.txt, variant_type)
         ; equal_to = Option.map equal_to ~f:(create_core ~builder)

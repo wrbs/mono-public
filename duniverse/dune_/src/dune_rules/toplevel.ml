@@ -1,4 +1,5 @@
 open Import
+open Memo.O
 
 let toplevel_dir_prefix = ".toplevel."
 
@@ -24,7 +25,6 @@ module Source = struct
   let obj_dir { dir; name; _ } = Obj_dir.make_exe ~dir ~name
 
   let modules t pp =
-    let open Memo.O in
     main_module t |> Pp_spec.pp_module pp >>| Modules.With_vlib.singleton_exe
   ;;
 
@@ -118,8 +118,9 @@ let setup_module_rules t =
     Action_builder.write_file_dyn
       path
       (let* libs = Resolve.Memo.read requires_compile in
+       let lib_config = (Compilation_context.ocaml t.cctx).lib_config in
        let include_dirs =
-         Path.Set.to_list (Lib_flags.L.include_paths libs (Ocaml Byte))
+         Path.Set.to_list (Lib_flags.L.include_paths libs (Ocaml Byte) lib_config)
        in
        let* pp_ppx = pp_flags t in
        let pp_dirs = Source.pp_ml t.source ~include_dirs in
@@ -130,7 +131,6 @@ let setup_module_rules t =
 ;;
 
 let setup_rules_and_return_exe_path t ~linkage =
-  let open Memo.O in
   let program = Source.program t.source in
   let* (_ : Exe.dep_graphs) =
     Exe.build_and_link
@@ -175,7 +175,6 @@ let print_toplevel_init_file { include_paths; files_to_load; uses; pp; ppx; code
 
 module Stanza = struct
   let setup ~sctx ~dir ~(toplevel : Toplevel_stanza.t) =
-    let open Memo.O in
     let source = Source.of_stanza ~dir ~toplevel in
     let* expander = Super_context.expander sctx ~dir in
     let* scope = Scope.DB.find_by_dir dir in
@@ -203,8 +202,7 @@ module Stanza = struct
       let compiler_libs =
         Lib_name.parse_string_exn (source.loc, "compiler-libs.toplevel")
       in
-      let names = [ source.loc, source.name ] in
-      let merlin_ident = Merlin_ident.for_exes ~names:(List.map ~f:snd names) in
+      let names = Nonempty_list.[ source.loc, source.name ] in
       Lib.DB.resolve_user_written_deps
         (Scope.libs scope)
         (`Exe names)
@@ -214,7 +212,6 @@ module Stanza = struct
         ~pps
         ~dune_version
         ~allow_overlaps:false
-        ~merlin_ident
     in
     let requires_compile = Lib.Compile.direct_requires compile_info in
     let requires_link = Lib.Compile.requires_link compile_info in
@@ -237,7 +234,7 @@ module Stanza = struct
         ~requires_compile
         ~requires_link
         ~flags
-        ~js_of_ocaml:None
+        ~js_of_ocaml:(Js_of_ocaml.Mode.Pair.make None)
         ~melange_package_name:None
         ~package:None
         ~preprocessing

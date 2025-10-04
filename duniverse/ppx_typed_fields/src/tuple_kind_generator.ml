@@ -1,3 +1,4 @@
+open! Base
 open Ppxlib
 
 type t = core_type
@@ -48,11 +49,12 @@ let set_function_body ~loc ~elements_to_convert =
     ~elements_to_convert
 ;;
 
-let create_function_body ~loc ~constructor_declarations =
+let create_function_body ~loc ~constructor_declarations ~local =
   Product_kind_generator.create_function_body
     (module Tuple_generator)
     ~loc
     ~constructor_declarations
+    ~local
 ;;
 
 let type_ids ~loc ~elements_to_convert ~core_type_params =
@@ -73,6 +75,20 @@ let subproduct_type_id_modules ~loc ~elements_to_convert ~core_type_params =
 
 let type_id_function_body ~loc ~elements_to_convert =
   Product_kind_generator.type_id_function_body
+    (module Tuple_generator)
+    ~loc
+    ~elements_to_convert
+;;
+
+let globalize0_function_body ~loc ~elements_to_convert =
+  Product_kind_generator.globalize0_function_body
+    (module Tuple_generator)
+    ~loc
+    ~elements_to_convert
+;;
+
+let globalize_packed_function_body ~loc ~elements_to_convert =
+  Product_kind_generator.globalize_packed_function_body
     (module Tuple_generator)
     ~loc
     ~elements_to_convert

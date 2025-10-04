@@ -1,29 +1,38 @@
 open Core
 open Async
 
-let () = Backtrace.elide := true
+let () = Dynamic.set_root Backtrace.elide true
 let max_message_size = 1_000_000
 
-let print_trace (conn : Rpc.Connection.t) source =
-  Bus.iter_exn
-    (Async_rpc_kernel.Async_rpc_kernel_private.Connection.events conn)
-    [%here]
-    ~f:(fun (event : Async_rpc_kernel.Tracing_event.t) ->
-    let%tydi { event; rpc; id = _; payload_bytes } = event in
-    let name =
-      match rpc with
-      | None -> "<unknown>"
-      | Some { name; version = _ } -> String.globalize name
-    in
-    let header = sprintf !"%s (%s)" source name in
-    Core.printf
-      !"%-16s %3dB %{sexp: Async_rpc_kernel.Tracing_event.Event.t}\n%!"
-      header
-      payload_bytes
-      ([%globalize: Async_rpc_kernel.Tracing_event.Event.t] event))
+let print_trace (conn : Rpc.Connection.t) ?filter_events source =
+  Bus.subscribe_permanently_exn
+    (Async_rpc_kernel.Async_rpc_kernel_private.Connection.tracing_events conn)
+    ~f:(fun (local_ (event : Async_rpc_kernel.Tracing_event.t)) ->
+      match filter_events with
+      | Some matches_filter when matches_filter event -> ()
+      | None | Some _ ->
+        let%tydi { event; rpc; id = _; payload_bytes } = event in
+        let header = sprintf !"%s (%s)" source rpc.name in
+        Core.printf
+          !"%-16s %3dB %{sexp: Async_rpc_kernel.Tracing_event.Event.t}\n%!"
+          header
+          payload_bytes
+          ([%globalize: Async_rpc_kernel.Tracing_event.Event.t] event))
 ;;
 
-let test ~trace ~make_transport ~make_transport2 ~imp1 ~imp2 ~state1 ~state2 ~f () =
+let test
+  ?filter_events
+  ~trace
+  ~on_handshake_error
+  ~make_transport
+  ~make_transport2
+  ~imp1
+  ~imp2
+  ~state1
+  ~state2
+  ~f
+  ()
+  =
   let%bind `Reader r1, `Writer w2 = Unix.pipe (Info.of_string "rpc_test 1") in
   let%bind `Reader r2, `Writer w1 = Unix.pipe (Info.of_string "rpc_test 2") in
   let t1 = make_transport (r1, w1) in
@@ -34,7 +43,8 @@ let test ~trace ~make_transport ~make_transport2 ~imp1 ~imp2 ~state1 ~state2 ~f 
       Some
         (Rpc.Implementations.create_exn
            ~implementations:imp
-           ~on_unknown_rpc:`Close_connection)
+           ~on_unknown_rpc:`Close_connection
+           ~on_exception:Log_on_background_exn)
     else None
   in
   let s1 = s imp1 in
@@ -45,27 +55,38 @@ let test ~trace ~make_transport ~make_transport2 ~imp1 ~imp2 ~state1 ~state2 ~f 
       ?implementations:s2
       t2
       ~dispatch_queries:(fun conn2 ->
-        if trace then print_trace conn2 "B";
+        if trace then print_trace ?filter_events conn2 "B";
         let%bind conn1 = Ivar.read conn1_ivar in
         f conn1 conn2)
       ~connection_state:(fun _ -> state2)
-      ~on_handshake_error:`Raise
+      ~on_handshake_error
   in
   Async_rpc_kernel.Rpc.Connection.with_close
     ?implementations:s1
     t1
     ~dispatch_queries:(fun conn1 ->
-      if trace then print_trace conn1 "A";
+      if trace then print_trace ?filter_events conn1 "A";
       Ivar.fill_exn conn1_ivar conn1;
       f2_done)
     ~connection_state:(fun _ -> state1)
-    ~on_handshake_error:`Raise
+    ~on_handshake_error
 ;;
 
-let test1 ~trace ~make_transport ~make_client_transport ~imp ~state ~f =
+let test1
+  ?filter_events
+  ~trace
+  ~make_transport
+  ~make_client_transport
+  ~on_handshake_error
+  ~imp
+  ~state
+  ~f
+  =
   test
+    ?filter_events
     ~make_transport2:make_client_transport
     ~trace
+    ~on_handshake_error
     ~make_transport
     ~imp1:imp
     ~state1:state

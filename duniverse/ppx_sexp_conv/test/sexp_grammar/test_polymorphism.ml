@@ -6,12 +6,12 @@ and u = (string, int, float) t [@@deriving_inline sexp_grammar]
 let _ = fun (_ : ('a, _, 'b) t) -> ()
 let _ = fun (_ : u) -> ()
 
-let t_sexp_grammar :
-      'a 'b__001_ 'b.
-      'a Sexplib0.Sexp_grammar.t
-      -> 'b__001_ Sexplib0.Sexp_grammar.t
-      -> 'b Sexplib0.Sexp_grammar.t
-      -> ('a, 'b__001_, 'b) t Sexplib0.Sexp_grammar.t
+let t_sexp_grammar
+  : 'a 'b__001_ 'b.
+  'a Sexplib0.Sexp_grammar.t
+  -> 'b__001_ Sexplib0.Sexp_grammar.t
+  -> 'b Sexplib0.Sexp_grammar.t
+  -> ('a, 'b__001_, 'b) t Sexplib0.Sexp_grammar.t
   =
   fun _'a_sexp_grammar _'b__001__sexp_grammar _'b_sexp_grammar ->
   { untyped =
@@ -21,11 +21,14 @@ let t_sexp_grammar :
 
 let _ = t_sexp_grammar
 
-let (u_sexp_grammar : u Sexplib0.Sexp_grammar.t) =
+let u_sexp_grammar : u Sexplib0.Sexp_grammar.t =
   { untyped =
       Lazy
-        (lazy
-          (t_sexp_grammar string_sexp_grammar int_sexp_grammar float_sexp_grammar).untyped)
+        (Basement.Portable_lazy.from_fun
+           (Basement.Portability_hacks.magic_portable__needs_base_and_core
+              (fun () : Sexplib0.Sexp_grammar.grammar ->
+                 (t_sexp_grammar string_sexp_grammar int_sexp_grammar float_sexp_grammar)
+                   .untyped)))
   }
 ;;
 

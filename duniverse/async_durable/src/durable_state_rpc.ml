@@ -21,7 +21,7 @@ type ('state, 'update, 'error, 'metadata, 'connection) t =
   ; dispatch :
       'connection
       -> ('state * 'update Pipe.Reader.t * 'metadata, 'error) Result.t Or_error.t
-         Deferred.t
+           Deferred.t
   ; time_source : Time_source.t
   }
 
@@ -43,7 +43,12 @@ let try_to_get_fresh_pipe t =
      | Ok result -> Ok result)
 ;;
 
-let rec subscribe t =
+let rec subscribe ~wait_before_subscribing t =
+  let%bind () =
+    if wait_before_subscribing
+    then Time_source.after t.time_source t.resubscribe_delay
+    else return ()
+  in
   if not (subscription_active t)
   then return `Subscription_no_longer_active
   else (
@@ -52,8 +57,7 @@ let rec subscribe t =
       (match err with
        | `Failed_to_connect e -> write t (Failed_to_connect e)
        | `Rpc_error e -> write t (Rpc_error e));
-      let%bind () = Time_source.after t.time_source t.resubscribe_delay in
-      subscribe t
+      subscribe ~wait_before_subscribing:true t
     | Ok (state, pipe, id) ->
       write t (Connection_success id);
       write t (State state);
@@ -76,7 +80,7 @@ let rec handle_update_pipe t deferred_pipe =
       return (Queue.map updates ~f:(fun update -> Update.Update update)))
     >>> fun () ->
     write t Lost_connection;
-    handle_update_pipe t (subscribe t)
+    handle_update_pipe t (subscribe ~wait_before_subscribing:true t)
 ;;
 
 let create_internal
@@ -97,7 +101,7 @@ let create' ?time_source connection ~dispatch ~resubscribe_delay =
   let updates_reader, t =
     create_internal ?time_source connection ~dispatch ~resubscribe_delay
   in
-  handle_update_pipe t (subscribe t);
+  handle_update_pipe t (subscribe ~wait_before_subscribing:false t);
   updates_reader
 ;;
 
@@ -131,11 +135,11 @@ let create_versioned
   let dispatch conn =
     let module State_rpc =
       (val rpc_module
-          : Versioned_rpc.Both_convert.State_rpc.S
-          with type caller_query = query
-           and type caller_state = state
-           and type caller_update = update
-           and type caller_error = error)
+        : Versioned_rpc.Both_convert.State_rpc.S
+        with type caller_query = query
+         and type caller_state = state
+         and type caller_update = update
+         and type caller_error = error)
     in
     State_rpc.dispatch_multi conn query
   in
@@ -153,11 +157,11 @@ let create_versioned'
   let dispatch conn =
     let module State_rpc =
       (val rpc_module
-          : Versioned_rpc.Caller_converts.State_rpc.S
-          with type query = query
-           and type state = state
-           and type update = update
-           and type error = error)
+        : Versioned_rpc.Caller_converts.State_rpc.S
+        with type query = query
+         and type state = state
+         and type update = update
+         and type error = error)
     in
     State_rpc.dispatch_multi conn query
   in
@@ -180,11 +184,11 @@ let create_or_fail_versioned
   let dispatch conn =
     let module State_rpc =
       (val rpc_module
-          : Versioned_rpc.Both_convert.State_rpc.S
-          with type caller_query = query
-           and type caller_state = state
-           and type caller_update = update
-           and type caller_error = error)
+        : Versioned_rpc.Both_convert.State_rpc.S
+        with type caller_query = query
+         and type caller_state = state
+         and type caller_update = update
+         and type caller_error = error)
     in
     State_rpc.dispatch_multi conn query
   in
@@ -202,11 +206,11 @@ let create_or_fail_versioned'
   let dispatch conn =
     let module State_rpc =
       (val rpc_module
-          : Versioned_rpc.Caller_converts.State_rpc.S
-          with type query = query
-           and type state = state
-           and type update = update
-           and type error = error)
+        : Versioned_rpc.Caller_converts.State_rpc.S
+        with type query = query
+         and type state = state
+         and type update = update
+         and type error = error)
     in
     State_rpc.dispatch_multi conn query
   in

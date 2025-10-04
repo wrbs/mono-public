@@ -63,16 +63,13 @@ exec`` to run the test executable (for the sake of this example,
 
   $ dune exec project/tests/myTest.exe
 
-To run :ref:`cram-tests`, you can use the alias that is created for the test.
-The name of the alias corresponds to the name of the test without the ``.t``
-extension. For directory tests, this is the name of the directory without the
-``.t`` extension. Assuming a ``cram-test.t`` or ``cram-test.t/run.t`` file
-exists, it can be run with:
+To run :ref:`cram-tests` you can pass their paths to the ``dune test``  command.
 
 .. code:: console
 
-   $ dune build @cram-test
+   $ dune test tests/myCramTest.t
 
+This works both for directory and file cram tests.
 
 Running Tests in a Directory
 ----------------------------
@@ -131,6 +128,10 @@ instance, if we make the test fail by replacing ``120`` by ``0`` we get:
    File "src/fact.ml", line 3, characters 0-25: <<(fact 5) = 0>> is false.
 
    FAILED 1 / 1 tests
+
+Every inline test library generates an alias with the library name prefixed by
+`runtest-`. You can build the specific inline test library by running
+``dune build @runtest-foo`` in this case.
 
 Note that in this case Dune knew how to build and run the tests
 without any special configuration. This is because ``ppx_inline_test``
@@ -261,6 +262,7 @@ field. Available modes are:
 - ``best`` for running tests in native mode with fallback to byte code,
   if native compilation is not available
 - ``js`` for running tests in JavaScript using Node.js
+- ``wasm`` for running tests in Wasm using Node.js
 
 For instance:
 
@@ -268,7 +270,7 @@ For instance:
 
    (library
     (name foo)
-    (inline_tests (modes byte best js))
+    (inline_tests (modes byte best js wasm))
     (preprocess (pps ppx_expect)))
 
 

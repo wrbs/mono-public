@@ -328,8 +328,10 @@ let modules t ~libs ~for_ = modules_and_obj_dir t ~libs ~for_ >>| fst
 let virtual_modules ~lookup_vlib ~libs vlib =
   let info = Lib.info vlib in
   let+ modules =
-    match Option.value_exn (Lib_info.virtual_ info) with
-    | External modules -> Memo.return modules
+    match Lib_info.modules info with
+    | External modules ->
+      let modules = Option.value_exn modules in
+      Memo.return (Modules_group.With_vlib.drop_vlib modules)
     | Local ->
       let src_dir = Lib_info.src_dir info |> Path.as_in_build_dir_exn in
       let* t = lookup_vlib ~dir:src_dir in
@@ -345,14 +347,14 @@ let virtual_modules ~lookup_vlib ~libs vlib =
 ;;
 
 let make_lib_modules
-  ~expander
-  ~dir
-  ~libs
-  ~lookup_vlib
-  ~(lib : Library.t)
-  ~modules
-  ~include_subdirs:(loc_include_subdirs, (include_subdirs : Include_subdirs.t))
-  ~version
+      ~expander
+      ~dir
+      ~libs
+      ~lookup_vlib
+      ~(lib : Library.t)
+      ~modules
+      ~include_subdirs:(loc_include_subdirs, (include_subdirs : Include_subdirs.t))
+      ~version
   =
   let open Resolve.Memo.O in
   let* kind, main_module_name, wrapped =
@@ -498,7 +500,7 @@ let modules_of_stanzas =
       let enabled_if =
         match Stanza.repr stanza with
         | Library.T lib -> lib.enabled_if
-        | Tests.T exes -> exes.build_if
+        | Tests.T tests -> tests.exes.enabled_if
         | Executables.T exes -> exes.enabled_if
         | Melange_stanzas.Emit.T mel -> mel.enabled_if
         | _ -> Blang.true_
@@ -533,12 +535,13 @@ let modules_of_stanzas =
          | Melange_stanzas.Emit.T mel ->
            let obj_dir = Obj_dir.make_melange_emit ~dir ~name:mel.target in
            let+ sources, modules =
+             let version = Dune_project.dune_version project in
              Modules_field_evaluator.eval
                ~expander
                ~modules
                ~stanza_loc:mel.loc
                ~kind:Modules_field_evaluator.Exe_or_normal_lib
-               ~version:mel.dune_version
+               ~version
                ~private_modules:Ordered_set_lang.Unexpanded.standard
                ~src_dir:dir
                mel.modules
@@ -555,16 +558,16 @@ let modules_of_stanzas =
 ;;
 
 let make
-  dune_file
-  ~expander
-  ~dir
-  ~libs
-  ~project
-  ~lib_config
-  ~loc
-  ~lookup_vlib
-  ~include_subdirs:(loc_include_subdirs, (include_subdirs : Include_subdirs.t))
-  ~dirs
+      dune_file
+      ~expander
+      ~dir
+      ~libs
+      ~project
+      ~lib_config
+      ~loc
+      ~lookup_vlib
+      ~include_subdirs:(loc_include_subdirs, (include_subdirs : Include_subdirs.t))
+      ~dirs
   =
   let+ modules_of_stanzas =
     let modules =
@@ -574,14 +577,17 @@ let make
         List.fold_left
           dirs
           ~init:Module_trie.empty
-          ~f:(fun acc { Source_file_dir.dir; path_to_root; files } ->
-            let path =
-              List.map path_to_root ~f:(fun m ->
-                Module_name.parse_string_exn
-                  (Loc.in_dir (Path.drop_optional_build_context (Path.build dir)), m))
-            in
-            let modules = modules_of_files ~dialects ~dir ~files ~path in
-            match Module_trie.set_map acc path modules with
+          ~f:(fun acc { Source_file_dir.dir; path_to_root; files; source_dir = _ } ->
+            match
+              let path =
+                let loc =
+                  Path.build dir |> Path.drop_optional_build_context |> Loc.in_dir
+                in
+                List.map path_to_root ~f:(fun m -> Module_name.parse_string_exn (loc, m))
+              in
+              let modules = modules_of_files ~dialects ~dir ~files ~path in
+              Module_trie.set_map acc path modules
+            with
             | Ok s -> s
             | Error module_ ->
               let module_ =
@@ -616,7 +622,7 @@ let make
         List.fold_left
           dirs
           ~init:Module_name.Map.empty
-          ~f:(fun acc { Source_file_dir.dir; files; path_to_root = _ } ->
+          ~f:(fun acc { Source_file_dir.dir; files; path_to_root = _; source_dir = _ } ->
             let modules = modules_of_files ~dialects ~dir ~files ~path:[] in
             Module_name.Map.union acc modules ~f:(fun name x y ->
               User_error.raise

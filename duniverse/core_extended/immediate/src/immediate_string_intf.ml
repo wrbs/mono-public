@@ -1,29 +1,29 @@
 (** [Immediate_string] represents strings using [Immediate_short_string] if they are short
-    enough, or using [Immediate_interned_string] otherwise.  This guarantees that short
-    strings will not be stored in the interned table and longer strings will.  However,
+    enough, or using [Immediate_interned_string] otherwise. This guarantees that short
+    strings will not be stored in the interned table and longer strings will. However,
     there is no guarantee about the particular mapping between strings and integers used
     in this module. *)
 
 open! Core
 
-(** Use fast, non-lexicographic [compare] by default.  This is not stable (as {!Stable});
+(** Use fast, non-lexicographic [compare] by default. This is not stable (as {!Stable});
     for a stable one, use {!Stable.V1.compare} or {!Lexicographic.compare}. *)
 module type S = sig
   include Immediate_intf.String_no_option
   include Immediate_intf.Intern_table
   module Interned : Immediate_interned_string.S
 
-  val is_interned : t -> bool
-  val of_short_string : Immediate_short_string.t -> t
-  val of_interned_string : Interned.t -> t
-  val to_short_string_exn : t -> Immediate_short_string.t
-  val to_interned_string_exn : t -> Interned.t
+  val is_interned : t -> bool [@@zero_alloc]
+  val of_short_string : Immediate_short_string.t -> t [@@zero_alloc]
+  val of_interned_string : Interned.t -> t [@@zero_alloc]
+  val to_short_string_exn : t -> Immediate_short_string.t [@@zero_alloc]
+  val to_interned_string_exn : t -> Interned.t [@@zero_alloc]
 
   module Stable : sig
     module V1 : sig
       type t [@@deriving typerep]
 
-      include Stable_without_comparator with type t := t
+      include%template Stable_without_comparator [@mode local] with type t := t
 
       val compare : [ `removed_because_not_antisymmetric ]
 
@@ -41,10 +41,13 @@ module type S = sig
 
       type nonrec t = t [@@deriving hash, typerep]
 
-      include
+      include%template
         Stable_comparable.With_stable_witness.V1
-          with type t := t
-           and type comparator_witness = Lexicographic.comparator_witness
+        [@mode local]
+        with type t := t
+         and type comparator_witness = Lexicographic.comparator_witness
+
+      include Sexpable.S_with_grammar with type t := t
 
       val of_v1 : V1.t -> t
 
@@ -72,7 +75,8 @@ module type S = sig
       module V2 : sig
         type nonrec t = t [@@deriving hash]
 
-        include Stable_without_comparator_with_witness with type t := t
+        include%template
+          Stable_without_comparator_with_witness [@mode local] with type t := t
 
         val of_v1 : V1.t -> t
 
@@ -92,13 +96,13 @@ module type S = sig
     val of_immediate_string_option : t -> t
   end
 
-  val of_local_string : string -> t
-  val to_local_string : t -> string
-  val of_string_no_intern : string -> Option.t
+  val of_local_string : local_ string -> t
+  val to_local_string : t -> local_ string [@@zero_alloc]
+  val of_string_no_intern : local_ string -> Option.t
 
   (* This is [Immediate_stringable.S], but written out to avoid a dependency loop. *)
   val of_immediate_string : t -> t
-  val to_immediate_string : t -> t
+  val to_immediate_string : t -> t [@@zero_alloc]
 end
 
 module type Immediate_string = sig

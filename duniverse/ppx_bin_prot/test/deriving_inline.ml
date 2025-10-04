@@ -9,7 +9,7 @@ module T : sig
     [@@@ocaml.warning "-32"]
 
     include Bin_prot.Binable.S with type t := t
-    include Bin_prot.Binable.S_local with type t := t
+    include Bin_prot.Binable.S__local with type t := t
   end
   [@@ocaml.doc "@inline"]
 
@@ -30,7 +30,7 @@ end = struct
 
   let _ = bin_shape_t
 
-  let (bin_size_t__local : t Bin_prot.Size.sizer_local) = function
+  let bin_size_t__local : t Bin_prot.Size.sizer__local = function
     | A -> 1
   ;;
 
@@ -38,7 +38,7 @@ end = struct
   let bin_size_t = (bin_size_t__local :> _ Bin_prot.Size.sizer)
   let _ = bin_size_t
 
-  let (bin_write_t__local : t Bin_prot.Write.writer_local) =
+  let bin_write_t__local : t Bin_prot.Write.writer__local =
     fun buf ~pos -> function
     | A -> Bin_prot.Write.bin_write_int_8bit buf ~pos 0
   ;;
@@ -47,20 +47,20 @@ end = struct
   let bin_write_t = (bin_write_t__local :> _ Bin_prot.Write.writer)
   let _ = bin_write_t
 
-  let bin_writer_t =
-    ({ size = bin_size_t; write = bin_write_t } : _ Bin_prot.Type_class.writer)
+  let bin_writer_t : t Bin_prot.Type_class.writer =
+    { size = bin_size_t; write = bin_write_t }
   ;;
 
   let _ = bin_writer_t
 
-  let (__bin_read_t__ : (int -> t) Bin_prot.Read.reader) =
+  let __bin_read_t__ : t Bin_prot.Read.vtag_reader =
     fun _buf ~pos_ref _vint ->
     Bin_prot.Common.raise_variant_wrong_type "deriving_inline.ml.T.t" !pos_ref
   ;;
 
   let _ = __bin_read_t__
 
-  let (bin_read_t : t Bin_prot.Read.reader) =
+  let bin_read_t : t Bin_prot.Read.reader =
     fun buf ~pos_ref ->
     match Bin_prot.Read.bin_read_int_8bit buf ~pos_ref with
     | 0 -> A
@@ -72,15 +72,15 @@ end = struct
 
   let _ = bin_read_t
 
-  let bin_reader_t =
-    ({ read = bin_read_t; vtag_read = __bin_read_t__ } : _ Bin_prot.Type_class.reader)
+  let bin_reader_t : t Bin_prot.Type_class.reader =
+    { read = bin_read_t; vtag_read = __bin_read_t__ }
   ;;
 
   let _ = bin_reader_t
 
   let bin_t =
     ({ writer = bin_writer_t; reader = bin_reader_t; shape = bin_shape_t }
-      : _ Bin_prot.Type_class.t)
+     : _ Bin_prot.Type_class.t)
   ;;
 
   let _ = bin_t
@@ -95,7 +95,7 @@ module T1 : sig
     [@@@ocaml.warning "-32"]
 
     include Bin_prot.Binable.S1 with type 'a t := 'a t
-    include Bin_prot.Binable.S_local1 with type 'a t := 'a t
+    include Bin_prot.Binable.S1__local with type 'a t := 'a t
   end
   [@@ocaml.doc "@inline"]
 
@@ -125,13 +125,13 @@ end = struct
 
   let _ = bin_shape_t
 
-  let bin_size_t__local :
-        'a. 'a Bin_prot.Size.sizer_local -> 'a t Bin_prot.Size.sizer_local
+  let bin_size_t__local
+    : 'a. 'a Bin_prot.Size.sizer__local -> 'a t Bin_prot.Size.sizer__local
     =
-    fun _size_of_a__local -> function
+    fun _size_of_a -> function
     | A v1 ->
       let size = 1 in
-      Bin_prot.Common.( + ) size (_size_of_a__local v1)
+      Bin_prot.Common.( + ) size (_size_of_a v1)
   ;;
 
   let _ = bin_size_t__local
@@ -145,13 +145,13 @@ end = struct
 
   let _ = bin_size_t
 
-  let bin_write_t__local :
-        'a. 'a Bin_prot.Write.writer_local -> 'a t Bin_prot.Write.writer_local
+  let bin_write_t__local
+    : 'a. 'a Bin_prot.Write.writer__local -> 'a t Bin_prot.Write.writer__local
     =
-    fun _write_a__local buf ~pos -> function
+    fun _write_a buf ~pos -> function
     | A v1 ->
       let pos = Bin_prot.Write.bin_write_int_8bit buf ~pos 0 in
-      _write_a__local buf ~pos v1
+      _write_a buf ~pos v1
   ;;
 
   let _ = bin_write_t__local
@@ -165,17 +165,16 @@ end = struct
 
   let _ = bin_write_t
 
-  let bin_writer_t =
-    (fun bin_writer_a ->
-       { size = (fun v -> bin_size_t bin_writer_a.size v)
-       ; write = (fun v -> bin_write_t bin_writer_a.write v)
-       }
-      : _ Bin_prot.Type_class.writer -> _ Bin_prot.Type_class.writer)
+  let bin_writer_t : 'a. 'a Bin_prot.Type_class.writer -> 'a t Bin_prot.Type_class.writer =
+    fun bin_writer_a ->
+    { size = (fun v -> bin_size_t bin_writer_a.size v)
+    ; write = (fun v -> bin_write_t bin_writer_a.write v)
+    }
   ;;
 
   let _ = bin_writer_t
 
-  let __bin_read_t__ : 'a. 'a Bin_prot.Read.reader -> (int -> 'a t) Bin_prot.Read.reader =
+  let __bin_read_t__ : 'a. 'a Bin_prot.Read.reader -> 'a t Bin_prot.Read.vtag_reader =
     fun _of__a _buf ~pos_ref _vint ->
     Bin_prot.Common.raise_variant_wrong_type "deriving_inline.ml.T1.t" !pos_ref
   ;;
@@ -196,13 +195,12 @@ end = struct
 
   let _ = bin_read_t
 
-  let bin_reader_t =
-    (fun bin_reader_a ->
-       { read = (fun buf ~pos_ref -> (bin_read_t bin_reader_a.read) buf ~pos_ref)
-       ; vtag_read =
-           (fun buf ~pos_ref vtag -> (__bin_read_t__ bin_reader_a.read) buf ~pos_ref vtag)
-       }
-      : _ Bin_prot.Type_class.reader -> _ Bin_prot.Type_class.reader)
+  let bin_reader_t : 'a. 'a Bin_prot.Type_class.reader -> 'a t Bin_prot.Type_class.reader =
+    fun bin_reader_a ->
+    { read = (fun buf ~pos_ref -> (bin_read_t bin_reader_a.read) buf ~pos_ref)
+    ; vtag_read =
+        (fun buf ~pos_ref vtag -> (__bin_read_t__ bin_reader_a.read) buf ~pos_ref vtag)
+    }
   ;;
 
   let _ = bin_reader_t
@@ -213,7 +211,7 @@ end = struct
        ; reader = bin_reader_t bin_a.reader
        ; shape = bin_shape_t bin_a.shape
        }
-      : _ Bin_prot.Type_class.t -> _ Bin_prot.Type_class.t)
+     : _ Bin_prot.Type_class.t -> _ Bin_prot.Type_class.t)
   ;;
 
   let _ = bin_t
@@ -231,9 +229,9 @@ module T_write : sig
     val bin_write_t : t Bin_prot.Write.writer
     val bin_writer_t : t Bin_prot.Type_class.writer
     val bin_size_t : t Bin_prot.Size.sizer
-    val bin_size_t__local : t Bin_prot.Size.sizer_local
+    val bin_size_t__local : t Bin_prot.Size.sizer__local
     val bin_write_t : t Bin_prot.Write.writer
-    val bin_write_t__local : t Bin_prot.Write.writer_local
+    val bin_write_t__local : t Bin_prot.Write.writer__local
     val bin_writer_t : t Bin_prot.Type_class.writer
   end
   [@@ocaml.doc "@inline"]
@@ -250,7 +248,7 @@ module T_read : sig
     [@@@ocaml.warning "-32"]
 
     val bin_read_t : t Bin_prot.Read.reader
-    val __bin_read_t__ : (int -> t) Bin_prot.Read.reader
+    val __bin_read_t__ : t Bin_prot.Read.vtag_reader
     val bin_reader_t : t Bin_prot.Type_class.reader
   end
   [@@ocaml.doc "@inline"]
@@ -273,6 +271,354 @@ module T_type_class : sig
   [@@@end]
 end = struct
   type t [@@deriving bin_io]
+end
+
+module Empty_variant : sig
+  type t = | [@@deriving_inline bin_io, bin_io ~localize]
+
+  include sig
+    [@@@ocaml.warning "-32"]
+
+    include Bin_prot.Binable.S with type t := t
+    include Bin_prot.Binable.S__local with type t := t
+  end
+  [@@ocaml.doc "@inline"]
+
+  [@@@end]
+end = struct
+  type t = | [@@deriving_inline bin_io, bin_io ~localize]
+
+  let _ = fun (_ : t) -> ()
+
+  let bin_shape_t =
+    let _group =
+      Bin_prot.Shape.group
+        (Bin_prot.Shape.Location.of_string
+           "ppx/ppx_bin_prot/test/deriving_inline.ml:289:2")
+        [ Bin_prot.Shape.Tid.of_string "t", [], Bin_prot.Shape.variant [] ]
+    in
+    (Bin_prot.Shape.top_app _group (Bin_prot.Shape.Tid.of_string "t")) []
+  ;;
+
+  let _ = bin_shape_t
+
+  let bin_size_t : t Bin_prot.Size.sizer =
+    fun v ->
+    (fun _v -> raise (Bin_prot.Common.Empty_type "deriving_inline.ml.Empty_variant.t")) v
+  ;;
+
+  let _ = bin_size_t
+
+  let bin_write_t : t Bin_prot.Write.writer =
+    fun buf ~pos v ->
+    (fun _buf ~pos:_ _v ->
+      raise (Bin_prot.Common.Empty_type "deriving_inline.ml.Empty_variant.t"))
+      buf
+      ~pos
+      v
+  ;;
+
+  let _ = bin_write_t
+
+  let bin_writer_t : t Bin_prot.Type_class.writer =
+    { size = bin_size_t; write = bin_write_t }
+  ;;
+
+  let _ = bin_writer_t
+
+  let __bin_read_t__ : t Bin_prot.Read.vtag_reader =
+    fun _buf ~pos_ref _vint ->
+    Bin_prot.Common.raise_variant_wrong_type "deriving_inline.ml.Empty_variant.t" !pos_ref
+  ;;
+
+  let _ = __bin_read_t__
+
+  let bin_read_t : t Bin_prot.Read.reader =
+    fun buf ~pos_ref ->
+    (fun _buf ~pos_ref ->
+      Bin_prot.Common.raise_read_error
+        (Bin_prot.Common.ReadError.Empty_type "deriving_inline.ml.Empty_variant.t")
+        !pos_ref)
+      buf
+      ~pos_ref
+  ;;
+
+  let _ = bin_read_t
+
+  let bin_reader_t : t Bin_prot.Type_class.reader =
+    { read = bin_read_t; vtag_read = __bin_read_t__ }
+  ;;
+
+  let _ = bin_reader_t
+
+  let bin_t =
+    ({ writer = bin_writer_t; reader = bin_reader_t; shape = bin_shape_t }
+     : _ Bin_prot.Type_class.t)
+  ;;
+
+  let _ = bin_t
+
+  let bin_shape_t =
+    let _group =
+      Bin_prot.Shape.group
+        (Bin_prot.Shape.Location.of_string
+           "ppx/ppx_bin_prot/test/deriving_inline.ml:289:2")
+        [ Bin_prot.Shape.Tid.of_string "t", [], Bin_prot.Shape.variant [] ]
+    in
+    (Bin_prot.Shape.top_app _group (Bin_prot.Shape.Tid.of_string "t")) []
+  ;;
+
+  let _ = bin_shape_t
+
+  let bin_size_t__local : t Bin_prot.Size.sizer__local =
+    fun v ->
+    (fun _v -> raise (Bin_prot.Common.Empty_type "deriving_inline.ml.Empty_variant.t")) v
+  ;;
+
+  let _ = bin_size_t__local
+  let bin_size_t = (bin_size_t__local :> _ Bin_prot.Size.sizer)
+  let _ = bin_size_t
+
+  let bin_write_t__local : t Bin_prot.Write.writer__local =
+    fun buf ~pos v ->
+    (fun _buf ~pos:_ _v ->
+      raise (Bin_prot.Common.Empty_type "deriving_inline.ml.Empty_variant.t"))
+      buf
+      ~pos
+      v
+  ;;
+
+  let _ = bin_write_t__local
+  let bin_write_t = (bin_write_t__local :> _ Bin_prot.Write.writer)
+  let _ = bin_write_t
+
+  let bin_writer_t : t Bin_prot.Type_class.writer =
+    { size = bin_size_t; write = bin_write_t }
+  ;;
+
+  let _ = bin_writer_t
+
+  let __bin_read_t__ : t Bin_prot.Read.vtag_reader =
+    fun _buf ~pos_ref _vint ->
+    Bin_prot.Common.raise_variant_wrong_type "deriving_inline.ml.Empty_variant.t" !pos_ref
+  ;;
+
+  let _ = __bin_read_t__
+
+  let bin_read_t : t Bin_prot.Read.reader =
+    fun buf ~pos_ref ->
+    (fun _buf ~pos_ref ->
+      Bin_prot.Common.raise_read_error
+        (Bin_prot.Common.ReadError.Empty_type "deriving_inline.ml.Empty_variant.t")
+        !pos_ref)
+      buf
+      ~pos_ref
+  ;;
+
+  let _ = bin_read_t
+
+  let bin_reader_t : t Bin_prot.Type_class.reader =
+    { read = bin_read_t; vtag_read = __bin_read_t__ }
+  ;;
+
+  let _ = bin_reader_t
+
+  let bin_t =
+    ({ writer = bin_writer_t; reader = bin_reader_t; shape = bin_shape_t }
+     : _ Bin_prot.Type_class.t)
+  ;;
+
+  let _ = bin_t
+
+  [@@@end]
+end
+
+module Empty_polymorphic_variant : sig
+  type t = private [> ] [@@deriving_inline bin_io, bin_io ~localize]
+
+  include sig
+    [@@@ocaml.warning "-32"]
+
+    include Bin_prot.Binable.S with type t := t
+    include Bin_prot.Binable.S__local with type t := t
+  end
+  [@@ocaml.doc "@inline"]
+
+  [@@@end]
+end = struct
+  type t = private [> ] [@@deriving_inline bin_io, bin_io ~localize]
+
+  let _ = fun (_ : t) -> ()
+
+  let bin_shape_t =
+    let _group =
+      Bin_prot.Shape.group
+        (Bin_prot.Shape.Location.of_string
+           "ppx/ppx_bin_prot/test/deriving_inline.ml:449:2")
+        [ ( Bin_prot.Shape.Tid.of_string "t"
+          , []
+          , Bin_prot.Shape.poly_variant
+              (Bin_prot.Shape.Location.of_string
+                 "ppx/ppx_bin_prot/test/deriving_inline.ml:449:19")
+              [] )
+        ]
+    in
+    (Bin_prot.Shape.top_app _group (Bin_prot.Shape.Tid.of_string "t")) []
+  ;;
+
+  let _ = bin_shape_t
+
+  let bin_size_t =
+    (fun v ->
+       (fun _v ->
+         raise
+           (Bin_prot.Common.Empty_type "deriving_inline.ml.Empty_polymorphic_variant.t"))
+         v
+     : _ Bin_prot.Size.sizer)
+  ;;
+
+  let _ = bin_size_t
+
+  let bin_write_t =
+    (fun buf ~pos v ->
+       (fun _buf ~pos:_ _v ->
+         raise
+           (Bin_prot.Common.Empty_type "deriving_inline.ml.Empty_polymorphic_variant.t"))
+         buf
+         ~pos
+         v
+     : _ Bin_prot.Write.writer)
+  ;;
+
+  let _ = bin_write_t
+
+  let bin_writer_t =
+    ({ size = bin_size_t; write = bin_write_t } : _ Bin_prot.Type_class.writer)
+  ;;
+
+  let _ = bin_writer_t
+
+  let __bin_read_t__ _buf ~pos_ref _vint =
+    Bin_prot.Common.raise_read_error
+      (Bin_prot.Common.ReadError.Empty_type
+         "deriving_inline.ml.Empty_polymorphic_variant.t")
+      !pos_ref
+  ;;
+
+  let _ = __bin_read_t__
+
+  let bin_read_t buf ~pos_ref =
+    let vint = Bin_prot.Read.bin_read_variant_int buf ~pos_ref in
+    try __bin_read_t__ buf ~pos_ref vint with
+    | Bin_prot.Common.No_variant_match ->
+      let err =
+        Bin_prot.Common.ReadError.Variant "deriving_inline.ml.Empty_polymorphic_variant.t"
+      in
+      Bin_prot.Common.raise_read_error err !pos_ref
+  ;;
+
+  let _ = bin_read_t
+
+  let bin_reader_t =
+    ({ read = bin_read_t; vtag_read = __bin_read_t__ } : _ Bin_prot.Type_class.reader)
+  ;;
+
+  let _ = bin_reader_t
+
+  let bin_t =
+    ({ writer = bin_writer_t; reader = bin_reader_t; shape = bin_shape_t }
+     : _ Bin_prot.Type_class.t)
+  ;;
+
+  let _ = bin_t
+
+  let bin_shape_t =
+    let _group =
+      Bin_prot.Shape.group
+        (Bin_prot.Shape.Location.of_string
+           "ppx/ppx_bin_prot/test/deriving_inline.ml:449:2")
+        [ ( Bin_prot.Shape.Tid.of_string "t"
+          , []
+          , Bin_prot.Shape.poly_variant
+              (Bin_prot.Shape.Location.of_string
+                 "ppx/ppx_bin_prot/test/deriving_inline.ml:449:19")
+              [] )
+        ]
+    in
+    (Bin_prot.Shape.top_app _group (Bin_prot.Shape.Tid.of_string "t")) []
+  ;;
+
+  let _ = bin_shape_t
+
+  let bin_size_t__local =
+    (fun v ->
+       (fun _v ->
+         raise
+           (Bin_prot.Common.Empty_type "deriving_inline.ml.Empty_polymorphic_variant.t"))
+         v
+     : _ Bin_prot.Size.sizer__local)
+  ;;
+
+  let _ = bin_size_t__local
+  let bin_size_t = (bin_size_t__local :> _ Bin_prot.Size.sizer)
+  let _ = bin_size_t
+
+  let bin_write_t__local =
+    (fun buf ~pos v ->
+       (fun _buf ~pos:_ _v ->
+         raise
+           (Bin_prot.Common.Empty_type "deriving_inline.ml.Empty_polymorphic_variant.t"))
+         buf
+         ~pos
+         v
+     : _ Bin_prot.Write.writer__local)
+  ;;
+
+  let _ = bin_write_t__local
+  let bin_write_t = (bin_write_t__local :> _ Bin_prot.Write.writer)
+  let _ = bin_write_t
+
+  let bin_writer_t =
+    ({ size = bin_size_t; write = bin_write_t } : _ Bin_prot.Type_class.writer)
+  ;;
+
+  let _ = bin_writer_t
+
+  let __bin_read_t__ _buf ~pos_ref _vint =
+    Bin_prot.Common.raise_read_error
+      (Bin_prot.Common.ReadError.Empty_type
+         "deriving_inline.ml.Empty_polymorphic_variant.t")
+      !pos_ref
+  ;;
+
+  let _ = __bin_read_t__
+
+  let bin_read_t buf ~pos_ref =
+    let vint = Bin_prot.Read.bin_read_variant_int buf ~pos_ref in
+    try __bin_read_t__ buf ~pos_ref vint with
+    | Bin_prot.Common.No_variant_match ->
+      let err =
+        Bin_prot.Common.ReadError.Variant "deriving_inline.ml.Empty_polymorphic_variant.t"
+      in
+      Bin_prot.Common.raise_read_error err !pos_ref
+  ;;
+
+  let _ = bin_read_t
+
+  let bin_reader_t =
+    ({ read = bin_read_t; vtag_read = __bin_read_t__ } : _ Bin_prot.Type_class.reader)
+  ;;
+
+  let _ = bin_reader_t
+
+  let bin_t =
+    ({ writer = bin_writer_t; reader = bin_reader_t; shape = bin_shape_t }
+     : _ Bin_prot.Type_class.t)
+  ;;
+
+  let _ = bin_t
+
+  [@@@end]
 end
 
 module Mutual_recursion : sig
@@ -321,7 +667,7 @@ end = struct
   let _ = bin_shape_t
   and _ = bin_shape_u
 
-  let rec (bin_size_t__local : t Bin_prot.Size.sizer_local) = function
+  let rec bin_size_t__local : t Bin_prot.Size.sizer__local = function
     | Int v1 ->
       let size = 1 in
       Bin_prot.Common.( + ) size (bin_size_int__local v1)
@@ -330,7 +676,7 @@ end = struct
       let size = Bin_prot.Common.( + ) size (bin_size_u__local v1) in
       Bin_prot.Common.( + ) size (bin_size_u__local v2)
 
-  and (bin_size_u__local : u Bin_prot.Size.sizer_local) = function
+  and bin_size_u__local : u Bin_prot.Size.sizer__local = function
     | Mul (v1, v2) ->
       let size = 1 in
       let size = Bin_prot.Common.( + ) size (bin_size_t__local v1) in
@@ -346,7 +692,7 @@ end = struct
   let _ = bin_size_t
   and _ = bin_size_u
 
-  let rec (bin_write_t__local : t Bin_prot.Write.writer_local) =
+  let rec bin_write_t__local : t Bin_prot.Write.writer__local =
     fun buf ~pos -> function
     | Int v1 ->
       let pos = Bin_prot.Write.bin_write_int_8bit buf ~pos 0 in
@@ -356,7 +702,7 @@ end = struct
       let pos = bin_write_u__local buf ~pos v1 in
       bin_write_u__local buf ~pos v2
 
-  and (bin_write_u__local : u Bin_prot.Write.writer_local) =
+  and bin_write_u__local : u Bin_prot.Write.writer__local =
     fun buf ~pos -> function
     | Mul (v1, v2) ->
       let pos = Bin_prot.Write.bin_write_int_8bit buf ~pos 0 in
@@ -373,29 +719,29 @@ end = struct
   let _ = bin_write_t
   and _ = bin_write_u
 
-  let bin_writer_t =
-    ({ size = bin_size_t; write = bin_write_t } : _ Bin_prot.Type_class.writer)
+  let bin_writer_t : t Bin_prot.Type_class.writer =
+    { size = bin_size_t; write = bin_write_t }
 
-  and bin_writer_u =
-    ({ size = bin_size_u; write = bin_write_u } : _ Bin_prot.Type_class.writer)
+  and bin_writer_u : u Bin_prot.Type_class.writer =
+    { size = bin_size_u; write = bin_write_u }
   ;;
 
   let _ = bin_writer_t
   and _ = bin_writer_u
 
-  let rec (__bin_read_t__ : (int -> t) Bin_prot.Read.reader) =
+  let rec __bin_read_t__ : t Bin_prot.Read.vtag_reader =
     fun _buf ~pos_ref _vint ->
     Bin_prot.Common.raise_variant_wrong_type
       "deriving_inline.ml.Mutual_recursion.t"
       !pos_ref
 
-  and (__bin_read_u__ : (int -> u) Bin_prot.Read.reader) =
+  and __bin_read_u__ : u Bin_prot.Read.vtag_reader =
     fun _buf ~pos_ref _vint ->
     Bin_prot.Common.raise_variant_wrong_type
       "deriving_inline.ml.Mutual_recursion.u"
       !pos_ref
 
-  and (bin_read_t : t Bin_prot.Read.reader) =
+  and bin_read_t : t Bin_prot.Read.reader =
     fun buf ~pos_ref ->
     match Bin_prot.Read.bin_read_int_8bit buf ~pos_ref with
     | 0 ->
@@ -410,7 +756,7 @@ end = struct
         (Bin_prot.Common.ReadError.Sum_tag "deriving_inline.ml.Mutual_recursion.t")
         !pos_ref
 
-  and (bin_read_u : u Bin_prot.Read.reader) =
+  and bin_read_u : u Bin_prot.Read.reader =
     fun buf ~pos_ref ->
     match Bin_prot.Read.bin_read_int_8bit buf ~pos_ref with
     | 0 ->
@@ -428,11 +774,11 @@ end = struct
   and _ = bin_read_t
   and _ = bin_read_u
 
-  let bin_reader_t =
-    ({ read = bin_read_t; vtag_read = __bin_read_t__ } : _ Bin_prot.Type_class.reader)
+  let bin_reader_t : t Bin_prot.Type_class.reader =
+    { read = bin_read_t; vtag_read = __bin_read_t__ }
 
-  and bin_reader_u =
-    ({ read = bin_read_u; vtag_read = __bin_read_u__ } : _ Bin_prot.Type_class.reader)
+  and bin_reader_u : u Bin_prot.Type_class.reader =
+    { read = bin_read_u; vtag_read = __bin_read_u__ }
   ;;
 
   let _ = bin_reader_t
@@ -440,11 +786,11 @@ end = struct
 
   let bin_t =
     ({ writer = bin_writer_t; reader = bin_reader_t; shape = bin_shape_t }
-      : _ Bin_prot.Type_class.t)
+     : _ Bin_prot.Type_class.t)
 
   and bin_u =
     ({ writer = bin_writer_u; reader = bin_reader_u; shape = bin_shape_u }
-      : _ Bin_prot.Type_class.t)
+     : _ Bin_prot.Type_class.t)
   ;;
 
   let _ = bin_t
@@ -484,7 +830,7 @@ end = struct
 
   let _ = bin_shape_t
 
-  let (bin_size_t : t Bin_prot.Size.sizer) = function
+  let bin_size_t : t Bin_prot.Size.sizer = function
     | v1, v2 ->
       let size = 0 in
       let size = Bin_prot.Common.( + ) size (bin_size_array bin_size_float v1) in
@@ -502,20 +848,20 @@ end = struct
 
   let _ = bin_write_t
 
-  let bin_writer_t =
-    ({ size = bin_size_t; write = bin_write_t } : _ Bin_prot.Type_class.writer)
+  let bin_writer_t : t Bin_prot.Type_class.writer =
+    { size = bin_size_t; write = bin_write_t }
   ;;
 
   let _ = bin_writer_t
 
-  let (__bin_read_t__ : (int -> t) Bin_prot.Read.reader) =
+  let __bin_read_t__ : t Bin_prot.Read.vtag_reader =
     fun _buf ~pos_ref _vint ->
     Bin_prot.Common.raise_variant_wrong_type "deriving_inline.ml.Float_array.t" !pos_ref
   ;;
 
   let _ = __bin_read_t__
 
-  let (bin_read_t : t Bin_prot.Read.reader) =
+  let bin_read_t : t Bin_prot.Read.reader =
     fun buf ~pos_ref ->
     let v1 = (bin_read_array bin_read_float) buf ~pos_ref in
     let v2 = (bin_read_list bin_read_int) buf ~pos_ref in
@@ -524,15 +870,15 @@ end = struct
 
   let _ = bin_read_t
 
-  let bin_reader_t =
-    ({ read = bin_read_t; vtag_read = __bin_read_t__ } : _ Bin_prot.Type_class.reader)
+  let bin_reader_t : t Bin_prot.Type_class.reader =
+    { read = bin_read_t; vtag_read = __bin_read_t__ }
   ;;
 
   let _ = bin_reader_t
 
   let bin_t =
     ({ writer = bin_writer_t; reader = bin_reader_t; shape = bin_shape_t }
-      : _ Bin_prot.Type_class.t)
+     : _ Bin_prot.Type_class.t)
   ;;
 
   let _ = bin_t
@@ -543,14 +889,26 @@ end
 module Global_fields_with_localize : sig
   module Record : sig
     type t [@@deriving bin_io ~localize]
+
+    module T1 : sig
+      type 'a t [@@deriving bin_io ~localize]
+    end
   end
 
   module Record_constructor : sig
     type t [@@deriving bin_io ~localize]
+
+    module T1 : sig
+      type 'a t [@@deriving bin_io ~localize]
+    end
   end
 
   module Tuple_constructor : sig
     type t [@@deriving bin_io ~localize]
+
+    module T1 : sig
+      type 'a t [@@deriving bin_io ~localize]
+    end
   end
 end = struct
   module T = struct
@@ -567,9 +925,9 @@ end = struct
     type t =
       { a : Normal.t
       ; mutable b : Mutable.t
-      ; c : Global.t
-      ; d : Ocaml_global.t
-      ; e : Extension_global.t
+      ; global_ c : Global.t
+      ; global_ d : Ocaml_global.t
+      ; global_ e : Extension_global.t
       }
     [@@deriving_inline bin_io ~localize ~hide_locations]
 
@@ -595,7 +953,7 @@ end = struct
 
     let _ = bin_shape_t
 
-    let (bin_size_t__local : t Bin_prot.Size.sizer_local) = function
+    let bin_size_t__local : t Bin_prot.Size.sizer__local = function
       | { a = v1; b = v2; c = v3; d = v4; e = v5 } ->
         let size = 0 in
         let size = Bin_prot.Common.( + ) size (Normal.bin_size_t__local v1) in
@@ -609,7 +967,7 @@ end = struct
     let bin_size_t = (bin_size_t__local :> _ Bin_prot.Size.sizer)
     let _ = bin_size_t
 
-    let (bin_write_t__local : t Bin_prot.Write.writer_local) =
+    let bin_write_t__local : t Bin_prot.Write.writer__local =
       fun buf ~pos -> function
       | { a = v1; b = v2; c = v3; d = v4; e = v5 } ->
         let pos = Normal.bin_write_t__local buf ~pos v1 in
@@ -623,13 +981,13 @@ end = struct
     let bin_write_t = (bin_write_t__local :> _ Bin_prot.Write.writer)
     let _ = bin_write_t
 
-    let bin_writer_t =
-      ({ size = bin_size_t; write = bin_write_t } : _ Bin_prot.Type_class.writer)
+    let bin_writer_t : t Bin_prot.Type_class.writer =
+      { size = bin_size_t; write = bin_write_t }
     ;;
 
     let _ = bin_writer_t
 
-    let (__bin_read_t__ : (int -> t) Bin_prot.Read.reader) =
+    let __bin_read_t__ : t Bin_prot.Read.vtag_reader =
       fun _buf ~pos_ref _vint ->
       Bin_prot.Common.raise_variant_wrong_type
         "deriving_inline.ml.Global_fields_with_localize.Record.t"
@@ -638,7 +996,7 @@ end = struct
 
     let _ = __bin_read_t__
 
-    let (bin_read_t : t Bin_prot.Read.reader) =
+    let bin_read_t : t Bin_prot.Read.reader =
       fun buf ~pos_ref ->
       let v_a = Normal.bin_read_t buf ~pos_ref in
       let v_b = Mutable.bin_read_t buf ~pos_ref in
@@ -650,20 +1008,135 @@ end = struct
 
     let _ = bin_read_t
 
-    let bin_reader_t =
-      ({ read = bin_read_t; vtag_read = __bin_read_t__ } : _ Bin_prot.Type_class.reader)
+    let bin_reader_t : t Bin_prot.Type_class.reader =
+      { read = bin_read_t; vtag_read = __bin_read_t__ }
     ;;
 
     let _ = bin_reader_t
 
     let bin_t =
       ({ writer = bin_writer_t; reader = bin_reader_t; shape = bin_shape_t }
-        : _ Bin_prot.Type_class.t)
+       : _ Bin_prot.Type_class.t)
     ;;
 
     let _ = bin_t
 
     [@@@end]
+
+    module T1 = struct
+      type 'a t = { global_ x : 'a } [@@deriving_inline bin_io ~localize ~hide_locations]
+
+      let _ = fun (_ : 'a t) -> ()
+
+      let bin_shape_t =
+        let _group =
+          Bin_prot.Shape.group
+            (Bin_prot.Shape.Location.of_string "<hidden>")
+            [ ( Bin_prot.Shape.Tid.of_string "t"
+              , [ Bin_prot.Shape.Vid.of_string "a" ]
+              , Bin_prot.Shape.record
+                  [ ( "x"
+                    , Bin_prot.Shape.var
+                        (Bin_prot.Shape.Location.of_string "<hidden>")
+                        (Bin_prot.Shape.Vid.of_string "a") )
+                  ] )
+            ]
+        in
+        fun a -> (Bin_prot.Shape.top_app _group (Bin_prot.Shape.Tid.of_string "t")) [ a ]
+      ;;
+
+      let _ = bin_shape_t
+
+      let bin_size_t__local
+        : 'a. 'a Bin_prot.Size.sizer__local -> 'a t Bin_prot.Size.sizer__local
+        =
+        fun _size_of_a -> function
+        | { x = v1 } ->
+          let size = 0 in
+          Bin_prot.Common.( + ) size (_size_of_a v1)
+      ;;
+
+      let _ = bin_size_t__local
+
+      let bin_size_t : 'a. 'a Bin_prot.Size.sizer -> 'a t Bin_prot.Size.sizer =
+        fun _size_of_a -> function
+        | { x = v1 } ->
+          let size = 0 in
+          Bin_prot.Common.( + ) size (_size_of_a v1)
+      ;;
+
+      let _ = bin_size_t
+
+      let bin_write_t__local
+        : 'a. 'a Bin_prot.Write.writer__local -> 'a t Bin_prot.Write.writer__local
+        =
+        fun _write_a buf ~pos -> function
+        | { x = v1 } -> _write_a buf ~pos v1
+      ;;
+
+      let _ = bin_write_t__local
+
+      let bin_write_t : 'a. 'a Bin_prot.Write.writer -> 'a t Bin_prot.Write.writer =
+        fun _write_a buf ~pos -> function
+        | { x = v1 } -> _write_a buf ~pos v1
+      ;;
+
+      let _ = bin_write_t
+
+      let bin_writer_t
+        : 'a. 'a Bin_prot.Type_class.writer -> 'a t Bin_prot.Type_class.writer
+        =
+        fun bin_writer_a ->
+        { size = (fun v -> bin_size_t bin_writer_a.size v)
+        ; write = (fun v -> bin_write_t bin_writer_a.write v)
+        }
+      ;;
+
+      let _ = bin_writer_t
+
+      let __bin_read_t__ : 'a. 'a Bin_prot.Read.reader -> 'a t Bin_prot.Read.vtag_reader =
+        fun _of__a _buf ~pos_ref _vint ->
+        Bin_prot.Common.raise_variant_wrong_type
+          "deriving_inline.ml.Global_fields_with_localize.Record.T1.t"
+          !pos_ref
+      ;;
+
+      let _ = __bin_read_t__
+
+      let bin_read_t : 'a. 'a Bin_prot.Read.reader -> 'a t Bin_prot.Read.reader =
+        fun _of__a buf ~pos_ref ->
+        let v_x = _of__a buf ~pos_ref in
+        { x = v_x }
+      ;;
+
+      let _ = bin_read_t
+
+      let bin_reader_t
+        : 'a. 'a Bin_prot.Type_class.reader -> 'a t Bin_prot.Type_class.reader
+        =
+        fun bin_reader_a ->
+        { read = (fun buf ~pos_ref -> (bin_read_t bin_reader_a.read) buf ~pos_ref)
+        ; vtag_read =
+            (fun buf ~pos_ref vtag ->
+              (__bin_read_t__ bin_reader_a.read) buf ~pos_ref vtag)
+        }
+      ;;
+
+      let _ = bin_reader_t
+
+      let bin_t =
+        (fun bin_a ->
+           { writer = bin_writer_t bin_a.writer
+           ; reader = bin_reader_t bin_a.reader
+           ; shape = bin_shape_t bin_a.shape
+           }
+         : _ Bin_prot.Type_class.t -> _ Bin_prot.Type_class.t)
+      ;;
+
+      let _ = bin_t
+
+      [@@@end]
+    end
   end
 
   module Record_constructor = struct
@@ -671,9 +1144,9 @@ end = struct
       | T of
           { a : Normal.t
           ; mutable b : Mutable.t
-          ; c : Global.t
-          ; d : Ocaml_global.t
-          ; e : Extension_global.t
+          ; global_ c : Global.t
+          ; global_ d : Ocaml_global.t
+          ; global_ e : Extension_global.t
           }
     [@@deriving_inline bin_io ~localize ~hide_locations]
 
@@ -703,7 +1176,7 @@ end = struct
 
     let _ = bin_shape_t
 
-    let (bin_size_t__local : t Bin_prot.Size.sizer_local) = function
+    let bin_size_t__local : t Bin_prot.Size.sizer__local = function
       | T { a = v1; b = v2; c = v3; d = v4; e = v5 } ->
         let size = 1 in
         let size = Bin_prot.Common.( + ) size (Normal.bin_size_t__local v1) in
@@ -717,7 +1190,7 @@ end = struct
     let bin_size_t = (bin_size_t__local :> _ Bin_prot.Size.sizer)
     let _ = bin_size_t
 
-    let (bin_write_t__local : t Bin_prot.Write.writer_local) =
+    let bin_write_t__local : t Bin_prot.Write.writer__local =
       fun buf ~pos -> function
       | T { a = v1; b = v2; c = v3; d = v4; e = v5 } ->
         let pos = Bin_prot.Write.bin_write_int_8bit buf ~pos 0 in
@@ -732,13 +1205,13 @@ end = struct
     let bin_write_t = (bin_write_t__local :> _ Bin_prot.Write.writer)
     let _ = bin_write_t
 
-    let bin_writer_t =
-      ({ size = bin_size_t; write = bin_write_t } : _ Bin_prot.Type_class.writer)
+    let bin_writer_t : t Bin_prot.Type_class.writer =
+      { size = bin_size_t; write = bin_write_t }
     ;;
 
     let _ = bin_writer_t
 
-    let (__bin_read_t__ : (int -> t) Bin_prot.Read.reader) =
+    let __bin_read_t__ : t Bin_prot.Read.vtag_reader =
       fun _buf ~pos_ref _vint ->
       Bin_prot.Common.raise_variant_wrong_type
         "deriving_inline.ml.Global_fields_with_localize.Record_constructor.t"
@@ -747,7 +1220,7 @@ end = struct
 
     let _ = __bin_read_t__
 
-    let (bin_read_t : t Bin_prot.Read.reader) =
+    let bin_read_t : t Bin_prot.Read.reader =
       fun buf ~pos_ref ->
       match Bin_prot.Read.bin_read_int_8bit buf ~pos_ref with
       | 0 ->
@@ -766,24 +1239,160 @@ end = struct
 
     let _ = bin_read_t
 
-    let bin_reader_t =
-      ({ read = bin_read_t; vtag_read = __bin_read_t__ } : _ Bin_prot.Type_class.reader)
+    let bin_reader_t : t Bin_prot.Type_class.reader =
+      { read = bin_read_t; vtag_read = __bin_read_t__ }
     ;;
 
     let _ = bin_reader_t
 
     let bin_t =
       ({ writer = bin_writer_t; reader = bin_reader_t; shape = bin_shape_t }
-        : _ Bin_prot.Type_class.t)
+       : _ Bin_prot.Type_class.t)
     ;;
 
     let _ = bin_t
 
     [@@@end]
+
+    module T1 = struct
+      type 'a t = T of { global_ x : 'a }
+      [@@deriving_inline bin_io ~localize ~hide_locations]
+
+      let _ = fun (_ : 'a t) -> ()
+
+      let bin_shape_t =
+        let _group =
+          Bin_prot.Shape.group
+            (Bin_prot.Shape.Location.of_string "<hidden>")
+            [ ( Bin_prot.Shape.Tid.of_string "t"
+              , [ Bin_prot.Shape.Vid.of_string "a" ]
+              , Bin_prot.Shape.variant
+                  [ ( "T"
+                    , [ Bin_prot.Shape.record
+                          [ ( "x"
+                            , Bin_prot.Shape.var
+                                (Bin_prot.Shape.Location.of_string "<hidden>")
+                                (Bin_prot.Shape.Vid.of_string "a") )
+                          ]
+                      ] )
+                  ] )
+            ]
+        in
+        fun a -> (Bin_prot.Shape.top_app _group (Bin_prot.Shape.Tid.of_string "t")) [ a ]
+      ;;
+
+      let _ = bin_shape_t
+
+      let bin_size_t__local
+        : 'a. 'a Bin_prot.Size.sizer__local -> 'a t Bin_prot.Size.sizer__local
+        =
+        fun _size_of_a -> function
+        | T { x = v1 } ->
+          let size = 1 in
+          Bin_prot.Common.( + ) size (_size_of_a v1)
+      ;;
+
+      let _ = bin_size_t__local
+
+      let bin_size_t : 'a. 'a Bin_prot.Size.sizer -> 'a t Bin_prot.Size.sizer =
+        fun _size_of_a -> function
+        | T { x = v1 } ->
+          let size = 1 in
+          Bin_prot.Common.( + ) size (_size_of_a v1)
+      ;;
+
+      let _ = bin_size_t
+
+      let bin_write_t__local
+        : 'a. 'a Bin_prot.Write.writer__local -> 'a t Bin_prot.Write.writer__local
+        =
+        fun _write_a buf ~pos -> function
+        | T { x = v1 } ->
+          let pos = Bin_prot.Write.bin_write_int_8bit buf ~pos 0 in
+          _write_a buf ~pos v1
+      ;;
+
+      let _ = bin_write_t__local
+
+      let bin_write_t : 'a. 'a Bin_prot.Write.writer -> 'a t Bin_prot.Write.writer =
+        fun _write_a buf ~pos -> function
+        | T { x = v1 } ->
+          let pos = Bin_prot.Write.bin_write_int_8bit buf ~pos 0 in
+          _write_a buf ~pos v1
+      ;;
+
+      let _ = bin_write_t
+
+      let bin_writer_t
+        : 'a. 'a Bin_prot.Type_class.writer -> 'a t Bin_prot.Type_class.writer
+        =
+        fun bin_writer_a ->
+        { size = (fun v -> bin_size_t bin_writer_a.size v)
+        ; write = (fun v -> bin_write_t bin_writer_a.write v)
+        }
+      ;;
+
+      let _ = bin_writer_t
+
+      let __bin_read_t__ : 'a. 'a Bin_prot.Read.reader -> 'a t Bin_prot.Read.vtag_reader =
+        fun _of__a _buf ~pos_ref _vint ->
+        Bin_prot.Common.raise_variant_wrong_type
+          "deriving_inline.ml.Global_fields_with_localize.Record_constructor.T1.t"
+          !pos_ref
+      ;;
+
+      let _ = __bin_read_t__
+
+      let bin_read_t : 'a. 'a Bin_prot.Read.reader -> 'a t Bin_prot.Read.reader =
+        fun _of__a buf ~pos_ref ->
+        match Bin_prot.Read.bin_read_int_8bit buf ~pos_ref with
+        | 0 ->
+          let v_x = _of__a buf ~pos_ref in
+          T { x = v_x }
+        | _ ->
+          Bin_prot.Common.raise_read_error
+            (Bin_prot.Common.ReadError.Sum_tag
+               "deriving_inline.ml.Global_fields_with_localize.Record_constructor.T1.t")
+            !pos_ref
+      ;;
+
+      let _ = bin_read_t
+
+      let bin_reader_t
+        : 'a. 'a Bin_prot.Type_class.reader -> 'a t Bin_prot.Type_class.reader
+        =
+        fun bin_reader_a ->
+        { read = (fun buf ~pos_ref -> (bin_read_t bin_reader_a.read) buf ~pos_ref)
+        ; vtag_read =
+            (fun buf ~pos_ref vtag ->
+              (__bin_read_t__ bin_reader_a.read) buf ~pos_ref vtag)
+        }
+      ;;
+
+      let _ = bin_reader_t
+
+      let bin_t =
+        (fun bin_a ->
+           { writer = bin_writer_t bin_a.writer
+           ; reader = bin_reader_t bin_a.reader
+           ; shape = bin_shape_t bin_a.shape
+           }
+         : _ Bin_prot.Type_class.t -> _ Bin_prot.Type_class.t)
+      ;;
+
+      let _ = bin_t
+
+      [@@@end]
+    end
   end
 
   module Tuple_constructor = struct
-    type t = T of Normal.t * Global.t * Ocaml_global.t * Extension_global.t
+    type t =
+      | T of
+          Normal.t
+          * global_ Global.t
+          * global_ Ocaml_global.t
+          * global_ Extension_global.t
     [@@deriving_inline bin_io ~localize ~hide_locations]
 
     let _ = fun (_ : t) -> ()
@@ -809,7 +1418,7 @@ end = struct
 
     let _ = bin_shape_t
 
-    let (bin_size_t__local : t Bin_prot.Size.sizer_local) = function
+    let bin_size_t__local : t Bin_prot.Size.sizer__local = function
       | T (v1, v2, v3, v4) ->
         let size = 1 in
         let size = Bin_prot.Common.( + ) size (Normal.bin_size_t__local v1) in
@@ -822,7 +1431,7 @@ end = struct
     let bin_size_t = (bin_size_t__local :> _ Bin_prot.Size.sizer)
     let _ = bin_size_t
 
-    let (bin_write_t__local : t Bin_prot.Write.writer_local) =
+    let bin_write_t__local : t Bin_prot.Write.writer__local =
       fun buf ~pos -> function
       | T (v1, v2, v3, v4) ->
         let pos = Bin_prot.Write.bin_write_int_8bit buf ~pos 0 in
@@ -836,13 +1445,13 @@ end = struct
     let bin_write_t = (bin_write_t__local :> _ Bin_prot.Write.writer)
     let _ = bin_write_t
 
-    let bin_writer_t =
-      ({ size = bin_size_t; write = bin_write_t } : _ Bin_prot.Type_class.writer)
+    let bin_writer_t : t Bin_prot.Type_class.writer =
+      { size = bin_size_t; write = bin_write_t }
     ;;
 
     let _ = bin_writer_t
 
-    let (__bin_read_t__ : (int -> t) Bin_prot.Read.reader) =
+    let __bin_read_t__ : t Bin_prot.Read.vtag_reader =
       fun _buf ~pos_ref _vint ->
       Bin_prot.Common.raise_variant_wrong_type
         "deriving_inline.ml.Global_fields_with_localize.Tuple_constructor.t"
@@ -851,7 +1460,7 @@ end = struct
 
     let _ = __bin_read_t__
 
-    let (bin_read_t : t Bin_prot.Read.reader) =
+    let bin_read_t : t Bin_prot.Read.reader =
       fun buf ~pos_ref ->
       match Bin_prot.Read.bin_read_int_8bit buf ~pos_ref with
       | 0 ->
@@ -869,19 +1478,441 @@ end = struct
 
     let _ = bin_read_t
 
-    let bin_reader_t =
-      ({ read = bin_read_t; vtag_read = __bin_read_t__ } : _ Bin_prot.Type_class.reader)
+    let bin_reader_t : t Bin_prot.Type_class.reader =
+      { read = bin_read_t; vtag_read = __bin_read_t__ }
     ;;
 
     let _ = bin_reader_t
 
     let bin_t =
       ({ writer = bin_writer_t; reader = bin_reader_t; shape = bin_shape_t }
-        : _ Bin_prot.Type_class.t)
+       : _ Bin_prot.Type_class.t)
     ;;
 
     let _ = bin_t
 
     [@@@end]
+
+    module T1 = struct
+      type 'a t = T of global_ 'a [@@deriving_inline bin_io ~localize ~hide_locations]
+
+      let _ = fun (_ : 'a t) -> ()
+
+      let bin_shape_t =
+        let _group =
+          Bin_prot.Shape.group
+            (Bin_prot.Shape.Location.of_string "<hidden>")
+            [ ( Bin_prot.Shape.Tid.of_string "t"
+              , [ Bin_prot.Shape.Vid.of_string "a" ]
+              , Bin_prot.Shape.variant
+                  [ ( "T"
+                    , [ Bin_prot.Shape.var
+                          (Bin_prot.Shape.Location.of_string "<hidden>")
+                          (Bin_prot.Shape.Vid.of_string "a")
+                      ] )
+                  ] )
+            ]
+        in
+        fun a -> (Bin_prot.Shape.top_app _group (Bin_prot.Shape.Tid.of_string "t")) [ a ]
+      ;;
+
+      let _ = bin_shape_t
+
+      let bin_size_t__local
+        : 'a. 'a Bin_prot.Size.sizer__local -> 'a t Bin_prot.Size.sizer__local
+        =
+        fun _size_of_a -> function
+        | T v1 ->
+          let size = 1 in
+          Bin_prot.Common.( + ) size (_size_of_a v1)
+      ;;
+
+      let _ = bin_size_t__local
+
+      let bin_size_t : 'a. 'a Bin_prot.Size.sizer -> 'a t Bin_prot.Size.sizer =
+        fun _size_of_a -> function
+        | T v1 ->
+          let size = 1 in
+          Bin_prot.Common.( + ) size (_size_of_a v1)
+      ;;
+
+      let _ = bin_size_t
+
+      let bin_write_t__local
+        : 'a. 'a Bin_prot.Write.writer__local -> 'a t Bin_prot.Write.writer__local
+        =
+        fun _write_a buf ~pos -> function
+        | T v1 ->
+          let pos = Bin_prot.Write.bin_write_int_8bit buf ~pos 0 in
+          _write_a buf ~pos v1
+      ;;
+
+      let _ = bin_write_t__local
+
+      let bin_write_t : 'a. 'a Bin_prot.Write.writer -> 'a t Bin_prot.Write.writer =
+        fun _write_a buf ~pos -> function
+        | T v1 ->
+          let pos = Bin_prot.Write.bin_write_int_8bit buf ~pos 0 in
+          _write_a buf ~pos v1
+      ;;
+
+      let _ = bin_write_t
+
+      let bin_writer_t
+        : 'a. 'a Bin_prot.Type_class.writer -> 'a t Bin_prot.Type_class.writer
+        =
+        fun bin_writer_a ->
+        { size = (fun v -> bin_size_t bin_writer_a.size v)
+        ; write = (fun v -> bin_write_t bin_writer_a.write v)
+        }
+      ;;
+
+      let _ = bin_writer_t
+
+      let __bin_read_t__ : 'a. 'a Bin_prot.Read.reader -> 'a t Bin_prot.Read.vtag_reader =
+        fun _of__a _buf ~pos_ref _vint ->
+        Bin_prot.Common.raise_variant_wrong_type
+          "deriving_inline.ml.Global_fields_with_localize.Tuple_constructor.T1.t"
+          !pos_ref
+      ;;
+
+      let _ = __bin_read_t__
+
+      let bin_read_t : 'a. 'a Bin_prot.Read.reader -> 'a t Bin_prot.Read.reader =
+        fun _of__a buf ~pos_ref ->
+        match Bin_prot.Read.bin_read_int_8bit buf ~pos_ref with
+        | 0 ->
+          let arg_1 = _of__a buf ~pos_ref in
+          T arg_1
+        | _ ->
+          Bin_prot.Common.raise_read_error
+            (Bin_prot.Common.ReadError.Sum_tag
+               "deriving_inline.ml.Global_fields_with_localize.Tuple_constructor.T1.t")
+            !pos_ref
+      ;;
+
+      let _ = bin_read_t
+
+      let bin_reader_t
+        : 'a. 'a Bin_prot.Type_class.reader -> 'a t Bin_prot.Type_class.reader
+        =
+        fun bin_reader_a ->
+        { read = (fun buf ~pos_ref -> (bin_read_t bin_reader_a.read) buf ~pos_ref)
+        ; vtag_read =
+            (fun buf ~pos_ref vtag ->
+              (__bin_read_t__ bin_reader_a.read) buf ~pos_ref vtag)
+        }
+      ;;
+
+      let _ = bin_reader_t
+
+      let bin_t =
+        (fun bin_a ->
+           { writer = bin_writer_t bin_a.writer
+           ; reader = bin_reader_t bin_a.reader
+           ; shape = bin_shape_t bin_a.shape
+           }
+         : _ Bin_prot.Type_class.t -> _ Bin_prot.Type_class.t)
+      ;;
+
+      let _ = bin_t
+
+      [@@@end]
+    end
   end
+end
+
+module With_any_param : sig
+  type ('a : any) t = A [@@deriving_inline bin_io, bin_io ~localize]
+
+  include sig
+    [@@@ocaml.warning "-32"]
+
+    val bin_shape_t : Bin_prot.Shape.t -> Bin_prot.Shape.t
+
+    val bin_size_t
+      : ('a : any).
+      ('a : any) Bin_prot.Size.sizer -> ('a : any) t Bin_prot.Size.sizer
+
+    val bin_write_t
+      : ('a : any).
+      ('a : any) Bin_prot.Write.writer -> ('a : any) t Bin_prot.Write.writer
+
+    val bin_writer_t
+      : ('a : any).
+      ('a : any) Bin_prot.Type_class.writer -> ('a : any) t Bin_prot.Type_class.writer
+
+    val bin_read_t
+      : ('a : any).
+      ('a : any) Bin_prot.Read.reader -> ('a : any) t Bin_prot.Read.reader
+
+    val __bin_read_t__
+      : ('a : any).
+      ('a : any) Bin_prot.Read.reader -> ('a : any) t Bin_prot.Read.vtag_reader
+
+    val bin_reader_t
+      : ('a : any).
+      ('a : any) Bin_prot.Type_class.reader -> ('a : any) t Bin_prot.Type_class.reader
+
+    val bin_t
+      : ('a : any).
+      ('a : any) Bin_prot.Type_class.t -> ('a : any) t Bin_prot.Type_class.t
+
+    val bin_shape_t : Bin_prot.Shape.t -> Bin_prot.Shape.t
+
+    val bin_size_t
+      : ('a : any).
+      ('a : any) Bin_prot.Size.sizer -> ('a : any) t Bin_prot.Size.sizer
+
+    val bin_size_t__local
+      : ('a : any).
+      ('a : any) Bin_prot.Size.sizer__local -> ('a : any) t Bin_prot.Size.sizer__local
+
+    val bin_write_t
+      : ('a : any).
+      ('a : any) Bin_prot.Write.writer -> ('a : any) t Bin_prot.Write.writer
+
+    val bin_write_t__local
+      : ('a : any).
+      ('a : any) Bin_prot.Write.writer__local -> ('a : any) t Bin_prot.Write.writer__local
+
+    val bin_writer_t
+      : ('a : any).
+      ('a : any) Bin_prot.Type_class.writer -> ('a : any) t Bin_prot.Type_class.writer
+
+    val bin_read_t
+      : ('a : any).
+      ('a : any) Bin_prot.Read.reader -> ('a : any) t Bin_prot.Read.reader
+
+    val __bin_read_t__
+      : ('a : any).
+      ('a : any) Bin_prot.Read.reader -> ('a : any) t Bin_prot.Read.vtag_reader
+
+    val bin_reader_t
+      : ('a : any).
+      ('a : any) Bin_prot.Type_class.reader -> ('a : any) t Bin_prot.Type_class.reader
+
+    val bin_t
+      : ('a : any).
+      ('a : any) Bin_prot.Type_class.t -> ('a : any) t Bin_prot.Type_class.t
+  end
+  [@@ocaml.doc "@inline"]
+
+  [@@@end]
+end = struct
+  type ('a : any) t = A [@@deriving_inline bin_io, bin_io ~localize]
+
+  let _ = fun (_ : ('a : any) t) -> ()
+
+  let bin_shape_t =
+    let _group =
+      Bin_prot.Shape.group
+        (Bin_prot.Shape.Location.of_string
+           "ppx/ppx_bin_prot/test/deriving_inline.ml:1705:2")
+        [ ( Bin_prot.Shape.Tid.of_string "t"
+          , [ Bin_prot.Shape.Vid.of_string "a" ]
+          , Bin_prot.Shape.variant [ "A", [] ] )
+        ]
+    in
+    fun a -> (Bin_prot.Shape.top_app _group (Bin_prot.Shape.Tid.of_string "t")) [ a ]
+  ;;
+
+  let _ = bin_shape_t
+
+  let bin_size_t
+    : ('a : any). ('a : any) Bin_prot.Size.sizer -> ('a : any) t Bin_prot.Size.sizer
+    =
+    fun _size_of_a -> function
+    | A -> 1
+  ;;
+
+  let _ = bin_size_t
+
+  let bin_write_t
+    : ('a : any). ('a : any) Bin_prot.Write.writer -> ('a : any) t Bin_prot.Write.writer
+    =
+    fun _write_a buf ~pos -> function
+    | A -> Bin_prot.Write.bin_write_int_8bit buf ~pos 0
+  ;;
+
+  let _ = bin_write_t
+
+  let bin_writer_t
+    : ('a : any).
+    ('a : any) Bin_prot.Type_class.writer -> ('a : any) t Bin_prot.Type_class.writer
+    =
+    fun bin_writer_a ->
+    { size = (fun v -> bin_size_t bin_writer_a.size v)
+    ; write = (fun v -> bin_write_t bin_writer_a.write v)
+    }
+  ;;
+
+  let _ = bin_writer_t
+
+  let __bin_read_t__
+    : ('a : any).
+    ('a : any) Bin_prot.Read.reader -> ('a : any) t Bin_prot.Read.vtag_reader
+    =
+    fun _of__a _buf ~pos_ref _vint ->
+    Bin_prot.Common.raise_variant_wrong_type
+      "deriving_inline.ml.With_any_param.t"
+      !pos_ref
+  ;;
+
+  let _ = __bin_read_t__
+
+  let bin_read_t
+    : ('a : any). ('a : any) Bin_prot.Read.reader -> ('a : any) t Bin_prot.Read.reader
+    =
+    fun _of__a buf ~pos_ref ->
+    match Bin_prot.Read.bin_read_int_8bit buf ~pos_ref with
+    | 0 -> A
+    | _ ->
+      Bin_prot.Common.raise_read_error
+        (Bin_prot.Common.ReadError.Sum_tag "deriving_inline.ml.With_any_param.t")
+        !pos_ref
+  ;;
+
+  let _ = bin_read_t
+
+  let bin_reader_t
+    : ('a : any).
+    ('a : any) Bin_prot.Type_class.reader -> ('a : any) t Bin_prot.Type_class.reader
+    =
+    fun bin_reader_a ->
+    { read = (fun buf ~pos_ref -> (bin_read_t bin_reader_a.read) buf ~pos_ref)
+    ; vtag_read =
+        (fun buf ~pos_ref vtag -> (__bin_read_t__ bin_reader_a.read) buf ~pos_ref vtag)
+    }
+  ;;
+
+  let _ = bin_reader_t
+
+  let bin_t =
+    (fun bin_a ->
+       { writer = bin_writer_t bin_a.writer
+       ; reader = bin_reader_t bin_a.reader
+       ; shape = bin_shape_t bin_a.shape
+       }
+     : _ Bin_prot.Type_class.t -> _ Bin_prot.Type_class.t)
+  ;;
+
+  let _ = bin_t
+
+  let bin_shape_t =
+    let _group =
+      Bin_prot.Shape.group
+        (Bin_prot.Shape.Location.of_string
+           "ppx/ppx_bin_prot/test/deriving_inline.ml:1705:2")
+        [ ( Bin_prot.Shape.Tid.of_string "t"
+          , [ Bin_prot.Shape.Vid.of_string "a" ]
+          , Bin_prot.Shape.variant [ "A", [] ] )
+        ]
+    in
+    fun a -> (Bin_prot.Shape.top_app _group (Bin_prot.Shape.Tid.of_string "t")) [ a ]
+  ;;
+
+  let _ = bin_shape_t
+
+  let bin_size_t__local
+    : ('a : any).
+    ('a : any) Bin_prot.Size.sizer__local -> ('a : any) t Bin_prot.Size.sizer__local
+    =
+    fun _size_of_a -> function
+    | A -> 1
+  ;;
+
+  let _ = bin_size_t__local
+
+  let bin_size_t
+    : ('a : any). ('a : any) Bin_prot.Size.sizer -> ('a : any) t Bin_prot.Size.sizer
+    =
+    fun _size_of_a -> function
+    | A -> 1
+  ;;
+
+  let _ = bin_size_t
+
+  let bin_write_t__local
+    : ('a : any).
+    ('a : any) Bin_prot.Write.writer__local -> ('a : any) t Bin_prot.Write.writer__local
+    =
+    fun _write_a buf ~pos -> function
+    | A -> Bin_prot.Write.bin_write_int_8bit buf ~pos 0
+  ;;
+
+  let _ = bin_write_t__local
+
+  let bin_write_t
+    : ('a : any). ('a : any) Bin_prot.Write.writer -> ('a : any) t Bin_prot.Write.writer
+    =
+    fun _write_a buf ~pos -> function
+    | A -> Bin_prot.Write.bin_write_int_8bit buf ~pos 0
+  ;;
+
+  let _ = bin_write_t
+
+  let bin_writer_t
+    : ('a : any).
+    ('a : any) Bin_prot.Type_class.writer -> ('a : any) t Bin_prot.Type_class.writer
+    =
+    fun bin_writer_a ->
+    { size = (fun v -> bin_size_t bin_writer_a.size v)
+    ; write = (fun v -> bin_write_t bin_writer_a.write v)
+    }
+  ;;
+
+  let _ = bin_writer_t
+
+  let __bin_read_t__
+    : ('a : any).
+    ('a : any) Bin_prot.Read.reader -> ('a : any) t Bin_prot.Read.vtag_reader
+    =
+    fun _of__a _buf ~pos_ref _vint ->
+    Bin_prot.Common.raise_variant_wrong_type
+      "deriving_inline.ml.With_any_param.t"
+      !pos_ref
+  ;;
+
+  let _ = __bin_read_t__
+
+  let bin_read_t
+    : ('a : any). ('a : any) Bin_prot.Read.reader -> ('a : any) t Bin_prot.Read.reader
+    =
+    fun _of__a buf ~pos_ref ->
+    match Bin_prot.Read.bin_read_int_8bit buf ~pos_ref with
+    | 0 -> A
+    | _ ->
+      Bin_prot.Common.raise_read_error
+        (Bin_prot.Common.ReadError.Sum_tag "deriving_inline.ml.With_any_param.t")
+        !pos_ref
+  ;;
+
+  let _ = bin_read_t
+
+  let bin_reader_t
+    : ('a : any).
+    ('a : any) Bin_prot.Type_class.reader -> ('a : any) t Bin_prot.Type_class.reader
+    =
+    fun bin_reader_a ->
+    { read = (fun buf ~pos_ref -> (bin_read_t bin_reader_a.read) buf ~pos_ref)
+    ; vtag_read =
+        (fun buf ~pos_ref vtag -> (__bin_read_t__ bin_reader_a.read) buf ~pos_ref vtag)
+    }
+  ;;
+
+  let _ = bin_reader_t
+
+  let bin_t =
+    (fun bin_a ->
+       { writer = bin_writer_t bin_a.writer
+       ; reader = bin_reader_t bin_a.reader
+       ; shape = bin_shape_t bin_a.shape
+       }
+     : _ Bin_prot.Type_class.t -> _ Bin_prot.Type_class.t)
+  ;;
+
+  let _ = bin_t
+
+  [@@@end]
 end

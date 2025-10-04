@@ -27,6 +27,47 @@ let%test _ =
     String.equal (Error.to_string_hum e) (Error.to_string_hum (Error.of_list [ a; b ]))
 ;;
 
+let%expect_test "of_option and lazy variants" =
+  let test f error =
+    (* make sure we haven't already forced a lazy value that prints *)
+    require_equal (module String) "" (expect_test_output ());
+    print_s [%sexp (f (Some "value") ~error : string Or_error.t)];
+    print_s [%sexp (f None ~error : string Or_error.t)]
+  in
+  let delay x =
+    Lazy.from_fun (fun () ->
+      print_endline "- forcing!";
+      x)
+  in
+  test Or_error.of_option (Error.of_string "oops");
+  [%expect
+    {|
+    (Ok value)
+    (Error oops)
+    |}];
+  test Or_error.of_option_lazy (delay (Error.of_string "oops"));
+  [%expect
+    {|
+    (Ok value)
+    - forcing!
+    (Error oops)
+    |}];
+  test Or_error.of_option_lazy_sexp (delay [%message "oops"]);
+  [%expect
+    {|
+    (Ok value)
+    - forcing!
+    (Error oops)
+    |}];
+  test Or_error.of_option_lazy_string (delay "oops");
+  [%expect
+    {|
+    (Ok value)
+    - forcing!
+    (Error oops)
+    |}]
+;;
+
 let%expect_test "map2" =
   let m t1 t2 =
     let result = Or_error.map2 ~f:(fun x y -> x + y) t1 t2 in
@@ -72,7 +113,7 @@ let%expect_test "behavior and performance on lists of or_error's" =
     (* Test for timeout / stack overflow on a long list. *)
     match to_string (f long_list) with
     | (_ : string) -> ()
-    | exception Stack_overflow -> print_cr [%here] [%message "stack overflow"]
+    | exception Stack_overflow -> print_cr [%message "stack overflow"]
   in
   (* test functions that combine a list of or_errors *)
   test all;
@@ -118,7 +159,7 @@ let%expect_test "behavior and performance on lists of or_error's" =
   test (find_map_ok ~f:Fn.id);
   [%expect
     {|
-    ()
+    find_map_ok called on empty list
     "at 0"
     ("at 0" "at 1")
     ("at 0" "at 1" "at 2" "at 3" "at 4" "at 5" "at 6" "at 7" "at 8" "at 9")
@@ -126,7 +167,7 @@ let%expect_test "behavior and performance on lists of or_error's" =
   test filter_ok_at_least_one;
   [%expect
     {|
-    ()
+    filter_ok_at_least_one called on empty list
     "at 0"
     ("at 0" "at 1")
     ("at 0" "at 1" "at 2" "at 3" "at 4" "at 5" "at 6" "at 7" "at 8" "at 9")

@@ -11,6 +11,16 @@ module Trailing_output_error : sig
         }
   [@@deriving sexp]
 
+  module With_backtrace : sig
+    type nonrec t = t * string list [@@deriving sexp]
+  end
+
+  val of_error : Error.t -> With_backtrace.t option
+end
+
+module Queue_of_crs_error : sig
+  type t = { crs : string Queue.t } [@@deriving sexp]
+
   val of_error : Error.t -> t option
 end
 
@@ -33,13 +43,15 @@ module type S = sig
     -> ?cr:CR.t (** default is [CR] *)
     -> ?hide_positions:bool (** default is [false] when [cr=CR], [true] otherwise *)
     -> ?examples:'a list
+    -> ?trials:int (** if provided, overrides the number of trials in [config] *)
     -> sexp_examples:'a Sexp_examples.t
     -> sexp_of:('a -> Sexp.t)
     -> generator:'a Base_quickcheck.Generator.t
     -> shrinker:'a Base_quickcheck.Shrinker.t
     -> filename:string
     -> error_already_placed:bool
-         (** note: the instance is passed across all quick test calls within a file (using enclose_impl) *)
+         (** note: the instance is passed across all quick test calls within a file (using
+             enclose_impl) *)
     -> ('a -> unit IO.t)
     -> unit IO.t
 end
@@ -55,6 +67,7 @@ module type Arg = sig
   val run
     :  here_pos:Lexing.position
     -> ?config:Base_quickcheck.Test.Config.t
+    -> ?trials:int (** if provided, overrides the number of trials in [config] *)
     -> examples:'a list
     -> (module Base_quickcheck.Test.S with type t = 'a)
     -> f:('a -> unit Or_error.t IO.t)

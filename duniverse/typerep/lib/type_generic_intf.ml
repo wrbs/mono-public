@@ -1,6 +1,8 @@
+open! Base
+
 module M (X : sig
-  type 'a t
-end) =
+    type ('a : any) t
+  end) =
 struct
   module type S = sig
     type t
@@ -58,10 +60,9 @@ struct
 end
 
 module type S = sig
-  type 'a t
+  type ('a : any) t
 
   include module type of M (struct
-    type 'a computation = 'a t
-    type 'a t = 'a computation
-  end)
+      type nonrec ('a : any) t = 'a t
+    end)
 end

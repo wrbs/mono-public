@@ -7,11 +7,13 @@ type ok_or_eof =
   | Eof
 [@@deriving compare, sexp_of]
 
-(** [Iobuf] has analogs of various [Bigstring] functions.  These analogs advance by the
+(** [Iobuf] has analogs of various [Bigstring] functions. These analogs advance by the
     amount written/read. *)
 val input : ([> write ], seek) t -> In_channel.t -> ok_or_eof
 
 val read : ([> write ], seek) t -> Unix.File_descr.t -> ok_or_eof
+val really_read : ([> write ], seek) t -> Unix.File_descr.t -> ok_or_eof
+val really_pread : ([> write ], seek) t -> Unix.File_descr.t -> offset:int -> ok_or_eof
 
 val read_assume_fd_is_nonblocking
   :  ([> write ], seek) t
@@ -29,28 +31,28 @@ val recvfrom_assume_fd_is_nonblocking
   -> Unix.File_descr.t
   -> Unix.sockaddr
 
-(** [recvmmsg]'s context comprises data needed by the system call.  Setup can be
-    expensive, particularly for many buffers.
+(** [recvmmsg]'s context comprises data needed by the system call. Setup can be expensive,
+    particularly for many buffers.
 
     NOTE: Unlike most system calls involving iobufs, the lo offset is not respected.
     Instead, the iobuf is implicity [reset] (i.e., [lo <- lo_min] and [hi <- hi_max])
-    prior to reading and a [flip_lo] applied afterward.  This is to prevent the
+    prior to reading and a [flip_lo] applied afterward. This is to prevent the
     memory-unsafe case where an iobuf's lo pointer is advanced and [recvmmsg] attempts to
-    copy into memory exceeding the underlying [bigstring]'s capacity.  If any of the
+    copy into memory exceeding the underlying [bigstring]'s capacity. If any of the
     returned iobufs have had their underlying bigstring or limits changed (e.g., through a
     call to [set_bounds_and_buffer] or [narrow_lo]), the call will fail with [EINVAL]. *)
 module Recvmmsg_context : sig
-  type ('rw, 'seek) iobuf
-  type t
+    type ('rw, 'seek) iobuf
+    type t
 
-  (** Do not change these [Iobuf]'s [buf]s or limits before calling
-      [recvmmsg_assume_fd_is_nonblocking]. *)
-  val create : (read_write, seek) iobuf array -> t
-end
-with type ('rw, 'seek) iobuf := ('rw, 'seek) t
+    (** Do not change these [Iobuf]'s [buf]s or limits before calling
+        [recvmmsg_assume_fd_is_nonblocking]. *)
+    val create : (read_write, seek) iobuf array -> t
+  end
+  with type ('rw, 'seek) iobuf := ('rw, 'seek) t
 
 (** [recvmmsg_assume_fd_is_nonblocking fd context] returns the number of [context] iobufs
-    read into (or [errno]).  [fd] must not block.  [THREAD_IO_CUTOFF] is ignored.
+    read into (or [errno]). [fd] must not block. [THREAD_IO_CUTOFF] is ignored.
 
     [EINVAL] is returned if an [Iobuf] passed to [Recvmmsg_context.create] has its [buf]
     or limits changed. *)
@@ -67,48 +69,33 @@ val sendto_nonblocking_no_sigpipe
       -> Unix.File_descr.t
       -> Unix.sockaddr
       -> Unix.Syscall_result.Unit.t)
-     Or_error.t
+       Or_error.t
 
-(** Write from the iobuf to the specified channel without changing the iobuf
-    window.  Returns the number of bytes written. *)
+(** Write from the iobuf to the specified channel without changing the iobuf window.
+    Returns the number of bytes written. *)
 module Peek : sig
-  val output : ([> read ], _) t -> Out_channel.t -> int
-  val write : ([> read ], _) t -> Unix.File_descr.t -> int
-  val write_assume_fd_is_nonblocking : ([> read ], _) t -> Unix.File_descr.t -> int
+  val output : local_ ([> read ], _) t -> Out_channel.t -> int
+  val write : local_ ([> read ], _) t -> Unix.File_descr.t -> int
+  val really_write : local_ ([> read ], _) t -> Unix.File_descr.t -> unit
+  val write_assume_fd_is_nonblocking : local_ ([> read ], _) t -> Unix.File_descr.t -> int
 end
 
 (** As [Peek], but advances the window by the number of bytes written. *)
-val output : ([> read ], seek) t -> Out_channel.t -> unit
+val output : local_ ([> read ], seek) t -> Out_channel.t -> unit
 
-val write : ([> read ], seek) t -> Unix.File_descr.t -> unit
-val write_assume_fd_is_nonblocking : ([> read ], seek) t -> Unix.File_descr.t -> unit
+val write : local_ ([> read ], seek) t -> Unix.File_descr.t -> unit
+val really_write : local_ ([> read ], seek) t -> Unix.File_descr.t -> unit
+
+val write_assume_fd_is_nonblocking
+  :  local_ ([> read ], seek) t
+  -> Unix.File_descr.t
+  -> unit
 
 val pwrite_assume_fd_is_nonblocking
-  :  ([> read ], seek) t
+  :  local_ ([> read ], seek) t
   -> Unix.File_descr.t
   -> offset:int
   -> unit
-
-(** As similar APIs in [In_channel], but using an intermediate [Iobuf]; considerably
-    faster. *)
-module In_channel_optimized : sig
-  type 'a channel_op_with_opts :=
-    ?fix_win_eol:bool (** defaults to [true] *)
-    -> ?buf:(read_write, seek) t
-         (** Allocates a fresh buffer by default; will merrily resize (and rebind!) any passed
-        buffer. *)
-    -> In_channel.t
-    -> 'a
-
-  val fold_lines : (init:'a -> f:('a -> string -> 'a) -> 'a) channel_op_with_opts
-  val iter_lines : (f:(string -> unit) -> unit) channel_op_with_opts
-  val input_lines : string array channel_op_with_opts
-
-  (** More efficient than [fold_lines] because no string allocation/copying.
-  *)
-  val fold_lines_raw
-    : (init:'a -> f:('a -> (read_write, seek) t -> 'a) -> 'a) channel_op_with_opts
-end
 
 (** {2 Expert} *)
 
@@ -137,5 +124,9 @@ module Expert : sig
     -> float
     -> [ `Ok | `Truncated | `Format_error ]
 
-  val to_iovec_shared : ?pos:int -> ?len:int -> (_, _) t -> Bigstring.t Unix.IOVec.t
+  val to_iovec_shared
+    :  ?pos:int
+    -> ?len:int
+    -> local_ (_, _) t
+    -> Bigstring.t Unix.IOVec.t
 end

@@ -1,5 +1,6 @@
 We want to make sure our OPAM-repository in git support works well.
 
+  $ . ../git-helpers.sh
   $ . ./helpers.sh
   $ mkrepo
   $ mkpkg foo 1.0 <<EOF
@@ -13,17 +14,7 @@ We want to make sure our OPAM-repository in git support works well.
 We'll set up a project that uses (only this) this repository, so doesn't use
 :standard:
 
-  $ cat > dune-workspace <<EOF
-  > (lang dune 3.10)
-  > (lock_dir
-  >  (repositories mock))
-  > (repository
-  >  (name mock)
-  >  (source "git+file://$PWD/mock-opam-repository"))
-  > (context
-  >  (default
-  >   (name default)))
-  > EOF
+  $ add_mock_repo_if_needed "git+file://$PWD/mock-opam-repository"
 
 We depend on the foo package
 

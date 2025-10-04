@@ -1,52 +1,62 @@
+module Atomic_ = Atomic
 open Base
+module Atomic = Atomic_
 open Base_quickcheck.Export
 open Bin_prot.Std
 
-module type S_with_quickcheck = sig
-  type t [@@deriving quickcheck]
+module type S_with_extra_deriving = sig @@ portable
+  type t [@@deriving compare ~localize, equal ~localize, quickcheck]
 
   include Diff_intf.S with type t := t
 end
 
-module Make_atomic_with_quickcheck (M : sig
-  type t [@@deriving sexp, bin_io, equal, quickcheck]
-end) =
-struct
-  include Atomic.Make_diff (M)
+module Make_atomic_with_extra_deriving (M : sig
+  @@ portable
+    type t [@@deriving sexp, bin_io, compare ~localize, equal ~localize, quickcheck]
+  end) : sig
+  @@ portable
+  include S_with_extra_deriving with type derived_on = M.t and type t = M.t
+end = struct
+  include%template Atomic.Make_diff [@mode portable] (M)
 
-  type t = M.t [@@deriving quickcheck]
+  type t = M.t [@@deriving compare ~localize, equal ~localize, quickcheck]
 end
 
-module Diff_of_bool = Make_atomic_with_quickcheck (struct
-  type t = bool [@@deriving sexp, bin_io, equal, quickcheck]
-end)
+module Diff_of_bool = Make_atomic_with_extra_deriving (struct
+    type t = bool
+    [@@deriving sexp, bin_io, compare ~localize, equal ~localize, quickcheck]
+  end)
 
-module Diff_of_char = Make_atomic_with_quickcheck (struct
-  type t = char [@@deriving sexp, bin_io, equal, quickcheck]
-end)
+module Diff_of_char = Make_atomic_with_extra_deriving (struct
+    type t = char
+    [@@deriving sexp, bin_io, compare ~localize, equal ~localize, quickcheck]
+  end)
 
-module Diff_of_float = Make_atomic_with_quickcheck (struct
-  type t = float [@@deriving sexp, bin_io, compare, quickcheck]
+module Diff_of_float = Make_atomic_with_extra_deriving (struct
+    type t = float [@@deriving sexp, bin_io, compare ~localize, quickcheck]
 
-  (* Overriding [equal], because
+    (* Overriding [equal], because
        - [Float.equal Float.nan Float.nan = false]
        - [Float.compare Float.nan Float.nan = 0]
          The latter makes more sense for diffs
     *)
-  let equal = [%compare.equal: t]
-end)
+    let equal = [%compare.equal: t]
+    let%template[@mode local] equal = [%compare_local.equal: t]
+  end)
 
-module Diff_of_int = Make_atomic_with_quickcheck (struct
-  type t = int [@@deriving sexp, bin_io, equal, quickcheck]
-end)
+module Diff_of_int = Make_atomic_with_extra_deriving (struct
+    type t = int [@@deriving sexp, bin_io, compare ~localize, equal ~localize, quickcheck]
+  end)
 
-module Diff_of_string = Make_atomic_with_quickcheck (struct
-  type t = string [@@deriving sexp, bin_io, equal, quickcheck]
-end)
+module Diff_of_string = Make_atomic_with_extra_deriving (struct
+    type t = string
+    [@@deriving sexp, bin_io, compare ~localize, equal ~localize, quickcheck]
+  end)
 
-module Diff_of_unit = Make_atomic_with_quickcheck (struct
-  type t = unit [@@deriving sexp, bin_io, equal, quickcheck]
-end)
+module Diff_of_unit = Make_atomic_with_extra_deriving (struct
+    type t = unit
+    [@@deriving sexp, bin_io, compare ~localize, equal ~localize, quickcheck]
+  end)
 
 module Diff_of_option = struct
   type 'a derived_on = 'a option [@@deriving sexp, bin_io]
@@ -57,12 +67,12 @@ module Diff_of_option = struct
     | Diff_some of 'a_diff
   [@@deriving sexp, bin_io, quickcheck]
 
-  let get get_a ~from ~to_ =
+  let get get_a ~from ~to_ = exclave_
     if phys_equal from to_
-    then Optional_diff.none
+    then Optional_diff.get_none ()
     else (
       match from, to_ with
-      | None, None -> Optional_diff.none
+      | None, None -> Optional_diff.get_none ()
       | Some from, Some to_ ->
         Optional_diff.map (get_a ~from ~to_) ~f:(fun d -> Diff_some d)
       | None, Some x -> Optional_diff.return (Set_to_some x)
@@ -80,16 +90,16 @@ module Diff_of_option = struct
           "Could not apply diff. Variant mismatch." ~derived_on:"None" ~diff:"Diff_some"]
   ;;
 
-  let of_list_exn of_list_exn_a apply_a_exn diffs =
+  let of_list_exn of_list_exn_a apply_a_exn diffs = exclave_
     match diffs with
-    | [] -> Optional_diff.none
+    | [] -> Optional_diff.get_none ()
     | [ hd ] -> Optional_diff.return hd
     | l ->
       let trailing_diffs_rev, rest_rev =
         List.rev l
         |> List.split_while ~f:(function
-             | Diff_some _ -> true
-             | Set_to_some _ | Set_to_none -> false)
+          | Diff_some _ -> true
+          | Set_to_some _ | Set_to_none -> false)
       in
       let a_diffs =
         List.rev_map trailing_diffs_rev ~f:(function

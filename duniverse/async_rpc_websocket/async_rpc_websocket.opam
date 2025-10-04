@@ -1,5 +1,4 @@
 opam-version: "2.0"
-version: "v0.17.0"
 maintainer: "Jane Street developers"
 authors: ["Jane Street Group, LLC"]
 homepage: "https://github.com/janestreet/async_rpc_websocket"
@@ -11,12 +10,18 @@ build: [
   ["dune" "build" "-p" name "-j" jobs]
 ]
 depends: [
-  "ocaml"                  {>= "5.1.0"}
-  "async_rpc_kernel"       {>= "v0.17" & < "v0.18"}
-  "cohttp_async_websocket" {>= "v0.17" & < "v0.18"}
-  "ppx_jane"               {>= "v0.17" & < "v0.18"}
+  "ocaml" {>= "5.1.0"}
+  "async"
+  "async_rpc_kernel"
+  "async_websocket"
+  "cohttp_async_websocket"
+  "core"
+  "ppx_jane"
+  "cohttp"                 {>= "2.5.6"}
   "cohttp-async"           {>= "2.5.7" & < "3.0.0" | >= "5.1.1" & < "6.0.0"}
-  "dune"                   {>= "3.11.0"}
+  "conduit-async"
+  "dune"                   {>= "3.17.0"}
+  "uri"                    {>= "3.0.0"}
 ]
 available: arch != "arm32" & arch != "x86_32"
 synopsis: "Library to serve and dispatch Async RPCs over websockets"

@@ -3,8 +3,7 @@ let is_root =
   then fun x -> x = "/" || x = "."
   else
     (* CR-someday rgrinberg: can we do better on windows? *)
-    fun s ->
-    Filename.dirname s = s
+    fun s -> Filename.dirname s = s
 ;;
 
 let initial_cwd = Stdlib.Sys.getcwd ()
@@ -118,7 +117,15 @@ let win32_unlink fn =
        Unix.chmod fn 0o666;
        Unix.unlink fn
      with
-     | _ -> raise e)
+     | Unix.Unix_error (Unix.EACCES, _, _) ->
+       (* On Windows a virus scanner frequently has a lock on new executables for a short while - just retry *)
+       let rec retry_loop cnt =
+         Unix.sleep 1;
+         try Unix.unlink fn with
+         | Unix.Unix_error (Unix.EACCES, _, _) ->
+           if cnt > 0 then retry_loop (cnt - 1) else raise e
+       in
+       retry_loop 30)
 ;;
 
 let unlink_exn = if Stdlib.Sys.win32 then win32_unlink else Unix.unlink
@@ -187,8 +194,8 @@ let rm_rf fn =
   | _ -> unlink_exn fn
 ;;
 
-let traverse =
-  let rec loop on_file on_dir root stack acc =
+let traverse ~dir ~init ~on_file ~on_dir ~on_broken_symlink =
+  let rec loop root stack acc =
     match stack with
     | [] -> acc
     | dir :: dirs ->
@@ -204,17 +211,29 @@ let traverse =
              | S_LNK ->
                let path = Filename.concat dir_path fname in
                (match (Unix.stat path).st_kind with
-                | exception Unix.Unix_error (Unix.ENOENT, _, _) -> stack, acc
+                | exception Unix.Unix_error (Unix.ENOENT, _, _) ->
+                  stack, on_broken_symlink ~dir fname acc
                 | S_DIR -> Filename.concat dir fname :: stack, on_dir ~dir fname acc
                 | S_REG -> stack, on_file ~dir fname acc
                 | _ -> stack, acc)
              | _ -> stack, acc)
          in
-         loop on_file on_dir root stack acc)
+         loop root stack acc)
   in
-  fun ~dir ~init ~on_file ~on_dir -> loop on_file on_dir dir [ "" ] init
+  loop dir [ "" ] init
 ;;
 
 let traverse_files ~dir ~init ~f =
-  traverse ~dir ~init ~on_dir:(fun ~dir:_ _fname acc -> acc) ~on_file:f
+  let skip = fun ~dir:_ _fname acc -> acc in
+  traverse ~dir ~init ~on_dir:skip ~on_broken_symlink:skip ~on_file:f
+;;
+
+let is_broken_symlink path =
+  let stats = Unix.lstat path in
+  match (stats.st_kind : Unix.file_kind) with
+  | S_LNK ->
+    (match Unix.stat path with
+     | exception Unix.Unix_error (Unix.ENOENT, _, _) -> true
+     | _ -> false)
+  | _ -> false
 ;;

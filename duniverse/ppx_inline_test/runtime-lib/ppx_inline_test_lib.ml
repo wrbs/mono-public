@@ -99,6 +99,14 @@ type test_mode =
   ; what_to_do : [ `Run_partition of string option | `List_partitions of Where_to_list.t ]
   }
 
+let force_drop =
+  try
+    ignore (Sys.getenv "FORCE_DROP_INLINE_TEST" : string);
+    true
+  with
+  | Not_found -> false
+;;
+
 module Action : sig
   type t =
     [ `Ignore
@@ -114,14 +122,6 @@ end = struct
     ]
 
   let action : t ref = ref `Ignore
-
-  let force_drop =
-    try
-      ignore (Sys.getenv "FORCE_DROP_INLINE_TEST" : string);
-      true
-    with
-    | Not_found -> false
-  ;;
 
   let get () =
     (* This is useful when compiling to javascript.
@@ -189,7 +189,7 @@ module Module_context = struct
   let current_tags () = T.tags !current
 end
 
-let verbose = ref false
+let verbose_output_channel = ref None
 let strict = ref false
 let show_counts = ref false
 let list_test_names = ref false
@@ -202,6 +202,15 @@ let in_place = ref false
 let diff_command = ref None
 let source_tree_root = ref None
 let diff_path_prefix = ref None
+
+let opt_printf ch fmt =
+  let formatter =
+    match ch with
+    | None -> Format.make_formatter (fun _ _ _ -> ()) (fun () -> ())
+    | Some ch -> Format.formatter_of_out_channel ch
+  in
+  Format.fprintf formatter fmt
+;;
 
 let displayed_descr descr filename line start_pos end_pos =
   let (lazy descr) = descr in
@@ -258,7 +267,7 @@ let parse_argv ?current args =
            , Arg.Unit
                (fun () ->
                  list_test_names := true;
-                 verbose := true)
+                 verbose_output_channel := Some stdout)
            , " Do not run tests but show what would have been run" )
          ; ( "-list-partitions"
            , Arg.Unit (fun () -> list_partitions := Some Stdout)
@@ -270,7 +279,12 @@ let parse_argv ?current args =
          ; ( "-partition"
            , Arg.String (fun i -> partition := Some i)
            , " Only run the tests in the given partition" )
-         ; "-verbose", Arg.Set verbose, " Show the tests as they run"
+         ; ( "-verbose"
+           , Arg.Unit (fun () -> verbose_output_channel := Some stdout)
+           , " Show the tests as they run" )
+         ; ( "-verbose-to-stderr"
+           , Arg.Unit (fun () -> verbose_output_channel := Some stderr)
+           , " Show the tests on stderr as they run" )
          ; ( "-stop-on-error"
            , Arg.Set stop_on_error
            , " Run tests only up to the first error (doesn't work for expect tests)" )
@@ -511,7 +525,9 @@ let print_delayed_errors () =
 let eprintf_or_delay fmt =
   Printf.ksprintf
     (fun s ->
-      if !verbose then delayed_errors := s :: !delayed_errors else Printf.eprintf "%s%!" s;
+      (match !verbose_output_channel with
+       | Some _ -> delayed_errors := s :: !delayed_errors
+       | None -> Printf.eprintf "%s%!" s);
       if !stop_on_error
       then (
         print_delayed_errors ();
@@ -529,7 +545,7 @@ let hum_backtrace backtrace =
   backtrace
   |> String.split_lines
   |> List.take_while ~f:(fun str ->
-       not (String.Search_pattern.matches (force where_to_cut_backtrace) str))
+    not (String.Search_pattern.matches (force where_to_cut_backtrace) str))
   |> List.map ~f:(fun str -> "  " ^ str ^ "\n")
   |> String.concat
 ;;
@@ -573,10 +589,8 @@ let[@inline never] test_inner
         then (
           let descr = Lazy.force descr in
           incr tests_ran;
-          (match !log with
-           | None -> ()
-           | Some ch -> Printf.fprintf ch "%s\n%s" descr (string_of_module_descr ()));
-          if !verbose then Printf.printf "%s%!" descr;
+          opt_printf !log "%s\n%s" descr (string_of_module_descr ());
+          opt_printf !verbose_output_channel "%s%!" descr;
           let result =
             if !list_test_names
             then Ok true
@@ -586,7 +600,7 @@ let[@inline never] test_inner
               Result.map bool_of_f (time_and_reset_random_seeds f)
           in
           (* If !list_test_names, this is is a harmless zero. *)
-          if !verbose then Printf.printf " (%.3f sec)\n%!" !time_sec;
+          opt_printf !verbose_output_channel " (%.3f sec)\n%!" !time_sec;
           match result with
           | Ok true -> ()
           | Ok false ->
@@ -676,9 +690,9 @@ let[@inline never] test_module
       (* If, no matter what tags a test defines, we certainly will drop all tests within
          this module, then don't run the module at all. This means people can write
          things like the following without breaking the 32-bit build:
-         let%test_module [@tags "64-bits-only"] = (module struct
-         let i = Int64.to_int_exn ....
-         end)
+         module%test [@tags "64-bits-only"] _ = struct
+           let i = Int64.to_int_exn ....
+         end
          We don't shortcut based on position, as we can't tell what positions the
          inner tests will have. *)
       && not (Tag_predicate.entire_module_disabled which_tags ~partial_tags)
@@ -694,15 +708,15 @@ let[@inline never] test_module
           let descr = descr () in
           match
             Module_context.with_ ~descr ~tags (fun () ->
-              (* We do not reset random states upon entering [let%test_module].
+              (* We do not reset random states upon entering [module%test].
 
                  Con: Code in test modules can accidentally depend on top-level random
                  state effects.
 
-                 Pros: (1) We don't reset to the same seed on entering a [let%test_module]
+                 Pros: (1) We don't reset to the same seed on entering a [module%test]
                  and then a [let%test] inside that module, which could lead to
                  accidentally randomly generating the same values in some test. (2) Moving
-                 code into and out of [let%test_module] does not change its random seed.
+                 code into and out of [module%test] does not change its random seed.
               *)
               time_without_resetting_random_seeds f)
           with
@@ -809,6 +823,11 @@ let assert_test_configs_initialized config =
     |> failwith
 ;;
 
+let verbose () =
+  assert_test_configs_initialized "verbose";
+  Option.is_some !verbose_output_channel
+;;
+
 let use_color () =
   assert_test_configs_initialized "use_color";
   !use_color
@@ -837,9 +856,10 @@ let source_tree_root () =
 let evaluators = ref [ summarize ]
 let add_evaluator ~f = evaluators := f :: !evaluators
 
-let exit () =
+let evaluate_exit_status () =
   List.map (fun f -> f ()) (List.rev !evaluators)
   |> Test_result.combine_all
   |> Test_result.to_exit_code
-  |> exit
 ;;
+
+let exit () = evaluate_exit_status () |> exit

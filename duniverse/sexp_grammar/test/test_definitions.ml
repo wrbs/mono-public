@@ -84,22 +84,21 @@ let%expect_test "error" =
 
 let%expect_test "option" =
   let test ~read_old ~write_old =
-    Ref.sets_temporarily
-      [ T (Sexplib.Conv.read_old_option_format, read_old)
-      ; T (Sexplib.Conv.write_old_option_format, write_old)
-      ]
-      ~f:(fun () -> validate_grammar_poly1 (module Option))
+    Dynamic.with_temporarily Sexplib.Conv.read_old_option_format read_old ~f:(fun () ->
+      Dynamic.with_temporarily
+        Sexplib.Conv.write_old_option_format
+        write_old
+        ~f:(fun () -> validate_grammar_poly1 (module Option)))
   in
   (* most combinations of read/write flags for options formats should work *)
-  test ~read_old:true ~write_old:false |> require_ok [%here];
+  test ~read_old:true ~write_old:false |> require_ok;
   [%expect {| (Option (Any A)) |}];
-  test ~read_old:true ~write_old:true |> require_ok [%here];
+  test ~read_old:true ~write_old:true |> require_ok;
   [%expect {| (Option (Any A)) |}];
-  test ~read_old:false ~write_old:false |> require_ok [%here];
+  test ~read_old:false ~write_old:false |> require_ok;
   [%expect {| (Option (Any A)) |}];
   (* writing the old option format without reading it should fail *)
-  test ~read_old:false ~write_old:true
-  |> require_error [%here] [%sexp_of: unit] ~print_error:true;
+  test ~read_old:false ~write_old:true |> require_error [%sexp_of: unit] ~print_error:true;
   [%expect
     {|
     (Option (Any A))

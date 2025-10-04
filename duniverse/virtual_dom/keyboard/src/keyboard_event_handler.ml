@@ -69,6 +69,10 @@ module Condition = struct
     | None -> false
     | Some element -> Js.to_bool (element##.classList##contains (Js.string class_))
   ;;
+
+  let any_element_exists ~selector _ev =
+    Js.Opt.test (Dom_html.document##querySelector (Js.string selector))
+  ;;
 end
 
 module Handler = struct
@@ -161,6 +165,14 @@ let of_action_list_exn actions =
 
 let of_command_list_exn commands =
   of_action_list_exn (List.map commands ~f:Action.command)
+;;
+
+let to_command_list t =
+  Map.to_alist t
+  |> List.filter_map ~f:(fun (_keystroke, (_uid, action)) ->
+    match action with
+    | Action.Disabled_key _ -> None
+    | Command command -> Some command)
 ;;
 
 let add_action_core t action map_add =

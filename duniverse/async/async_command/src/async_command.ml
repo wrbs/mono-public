@@ -5,6 +5,11 @@ include Core.Command
 type 'a with_options = ?behave_nicely_in_pipeline:bool -> ?extract_exn:bool -> 'a
 
 let shutdown_with_error e =
+  (* This logging is best-effort because if [shutdown] has already been called, there's no
+     guarantee that the log lines will flush. *)
+  Async_log.Global.error_from_async_command
+    "%s"
+    (Error.to_string_mach e) [@alert "-private_async_log_function"];
   Stdlib.at_exit (fun () ->
     (* We use [Core] printing rather than [Async] printing, because the program may
        already be shutting down, which could cause the error to be omitted because
@@ -56,7 +61,7 @@ let in_async ?(behave_nicely_in_pipeline = true) ?extract_exn param on_result ki
     if behave_nicely_in_pipeline then Writer.behave_nicely_in_pipeline ();
     let main = Or_error.try_with (fun () -> unstage (staged_main ())) in
     match !recursive_invocation with
-    | Some r -> Set_once.set_exn r [%here] (Or_error.map ~f:kind main)
+    | Some r -> Set_once.set_exn r (Or_error.map ~f:kind main)
     | None ->
       (match main with
        | Error e ->
@@ -83,8 +88,14 @@ let in_async ?(behave_nicely_in_pipeline = true) ?extract_exn param on_result ki
                    a "shutdown forced" message and exit 1 if [prev ()] finished first. *)
                 [ prev (); (before_shutdown () >>= fun () -> after (sec 1.)) ]);
          upon
-           (Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log ?extract_exn (fun () ->
-              main `Scheduler_started))
+           (Deferred.Or_error.try_with
+            (* NOTE: We are passing [Lexing.dummy_pos] here to hide this location from
+               appearing in error messages. *)
+              ~here:Lexing.dummy_pos
+              ~run:`Schedule
+              ~rest:`Log
+              ?extract_exn
+              (fun () -> main `Scheduler_started))
            on_result;
          (never_returns (Scheduler.go ()) : unit)))
 ;;
@@ -188,11 +199,15 @@ module For_testing = struct
           | None -> return (Ok ())
           | Some (Error _ as e) -> return e
           | Some (Ok kind) ->
-            Monitor.try_with_join_or_error (fun () ->
-              match kind with
-              | Unit thunk ->
-                let%map.Deferred () = thunk `Scheduler_started in
-                Ok ()
-              | Or_error thunk -> thunk `Scheduler_started)))
+            Monitor.try_with_join_or_error
+            (* NOTE: We are passing [Lexing.dummy_pos] here to hide this location from
+                 appearing in error messages. *)
+              ~here:Lexing.dummy_pos
+              (fun () ->
+                 match kind with
+                 | Unit thunk ->
+                   let%map.Deferred () = thunk `Scheduler_started in
+                   Ok ()
+                 | Or_error thunk -> thunk `Scheduler_started)))
   ;;
 end

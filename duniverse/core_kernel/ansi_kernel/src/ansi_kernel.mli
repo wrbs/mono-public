@@ -1,3 +1,5 @@
+@@ portable
+
 (** Common ANSI display attribute definitions.
 
     NOTE: assorted content lifted from lib/console/src/console.ml *)
@@ -31,9 +33,9 @@ module Color : sig
 end
 
 module Attr : sig
-  (** Styling attributes: these provide most of the ANSI display attributes,
-      but not directly `Reset, `Blink and `Hidden, so as to explicitly
-      discourage their use in general code. *)
+  (** Styling attributes: these provide most of the ANSI display attributes, but not
+      directly `Reset, `Blink and `Hidden, so as to explicitly discourage their use in
+      general code. *)
   type t =
     [ `Bright
     | `Dim
@@ -66,12 +68,12 @@ module Stable : sig
   module Color : sig
     module V1 : sig
       type primary
-      type t [@@deriving sexp, compare, hash, equal]
+      type t [@@deriving compare, equal, hash, sexp, sexp_grammar]
     end
 
     module V2 : sig
       type primary = Color.primary
-      type t = Color.t [@@deriving sexp, compare, hash, equal]
+      type t = Color.t [@@deriving compare, equal, hash, sexp, sexp_grammar]
 
       val of_v1 : V1.t -> t
       val to_v1 : t -> foreground:bool -> V1.t
@@ -82,11 +84,11 @@ module Stable : sig
 
   module Attr : sig
     module V1 : sig
-      type t [@@deriving sexp, compare, hash, equal]
+      type t [@@deriving compare, equal, hash, sexp, sexp_grammar]
     end
 
     module V2 : sig
-      type t = Attr.t [@@deriving sexp, compare, hash, equal]
+      type t = Attr.t [@@deriving compare, equal, hash, sexp, sexp_grammar]
 
       val of_v1 : V1.t -> t
       val to_v1 : t -> V1.t

@@ -115,10 +115,11 @@ let%test_unit _ =
     ; "\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF"
     ]
     ~f:(fun string ->
-    assert (Exn.does_raise (fun () -> unsafe_get_uint64_be_exn ~pos:0 (of_string string)));
-    assert (
-      Exn.does_raise (fun () ->
-        unsafe_get_uint64_le_exn ~pos:0 (of_string (String.rev string)))))
+      assert (
+        Exn.does_raise (fun () -> unsafe_get_uint64_be_exn ~pos:0 (of_string string)));
+      assert (
+        Exn.does_raise (fun () ->
+          unsafe_get_uint64_le_exn ~pos:0 (of_string (String.rev string)))))
 ;;
 
 let%test _ =
@@ -207,7 +208,6 @@ let test_int64 get_exn get_trunc set_t double_check_set =
       with
       | e ->
         failwiths
-          ~here:[%here]
           "test_int64"
           ( sprintf "too_big = %LdL = 0x%LxL" too_big too_big
           , sprintf "trunc = %d = 0x%x" trunc trunc

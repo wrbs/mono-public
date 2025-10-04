@@ -30,18 +30,20 @@ module Make (Interned : Immediate_interned_string.S) = struct
     module V1 = struct
       module T_stringable = struct
         (* This [int] is not transportable, so don't derive [bin_io]. *)
-        type t = int [@@deriving hash, typerep, globalize]
+        type t = int
+        [@@deriving hash, typerep, globalize, compare ~localize, equal ~localize]
 
         let[@inline] is_interned t = t < 0
         let[@inline] unsafe_of_short s = Short_string.unsafe_to_int s
         let[@inline] unsafe_of_interned i = Interned_string.unsafe_to_int i lxor -1
         let[@inline] unsafe_to_interned t = Interned_string.unsafe_of_int (t lxor -1)
         let[@inline] unsafe_to_short t = Short_string.unsafe_of_int t
-        let of_short_string = unsafe_of_short
+        let of_short_string = [%eta1 unsafe_of_short]
 
         let[@inline] of_interned_string i =
           if Short_string.is_valid_length (Interned_string.length i)
-          then unsafe_of_short (Short_string.of_string (Interned_string.to_string i))
+          then
+            unsafe_of_short (Short_string.of_local_string (Interned_string.to_string i))
           else unsafe_of_interned i
         ;;
 
@@ -82,13 +84,13 @@ module Make (Interned : Immediate_interned_string.S) = struct
 
         let to_int_exn t = t
 
-        let of_local_string str =
+        let of_local_string (local_ str) =
           if Short_string.is_valid_string str
           then unsafe_of_short (Short_string.of_local_string str)
           else unsafe_of_interned (Interned_string.of_local_string str)
         ;;
 
-        let to_local_string t =
+        let to_local_string t = exclave_
           if is_interned t
           then Interned_string.to_string (unsafe_to_interned t)
           else Short_string.to_local_string (unsafe_to_short t)
@@ -149,6 +151,8 @@ module Make (Interned : Immediate_interned_string.S) = struct
           dst_pos + len)
       ;;
 
+      let%template[@mode local] bin_write_t = bin_write_t
+
       let bin_size_t t =
         if is_interned t
         then Interned_string.Stable.V1.bin_size_t (unsafe_to_interned t)
@@ -156,6 +160,8 @@ module Make (Interned : Immediate_interned_string.S) = struct
           let len = Short_string.length (unsafe_to_short t) in
           Bin_prot.Size.bin_size_nat0 (Bin_prot.Nat0.of_int len) + len)
       ;;
+
+      let%template[@mode local] bin_size_t = bin_size_t
 
       let bin_writer_t : t Bin_prot.Type_class.writer =
         { write = bin_write_t; size = bin_size_t }
@@ -189,7 +195,7 @@ module Make (Interned : Immediate_interned_string.S) = struct
 
   module Option_stable = struct
     module V1 = struct
-      type t = int [@@deriving hash]
+      type t = int [@@deriving globalize, hash]
 
       let none = Core.Int.max_value
       let is_none t = t = none
@@ -197,7 +203,14 @@ module Make (Interned : Immediate_interned_string.S) = struct
       let some (t : Stable.V1.t) = t
       let some_is_representable _ = true
       let unchecked_value (t : t) = t
-      let to_option t = if is_none t then None else Some (unchecked_value t)
+
+      let%template[@mode m = (global, local)] to_option t =
+        if is_none t
+        then None
+        else (
+          let v = unchecked_value t in
+          Some v [@exclave_if_local m])
+      ;;
 
       let of_option = function
         | None -> none
@@ -208,16 +221,17 @@ module Make (Interned : Immediate_interned_string.S) = struct
       let t_of_sexp s = [%of_sexp: Stable.V1.t option] s |> of_option
 
       module Serializable = struct
-        type t = Stable.V1.t option [@@deriving bin_io, stable_witness]
+        type t = Stable.V1.t option [@@deriving bin_io ~localize, stable_witness]
       end
 
-      include
-        Binable.Of_binable.V1 [@alert "-legacy"]
+      include%template
+        Binable.Of_binable.V1 [@mode local] [@alert "-legacy"]
           (Serializable)
           (struct
             type nonrec t = t
 
-            let of_binable, to_binable = of_option, to_option
+            let of_binable = of_option
+            let%template[@mode m = (global, local)] to_binable = (to_option [@mode m])
           end)
 
       let stable_witness =
@@ -253,13 +267,14 @@ module Make (Interned : Immediate_interned_string.S) = struct
         else Stable.V2.compare (unchecked_value t) (unchecked_value u)
       ;;
 
+      let%template[@mode local] [@inline] compare t u = compare t u
       let of_v1 t = t
     end
   end
 
   open Core
 
-  let to_immediate_string = Fn.id
+  let to_immediate_string t = t
   let of_immediate_string = Fn.id
 
   module T_hash = struct
@@ -311,28 +326,28 @@ module Make (Interned : Immediate_interned_string.S) = struct
   let grow_by, after_grow = Interned_string.(grow_by, after_grow)
 
   include Identifiable.Make (struct
-    include T_hash
+      include T_hash
 
-    let module_name = "Immediate.String"
-  end)
+      let module_name = "Immediate.String"
+    end)
 
   module Lexicographic = struct
     type nonrec t = t
 
     module Comparator :
       Comparator.S
-        with type t := t
-         and type comparator_witness = Stable.V2.comparator_witness =
+      with type t := t
+       and type comparator_witness = Stable.V2.comparator_witness =
       Stable.V2
 
     include Comparator
 
     include Identifiable.Make_using_comparator (struct
-      include T_hash
-      include Comparator
+        include T_hash
+        include Comparator
 
-      let module_name = "Immediate.String.Lexicographic"
-    end)
+        let module_name = "Immediate.String.Lexicographic"
+      end)
   end
 
   module Option = struct
@@ -350,26 +365,28 @@ module Make (Interned : Immediate_interned_string.S) = struct
 
     module Optional_syntax = struct
       module Optional_syntax = struct
-        let is_none = is_none
-        let unsafe_value = unchecked_value
+        let[@zero_alloc] is_none t = is_none t
+        let[@zero_alloc] unsafe_value t = unchecked_value t
       end
     end
 
     include Identifiable.Make (struct
-      include Option_stable.V1
+        include Option_stable.V1
 
-      let compare = Int.compare
+        let compare = Int.compare
 
-      include Sexpable.To_stringable (Option_stable.V1)
+        include Sexpable.To_stringable (Option_stable.V1)
 
-      let module_name = "Immediate.String.Option"
-    end)
+        let module_name = "Immediate.String.Option"
+      end)
 
+    let%template[@mode local] [@inline] compare t u = compare t u
+    let%template[@mode local] [@inline] equal t u = equal t u
     let to_immediate_string_option = Fn.id
     let of_immediate_string_option = Fn.id
   end
 
-  let of_string_no_intern str =
+  let of_string_no_intern (local_ str) =
     if Short_string.is_valid_string str
     then unsafe_of_short (Short_string.of_local_string str) |> Option.some
     else (
@@ -639,35 +656,29 @@ let%test_unit "Stable.V2.compare consistent with String.compare" =
         ~message:(Printf.sprintf "compare %S %S" str1 str2)))
 ;;
 
-let%bench_module "comparisons" =
-  (module struct
-    let t = of_string "abc"
+module%bench [@name "comparisons"] _ = struct
+  let t = of_string "abc"
 
-    let%bench_module "built-in" =
-      (module struct
-        open Poly
+  module%bench [@name "built-in"] _ = struct
+    open Poly
 
-        let%bench "=" = t = t
-        let%bench "<" = t < t
-        let%bench ">" = t > t
-        let%bench "<=" = t <= t
-        let%bench ">=" = t >= t
-        let%bench "<>" = t <> t
-      end)
-    ;;
+    let%bench "=" = t = t
+    let%bench "<" = t < t
+    let%bench ">" = t > t
+    let%bench "<=" = t <= t
+    let%bench ">=" = t >= t
+    let%bench "<>" = t <> t
+  end
 
-    let%bench_module "exported" =
-      (module struct
-        let%bench "=" = t = t
-        let%bench "<" = t < t
-        let%bench ">" = t > t
-        let%bench "<=" = t <= t
-        let%bench ">=" = t >= t
-        let%bench "<>" = t <> t
-      end)
-    ;;
-  end)
-;;
+  module%bench [@name "exported"] _ = struct
+    let%bench "=" = t = t
+    let%bench "<" = t < t
+    let%bench ">" = t > t
+    let%bench "<=" = t <= t
+    let%bench ">=" = t >= t
+    let%bench "<>" = t <> t
+  end
+end
 
 let%bench_fun "mem (short string) (found)" =
   let t = of_string "XXX.X  " in
@@ -699,32 +710,31 @@ let%bench_fun "mem (interned string) (found, last char)" =
   fun () -> Sys.opaque_identity (mem t '.')
 ;;
 
-let%test_module "Comparable.Make(Stable.V2).compare antisymmetric (bug repro)" =
-  (module struct
-    let x = of_string "ca"
-    let y = of_string "ac"
-    let z = of_string "bb-interned"
+module%test [@name "Comparable.Make(Stable.V2).compare antisymmetric (bug repro)"] _ =
+struct
+  let x = of_string "ca"
+  let y = of_string "ac"
+  let z = of_string "bb-interned"
 
-    module C = Comparable.Make (Stable.V2)
+  module C = Comparable.Make (Stable.V2)
 
-    let a = C.Set.of_list [ x; y; z ]
-    let a_sexp = [%sexp_of: C.Set.t] a
-    let b = [%of_sexp: C.Set.t] a_sexp
-    let b_sexp = [%sexp_of: C.Set.t] b
-    let a_minus_b = Core.Set.diff a b
-    let b_minus_a = Core.Set.diff b a
+  let a = C.Set.of_list [ x; y; z ]
+  let a_sexp = [%sexp_of: C.Set.t] a
+  let b = [%of_sexp: C.Set.t] a_sexp
+  let b_sexp = [%sexp_of: C.Set.t] b
+  let a_minus_b = Core.Set.diff a b
+  let b_minus_a = Core.Set.diff b a
 
-    let%test_unit _ =
-      [%test_result: string] ~expect:"(ac bb-interned ca)" (Sexp.to_string a_sexp)
-    ;;
+  let%test_unit _ =
+    [%test_result: string] ~expect:"(ac bb-interned ca)" (Sexp.to_string a_sexp)
+  ;;
 
-    let%test_unit _ =
-      [%test_result: string] ~expect:"(ac bb-interned ca)" (Sexp.to_string b_sexp)
-    ;;
+  let%test_unit _ =
+    [%test_result: string] ~expect:"(ac bb-interned ca)" (Sexp.to_string b_sexp)
+  ;;
 
-    let%test _ = C.Set.equal a b
-    let%test _ = Core.Set.is_empty a_minus_b
-    let%test _ = Core.Set.is_empty b_minus_a
-    let%test _ = true && C.( < ) y x && C.( < ) y z && C.( < ) z x
-  end)
-;;
+  let%test _ = C.Set.equal a b
+  let%test _ = Core.Set.is_empty a_minus_b
+  let%test _ = Core.Set.is_empty b_minus_a
+  let%test _ = true && C.( < ) y x && C.( < ) y z && C.( < ) z x
+end

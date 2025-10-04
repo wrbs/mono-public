@@ -1,5 +1,4 @@
 open Core
-open Poly
 open Async
 open Rpc
 module Limiter = Limiter_async.Token_bucket
@@ -129,7 +128,7 @@ module Pipe_simple_test = struct
 
   module Client = struct
     let _is_the_right_string msg_size string =
-      String.length string = msg_size && String.for_all string ~f:(( = ) 'A')
+      String.length string = msg_size && String.for_all string ~f:([%equal: char] 'A')
     ;;
 
     let main bytes msgs_per_sec host port ~rpc_impl () =
@@ -178,6 +177,7 @@ module Pipe_simple_test = struct
         Implementations.create_exn
           ~implementations:[ implementation ]
           ~on_unknown_rpc:`Raise
+          ~on_exception:Log_on_background_exn
       in
       let%bind (_ : Rpc_impl.Server.t) =
         Rpc_impl.make_server
@@ -209,7 +209,10 @@ end
 module Heartbeat_pipe_test = struct
   let main () =
     let implementations =
-      Implementations.create_exn ~implementations:[] ~on_unknown_rpc:`Raise
+      Implementations.create_exn
+        ~implementations:[]
+        ~on_unknown_rpc:`Raise
+        ~on_exception:Log_on_background_exn
     in
     let heartbeat_config =
       Connection.Heartbeat_config.create
@@ -286,6 +289,7 @@ module Pipe_closing_test = struct
                | `Do_close -> Pipe.close_read pipe);
               return (Ok pipe))
           ]
+        ~on_exception:Log_on_background_exn
     in
     let%bind server =
       Connection.serve
@@ -301,11 +305,11 @@ module Pipe_closing_test = struct
         let%bind pipe, id = Pipe_rpc.dispatch_exn rpc conn `Dont_close in
         Pipe.close_read pipe;
         let%bind reason = Pipe_rpc.close_reason id in
-        assert (reason = Closed_locally);
+        assert ([%compare.equal: Pipe_close_reason.t] reason Closed_locally);
         let%bind pipe, id = Pipe_rpc.dispatch_exn rpc conn `Do_close in
         let%bind reason = Pipe_rpc.close_reason id in
         assert (Pipe.is_closed pipe);
-        assert (reason = Closed_remotely);
+        assert ([%compare.equal: Pipe_close_reason.t] reason Closed_remotely);
         let%bind pipe, id = Pipe_rpc.dispatch_exn rpc conn `Dont_close in
         let%bind () = Connection.close conn in
         let%bind reason = Pipe_rpc.close_reason id in
@@ -357,6 +361,7 @@ module Pipe_iter_test = struct
                      `Repeat (counter + 1))));
               return (Ok r))
           ]
+        ~on_exception:Log_on_background_exn
     in
     let%bind server =
       Connection.serve
@@ -459,7 +464,10 @@ module Pipe_direct_test = struct
         return (Ok ()))
     in
     let implementations =
-      Implementations.create_exn ~implementations:[ impl ] ~on_unknown_rpc:`Raise
+      Implementations.create_exn
+        ~implementations:[ impl ]
+        ~on_unknown_rpc:`Raise
+        ~on_exception:Log_on_background_exn
     in
     let%bind server =
       Connection.serve
@@ -476,7 +484,7 @@ module Pipe_direct_test = struct
         let%bind l = Pipe.to_list pipe in
         [%test_result: int list] l ~expect:output;
         let%bind reason = Pipe_rpc.close_reason md in
-        assert (reason = Closed_remotely);
+        assert ([%compare.equal: Pipe_close_reason.t] reason Closed_remotely);
         let%bind pipe, md = Pipe_rpc.dispatch_exn rpc conn (`Expect_auto_close 0) in
         let%bind result = Pipe.read_exactly pipe ~num_values:10 in
         let l =
@@ -487,7 +495,7 @@ module Pipe_direct_test = struct
         Pipe.close_read pipe;
         [%test_result: int list] l ~expect:output;
         let%bind reason = Pipe_rpc.close_reason md in
-        assert (reason = Closed_locally);
+        assert ([%compare.equal: Pipe_close_reason.t] reason Closed_locally);
         let%bind was_ok = Ivar.read auto_close_was_ok.(0) in
         assert was_ok;
         let%bind pipe, md = Pipe_rpc.dispatch_exn rpc conn (`Expect_auto_close 1) in
@@ -545,7 +553,7 @@ module Pipe_rpc_performance_measurements = struct
           (Pipe.iter_without_pushback (Cpu_usage.samples ()) ~f:(fun percent ->
              let percentage = Percent.to_percentage percent in
              incr sample_to_collect_and_exit;
-             if percentage > 100.
+             if Float.(percentage > 100.)
              then (
                Print.printf "CPU pegged (%f). This test is not good.\n" percentage;
                Shutdown.shutdown 1);
@@ -623,7 +631,11 @@ module Rpc_performance_measurements = struct
 
   module Server = struct
     let cnt = ref 0
-    let one_way_implementation = One_way.implement one_way (fun () () -> incr cnt)
+
+    let one_way_implementation =
+      One_way.implement one_way (fun () () -> incr cnt) ~on_exception:Close_connection
+    ;;
+
     let rpc_implementation = Rpc.implement' rpc (fun () () -> incr cnt)
 
     let main port ~rpc_impl () =
@@ -635,6 +647,7 @@ module Rpc_performance_measurements = struct
             ; Pipe_rpc_performance_measurements.Server.implementation
             ]
           ~on_unknown_rpc:`Raise
+          ~on_exception:Log_on_background_exn
       in
       let%bind _server =
         Rpc_impl.make_server
@@ -658,7 +671,7 @@ module Rpc_performance_measurements = struct
                !sample
                (!ratio_acc /. Float.of_int !sample)
                (!percentage_acc /. Float.of_int !sample);
-             if percentage > 100.
+             if Float.(percentage > 100.)
              then Print.printf "CPU pegged (%f). This test may not good.\n" percentage
              else (
                if !sample >= 0
@@ -767,13 +780,13 @@ module Rpc_expert_test = struct
              new_buf
              ~pos:0
              ~len:(Bigstring.length new_buf)
-            : [ `Connection_closed | `Flushed of unit Deferred.t ])
+           : [ `Connection_closed | `Flushed of unit Deferred.t ])
       in
       let handle_unknown_raw
         ()
         ~rpc_tag
         ~version
-        ~metadata:(_ : string option)
+        ~metadata:(_ : Async_rpc_kernel.Rpc_metadata.V1.t option)
         responder
         buf
         ~pos
@@ -781,7 +794,8 @@ module Rpc_expert_test = struct
         =
         [%log.debug_format log "query: %s v%d" rpc_tag version];
         assert (
-          rpc_tag = Rpc.name unknown_raw_rpc && version = Rpc.version unknown_raw_rpc);
+          [%equal: string] rpc_tag (Rpc.name unknown_raw_rpc)
+          && version = Rpc.version unknown_raw_rpc);
         try
           handle_raw responder buf ~pos ~len;
           Deferred.unit
@@ -803,25 +817,32 @@ module Rpc_expert_test = struct
               ~rpc_tag:custom_io_rpc_tag
               ~version:custom_io_rpc_version
               (fun () responder buf ~pos ~len ->
-              handle_raw responder buf ~pos ~len;
-              Replied)
-          ; One_way.implement normal_one_way_rpc (fun () query ->
-              [%log.debug_format
-                log "received one-way RPC message (normal implementation)"];
-              [%log.debug_format log "message value = %S" query];
-              [%test_result: string] query ~expect:the_query;
-              Pipe.write_without_pushback one_way_writer ())
-          ; One_way.Expert.implement raw_one_way_rpc (fun () buf ~pos ~len ->
-              [%log.debug_format
-                log "received one-way RPC message (expert implementation)"];
-              let pos_ref = ref pos in
-              let query = String.bin_read_t buf ~pos_ref in
-              [%log.debug_format log "message value = %S" query];
-              assert (!pos_ref - pos = len);
-              [%test_result: string] query ~expect:the_query;
-              Pipe.write_without_pushback one_way_writer ())
+                 handle_raw responder buf ~pos ~len;
+                 Replied)
+          ; One_way.implement
+              normal_one_way_rpc
+              (fun () query ->
+                [%log.debug_format
+                  log "received one-way RPC message (normal implementation)"];
+                [%log.debug_format log "message value = %S" query];
+                [%test_result: string] query ~expect:the_query;
+                Pipe.write_without_pushback one_way_writer ())
+              ~on_exception:Close_connection
+          ; One_way.Expert.implement
+              raw_one_way_rpc
+              (fun () buf ~pos ~len ->
+                [%log.debug_format
+                  log "received one-way RPC message (expert implementation)"];
+                let pos_ref = ref pos in
+                let query = String.bin_read_t buf ~pos_ref in
+                [%log.debug_format log "message value = %S" query];
+                assert (!pos_ref - pos = len);
+                [%test_result: string] query ~expect:the_query;
+                Pipe.write_without_pushback one_way_writer ())
+              ~on_exception:Close_connection
           ]
         ~on_unknown_rpc:(`Expert handle_unknown_raw)
+        ~on_exception:Log_on_background_exn
     in
     let%bind server =
       Rpc_impl.make_server
@@ -837,33 +858,34 @@ module Rpc_expert_test = struct
             ~how:`Sequential
             [ unknown_raw_rpc; raw_rpc; normal_rpc ]
             ~f:(fun rpc ->
-            [%log.debug_format log "sending %s query normally" (Rpc.name rpc)];
-            let%bind response = Rpc.dispatch_exn rpc conn the_query in
-            [%log.debug_format log "got response"];
-            [%test_result: string] response ~expect:the_response;
-            let buf = Bin_prot.Utils.bin_dump String.bin_writer_t the_query in
-            [%log.debug_format log "sending %s query via Expert interface" (Rpc.name rpc)];
-            let%map response =
-              Deferred.create (fun i ->
-                ignore
-                  (Rpc.Expert.schedule_dispatch
-                     conn
-                     ~rpc_tag:(Rpc.name rpc)
-                     ~version:(Rpc.version rpc)
-                     buf
-                     ~pos:0
-                     ~len:(Bigstring.length buf)
-                     ~handle_error:(fun e -> Ivar.fill_exn i (Error e))
-                     ~handle_response:(fun buf ~pos ~len ->
-                       let pos_ref = ref pos in
-                       let response = String.bin_read_t buf ~pos_ref in
-                       assert (!pos_ref - pos = len);
-                       Ivar.fill_exn i (Ok response);
-                       Deferred.unit)
-                    : [ `Connection_closed | `Flushed of unit Deferred.t ]))
-            in
-            [%log.debug_format log "got response"];
-            [%test_result: string Or_error.t] response ~expect:(Ok the_response))
+              [%log.debug_format log "sending %s query normally" (Rpc.name rpc)];
+              let%bind response = Rpc.dispatch_exn rpc conn the_query in
+              [%log.debug_format log "got response"];
+              [%test_result: string] response ~expect:the_response;
+              let buf = Bin_prot.Utils.bin_dump String.bin_writer_t the_query in
+              [%log.debug_format
+                log "sending %s query via Expert interface" (Rpc.name rpc)];
+              let%map response =
+                Deferred.create (fun i ->
+                  ignore
+                    (Rpc.Expert.schedule_dispatch
+                       conn
+                       ~rpc_tag:(Rpc.name rpc)
+                       ~version:(Rpc.version rpc)
+                       buf
+                       ~pos:0
+                       ~len:(Bigstring.length buf)
+                       ~handle_error:(fun e -> Ivar.fill_exn i (Error e))
+                       ~handle_response:(fun buf ~pos ~len ->
+                         let pos_ref = ref pos in
+                         let response = String.bin_read_t buf ~pos_ref in
+                         assert (!pos_ref - pos = len);
+                         Ivar.fill_exn i (Ok response);
+                         Deferred.unit)
+                     : [ `Connection_closed | `Flushed of unit Deferred.t ]))
+              in
+              [%log.debug_format log "got response"];
+              [%test_result: string Or_error.t] response ~expect:(Ok the_response))
         in
         let%bind () =
           let buf = Bin_prot.Utils.bin_dump String.bin_writer_t the_query in
@@ -886,7 +908,7 @@ module Rpc_expert_test = struct
                      assert (!pos_ref - pos = len);
                      Ivar.fill_exn i (Ok response);
                      Deferred.unit)
-                  : [ `Connection_closed | `Flushed of unit Deferred.t ]))
+                 : [ `Connection_closed | `Flushed of unit Deferred.t ]))
           in
           [%log.debug_format log "got response"];
           [%test_result: string Or_error.t] response ~expect:(Ok the_response)
@@ -895,26 +917,26 @@ module Rpc_expert_test = struct
           ~how:`Sequential
           [ raw_one_way_rpc; normal_one_way_rpc ]
           ~f:(fun rpc ->
-          [%log.debug_format log "sending %s query normally" (One_way.name rpc)];
-          One_way.dispatch_exn rpc conn the_query;
-          let%bind () = assert_one_way_rpc_received () in
-          [%log.debug_format
-            log "sending %s query via Expert.dispatch" (One_way.name rpc)];
-          let buf = Bin_prot.Utils.bin_dump String.bin_writer_t the_query in
-          let pos = 0 in
-          let len = Bigstring.length buf in
-          (match One_way.Expert.dispatch rpc conn buf ~pos ~len with
-           | `Ok -> ()
-           | `Connection_closed -> assert false);
-          let%bind () = assert_one_way_rpc_received () in
-          [%log.debug_format
-            log "sending %s query via Expert.schedule_dispatch" (One_way.name rpc)];
-          let%bind () =
-            match One_way.Expert.schedule_dispatch rpc conn buf ~pos ~len with
-            | `Flushed f -> f
-            | `Connection_closed -> assert false
-          in
-          assert_one_way_rpc_received ()))
+            [%log.debug_format log "sending %s query normally" (One_way.name rpc)];
+            One_way.dispatch_exn rpc conn the_query;
+            let%bind () = assert_one_way_rpc_received () in
+            [%log.debug_format
+              log "sending %s query via Expert.dispatch" (One_way.name rpc)];
+            let buf = Bin_prot.Utils.bin_dump String.bin_writer_t the_query in
+            let pos = 0 in
+            let len = Bigstring.length buf in
+            (match One_way.Expert.dispatch rpc conn buf ~pos ~len with
+             | `Ok -> ()
+             | `Connection_closed -> assert false);
+            let%bind () = assert_one_way_rpc_received () in
+            [%log.debug_format
+              log "sending %s query via Expert.schedule_dispatch" (One_way.name rpc)];
+            let%bind () =
+              match One_way.Expert.schedule_dispatch rpc conn buf ~pos ~len with
+              | `Flushed f -> f
+              | `Connection_closed -> assert false
+            in
+            assert_one_way_rpc_received ()))
     in
     Result.ok_exn result;
     Rpc_impl.Server.close server
@@ -949,6 +971,7 @@ module Connection_closing_test = struct
     Implementations.create_exn
       ~implementations:[ never_returns_impl ]
       ~on_unknown_rpc:`Continue
+      ~on_exception:Log_on_background_exn
   ;;
 
   let main () =
@@ -995,7 +1018,7 @@ module Connection_closing_test = struct
     (* Kill the connection after dispatching the RPC. *)
     let%bind conn = connect () in
     let%bind response_deferred = dispatch_never_returns conn in
-    let server_conn = Option.value_exn ~here:[%here] !most_recent_server_conn in
+    let server_conn = Option.value_exn !most_recent_server_conn in
     let%bind () = Connection.close server_conn in
     let%bind () = check_response_is_error [%here] conn response_deferred in
     (* Call an unknown one-way RPC while the connection is open. This causes somewhat

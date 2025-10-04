@@ -2,8 +2,8 @@ open Core
 open Import
 
 module As_recompute_list = Node.Packed.As_list (struct
-  let next (Node.Packed.T node) = node.next_in_recompute_heap
-end)
+    let next (Node.Packed.T node) = node.next_in_recompute_heap
+  end)
 
 module Nodes_by_height = struct
   type t = As_recompute_list.t Uniform_array.t [@@deriving sexp_of]
@@ -27,7 +27,7 @@ let max_height_allowed t = Uniform_array.length t.nodes_by_height - 1
 let is_empty t = t.length = 0
 
 let invariant t =
-  Invariant.invariant [%here] t [%sexp_of: t] (fun () ->
+  Invariant.invariant t [%sexp_of: t] (fun () ->
     let check f = Invariant.check_field t f in
     Fields.iter
       ~length:
@@ -52,7 +52,7 @@ let invariant t =
 ;;
 
 let create_nodes_by_height ~max_height_allowed =
-  Uniform_array.create ~len:(max_height_allowed + 1) Uopt.none
+  Uniform_array.create ~len:(max_height_allowed + 1) (Uopt.get_none ())
 ;;
 
 let set_max_height_allowed t max_height_allowed =
@@ -113,7 +113,7 @@ let unlink (type a) t (node : a Node.t) =
   then Uniform_array.unsafe_set t.nodes_by_height node.height_in_recompute_heap next;
   set_prev next ~prev;
   set_next prev ~next;
-  node.prev_in_recompute_heap <- Uopt.none
+  node.prev_in_recompute_heap <- Uopt.get_none ()
 ;;
 
 (* We don't set [node.next_in_recompute_heap] here, but rather after calling [unlink]. *)
@@ -121,11 +121,7 @@ let unlink (type a) t (node : a Node.t) =
 let add (type a) t (node : a Node.t) =
   if debug && (Node.is_in_recompute_heap node || not (Node.needs_to_be_computed node))
   then
-    failwiths
-      ~here:[%here]
-      "incorrect attempt to add node to recompute heap"
-      node
-      [%sexp_of: _ Node.t];
+    failwiths "incorrect attempt to add node to recompute heap" node [%sexp_of: _ Node.t];
   if debug then assert (node.height <= max_height_allowed t);
   let height = node.height in
   if height < t.height_lower_bound then t.height_lower_bound <- height;
@@ -136,13 +132,9 @@ let add (type a) t (node : a Node.t) =
 let remove (type a) t (node : a Node.t) =
   if debug && ((not (Node.is_in_recompute_heap node)) || Node.needs_to_be_computed node)
   then
-    failwiths
-      ~here:[%here]
-      "incorrect [remove] of node from recompute heap"
-      node
-      [%sexp_of: _ Node.t];
+    failwiths "incorrect [remove] of node from recompute heap" node [%sexp_of: _ Node.t];
   unlink t node;
-  node.next_in_recompute_heap <- Uopt.none;
+  node.next_in_recompute_heap <- Uopt.get_none ();
   node.height_in_recompute_heap <- -1;
   t.length <- t.length - 1
 ;;
@@ -177,7 +169,6 @@ let remove_min t : Node.Packed.t =
     if debug && t.height_lower_bound >= Uniform_array.length t.nodes_by_height
     then
       failwiths
-        ~here:[%here]
         "Recompute_heap.remove_min unexpectedly reached end of heap"
         t
         [%sexp_of: t];
@@ -188,8 +179,8 @@ let remove_min t : Node.Packed.t =
   t.length <- t.length - 1;
   let next = node.next_in_recompute_heap in
   Uniform_array.set t.nodes_by_height t.height_lower_bound next;
-  set_prev next ~prev:Uopt.none;
+  set_prev next ~prev:(Uopt.get_none ());
   if debug then assert (Uopt.is_none node.prev_in_recompute_heap);
-  node.next_in_recompute_heap <- Uopt.none;
+  node.next_in_recompute_heap <- Uopt.get_none ();
   T node
 ;;

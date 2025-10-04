@@ -12,12 +12,12 @@ module Decimal : Stringable.S with type t = float
 module Merge_behavior : sig
   type t =
     | Merge
-        (** Specifies that a widget should use [Vdom.Attr.many] when combining
-        several attributes into one. *)
+    (** Specifies that a widget should use [Vdom.Attr.many] when combining several
+        attributes into one. *)
     | Legacy_dont_merge
-        (** Specifies that a widget should use [Vdom.Attr.many_without_merge] when
-        combining several attributes into one. This is legacy behavior, so new
-        code should always prefer to use [Merge]. *)
+    (** Specifies that a widget should use [Vdom.Attr.many_without_merge] when combining
+        several attributes into one. This is legacy behavior, so new code should always
+        prefer to use [Merge]. *)
 end
 
 module Validated : sig
@@ -166,8 +166,7 @@ module Multi_select : sig
       - Clicking an element makes it the only one selected.
       - Ctrl+clicking an element toggles it independently.
       - Shift+clicking an element selects everything between it and the previous click.
-      - Clicking and dragging selects a range.
-  *)
+      - Clicking and dragging selects a range. *)
 
   module Repeated_click_behavior : sig
     (** When a single element is already selected and you click it again, you can
@@ -214,8 +213,7 @@ module Entry : sig
       have the box focused. This is one solution for specific use-cases where pressing
       [Enter] will submit the value and you want to clear the box as a result.
 
-      [on_return] is called when the user presses the enter key with the text box focused.
-  *)
+      [on_return] is called when the user presses the enter key with the text box focused. *)
   val raw
     :  ?extra_attrs:Attr.t list (** default empty *)
     -> ?disabled:bool (** default false *)
@@ -236,11 +234,13 @@ module Entry : sig
     -> ?disabled:bool (** default false *)
     -> ?placeholder:string (** default blank *)
     -> ?merge_behavior:Merge_behavior.t
+    -> ?allow_updates_when_focused:[ `Always | `Never ]
+         (** Whether or not to ignore changes to the value when the user is focused on the
+             input element. Defaults to [`Always] *)
     -> ?key:string
     -> (module Stringable.S with type t = 'a)
     -> value:'a option
     -> on_input:('a option -> unit Effect.t)
-    -> allow_updates_when_focused:[ `Always | `Never ]
     -> Node.t
 
   (** Creates a text input of a serializable type, wrapping it in a type that stores
@@ -264,11 +264,13 @@ module Entry : sig
     -> ?placeholder:string (** default blank *)
     -> ?on_return:(unit -> unit Effect.t) (** default no-op *)
     -> ?merge_behavior:Merge_behavior.t
+    -> ?allow_updates_when_focused:[ `Always | `Never ]
+         (** Whether or not to ignore changes to the value when the user is focused on the
+             input element. Defaults to [`Always] *)
     -> ?key:string
     -> (module Stringable with type t = 'a)
     -> value:'a Validated.t
     -> on_input:('a Validated.update -> unit Effect.t)
-    -> allow_updates_when_focused:[ `Always | `Never ]
     -> Node.t
 
   (** Creates a text input that equates an empty input with [None] and a non-empty input
@@ -279,10 +281,12 @@ module Entry : sig
     -> ?disabled:bool (** default false *)
     -> ?placeholder:string (** default blank *)
     -> ?merge_behavior:Merge_behavior.t
+    -> ?allow_updates_when_focused:[ `Always | `Never ]
+         (** Whether or not to ignore changes to the value when the user is focused on the
+             input element. Defaults to [`Always] *)
     -> ?key:string
     -> value:string option
     -> on_input:(string option -> unit Effect.t)
-    -> allow_updates_when_focused:[ `Always | `Never ]
     -> unit
     -> Node.t
 
@@ -294,8 +298,10 @@ module Entry : sig
     -> ?disabled:bool (** default false *)
     -> ?placeholder:string (** default blank *)
     -> ?merge_behavior:Merge_behavior.t
+    -> ?allow_updates_when_focused:[ `Always | `Never ]
+         (** Whether or not to ignore changes to the value when the user is focused on the
+             input element. Defaults to [`Always] *)
     -> ?key:string
-    -> allow_updates_when_focused:[ `Always | `Never ]
     -> value:string option
     -> on_input:(string option -> unit Effect.t)
     -> unit
@@ -317,12 +323,14 @@ module Entry : sig
     -> ?disabled:bool (** default false *)
     -> ?placeholder:string (** default blank *)
     -> ?merge_behavior:Merge_behavior.t
+    -> ?allow_updates_when_focused:[ `Always | `Never ]
+         (** Whether or not to ignore changes to the value when the user is focused on the
+             input element. Defaults to [`Always] *)
     -> ?key:string
     -> (module Stringable.S with type t = 'a)
     -> value:'a option
     -> step:float
     -> on_input:('a option -> unit Effect.t)
-    -> allow_updates_when_focused:[ `Always | `Never ]
     -> Node.t
 
   (** A slider bar. Roughly equivalent to [number], but with a different appearance. We
@@ -334,12 +342,14 @@ module Entry : sig
     -> ?disabled:bool (** default false *)
     -> ?placeholder:string (** default blank *)
     -> ?merge_behavior:Merge_behavior.t
+    -> ?allow_updates_when_focused:[ `Always | `Never ]
+         (** Whether or not to ignore changes to the value when the user is focused on the
+             input element. Defaults to [`Always] *)
     -> ?key:string
     -> (module Stringable.S with type t = 'a)
     -> value:'a option
     -> step:float
     -> on_input:('a option -> unit Effect.t)
-    -> allow_updates_when_focused:[ `Always | `Never ]
     -> Node.t
 
   (** Creates a time input that equates an empty input with [None] and a non-empty input
@@ -350,10 +360,12 @@ module Entry : sig
     -> ?disabled:bool (** default false *)
     -> ?placeholder:string (** default blank *)
     -> ?merge_behavior:Merge_behavior.t
+    -> ?allow_updates_when_focused:[ `Always | `Never ]
+         (** Whether or not to ignore changes to the value when the user is focused on the
+             input element. Defaults to [`Always] *)
     -> ?key:string
     -> value:Time_ns.Ofday.t option
     -> on_input:(Time_ns.Ofday.t option -> unit Effect.t)
-    -> allow_updates_when_focused:[ `Always | `Never ]
     -> unit
     -> Node.t
 
@@ -365,10 +377,12 @@ module Entry : sig
     -> ?disabled:bool (** default false *)
     -> ?placeholder:string (** default blank *)
     -> ?merge_behavior:Merge_behavior.t
+    -> ?allow_updates_when_focused:[ `Always | `Never ]
+         (** Whether or not to ignore changes to the value when the user is focused on the
+             input element. Defaults to [`Always] *)
     -> ?key:string
     -> value:Date.t option
     -> on_input:(Date.t option -> unit Effect.t)
-    -> allow_updates_when_focused:[ `Always | `Never ]
     -> unit
     -> Node.t
 
@@ -376,21 +390,22 @@ module Entry : sig
       as [Some Time_ns.t].
 
       Because the underlying datepicker expects the datetime_local to be specified in the
-      format yyyy-MM-ddThh:mm with optional ":ss" or ":ss.SSS" when using this widget
-      a timezone should be specified.
-  *)
+      format yyyy-MM-ddThh:mm with optional ":ss" or ":ss.SSS" when using this widget a
+      timezone should be specified. *)
   val datetime_local
     :  ?extra_attrs:Attr.t list (** default empty *)
     -> ?call_on_input_when:Call_on_input_when.t (** default [Text_changed] *)
     -> ?disabled:bool (** default false *)
     -> ?placeholder:string (** default blank *)
     -> ?utc_offset:Time_ns.Span.t
-    -> ?merge_behavior:Merge_behavior.t
          (** If blank the browser local timezone is used. Max accuracy 1h. *)
+    -> ?merge_behavior:Merge_behavior.t
+    -> ?allow_updates_when_focused:[ `Never ]
+         (** Whether or not to ignore changes to the value when the user is focused on the
+             input element. Defaults to [`Always] *)
     -> ?key:string
     -> value:Time_ns.t option
     -> on_input:(Time_ns.t option -> unit Effect.t)
-    -> allow_updates_when_focused:[ `Always | `Never ]
     -> unit
     -> Node.t
 
@@ -401,10 +416,12 @@ module Entry : sig
     -> ?disabled:bool (** default false *)
     -> ?placeholder:string (** default blank *)
     -> ?merge_behavior:Merge_behavior.t
+    -> ?allow_updates_when_focused:[ `Always | `Never ]
+         (** Whether or not to ignore changes to the value when the user is focused on the
+             input element. Defaults to [`Always] *)
     -> ?key:string
     -> value:string
     -> on_input:(string -> unit Effect.t)
-    -> allow_updates_when_focused:[ `Always | `Never ]
     -> unit
     -> Node.t
 
@@ -484,7 +501,11 @@ module Radio_buttons : sig
 end
 
 module File_select : sig
-  (** Elements for selecting files from local disk *)
+  (** Elements for selecting files from local disk
+
+      NOTE: File inputs are unique in that they cannot be set programmatically, other than
+      setting them to empty. Therefore, they don't take a "current value" parameter and
+      instead act more like uncontrolled components. *)
 
   val single
     :  ?extra_attrs:Attr.t list (** default empty *)

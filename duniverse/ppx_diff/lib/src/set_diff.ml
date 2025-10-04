@@ -7,23 +7,29 @@ module Stable = struct
       type 'a t =
         | Add of 'a
         | Remove of 'a
-      [@@deriving sexp, bin_io]
+      [@@deriving bin_io, quickcheck, sexp]
     end
 
-    type 'a t = 'a Change.t list [@@deriving sexp, bin_io]
+    include struct
+      open Base_quickcheck
 
-    let get ~from ~to_ =
+      type 'a t = 'a Change.t list [@@deriving bin_io, quickcheck, sexp]
+    end
+
+    let get ~from ~to_ = exclave_
       if phys_equal from to_
-      then Optional_diff.none
+      then Optional_diff.get_none ()
       else (
         let diff =
           Set.symmetric_diff from to_
           |> Sequence.to_list
           |> List.map ~f:(function
-               | First a -> Change.Remove a
-               | Second a -> Change.Add a)
+            | First a -> Change.Remove a
+            | Second a -> Change.Add a)
         in
-        if List.is_empty diff then Optional_diff.none else Optional_diff.return diff)
+        if List.is_empty diff
+        then Optional_diff.get_none ()
+        else Optional_diff.return diff)
     ;;
 
     let apply_exn set diff =
@@ -34,18 +40,19 @@ module Stable = struct
     ;;
 
     let of_list_exn = function
-      | [] -> Optional_diff.none
-      | _ :: _ as l -> Optional_diff.return (List.concat l)
+      | [] -> exclave_ Optional_diff.get_none ()
+      | _ :: _ as l -> exclave_ Optional_diff.return (List.concat l)
     ;;
 
     module Make (S : sig
-      module Elt : sig
-        type t
-        type comparator_witness
-      end
+        module Elt : sig
+          type t
+          type comparator_witness
+        end
 
-      type t = (Elt.t, Elt.comparator_witness) Set.t
-    end) : Diff_intf.S_plain with type derived_on := S.t and type t := S.Elt.t t = struct
+        type t = (Elt.t, Elt.comparator_witness) Set.t
+      end) : Diff_intf.S_plain with type derived_on := S.t and type t := S.Elt.t t =
+    struct
       let get = get
       let apply_exn = apply_exn
       let of_list_exn = of_list_exn

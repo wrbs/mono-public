@@ -10,11 +10,6 @@ general guidelines specific to Dune. However, given that Dune is a large project
 developed by many different people, it's important to follow these guidelines in
 order to keep the project in a good state and pleasant to work on for everybody.
 
-.. contents:: Table of Contents
-   :depth: 1
-   :local:
-   :backlinks: none
-
 Dependencies
 ============
 
@@ -23,6 +18,12 @@ To create a directory-local opam switch with the dependencies necessary to build
 .. code:: console
 
   $ make dev-switch
+
+This can also be used to keep the switch updated when dependencies change.
+
+The ``Makefile`` also has a ``make dev-deps`` which will install just the
+dependencies used by tests. These are marked ``{ with-dev-setup }`` in Dune's
+opam file.
 
 Bootstrapping
 =============
@@ -53,10 +54,10 @@ Here are the most common commands you'll be running:
    $ ./dune.exe build @foo
 
 
-Note that tests are currently written for version 4.14.1 of the OCaml compiler.
+Note that tests are currently written for version 5.3.0 of the OCaml compiler.
 Some tests depend on the specific wording of compilation errors which can change
 between compiler versions, so to reliably run the tests make sure that
-``ocaml.4.14.1`` is installed. The ``TEST_OCAMLVERSION`` in the ``Makefile`` at
+``ocaml.5.3.0`` is installed. The ``TEST_OCAMLVERSION`` in the ``Makefile`` at
 the root of the Dune repo contains the current compiler version for which tests
 are written.
 
@@ -205,6 +206,8 @@ consists of two steps:
 * Running ``$ make opam-release`` to create the release tarball. Then publish it
   to GitHub and submit it to opam.
 
+.. _dune-release: https://github.com/tarides/dune-release
+
 Major & Feature Releases
 ------------------------
 
@@ -229,7 +232,7 @@ to add a new stanza is:
 - Extend ``Stanza.t`` with a new constructor to represent the new stanza
 - Modify ``Dune_file`` to parse the Dune language into this constructor
 - Modify the rules to interpret this stanza into rules, usually done in
-  ``Gen_rules```
+  ``Gen_rules``
 
 Versioning
 ----------
@@ -283,7 +286,7 @@ Such languages must be enabled in the ``dune`` project file separately:
 
 .. code:: dune
 
-   (lang dune 3.16)
+   (lang dune 3.20)
    (using coq 0.8)
 
 If such extensions are experimental, it's recommended that they pass
@@ -341,7 +344,7 @@ Documentation
 User documentation lives in the ``./doc`` directory.
 
 In order to build the user documentation, you must install python-sphinx_,
-sphinx_rtd_theme_ and sphinx-copybutton_.
+sphinx-design_, sphinx-copybutton_, myst-parser_, and furo_.
 
 Build the documentation with
 
@@ -355,11 +358,15 @@ For automatically updated builds, you can install sphinx-autobuild_, and run
 
    $ make livedoc
 
+.. seealso::
+    ``doc/requirements.txt`` for an always up-to-date list of packages to install
+
 .. _python-sphinx: http://www.sphinx-doc.org/en/master/usage/installation.html
-.. _sphinx_rtd_theme: https://sphinx-rtd-theme.readthedocs.io/en/stable/
-.. _sphinx-autobuild: https://pypi.org/project/sphinx-autobuild/
+.. _sphinx-design: https://sphinx-design.readthedocs.io/en/latest/index.html
 .. _sphinx-copybutton: https://sphinx-copybutton.readthedocs.io/en/latest/index.html
-.. _dune-release: https://github.com/ocamllabs/dune-release
+.. _sphinx-autobuild: https://pypi.org/project/sphinx-autobuild/
+.. _myst-parser: https://myst-parser.readthedocs.io/en/latest/
+.. _furo: https://sphinx-themes.org/sample-sites/furo/
 
 Nix users may drop into a development shell with the necessary dependencies for
 building docs ``nix develop .#doc``.
@@ -776,16 +783,6 @@ Melange Bench
 We also benchmark a demo Melange project's build time:
 
 https://ocaml.github.io/dune/dev/bench/
-
-Monorepo Benchmark
-------------------
-
-We benchmark the performance of Dune in building a large monorepo in every
-PR. The benchmark results can be found here:
-
-https://bench.ci.dev/ocaml/dune/branch/main?worker=fermat&image=bench%2Fmonorepo%2Fbench.Dockerfile
-
-You can find more information about these benchmarks `here <./dev/monorepo-bench.md>`_.
 
 Formatting
 ==========

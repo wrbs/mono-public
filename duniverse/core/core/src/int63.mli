@@ -1,4 +1,4 @@
-(** This module extends {{!Base.Int63}[Base.Int63]}. *)
+(** This module extends {{!Base.Int63} [Base.Int63]}. *)
 
 (** {2 Interface from Base} *)
 
@@ -11,15 +11,23 @@ end
 
 (** @inline *)
 include
-  Int_intf.Extension with type t := t and type comparator_witness := comparator_witness
+  Int_intf.Extension with type t := t and type comparator_witness := comparator_witness @@ 
+portable
 
-module Stable : sig
+module Stable : sig @@ portable
   module V1 : sig
-    type nonrec t = t [@@immediate64] [@@deriving equal, hash, sexp_grammar]
+    type nonrec t : immediate64 = t
+    [@@deriving
+      bin_io ~localize ~portable
+      , compare ~localize ~portable
+      , equal ~localize ~portable
+      , globalize
+      , hash
+      , sexp_grammar]
 
     include
       Stable_comparable.With_stable_witness.V1
-        with type t := t
-         and type comparator_witness = comparator_witness
+      with type t := t
+       and type comparator_witness = comparator_witness
   end
 end

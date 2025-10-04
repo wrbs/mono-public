@@ -5,12 +5,29 @@ let def name dyn =
   Pp.box ~indent:2 (Pp.textf "let %s = " name ++ Dyn.pp dyn)
 ;;
 
+let flags flags =
+  let open Dyn in
+  list (pair (list string) (list string)) flags
+;;
+
+let type_def =
+  {|
+type library =
+  { path : string
+  ; main_module_name : string option
+  ; include_subdirs_unqualified : bool
+  ; special_builtin_support : string option
+  }
+|}
+;;
+
 let rule sctx ~requires_link =
   let open Action_builder.O in
   let* () = Action_builder.return () in
   let* locals, externals =
-    let+ libs = Resolve.Memo.read (Memo.Lazy.force requires_link) in
-    List.partition_map libs ~f:(fun lib ->
+    Memo.Lazy.force requires_link
+    |> Resolve.Memo.read
+    >>| List.partition_map ~f:(fun lib ->
       match Lib.Local.of_lib lib with
       | Some x -> Left x
       | None -> Right lib)
@@ -39,61 +56,54 @@ let rule sctx ~requires_link =
       in
       let open Memo.O in
       let+ is_multi_dir =
-        let+ dc = Dir_contents.get sctx ~dir in
-        match Dir_contents.dirs dc with
+        Dir_contents.get sctx ~dir
+        >>| Dir_contents.dirs
+        >>| function
         | _ :: _ :: _ -> true
         | _ -> false
       in
-      Dyn.Tuple
-        [ Path.Build.drop_build_context_exn dir
-          |> Path.Source.to_local
-          |> Path.Local.to_dyn
-        ; Dyn.option
-            Module_name.to_dyn
-            (match Lib_info.main_module_name info with
-             | From _ -> None
-             | This x -> x)
-        ; Dyn.Bool is_multi_dir
-        ; Dyn.option Module_name.to_dyn special_builtin_support
+      Dyn.record
+        [ ( "path"
+          , Path.Build.drop_build_context_exn dir
+            |> Path.Source.to_local
+            |> Path.Local.to_dyn )
+        ; ( "main_module_name"
+          , Dyn.option
+              Module_name.to_dyn
+              (match Lib_info.main_module_name info with
+               | From _ -> None
+               | This x -> x) )
+        ; "include_subdirs_unqualified", Dyn.Bool is_multi_dir
+        ; "special_builtin_support", Dyn.option Module_name.to_dyn special_builtin_support
         ])
     |> Action_builder.of_memo
+  in
+  let externals =
+    List.filter_map externals ~f:(fun lib ->
+      let name = Lib.name lib in
+      Option.some_if (not (Lib_name.equal name (Lib_name.of_string "threads.posix"))) name)
   in
   Format.asprintf
     "%a@."
     Pp.to_fmt
-    (Pp.vbox
-       (Pp.concat
-          ~sep:Pp.cut
-          [ def
-              "external_libraries"
-              (List
-                 (List.filter_map externals ~f:(fun x ->
-                    let name = Lib.name x in
-                    if Lib_name.equal name (Lib_name.of_string "threads.posix")
-                    then None
-                    else Some (Lib_name.to_dyn name))))
-          ; Pp.nop
-          ; def "local_libraries" (List locals)
-          ; Pp.nop
-          ; def
-              "build_flags"
-              (let open Dyn in
-               list (pair (list string) (list string)) build_flags)
-          ; Pp.nop
-          ; def
-              "link_flags"
-              (let open Dyn in
-               list (pair (list string) (list string)) link_flags)
-          ]))
+    (Pp.concat
+       ~sep:Pp.cut
+       [ Pp.verbatim type_def
+       ; def "external_libraries" (Dyn.list Lib_name.to_dyn externals)
+       ; Pp.nop
+       ; def "local_libraries" (List locals)
+       ; Pp.nop
+       ; def "build_flags" (flags build_flags)
+       ; Pp.nop
+       ; def "link_flags" (flags link_flags)
+       ]
+     |> Pp.vbox)
 ;;
 
 let gen_rules sctx (exes : Executables.t) ~dir ~requires_link =
   Memo.Option.iter exes.bootstrap_info ~f:(fun fname ->
-    Super_context.add_rule
-      sctx
-      ~loc:exes.buildable.loc
-      ~dir
-      (Action_builder.write_file_dyn
-         (Path.Build.relative dir fname)
-         (rule sctx ~requires_link)))
+    Action_builder.write_file_dyn
+      (Path.Build.relative dir fname)
+      (rule sctx ~requires_link)
+    |> Super_context.add_rule sctx ~loc:exes.buildable.loc ~dir)
 ;;

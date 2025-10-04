@@ -2,7 +2,7 @@ open Core
 open Async
 module L = Laziness_preserving_deferred
 
-let () = Backtrace.elide := true
+let () = Dynamic.set_root Backtrace.elide true
 let value = "foo"
 
 let sexp_of_test = function
@@ -20,7 +20,8 @@ let%expect_test "Simple [of_eager] test" =
   let%bind () = Scheduler.yield_until_no_jobs_remain () in
   print_s [%sexp (Deferred.peek result1 : test)];
   print_s [%sexp (Deferred.peek result2 : test)];
-  [%expect {|
+  [%expect
+    {|
     (Ok foo)
     (Ok foo)
     |}];
@@ -37,7 +38,8 @@ let%expect_test "Simple [of_lazy] test" =
   let%bind () = Scheduler.yield_until_no_jobs_remain () in
   print_s [%sexp (Deferred.peek result1 : test)];
   print_s [%sexp (Deferred.peek result2 : test)];
-  [%expect {|
+  [%expect
+    {|
     (Ok foo)
     (Ok foo)
     |}];
@@ -151,7 +153,7 @@ let%expect_test "[force] is able to complete even if a [weak_run] has already st
   let%bind results =
     with_timeout
       (Time_float.Span.of_int_sec 3)
-      (let%map result1 = result1
+      (let%map result1
        and result2 = L.force t in
        Or_error.all_unit [ result1; result2 ])
   in
@@ -200,7 +202,7 @@ let%expect_test "When binding, [f] is only invoked once across multiple readers"
   let t =
     let open L.Let_syntax in
     let%bind () = L.of_lazy (Lazy_deferred.create Deferred.return) in
-    Set_once.set_exn called_f [%here] ();
+    Set_once.set_exn called_f ();
     return ()
   in
   let%bind result1 = L.weak_run t
@@ -309,7 +311,7 @@ module Monad_laws_test = struct
               ~cases:
                 ([%message
                    "" ~m:(m_case : Case.t) ~f:(f_case : Case.t) ~g:(g_case : Case.t)]
-                  : Sexp.t)
+                 : Sexp.t)
               (m >>= f >>= g : result1)
               (m >>= fun x -> f x >>= g : result2)]
     in

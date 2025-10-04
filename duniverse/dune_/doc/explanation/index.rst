@@ -7,8 +7,10 @@ the rest of the OCaml ecosystem.
 .. toctree::
    :maxdepth: 1
 
+   scopes
    preprocessing
    ocaml-ecosystem
+   package-management
    opam-integration
    bootstrap
    mental-model

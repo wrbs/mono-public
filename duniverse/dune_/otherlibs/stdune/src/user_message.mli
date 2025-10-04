@@ -66,6 +66,8 @@ type t =
   ; paragraphs : Style.t Pp.t list
   ; hints : Style.t Pp.t list
   ; annots : Annots.t
+  ; context : string option
+  ; dir : string option
   }
 
 val compare : t -> t -> Ordering.t
@@ -90,6 +92,8 @@ val make
   -> ?prefix:Style.t Pp.t
   -> ?hints:Style.t Pp.t list
   -> ?annots:Annots.t
+  -> ?context:string
+  -> ?dir:string
   -> Style.t Pp.t list
   -> t
 
@@ -103,7 +107,7 @@ val prerr : ?config:Print_config.t -> t -> unit
 val did_you_mean : string -> candidates:string list -> Style.t Pp.t list
 
 (** Produces a plain text representation of the error message, without the
-    "Error: " prefix. *)
+    "Error:" prefix. *)
 val to_string : t -> string
 
 (** Returns [true] if the message has an explicit location or one embedded in
@@ -120,3 +124,8 @@ val needs_stack_trace : t -> bool
 
 (** Formatting of shell commands *)
 val command : string -> Style.t Pp.t
+
+(** A message with a left and right component separated by a
+    space. The left component is padded to 12 characters so that the space
+    separating the left and right side of all messages are aligned. *)
+val aligned_message : left:Style.t * string -> right:Style.t Pp.t -> Style.t Pp.t

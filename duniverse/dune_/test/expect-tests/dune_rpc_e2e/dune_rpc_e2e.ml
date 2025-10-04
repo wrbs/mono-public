@@ -9,7 +9,7 @@ module Session = Csexp_rpc.Session
 
 (* enable to debug process stdout/stderr *)
 let debug = false
-let () = if debug then Dune_util.Log.init ~file:(Out_channel stderr) ()
+let () = if debug then Dune_util.Log.init ~file:Stderr ()
 
 let dune_prog =
   lazy
@@ -34,7 +34,7 @@ let init_chan ~root_dir =
     let* res = once () in
     match res with
     | Some res -> Fiber.return res
-    | None -> Scheduler.sleep 0.2 >>= loop
+    | None -> Scheduler.sleep ~seconds:0.2 >>= loop
   in
   loop ()
 ;;
@@ -109,7 +109,7 @@ let run ?env ~prog ~argv () =
   Unix.close stdout_w;
   Unix.close stderr_w;
   ( pid
-  , (let+ proc = Scheduler.wait_for_process ~timeout:3.0 pid in
+  , (let+ proc = Scheduler.wait_for_process ~timeout_seconds:3.0 pid in
      if proc.status <> Unix.WEXITED 0
      then (
        let name =
@@ -148,7 +148,7 @@ let dune_build client what =
       what
       (match res with
        | Success -> "succeeded"
-       | Failure -> "failed")
+       | Failure _ -> "failed")
 ;;
 
 let with_dune_watch ?watch_mode_args ?env f =
@@ -195,5 +195,5 @@ let run run =
     ~finally:(fun () -> Sys.chdir cwd)
     ~f:(fun () ->
       Sys.chdir (Path.to_string dir);
-      Scheduler.Run.go config run ~timeout:5.0 ~on_event:(fun _ _ -> ()))
+      Scheduler.Run.go config run ~timeout_seconds:5.0 ~on_event:(fun _ _ -> ()))
 ;;

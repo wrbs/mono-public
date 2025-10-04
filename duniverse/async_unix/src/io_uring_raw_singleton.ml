@@ -7,14 +7,12 @@ type t =
   | Ok of Io_uring_raw.t
 
 module Eventfd_driver = struct
-  (**
-     The submission and completion of tasks is completely autonomous, using two async jobs
-     (one for submission and one for completion) that get scheduled when needed.
-     Submission is done at the end of every cycle (submissions when the queue is empty
-     should be very cheap). If a syscall makes its way to the completion queue, the job
-     that will fill the corresponding deferred is scheduled the next time the async
-     scheduler checks for I/O through the file descriptor watcher.
-  *)
+  (** The submission and completion of tasks is completely autonomous, using two async
+      jobs (one for submission and one for completion) that get scheduled when needed.
+      Submission is done at the end of every cycle (submissions when the queue is empty
+      should be very cheap). If a syscall makes its way to the completion queue, the job
+      that will fill the corresponding deferred is scheduled the next time the async
+      scheduler checks for I/O through the file descriptor watcher. *)
   let register_hooks uring eventfd =
     Io_uring_raw.register_eventfd uring (Eventfd.to_file_descr eventfd);
     Async_kernel_scheduler.Expert.run_every_cycle_end (fun () ->
@@ -51,19 +49,23 @@ module Eventfd_driver = struct
          (Raw_scheduler.the_one_and_only ())
          fd
          `Read
-         (Raw_fd.Watching.Watch_repeatedly (eventfd_ready_job, finished_watching))
+         (Raw_fd.Watching.Watch_repeatedly
+            { job = eventfd_ready_job
+            ; finished_ivar = finished_watching
+            ; pending = (fun () -> Io_uring_raw.has_pending_jobs uring)
+            })
      with
      | `Watching -> ()
      | (`Already_closed | `Already_watching) as result ->
        raise_s
          [%sexp
            (("unexpected result when asked to watch eventfd", result)
-             : string * [ `Already_closed | `Already_watching ])]);
+            : string * [ `Already_closed | `Already_watching ])]);
     Deferred.upon (Ivar.read finished_watching) (fun reason ->
       raise_s
         [%sexp
           (("unexpectedly stopped watching eventfd", reason)
-            : string * [ `Bad_fd | `Closed | `Interrupted | `Unsupported ])])
+           : string * [ `Bad_fd | `Closed | `Interrupted | `Unsupported ])])
   ;;
 
   let force_uring_exn () =

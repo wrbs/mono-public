@@ -12,7 +12,7 @@ module Anons : sig
       | Maybe of t
       | Concat of t list
       | Ad_hoc of string
-    [@@deriving compare, sexp_of]
+    [@@deriving compare ~localize, sexp_of]
 
     include Invariant.S with type t := t
 
@@ -21,9 +21,9 @@ module Anons : sig
 
   type t =
     | Usage of string
-        (** When exec'ing an older binary whose help sexp doesn't expose the grammar. *)
+    (** When exec'ing an older binary whose help sexp doesn't expose the grammar. *)
     | Grammar of Grammar.t
-  [@@deriving compare, sexp_of]
+  [@@deriving compare ~localize, sexp_of]
 end
 
 module Num_occurrences : sig
@@ -31,7 +31,7 @@ module Num_occurrences : sig
     { at_least_once : bool
     ; at_most_once : bool
     }
-  [@@deriving compare, enumerate, sexp_of]
+  [@@deriving compare ~localize, enumerate, sexp_of]
 
   val to_help_string : t -> flag_name:string -> string
 end
@@ -42,7 +42,7 @@ module Flag_info : sig
     ; doc : string
     ; aliases : string list
     }
-  [@@deriving compare, fields ~getters, sexp_of]
+  [@@deriving compare ~localize, fields ~getters, sexp_of]
 
   (** [flag_name] infers the string which one would pass on the command line. It is not
       the same as the raw [name] field, which additionally encodes [num_occurrences] and
@@ -56,7 +56,7 @@ module Flag_info : sig
   val requires_arg : t -> bool Or_error.t
 
   val t_of_sexp : Sexp.t -> t
-    [@@deprecated "[since 2020-04] Use [Command.Stable.Shape.Flag_info]."]
+  [@@deprecated "[since 2020-04] Use [Command.Stable.Shape.Flag_info]."]
 end
 
 module Flag_help_display : sig
@@ -73,21 +73,21 @@ module Base_info : sig
     ; anons : Anons.t
     ; flags : Flag_info.t list
     }
-  [@@deriving compare, fields ~getters, sexp_of]
+  [@@deriving compare ~localize, fields ~getters, sexp_of]
 
   (** [find_flag t prefix] looks up the flag, if any, to which [prefix] refers.
 
       It raises if [prefix] does not begin with [-] as all flags should.
 
-      [find_flag] does not consider [aliases_excluded_from_help], and it assumes that
-      all flags can be passed by prefix. These are limitations in the underlying shape
+      [find_flag] does not consider [aliases_excluded_from_help], and it assumes that all
+      flags can be passed by prefix. These are limitations in the underlying shape
       representation. *)
   val find_flag : t -> string -> Flag_info.t Or_error.t
 
   val get_usage : t -> string
 
   val t_of_sexp : Sexp.t -> t
-    [@@deprecated "[since 2020-04] Use [Command.Stable.Shape.Base_info]."]
+  [@@deprecated "[since 2020-04] Use [Command.Stable.Shape.Base_info]."]
 end
 
 module Group_info : sig
@@ -96,13 +96,13 @@ module Group_info : sig
     ; readme : string option
     ; subcommands : (string, 'a) List.Assoc.t Lazy.t
     }
-  [@@deriving compare, fields ~getters, sexp_of]
+  [@@deriving compare ~localize, fields ~getters, sexp_of]
 
   val find_subcommand : 'a t -> string -> 'a Or_error.t
   val map : 'a t -> f:('a -> 'b) -> 'b t
 
   val t_of_sexp : (Sexp.t -> 'a) -> Sexp.t -> 'a t
-    [@@deprecated "[since 2020-04] Use [Command.Stable.Shape.Group_info]."]
+  [@@deprecated "[since 2020-04] Use [Command.Stable.Shape.Group_info]."]
 end
 
 module Exec_info : sig
@@ -113,10 +113,10 @@ module Exec_info : sig
     ; path_to_exe : string
     ; child_subcommand : string list
     }
-  [@@deriving compare, sexp_of]
+  [@@deriving compare ~localize, sexp_of]
 
   val t_of_sexp : Sexp.t -> t
-    [@@deprecated "[since 2020-04] Use [Command.Stable.Shape.Exec_info]."]
+  [@@deprecated "[since 2020-04] Use [Command.Stable.Shape.Exec_info]."]
 end
 
 (** Fully forced shapes are comparable and serializable. *)
@@ -125,12 +125,12 @@ module Fully_forced : sig
     | Basic of Base_info.t
     | Group of t Group_info.t
     | Exec of Exec_info.t * t
-  [@@deriving compare, sexp_of]
+  [@@deriving compare ~localize, sexp_of]
 
   val expanded_subcommands : t -> string list list
 
   val t_of_sexp : Sexp.t -> t
-    [@@deprecated "[since 2020-04] Use [Command.Stable.Shape.Fully_forced]."]
+  [@@deprecated "[since 2020-04] Use [Command.Stable.Shape.Fully_forced]."]
 end
 
 type t =
@@ -174,7 +174,7 @@ module Stable : sig
           | Maybe of t
           | Concat of t list
           | Ad_hoc of string
-        [@@deriving compare, sexp, stable_witness]
+        [@@deriving compare ~localize, sexp, stable_witness]
       end
     end
 
@@ -182,7 +182,7 @@ module Stable : sig
       type t = Anons.t =
         | Usage of string
         | Grammar of Grammar.V1.t
-      [@@deriving compare, sexp, stable_witness]
+      [@@deriving compare ~localize, sexp, stable_witness]
     end
   end
 
@@ -193,7 +193,7 @@ module Stable : sig
         ; doc : string
         ; aliases : string list
         }
-      [@@deriving compare, sexp, stable_witness]
+      [@@deriving compare ~localize, sexp, stable_witness]
     end
   end
 
@@ -205,7 +205,7 @@ module Stable : sig
         ; anons : Anons.V2.t
         ; flags : Flag_info.V1.t list
         }
-      [@@deriving compare, sexp, stable_witness]
+      [@@deriving compare ~localize, sexp, stable_witness]
     end
 
     module V1 : sig
@@ -229,7 +229,7 @@ module Stable : sig
         ; readme : string option
         ; subcommands : (string * 'a) list Lazy.t
         }
-      [@@deriving compare, sexp, stable_witness]
+      [@@deriving compare ~localize, sexp, stable_witness]
 
       val map : 'a t -> f:('a -> 'b) -> 'b t
     end
@@ -244,7 +244,7 @@ module Stable : sig
         ; path_to_exe : string
         ; child_subcommand : string list
         }
-      [@@deriving compare, sexp, stable_witness]
+      [@@deriving compare ~localize, sexp, stable_witness]
     end
 
     module Model = V3
@@ -281,7 +281,7 @@ module Stable : sig
         | Basic of Base_info.V2.t
         | Group of t Group_info.V2.t
         | Exec of Exec_info.V3.t * t
-      [@@deriving compare, sexp, stable_witness]
+      [@@deriving compare ~localize, sexp, stable_witness]
     end
   end
 end
@@ -300,6 +300,15 @@ module Private : sig
 
   val lookup_expand
     :  (string * ('a * [ `Full_match_required | `Prefix ])) list
+    -> string
+    -> Key_type.t
+    -> (string * 'a, string) Result.t
+
+  (** In case of ambiguity within an equivalence class, the returned key will be the first
+      matching key in the list. *)
+  val lookup_expand_with_equivalence_classes
+    :  [%equal: 'a]
+    -> (string * ('a * [ `Full_match_required | `Prefix ])) list
     -> string
     -> Key_type.t
     -> (string * 'a, string) Result.t

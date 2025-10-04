@@ -131,13 +131,19 @@ module Time_compat = struct
     (module struct
       type t = Time_ns.t
 
-      (* Format from the browser: yyyy-MM-ddThh:mm *)
+      (* Format from the browser: yyyy-MM-ddThh:mm. It allows trailing ":ss" or ":ss.SSS". *)
       let of_string s =
-        let parts = String.split_on_chars s ~on:[ 'T'; ':' ] in
-        let date = List.nth_exn parts 0 |> Date.of_string in
-        let hr = List.nth_exn parts 1 |> Int.of_string in
-        let min = List.nth_exn parts 2 |> Int.of_string in
-        let ofday = Time_ns.Ofday.create ~hr ~min () in
+        let date, time = String.lsplit2_exn ~on:'T' s in
+        let hr, min, sec, ms =
+          let time_parts = String.split_on_chars ~on:[ ':'; '.' ] time in
+          match List.map ~f:Int.of_string time_parts with
+          | [ hr; min ] -> hr, min, None, None
+          | [ hr; min; sec ] -> hr, min, Some sec, None
+          | [ hr; min; sec; ms ] -> hr, min, Some sec, Some ms
+          | _ -> failwith "Invalid time format. Expected hh:mm[:ss[.ms]]"
+        in
+        let date = Date.of_string date in
+        let ofday = Time_ns.Ofday.create ~hr ~min ?sec ?ms () in
         Time_ns.of_date_ofday ~zone date ofday
       ;;
 
@@ -159,9 +165,10 @@ end
 let maybe_disabled ~disabled attrs = if disabled then Attr.disabled :: attrs else attrs
 let add_attrs attrs' attrs = [ Attr.many (attrs @ attrs') ]
 
-let merge = function
-  | Merge_behavior.Merge -> Attr.many
-  | Legacy_dont_merge -> Attr.many_without_merge
+let merge ~(here : [%call_pos]) behavior l =
+  match behavior with
+  | Merge_behavior.Merge -> Attr.many l
+  | Legacy_dont_merge -> Attr.many_without_merge ~here l
 ;;
 
 let structural_list
@@ -198,8 +205,12 @@ module Value_normalizing_hook = struct
   ;;
 
   let value_property = Js.string "value"
-  let get_value element : 'a Js.t = Unsafe.get element value_property
-  let set_value element value = Unsafe.set element value_property value
+  let type_property = Js.string "type"
+  let get_value (element : 'a Js.t) : 'b Js.t = Unsafe.get element value_property
+
+  let set_value (element : 'a Js.t) (value : string) =
+    Unsafe.set element value_property (Js.string value)
+  ;;
 
   let install_event_handler element ~f =
     (* This event handler normalizes the value on the input element on the [change] event.
@@ -211,8 +222,7 @@ module Value_normalizing_hook = struct
        model swaps back and forth with the value in the element. *)
     let change_handler _ =
       let value = Js.to_string (get_value element) in
-      Option.iter (f value) ~f:(fun normalized ->
-        set_value element (Js.string normalized));
+      Option.iter (f value) ~f:(fun normalized -> set_value element normalized);
       Js._true
     in
     let change_handler = Dom.handler change_handler in
@@ -235,28 +245,93 @@ module Value_normalizing_hook = struct
       let combine _left right = right
     end
 
-    let init { Input.value; f; allow_updates_when_focused } element =
-      let should_set =
-        match allow_updates_when_focused with
-        | `Always -> true
-        | `Never -> not (is_active element)
-      in
-      if should_set then set_value element (Js.string value);
+    let init { Input.value; f; allow_updates_when_focused = _ } element =
+      set_value element value;
       let event_id = install_event_handler element ~f in
       { State.event_id }
     ;;
 
     let on_mount = `Do_nothing
+    let destroy _input state _element = removeEventListener state.State.event_id
 
-    let destroy _input state =
-      let { State.event_id } = state in
-      fun _element -> removeEventListener event_id
+    let set_value_if_necessary ~allow_updates_when_focused ~new_value element =
+      let element_value : string = Js.to_string (Unsafe.get element value_property) in
+      (* [equal_numerical_value] exists because the JSOO version of [parseFloat] raises if
+         the value parsed is NaN. From MDN, the value of a number input can either be a
+         number or the empty string, the latter of which parses to NaN.
+
+         Because we only call this function when two OCaml string values are not equal and
+         only use the output of [parseFloat] to compare and decide whether we need to
+         update the value property, this is fine. We don't have to worry about leaking
+         NaNs back into OCaml.
+
+         We could special case the empty string, but using the browser's underlying
+         [parseFloat] sounds a bit more resilient to potential browser behaviour changes
+         in the future. *)
+      let equal_numerical_value : string -> string -> bool =
+        let equal = Unsafe.pure_js_expr {|(a, b) => (parseFloat(a) === parseFloat(b))|} in
+        fun a b ->
+          Js.to_bool
+            (Unsafe.fun_call
+               equal
+               [| Unsafe.inject (Js.string a); Unsafe.inject (Js.string b) |])
+      in
+      let should_set_value =
+        match allow_updates_when_focused with
+        | `Never -> if is_active element then `Should_not_update else `Should_update
+        | `Always ->
+          (* This condition looks complex, but it's mostly interacting with JSOO. We
+             SHOULD NOT set the value property of the element only if either:
+              1. The element's current value already matches the value being set.
+              2. The element is a number input and
+                 [parseFloat(element.value) !== parseFloat(new_value)]
+
+             The first condition ensures that typing an invalid state into the input
+             doesn't cause the input to be cleared.
+
+             The second condition ensures that typing "1e4" into a number input doesn't
+             immediately expand to 10000.
+
+             There is one small catch: clearing a form might not work in certain niche
+             scenarios. If the form is currently in a state where its value is "", then
+             setting "" won't actually trigger a [set_value]. This would happen if the
+             user is in an invalid state (e.g. they have typed the month and day but not
+             year of a date input) and we attempt to set the empty value.
+
+             In practice, this probably isn't a problem. If people run into this and are
+             seriously sad, they can hack around it by setting a non-empty value, followed
+             by the empty one. A more principled solution would be to distinguish whether
+             the new value is being set from user input or programmatically. *)
+          (match String.equal new_value element_value with
+           | true -> `Should_not_update
+           | false ->
+             let element_type : Js.js_string Js.t option =
+               Js.Opt.to_option (Unsafe.get element type_property)
+             in
+             (match element_type with
+              | None -> `Should_update
+              | Some js_string ->
+                (match Js.to_string js_string with
+                 | "number" ->
+                   (match equal_numerical_value element_value new_value with
+                    | true -> `Should_not_update
+                    | false -> `Should_update)
+                 | _ -> `Should_update)))
+      in
+      match should_set_value with
+      | `Should_update -> set_value element new_value
+      | `Should_not_update -> ()
     ;;
 
-    let update ~old_input ~new_input state element =
-      destroy old_input state element;
-      let { State.event_id } = init new_input element in
-      state.State.event_id <- event_id
+    let update
+      ~old_input:_
+      ~new_input:{ Input.value; f; allow_updates_when_focused }
+      state
+      element
+      =
+      set_value_if_necessary ~allow_updates_when_focused ~new_value:value element;
+      removeEventListener state.State.event_id;
+      state.State.event_id <- install_event_handler element ~f
     ;;
   end
 
@@ -718,7 +793,7 @@ module Entry = struct
   let input_node
     ?(extra_attrs = [])
     ?(disabled = false)
-    ?(placeholder = "")
+    ?placeholder
     ?(merge_behavior = Merge_behavior.Merge)
     ?key
     attrs
@@ -729,7 +804,9 @@ module Entry = struct
         [ (merge merge_behavior)
             (attrs
              |> add_attrs
-                  [ Attr.placeholder placeholder; Attr.create "spellcheck" "false" ]
+                  [ Option.value_map placeholder ~f:Attr.placeholder ~default:Attr.empty
+                  ; Attr.create "spellcheck" "false"
+                  ]
              |> maybe_disabled ~disabled
              |> add_attrs extra_attrs)
         ]
@@ -760,12 +837,12 @@ module Entry = struct
     ?placeholder
     ?(should_normalize = true)
     ?(merge_behavior = Merge_behavior.Merge)
+    ?(allow_updates_when_focused = `Always)
     ?key
     (module M : Stringable.S with type t = t)
     ~type_attrs
     ~value
     ~on_input
-    ~allow_updates_when_focused
     =
     let value =
       let value = Option.value_map ~f:M.to_string value ~default:"" in
@@ -793,11 +870,11 @@ module Entry = struct
     ?disabled
     ?placeholder
     ?(merge_behavior = Merge_behavior.Merge)
+    ?(allow_updates_when_focused = `Always)
     ?key
     (module M : Stringable.S with type t = t)
     ~value
     ~on_input
-    ~allow_updates_when_focused
     =
     stringable_input_opt
       ?extra_attrs
@@ -821,11 +898,11 @@ module Entry = struct
     ?placeholder
     ?on_return
     ?(merge_behavior = Merge_behavior.Merge)
+    ?(allow_updates_when_focused = `Always)
     ?key
     (module M : Stringable.S with type t = t)
     ~value
     ~on_input
-    ~allow_updates_when_focused
     =
     let (module V) = Validated.lift (module M) in
     let value_attr =
@@ -853,10 +930,10 @@ module Entry = struct
     ?disabled
     ?placeholder
     ?(merge_behavior = Merge_behavior.Merge)
+    ?(allow_updates_when_focused = `Always)
     ?key
     ~value
     ~on_input
-    ~allow_updates_when_focused
     ()
     =
     of_stringable
@@ -878,8 +955,8 @@ module Entry = struct
     ?disabled
     ?placeholder
     ?(merge_behavior = Merge_behavior.Merge)
+    ?(allow_updates_when_focused = `Always)
     ?key
-    ~allow_updates_when_focused
     ~value
     ~on_input
     ()
@@ -905,6 +982,7 @@ module Entry = struct
     ?disabled
     ?placeholder
     ?(merge_behavior = Merge_behavior.Merge)
+    ?(allow_updates_when_focused = `Always)
     ?key
     (module M : Stringable.S with type t = t)
     ~value
@@ -922,6 +1000,7 @@ module Entry = struct
       ~value
       ~on_input
       ~merge_behavior
+      ~allow_updates_when_focused
   ;;
 
   let range
@@ -931,6 +1010,7 @@ module Entry = struct
     ?disabled
     ?placeholder
     ?(merge_behavior = Merge_behavior.Merge)
+    ?(allow_updates_when_focused = `Always)
     ?key
     (module M : Stringable.S with type t = t)
     ~value
@@ -948,6 +1028,7 @@ module Entry = struct
       ~value
       ~on_input
       ~merge_behavior
+      ~allow_updates_when_focused
   ;;
 
   let time
@@ -956,10 +1037,10 @@ module Entry = struct
     ?disabled
     ?placeholder
     ?(merge_behavior = Merge_behavior.Merge)
+    ?(allow_updates_when_focused = `Always)
     ?key
     ~value
     ~on_input
-    ~allow_updates_when_focused
     ()
     =
     stringable_input_opt
@@ -983,10 +1064,10 @@ module Entry = struct
     ?disabled
     ?placeholder
     ?(merge_behavior = Merge_behavior.Merge)
+    ?(allow_updates_when_focused = `Always)
     ?key
     ~value
     ~on_input
-    ~allow_updates_when_focused
     ()
     =
     stringable_input_opt
@@ -1011,10 +1092,10 @@ module Entry = struct
     ?placeholder
     ?utc_offset
     ?(merge_behavior = Merge_behavior.Merge)
+    ?(allow_updates_when_focused = (`Never : [ `Never ]))
     ?key
     ~value
     ~on_input
-    ~allow_updates_when_focused
     ()
     =
     let hours =
@@ -1048,7 +1129,7 @@ module Entry = struct
       ~value
       ~on_input
       ~merge_behavior
-      ~allow_updates_when_focused
+      ~allow_updates_when_focused:(allow_updates_when_focused :> [ `Always | `Never ])
   ;;
 
   let text_area
@@ -1057,10 +1138,10 @@ module Entry = struct
     ?(disabled = false)
     ?(placeholder = "")
     ?(merge_behavior = Merge_behavior.Merge)
+    ?(allow_updates_when_focused = `Always)
     ?key
     ~value
     ~on_input
-    ~allow_updates_when_focused
     ()
     =
     Node.textarea

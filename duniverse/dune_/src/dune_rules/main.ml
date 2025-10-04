@@ -46,13 +46,11 @@ let execution_parameters =
 ;;
 
 let init
-  ?(action_runner = fun _ -> None)
-  ?(action_runners = fun _ -> [])
-  ~stats
-  ~sandboxing_preference
-  ~cache_config
-  ~(cache_debug_flags : Dune_engine.Cache_debug_flags.t)
-  ()
+      ~stats
+      ~sandboxing_preference
+      ~cache_config
+      ~(cache_debug_flags : Dune_engine.Cache_debug_flags.t)
+      ()
   : unit
   =
   let promote_source ~chmod ~delete_dst_if_it_is_a_directory ~src ~dst =
@@ -97,8 +95,6 @@ let init
     ~execution_parameters
     ~source_tree:(module Source_tree)
     ~shared_cache:(module Shared_cache)
-    ~action_runner
-    ~action_runners
     ~write_error_summary:(fun _ -> Fiber.return ())
 ;;
 

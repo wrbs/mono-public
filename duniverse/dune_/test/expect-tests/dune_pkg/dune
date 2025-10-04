@@ -1,7 +1,7 @@
 (library
  (name dune_pkg_unit_tests)
  (inline_tests
-  (deps tar-inputs/plaintext.md tarball.tar.gz %{bin:git}))
+  (deps tar-inputs/plaintext.md tarball.tar.gz %{bin:git} %{bin:curl}))
  (libraries
   dune_tests_common
   stdune
@@ -20,7 +20,6 @@
   ;; in dune-project
   ppx_expect.config
   ppx_expect.config_types
-  ppx_expect.common
   ppx_inline_test.config)
  (preprocess
   (pps ppx_expect)))

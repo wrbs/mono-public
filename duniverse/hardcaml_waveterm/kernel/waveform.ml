@@ -7,10 +7,10 @@ module type S = Waveform_intf.S
 module M = Waveform_intf.M
 
 module Make
-  (Data : Data.S)
-  (Wave : Wave.M(Data).S)
-  (Waves : Waves.M(Data)(Wave).S)
-  (Render : Render.M(Data)(Wave)(Waves).S) =
+    (Data : Data.S)
+    (Wave : Wave.M(Data).S)
+    (Waves : Waves.M(Data)(Wave).S)
+    (Render : Render.M(Data)(Wave)(Waves).S) =
 struct
   let apply_wave_format
     (t : Wave.t)
@@ -83,18 +83,19 @@ struct
        about what [hardcaml_waveterm] is actually doing and do our best to construct the
        requested display.  In fact, [t.waves] should match [t.ports]. *)
     |> List.filter_map ~f:(fun ((port : Port.t), fmt_align_opt) ->
-         Map.find waves port.port_name
-         |> Option.map ~f:(fun wave ->
-              match fmt_align_opt, wave with
-              | Some (format, alignment), _ -> apply_wave_format wave format alignment
-              (* None represents default format. Don't apply default to Index and Custom *)
-              | None, Data (_, _, Wave_format.Index _, _)
-              | None, Data (_, _, Wave_format.Custom _, _) -> wave
-              | None, _ ->
-                Display_rules.run_rule Display_rule.Default port
-                |> Option.map ~f:(fun (format, alignment) ->
-                     apply_wave_format wave format alignment)
-                |> Option.value ~default:wave))
+      Map.find waves port.port_name
+      |> Option.map ~f:(fun wave ->
+        match fmt_align_opt, wave with
+        | Some (format, alignment), _ -> apply_wave_format wave format alignment
+        (* None represents default format. Don't apply default to Map, Index and Custom *)
+        | None, Data (_, _, Wave_format.Map _, _)
+        | None, Data (_, _, Wave_format.Index _, _)
+        | None, Data (_, _, Wave_format.Custom _, _) -> wave
+        | None, _ ->
+          Display_rules.run_rule Display_rule.Default port
+          |> Option.map ~f:(fun (format, alignment) ->
+            apply_wave_format wave format alignment)
+          |> Option.value ~default:wave))
     |> Array.of_list
   ;;
 
@@ -114,7 +115,7 @@ struct
     ?display_rules
     ?signals_alignment
     ?(display_width = 70)
-    ?(display_height = 20)
+    ?display_height
     ?(wave_width = 3)
     ?(wave_height = 1)
     ?(start_cycle = 0)
@@ -122,9 +123,6 @@ struct
     ?signals_width
     t
     =
-    if display_height < 3
-    then
-      raise_s [%message "Invalid display height.  Must be >= 3." (display_height : int)];
     if display_width < 7
     then raise_s [%message "Invalid display width.  Must be >= 7." (display_width : int)];
     if wave_height < 0
@@ -137,6 +135,26 @@ struct
             "Invalid signals_width. Require signals_width < display_width."
               (signals_width : int)
               (display_width : int)]);
+    let waves =
+      { Waves.cfg = { Waves.Config.default with wave_width; wave_height; start_cycle }
+      ; waves = sort_ports_and_formats t display_rules
+      }
+    in
+    let display_height =
+      match display_height with
+      | Some display_height ->
+        if display_height < 3
+        then
+          raise_s
+            [%message "Invalid display height.  Must be >= 3." (display_height : int)];
+        display_height
+      | None ->
+        Int.min
+          256
+          (2
+           + Array.fold waves.waves ~init:0 ~f:(fun acc w ->
+             acc + Wave.get_height_in_chars w ~wave_height))
+    in
     Render.Static.draw
       ?signals_alignment
       ?signals_width
@@ -144,9 +162,7 @@ struct
       ~style:Render.Styles.black_on_white
       ~rows:display_height
       ~cols:display_width
-      { cfg = { Waves.Config.default with wave_width; wave_height; start_cycle }
-      ; waves = sort_ports_and_formats t display_rules
-      }
+      waves
   ;;
 
   let to_buffer

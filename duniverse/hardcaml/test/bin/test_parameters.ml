@@ -1,20 +1,20 @@
 (* Generate Hardcaml instantiations for VHDL and Verilog to test various
    parameter types.  See hardcaml/test/rtl/README. *)
 
-open! Import
+open Core
+open Hardcaml
+open Hardcaml_test
 
 let () =
-  Out_channel.with_file "test_instantiate_verilog.v" ~f:(fun f ->
-    Rtl.output
-      Verilog
-      ~output_mode:(To_channel f)
-      (Test_parameter.create_instantiation_test "verilog"))
+  let circ, config = Test_parameter.create_instantiation_test "verilog" in
+  Out_channel.write_all
+    "test_instantiate_verilog.v"
+    ~data:(Rtl.create Verilog [ circ ] ~config |> Rtl.full_hierarchy |> Rope.to_string)
 ;;
 
 let () =
-  Out_channel.with_file "test_instantiate_vhdl.vhd" ~f:(fun f ->
-    Rtl.output
-      Vhdl
-      ~output_mode:(To_channel f)
-      (Test_parameter.create_instantiation_test "vhdl"))
+  let circ, config = Test_parameter.create_instantiation_test "vhdl" in
+  Out_channel.write_all
+    "test_instantiate_vhdl.vhd"
+    ~data:(Rtl.create Vhdl [ circ ] ~config |> Rtl.full_hierarchy |> Rope.to_string)
 ;;

@@ -18,7 +18,7 @@ include (
 
     let of_list = of_char_list
   end) :
-    sig end)
+  sig end)
 
 let%expect_test "Hash_set" =
   Base_container_tests.test_container_s0
@@ -91,6 +91,7 @@ let%expect_test "String" =
 
       (* eta-expand due to [local_] types *)
       let mem t c = mem t c
+      let append t1 t2 = append t1 t2
 
       (* leave off the [?sep] argument *)
       let concat list = concat list
@@ -138,5 +139,7 @@ let%expect_test "String" =
     Container: testing [filteri]
     Container: testing [filter_mapi]
     Container: testing [concat_mapi]
+    Container: testing [partitioni_tf]
+    Container: testing [partition_mapi]
     |}]
 ;;

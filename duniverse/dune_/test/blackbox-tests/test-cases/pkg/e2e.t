@@ -19,13 +19,13 @@ Make a library:
   >  (public_name foo))
   > EOF
   $ cd ..
-  $ tar -czf foo.tar.gz foo
+  $ tar cf foo.tar foo
   $ rm -rf foo
 
-Start a oneshot webserver so dune can download the packgae with http:
-  $ webserver_oneshot --content-file foo.tar.gz --port-file port.txt &
-  $ until test -f port.txt; do sleep 0.1; done
-  $ PORT=$(cat port.txt)
+Configure our fake curl to serve the tarball
+
+  $ echo foo.tar >> fake-curls
+  $ PORT=1
 
 Make a package for the library:
   $ mkpkg foo <<EOF
@@ -46,7 +46,7 @@ Make a package for the library:
   > url {
   >  src: "http://0.0.0.0:$PORT"
   >  checksum: [
-  >   "md5=$(md5sum foo.tar.gz | cut -f1 -d' ')"
+  >   "md5=$(md5sum foo.tar | cut -f1 -d' ')"
   >  ]
   > }
   > EOF
@@ -75,10 +75,5 @@ Lock, build, and run the executable in the project:
   $ dune pkg lock
   Solution for dune.lock:
   - foo.0.0.1
-
-# Temporary failure until 10080 is fixed
-
   $ dune exec bar
   Hello, World!
-
-  $ wait

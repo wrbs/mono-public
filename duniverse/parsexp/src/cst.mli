@@ -3,8 +3,7 @@
 (** This module exposes a type that describe the full contents of a source file containing
     s-expressions.
 
-    One can use this type to do low-level rewriting of s-expression files.
-*)
+    One can use this type to do low-level rewriting of s-expression files. *)
 
 open! Import
 
@@ -12,7 +11,7 @@ type t =
   | Atom of
       { loc : Positions.range
       ; atom : string
-          (** Source syntax of atom. The parser only fills this for atoms that are quoted in
+      (** Source syntax of atom. The parser only fills this for atoms that are quoted in
           the source, but it makes sense for unquoted atoms too (to ensure they get
           printed unquoted). *)
       ; unescaped : string option

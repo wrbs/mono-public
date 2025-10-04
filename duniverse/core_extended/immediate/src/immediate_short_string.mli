@@ -10,19 +10,20 @@ open! Core
 
 include Immediate_intf.String_no_option
 
-val of_bytes : Bytes.t -> t
-val of_uint32 : Int_repr.Uint32.t -> t
-val of_local_string : string -> t
-val to_local_string : t -> string
-val of_substring : string -> pos:int -> len:int -> t
-val to_local_bytes : t -> Bytes.t
+val of_bytes : Bytes.t -> t [@@zero_alloc]
+val of_uint32 : Int_repr.Uint32.t -> t [@@zero_alloc]
+val of_local_string : local_ string -> t [@@zero_alloc]
+val to_local_string : t -> local_ string [@@zero_alloc]
+val of_substring : local_ string -> pos:int -> len:int -> t [@@zero_alloc]
+val to_local_bytes : t -> local_ Bytes.t [@@zero_alloc]
 val max_length : int
-val is_valid_length : int -> bool
-val is_valid_string : string -> bool
-val pad_right : t -> char:char -> len:int -> t
+val is_valid_length : int -> bool [@@zero_alloc]
+val is_valid_string : local_ string -> bool [@@zero_alloc]
+val pad_right : t -> char:char -> len:int -> t [@@zero_alloc]
 
 (** Raises if the result exceeds [max_length]. *)
 val append_exn : t -> t -> t
+[@@zero_alloc]
 
 val gen' : char Quickcheck.Generator.t -> t Quickcheck.Generator.t
 val gen_with_length : int -> char Quickcheck.Generator.t -> t Quickcheck.Generator.t
@@ -39,7 +40,9 @@ module Option : sig
     module V1 : sig
       type nonrec t = t [@@deriving hash]
 
+      include Sexpable.S_with_grammar with type t := t
       include Stable_without_comparator with type t := t
+      include Intable with type t := t
     end
   end
 end
@@ -48,7 +51,9 @@ module Stable : sig
   module V1 : sig
     type nonrec t = t [@@deriving hash]
 
-    include Stable_without_comparator_with_witness with type t := t
+    include%template Stable_without_comparator_with_witness [@mode local] with type t := t
+
+    include Sexpable.S_with_grammar with type t := t
     include Intable with type t := t
     include Stringable with type t := t
     include Equal.S with type t := t

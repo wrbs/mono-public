@@ -1,25 +1,27 @@
 (** This module just re-exports lots of modules from [Async_rpc_kernel] and adds some
-    Unix-specific wrappers in [Connection] (for using [Reader], [Writer], and [Tcp]).  For
-    documentation, see {{!Async_rpc_kernel.Rpc}[Rpc]} and
-    {{!Async_rpc_kernel__.Connection_intf}[Connection_intf]} in the
-    {{!Async_rpc_kernel}[Async_rpc_kernel]} library.
-*)
+    Unix-specific wrappers in [Connection] (for using [Reader], [Writer], and [Tcp]). For
+    documentation, see {{!Async_rpc_kernel.Rpc} [Rpc]} and
+    {{!Async_rpc_kernel__.Connection_intf} [Connection_intf]} in the {{!Async_rpc_kernel}
+    [Async_rpc_kernel]} library. *)
 
 open! Core
 open! Import
-module Transport = Rpc_transport
-module Low_latency_transport = Rpc_transport_low_latency
 module Any = Rpc_kernel.Any
 module Description = Rpc_kernel.Description
 module How_to_recognise_errors = Rpc_kernel.How_to_recognise_errors
 module Implementation = Rpc_kernel.Implementation
 module Implementations = Rpc_kernel.Implementations
+module Low_latency_transport = Rpc_transport_low_latency
 module On_exception = Rpc_kernel.On_exception
 module One_way = Rpc_kernel.One_way
+module Or_not_authorized = Async_rpc_kernel.Or_not_authorized
+module Pipe_close_reason = Rpc_kernel.Pipe_close_reason
 module Pipe_rpc = Rpc_kernel.Pipe_rpc
 module Rpc = Rpc_kernel.Rpc
+module Rpc_metadata = Async_rpc_kernel.Rpc_metadata
 module State_rpc = Rpc_kernel.State_rpc
-module Pipe_close_reason = Rpc_kernel.Pipe_close_reason
+module Tracing_event = Async_rpc_kernel.Tracing_event
+module Transport = Rpc_transport
 
 module Connection : sig
   include module type of struct
@@ -30,8 +32,8 @@ module Connection : sig
       [Async_rpc_kernel.Rpc.Connection]; see [Connection_intf] in that library for
       documentation. The differences are that:
 
-      - they take an [Async_unix.Reader.t], [Async_unix.Writer.t] and
-        [max_message_size] instead of a [Transport.t]
+      - they take an [Async_unix.Reader.t], [Async_unix.Writer.t] and [max_message_size]
+        instead of a [Transport.t]
       - they use [Time] instead of [Time_ns] *)
   val create
     :  ?implementations:'s Implementations.t
@@ -41,18 +43,18 @@ module Connection : sig
     -> ?heartbeat_config:Heartbeat_config.t
     -> ?description:Info.t
     -> ?identification:Bigstring.t
+    -> ?provide_rpc_shapes:bool
     -> Reader.t
     -> Writer.t
     -> (t, Exn.t) Result.t Deferred.t
 
   (** As of Feb 2017, the RPC protocol started to contain a magic number so that one can
-      identify RPC communication.  The bool returned by [contains_magic_prefix] says
+      identify RPC communication. The bool returned by [contains_magic_prefix] says
       whether this magic number was observed.
 
       This operation is a "peek" that does not advance any pointers associated with the
-      reader.  In particular, it makes sense to call [create] on a reader after calling
-      this function.
-  *)
+      reader. In particular, it makes sense to call [create] on a reader after calling
+      this function. *)
   val contains_magic_prefix : Reader.t -> bool Deferred.t
 
   val with_close
@@ -89,17 +91,15 @@ module Connection : sig
       {[
         ~make_transport:(fun fd ~max_message_size ->
           Rpc.Transport.of_fd fd ~max_message_size ~buffer_age_limit:`Unlimited)
-      ]}
-  *)
+      ]} *)
   type transport_maker = Fd.t -> max_message_size:int -> Transport.t
 
   (** [serve implementations ~port ?on_handshake_error ()] starts a server with the given
-      implementation on [port].  The optional auth function will be called on all incoming
+      implementation on [port]. The optional auth function will be called on all incoming
       connections with the address info of the client and will disconnect the client
-      immediately if it returns false.  This auth mechanism is generic and does nothing
+      immediately if it returns false. This auth mechanism is generic and does nothing
       other than disconnect the client -- any logging or record of the reasons is the
-      responsibility of the auth function itself.
-  *)
+      responsibility of the auth function itself. *)
   val serve
     :  implementations:'s Implementations.t
     -> initial_connection_state:('address -> t -> 's)
@@ -112,12 +112,13 @@ module Connection : sig
     -> ?make_transport:transport_maker
     -> ?handshake_timeout:Time_float.Span.t
     -> ?heartbeat_config:Heartbeat_config.t
-    -> ?auth:('address -> bool) (** default is [`Ignore] *)
+    -> ?auth:('address -> bool Deferred.t) (** default is [`Ignore] *)
     -> ?on_handshake_error:[ `Raise | `Ignore | `Call of 'address -> exn -> unit ]
          (** default is [`Ignore] *)
     -> ?on_handler_error:[ `Raise | `Ignore | `Call of 'address -> exn -> unit ]
     -> ?description:Info.t
     -> ?identification:Bigstring.t
+    -> ?provide_rpc_shapes:bool
     -> unit
     -> ('address, 'listening_on) Tcp.Server.t Deferred.t
 
@@ -135,7 +136,7 @@ module Connection : sig
     -> ?make_transport:transport_maker
     -> ?handshake_timeout:Time_float.Span.t
     -> ?heartbeat_config:Heartbeat_config.t
-    -> ?auth:(Socket.Address.Inet.t -> bool) (** default is [`Ignore] *)
+    -> ?auth:(Socket.Address.Inet.t -> bool Deferred.t) (** default is [`Ignore] *)
     -> ?on_handshake_error:
          [ `Raise | `Ignore | `Call of Socket.Address.Inet.t -> exn -> unit ]
          (** default is [`Ignore] *)
@@ -143,6 +144,7 @@ module Connection : sig
          [ `Raise | `Ignore | `Call of Socket.Address.Inet.t -> exn -> unit ]
     -> ?description:Info.t
     -> ?identification:Bigstring.t
+    -> ?provide_rpc_shapes:bool
     -> unit
     -> (Socket.Address.Inet.t, int) Tcp.Server.t
 
@@ -161,7 +163,7 @@ module Connection : sig
     -> ?make_transport:transport_maker
     -> ?handshake_timeout:Time_float.Span.t
     -> ?heartbeat_config:Heartbeat_config.t
-    -> ?auth:(Socket.Address.Unix.t -> bool) (** default is [`Ignore] *)
+    -> ?auth:(Socket.Address.Unix.t -> bool Deferred.t) (** default is [`Ignore] *)
     -> ?on_handshake_error:
          [ `Raise | `Ignore | `Call of Socket.Address.Unix.t -> exn -> unit ]
          (** default is [`Ignore] *)
@@ -169,6 +171,7 @@ module Connection : sig
          [ `Raise | `Ignore | `Call of Socket.Address.Unix.t -> exn -> unit ]
     -> ?description:Info.t
     -> ?identification:Bigstring.t
+    -> ?provide_rpc_shapes:bool
     -> unit
     -> Tcp.Server.unix Deferred.t
 
@@ -186,6 +189,7 @@ module Connection : sig
     -> ?heartbeat_config:Heartbeat_config.t
     -> ?description:Info.t
     -> ?identification:Bigstring.t
+    -> ?provide_rpc_shapes:bool
     -> _ Tcp.Where_to_connect.t
     -> (t, Exn.t) Result.t Deferred.t
 
@@ -199,13 +203,14 @@ module Connection : sig
     -> ?heartbeat_config:Heartbeat_config.t
     -> ?description:Info.t
     -> ?identification:Bigstring.t
+    -> ?provide_rpc_shapes:bool
     -> 'address Tcp.Where_to_connect.t
     -> ('address * t, Exn.t) Result.t Deferred.t
 
   (** [with_client where_to_connect f] connects to the server at [where_to_connect] and
       runs f until an exception is thrown or until the returned Deferred is fulfilled.
 
-      NOTE:  As with [with_close], you should be careful when using this with [Pipe_rpc].
+      NOTE: As with [with_close], you should be careful when using this with [Pipe_rpc].
       See [with_close] for more information. *)
   val with_client
     :  ?implementations:Client_implementations.t
@@ -215,6 +220,7 @@ module Connection : sig
     -> ?heartbeat_config:Heartbeat_config.t
     -> ?description:Info.t
     -> ?identification:Bigstring.t
+    -> ?provide_rpc_shapes:bool
     -> _ Tcp.Where_to_connect.t
     -> (t -> 'a Deferred.t)
     -> ('a, Exn.t) Result.t Deferred.t
@@ -229,6 +235,7 @@ module Connection : sig
     -> ?heartbeat_config:Heartbeat_config.t
     -> ?description:Info.t
     -> ?identification:Bigstring.t
+    -> ?provide_rpc_shapes:bool
     -> 'transport Tcp.Where_to_connect.t
     -> (remote_server:'transport -> t -> 'a Deferred.t)
     -> ('a, Exn.t) Result.t Deferred.t

@@ -61,11 +61,7 @@ let create ?rotate ?finalize ~flush write =
 ;;
 
 let create_expert = create_expert ?rotate:None
-
-let empty =
-  create_expert (fun (_ : Message_event.t Queue.t) -> Deferred.unit) ~flush:return
-;;
-
+let empty = create_unbuffered (ignore : Message_event.t -> unit) ~flush:return
 let write t = t.write
 let rotate t = t.rotate ()
 let flush t = t.flush ()
@@ -81,12 +77,16 @@ let filter_to_level t ~level =
   { t with write }
 ;;
 
+let transform_message t ~f =
+  let write message = f message |> t.write in
+  { t with write }
+;;
+
 let stderr_sync =
   lazy
     (let zone =
        (* Set all the tests to run in the NYC time zone to keep this deterministic in
           tests, and preserve compatibility with [Time_ns_unix].
-
        *)
        if am_running_test then Timezone.find_exn "nyc" else force Timezone.local
      in
@@ -106,7 +106,8 @@ let stderr =
 
 module Private = struct
   let buffered_background_error t = t.buffered_background_error
-  let set_async_stderr_output t ~here = Set_once.set_exn stderr_async here t
+  let set_async_stderr_output t ~here = Set_once.set_exn stderr_async ~here t
+  let buffered_batch_size = Buffered_output.Private.batch_size
 end
 
 module For_testing = struct

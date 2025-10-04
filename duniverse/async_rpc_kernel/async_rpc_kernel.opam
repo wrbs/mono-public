@@ -1,5 +1,4 @@
 opam-version: "2.0"
-version: "v0.17.0"
 maintainer: "Jane Street developers"
 authors: ["Jane Street Group, LLC"]
 homepage: "https://github.com/janestreet/async_rpc_kernel"
@@ -11,14 +10,18 @@ build: [
   ["dune" "build" "-p" name "-j" jobs]
 ]
 depends: [
-  "ocaml"                   {>= "5.1.0"}
-  "async_kernel"            {>= "v0.17" & < "v0.18"}
-  "core"                    {>= "v0.17" & < "v0.18"}
-  "core_kernel"             {>= "v0.17" & < "v0.18"}
-  "gel"                     {>= "v0.17" & < "v0.18"}
-  "ppx_jane"                {>= "v0.17" & < "v0.18"}
-  "protocol_version_header" {>= "v0.17" & < "v0.18"}
-  "dune"                    {>= "3.11.0"}
+  "ocaml" {>= "5.1.0"}
+  "async_kernel"
+  "base"
+  "bin_prot"
+  "core"
+  "core_extended"
+  "core_kernel"
+  "pipe_with_writer_error"
+  "ppx_jane"
+  "protocol_version_header"
+  "sexplib"
+  "dune"                    {>= "3.17.0"}
 ]
 available: arch != "arm32" & arch != "x86_32"
 synopsis: "Platform-independent core of Async RPC library"

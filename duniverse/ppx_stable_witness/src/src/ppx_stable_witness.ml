@@ -46,18 +46,21 @@ module Value_binding = struct
 end
 
 module Signature = struct
-  let expand_type_declaration td =
+  let expand_type_declaration td ~portable =
     let td = name_type_params_in_td td in
     let loc = ghost td.ptype_loc in
-    value_description
+    Ppxlib_jane.Ast_builder.Default.value_description
       ~loc
       ~name:(Loc.map ~f:stable_witness_name td.ptype_name)
       ~type_:(combinator_type_of_type_declaration td ~f:stable_witness_type)
+      ~modalities:(if portable then [ Ppxlib_jane.Modality "portable" ] else [])
       ~prim:[]
     |> psig_value ~loc
   ;;
 
-  let expand ~loc:_ ~path:_ (_, tds) : signature = List.map tds ~f:expand_type_declaration
+  let expand ~loc:_ ~path:_ (_, tds) ~portable : signature_item list =
+    List.map tds ~f:(expand_type_declaration ~portable)
+  ;;
 end
 
 module Structure = struct
@@ -98,21 +101,19 @@ module Structure = struct
     match Attribute.get custom_attr core_type with
     | Some expr -> [ check ~loc expr (stable_witness_type ~loc core_type) ]
     | None ->
-      (match core_type.ptyp_desc with
-       | Ptyp_any -> [ unsupported ~loc "wildcard type" ]
-       | Ptyp_var var -> [ check_type_variable ~loc var ]
-       | Ptyp_arrow _ -> [ unsupported ~loc "arrow type" ]
-       | Ptyp_tuple tuple -> List.concat_map tuple ~f:check_core_type
+      (match Ppxlib_jane.Shim.Core_type_desc.of_parsetree core_type.ptyp_desc with
+       | Ptyp_var (var, _) -> [ check_type_variable ~loc var ]
+       | Ptyp_tuple tuple -> List.concat_map tuple ~f:(fun (_, t) -> check_core_type t)
        | Ptyp_constr (id, params) ->
          check_type_constructor ~loc id params
          :: List.concat_map params ~f:check_core_type
-       | Ptyp_object _ -> [ unsupported ~loc "object type" ]
-       | Ptyp_class _ -> [ unsupported ~loc "class type" ]
-       | Ptyp_alias (core_type, _) -> check_core_type core_type
+       | Ptyp_alias (core_type, _, _) -> check_core_type core_type
        | Ptyp_variant (rows, _, _) -> List.concat_map rows ~f:check_row_field
-       | Ptyp_poly (_, _) -> [ unsupported ~loc "polymorphic type" ]
-       | Ptyp_package _ -> [ unsupported ~loc "first-class module type" ]
-       | Ptyp_extension _ -> [ unsupported ~loc "ppx extension" ])
+       | unsupported_type ->
+         [ unsupported
+             ~loc
+             (Ppxlib_jane.Language_feature_name.of_core_type_desc unsupported_type)
+         ])
 
   and check_row_field row =
     match row.prf_desc with
@@ -127,7 +128,12 @@ module Structure = struct
     | Some _ -> [ unsupported ~loc:cd.pcd_loc "GADT" ]
     | None ->
       (match cd.pcd_args with
-       | Pcstr_tuple tuple -> List.concat_map ~f:check_core_type tuple
+       | Pcstr_tuple tuple ->
+         List.concat_map
+           ~f:(fun arg ->
+             let type_ = Ppxlib_jane.Shim.Pcstr_tuple_arg.to_core_type arg in
+             check_core_type type_)
+           tuple
        | Pcstr_record record -> List.concat_map ~f:check_label_declaration record)
   ;;
 
@@ -146,9 +152,10 @@ module Structure = struct
     let loc = ghost td.ptype_loc in
     let pat = pvar ~loc ("__stable_witness_checks_for_" ^ td.ptype_name.txt ^ "__") in
     let checks =
-      match td.ptype_kind with
+      match Ppxlib_jane.Shim.Type_kind.of_parsetree td.ptype_kind with
       | Ptype_open -> [ unsupported ~loc "open type" ]
       | Ptype_record fields -> List.concat_map fields ~f:check_label_declaration
+      | Ptype_record_unboxed_product _ -> [ unsupported ~loc "unboxed record type" ]
       | Ptype_variant clauses -> List.concat_map clauses ~f:check_constructor_declaration
       | Ptype_abstract ->
         (match td.ptype_manifest with
@@ -173,14 +180,27 @@ module Structure = struct
       [ value_binding ~loc ~pat ~expr ]
   ;;
 
+  let assert_witness_expr ~loc =
+    [%expr Ppx_stable_witness_runtime.Stable_witness.assert_stable]
+  ;;
+
   (* Create a stable witness for a type we trust to be stable. Evalutes to a variable
      reference so that it is safe inside [let rec]. *)
   let assert_witness_for core_type =
     let loc = ghost core_type.ptyp_loc in
-    pexp_constraint
-      ~loc
-      [%expr Ppx_stable_witness_runtime.Stable_witness.assert_stable]
-      (stable_witness_type ~loc core_type)
+    pexp_constraint ~loc (assert_witness_expr ~loc) (stable_witness_type ~loc core_type)
+  ;;
+
+  let assert_witness_with_params_for core_type ~params =
+    match params with
+    | [] -> assert_witness_for core_type
+    | params ->
+      let loc = ghost core_type.ptyp_loc in
+      Ppxlib_jane.Ast_builder.Default.eabstract
+        params
+        ~loc
+        ~return_constraint:(stable_witness_type ~loc core_type)
+        (assert_witness_expr ~loc)
   ;;
 
   (* Generate the actual stable witness definition for a type declaration. *)
@@ -189,8 +209,7 @@ module Structure = struct
     let expr =
       List.map td.ptype_params ~f:fst
       |> ptyp_constr ~loc (Located.map_lident td.ptype_name)
-      |> assert_witness_for
-      |> eabstract ~loc (param_patterns td)
+      |> assert_witness_with_params_for ~params:(param_patterns td)
     in
     let pat = pvar ~loc:td.ptype_name.loc (stable_witness_name td.ptype_name.txt) in
     value_binding ~loc ~pat ~expr
@@ -202,8 +221,11 @@ module Structure = struct
       when String.equal name td.ptype_name.txt ->
       (match
          List.for_all2 params td.ptype_params ~f:(fun actual (formal, _) ->
-           match actual.ptyp_desc, formal.ptyp_desc with
-           | Ptyp_var a, Ptyp_var b -> String.equal a b
+           match
+             ( Ppxlib_jane.Shim.Core_type_desc.of_parsetree actual.ptyp_desc
+             , Ppxlib_jane.Shim.Core_type_desc.of_parsetree formal.ptyp_desc )
+           with
+           | Ptyp_var (a, _), Ptyp_var (b, _) -> String.equal a b
            | _ -> false)
        with
        | Ok bool -> bool
@@ -273,7 +295,13 @@ module Structure = struct
 end
 
 let extension = Structure.extension
-let sig_type_decl = Deriving.Generator.make_noarg Signature.expand
+
+let sig_type_decl =
+  Deriving.Generator.make
+    Deriving.Args.(empty +> flag "portable")
+    (fun ~loc ~path tds portable -> Signature.expand ~loc ~path tds ~portable)
+;;
+
 let str_type_decl = Deriving.Generator.make_noarg Structure.expand
 
 let () =

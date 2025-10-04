@@ -12,7 +12,7 @@ let output =
   in
   let output = wire 4 -- "result" in
   output
-  <== add_attribute (a +: b +:. 3) (Rtl_attribute.create "hello" ~value:(String "world"))
+  <-- add_attribute (a +: b +:. 3) (Rtl_attribute.create "hello" ~value:(String "world"))
       -- "tmp";
   output
 ;;
@@ -36,18 +36,25 @@ module Test_component = struct
     let reg_spec = Reg_spec.create ~clock:i.clk () in
     let a = reg reg_spec ~enable:vdd i.a -- "hello" in
     let a = add_attribute a (Rtl_attribute.Vivado.dont_touch true) in
-    let b = add_attribute i.b (Rtl_attribute.Vivado.mark_debug true) in
-    let c = add_attribute (a +: b) (Rtl_attribute.Vivado.mark_debug true) in
+    let b = i.b in
+    let c = a +: b in
     { O.c }
   ;;
 end
 
-let%expect_test "Signal attributes on top of signals in Verilog for circuitsconstructed \
+let%expect_test "Signal attributes on top of signals in Verilog for circuits constructed \
                  using Circuit.With_interface"
   =
   let open Test_component in
   let module Circuit = Circuit.With_interface (I) (O) in
-  Rtl.print Verilog (Circuit.create_exn ~name:"module_foo" create);
+  Rtl.print
+    Verilog
+    (Circuit.create_exn
+       ~input_attributes:
+         { (I.const []) with b = [ Rtl_attribute.Vivado.mark_debug true ] }
+       ~output_attributes:{ O.c = [ Rtl_attribute.Vivado.mark_debug true ] }
+       ~name:"module_foo"
+       create);
   [%expect
     {|
     module module_foo (
@@ -67,23 +74,19 @@ let%expect_test "Signal attributes on top of signals in Verilog for circuitscons
         output [3:0] c;
 
         wire [3:0] _2;
-        wire vdd;
-        wire [3:0] _9;
         wire _4;
         wire [3:0] _6;
         (* dont_touch="TRUE" *)
         reg [3:0] hello;
-        wire [3:0] _12;
+        wire [3:0] _9;
         assign _2 = b;
-        assign vdd = 1'b1;
-        assign _9 = 4'b0000;
         assign _4 = clk;
         assign _6 = a;
         always @(posedge _4) begin
             hello <= _6;
         end
-        assign _12 = hello + _2;
-        assign c = _12;
+        assign _9 = hello + _2;
+        assign c = _9;
 
     endmodule
     |}]
@@ -119,7 +122,7 @@ let%expect_test "Signal attributes on top of signals in Verilog" =
 ;;
 
 let%expect_test "Signal attributes on top of signals in VHDL" =
-  require_does_not_raise [%here] (fun () -> rtl_write_null Vhdl [ output ]);
+  require_does_not_raise (fun () -> rtl_write_null Vhdl [ output ]);
   [%expect
     {|
     library ieee;
@@ -132,31 +135,25 @@ let%expect_test "Signal attributes on top of signals in VHDL" =
             a : in std_logic_vector(3 downto 0);
             result : out std_logic_vector(3 downto 0)
         );
+        attribute bar : integer;
+        attribute baz : boolean;
+        attribute hello : string;
+        attribute bar of b : signal is 10;
+        attribute baz of a : signal is true;
     end entity;
 
     architecture rtl of test is
 
-        -- conversion functions
-        function hc_uns(a : std_logic)        return unsigned         is variable b : unsigned(0 downto 0); begin b(0) := a; return b; end;
-        function hc_uns(a : std_logic_vector) return unsigned         is begin return unsigned(a); end;
-        function hc_sgn(a : std_logic)        return signed           is variable b : signed(0 downto 0); begin b(0) := a; return b; end;
-        function hc_sgn(a : std_logic_vector) return signed           is begin return signed(a); end;
-        function hc_sl (a : std_logic_vector) return std_logic        is begin return a(a'right); end;
-        function hc_sl (a : unsigned)         return std_logic        is begin return a(a'right); end;
-        function hc_sl (a : signed)           return std_logic        is begin return a(a'right); end;
-        function hc_sl (a : boolean)          return std_logic        is begin if a then return '1'; else return '0'; end if; end;
-        function hc_slv(a : std_logic_vector) return std_logic_vector is begin return a; end;
-        function hc_slv(a : unsigned)         return std_logic_vector is begin return std_logic_vector(a); end;
-        function hc_slv(a : signed)           return std_logic_vector is begin return std_logic_vector(a); end;
         signal hc_5 : std_logic_vector(3 downto 0);
         signal hc_4 : std_logic_vector(3 downto 0);
         signal tmp : std_logic_vector(3 downto 0);
+        attribute hello of tmp : signal is "world";
 
     begin
 
         hc_5 <= "0011";
-        hc_4 <= hc_slv(hc_uns(a) + hc_uns(b));
-        tmp <= hc_slv(hc_uns(hc_4) + hc_uns(hc_5));
+        hc_4 <= std_logic_vector(unsigned(a) + unsigned(b));
+        tmp <= std_logic_vector(unsigned(hc_4) + unsigned(hc_5));
         result <= tmp;
 
     end architecture;
@@ -203,32 +200,28 @@ let%expect_test "Test Rtl attributes on the pipeline construct" =
 
         input clk;
         input [3:0] a;
-        (* SRL_STYLE="register" *)
         output [3:0] b;
 
-        wire [3:0] _14;
-        wire vdd;
         wire _2;
         wire [3:0] _4;
         (* SRL_STYLE="register" *)
-        reg [3:0] _9;
+        reg [3:0] _6;
         (* SRL_STYLE="register" *)
-        reg [3:0] _12;
-        reg [3:0] _15;
-        assign _14 = 4'b0000;
-        assign vdd = 1'b1;
+        reg [3:0] _7;
+        (* SRL_STYLE="register" *)
+        reg [3:0] _8;
         assign _2 = clk;
         assign _4 = a;
         always @(posedge _2) begin
-            _9 <= _4;
+            _6 <= _4;
         end
         always @(posedge _2) begin
-            _12 <= _9;
+            _7 <= _6;
         end
         always @(posedge _2) begin
-            _15 <= _12;
+            _8 <= _7;
         end
-        assign b = _15;
+        assign b = _8;
 
     endmodule
     |}]

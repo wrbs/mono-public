@@ -1,5 +1,5 @@
 open! Import
-include Hash_set_intf
+include Hash_set_intf.Definitions
 
 let hashable_s = Hashtbl.hashable_s
 let hashable = Hashtbl.Private.hashable
@@ -8,12 +8,12 @@ let with_return = With_return.with_return
 
 type 'a t = ('a, unit) Hashtbl.t
 type 'a hash_set = 'a t
-type 'a elt = 'a
 
 module Accessors = struct
   let hashable = hashable
   let clear = Hashtbl.clear
   let length = Hashtbl.length
+  let capacity = Hashtbl.capacity
   let mem = Hashtbl.mem
   let is_empty t = Hashtbl.is_empty t
 
@@ -23,32 +23,45 @@ module Accessors = struct
         match f elt with
         | None -> ()
         | Some _ as o -> r.return o);
-      None) [@nontail]
+      None)
+    [@nontail]
   ;;
 
   let find t ~f = find_map t ~f:(fun a -> if f a then Some a else None) [@nontail]
   let add t k = Hashtbl.set t ~key:k ~data:()
 
-  let strict_add t k =
+  let strict_add t k : Ok_or_duplicate.t =
     if mem t k
-    then Or_error.error_string "element already exists"
+    then Duplicate
     else (
       Hashtbl.set t ~key:k ~data:();
-      Result.Ok ())
+      Ok)
   ;;
 
-  let strict_add_exn t k = Or_error.ok_exn (strict_add t k)
+  let strict_add_or_error t k =
+    match strict_add t k with
+    | Duplicate -> Or_error.error_string "element already exists"
+    | Ok -> Ok ()
+  ;;
+
+  let strict_add_exn t k = Or_error.ok_exn (strict_add_or_error t k)
   let remove = Hashtbl.remove
 
-  let strict_remove t k =
+  let strict_remove t k : Ok_or_absent.t =
     if mem t k
     then (
       remove t k;
-      Result.Ok ())
-    else Or_error.error "element not in set" k (Hashtbl.sexp_of_key t)
+      Ok)
+    else Absent
   ;;
 
-  let strict_remove_exn t k = Or_error.ok_exn (strict_remove t k)
+  let strict_remove_or_error t k =
+    match strict_remove t k with
+    | Ok -> Ok ()
+    | Absent -> Or_error.error "element not in set" k (Hashtbl.sexp_of_key t)
+  ;;
+
+  let strict_remove_exn t k = Or_error.ok_exn (strict_remove_or_error t k)
 
   let fold t ~init ~f =
     Hashtbl.fold t ~init ~f:(fun ~key ~data:() acc -> f acc key) [@nontail]
@@ -79,12 +92,21 @@ module Accessors = struct
         acc))
   ;;
 
-  let exists t ~f = Hashtbl.existsi t ~f:(fun ~key ~data:() -> f key) [@nontail]
+  let exists t ~(local_ f) = Hashtbl.existsi t ~f:(fun ~key ~data:() -> f key) [@nontail]
   let for_all t ~f = not (Hashtbl.existsi t ~f:(fun ~key ~data:() -> not (f key)))
-  let equal t1 t2 = Hashtbl.equal (fun () () -> true) t1 t2
+
+  let%template equal t1 t2 = (Hashtbl.equal [@mode m]) (fun () () -> true) t1 t2
+  [@@mode m = (local, global)]
+  ;;
+
   let copy t = Hashtbl.copy t
   let filter t ~f = Hashtbl.filteri t ~f:(fun ~key ~data:() -> f key) [@nontail]
   let union t1 t2 = Hashtbl.merge t1 t2 ~f:(fun ~key:_ _ -> Some ())
+
+  let union_in_place ~dst ~src =
+    Hashtbl.merge_into ~src ~dst ~f:(fun ~key:_ _ _ -> Set_to ())
+  ;;
+
   let diff t1 t2 = filter t1 ~f:(fun key -> not (Hashtbl.mem t2 key))
 
   let inter t1 t2 =
@@ -124,24 +146,24 @@ let t_of_sexp m e_of_sexp sexp =
     List.iter list ~f:(fun sexp ->
       let e = e_of_sexp sexp in
       match strict_add t e with
-      | Ok () -> ()
-      | Error _ -> of_sexp_error "Hash_set.t_of_sexp got a duplicate element" sexp);
+      | Ok -> ()
+      | Duplicate -> of_sexp_error "Hash_set.t_of_sexp got a duplicate element" sexp);
     t
 ;;
 
-module Creators (Elt : sig
-  type 'a t
+module%template.portable Creators (Elt : sig
+    type 'a t
 
-  val hashable : 'a t Hashable.t
-end) : sig
+    val hashable : 'a t Hashable.t
+  end) : sig
   val t_of_sexp : (Sexp.t -> 'a Elt.t) -> Sexp.t -> 'a Elt.t t
 
   include
     Creators_generic
-      with type 'a t := 'a Elt.t t
-      with type 'a elt := 'a Elt.t
-      with type ('elt, 'z) create_options :=
-        ('elt, 'z) create_options_without_first_class_module
+    with type 'a t := 'a Elt.t t
+    with type 'a elt := 'a Elt.t
+    with type ('elt, 'z) create_options :=
+      ('elt, 'z) create_options_without_first_class_module
 end = struct
   let create ?growth_allowed ?size () =
     create ?growth_allowed ?size (Hashable.to_key Elt.hashable)
@@ -160,11 +182,11 @@ module Poly = struct
 
   let hashable = poly_hashable
 
-  include Creators (struct
-    type 'a t = 'a
+  include%template Creators [@modality portable] (struct
+      type 'a t = 'a
 
-    let hashable = hashable
-  end)
+      let hashable = hashable
+    end)
 
   include Accessors
 
@@ -189,6 +211,7 @@ let m__t_sexp_grammar (type elt) (module Elt : M_sexp_grammar with type t = elt)
 ;;
 
 let equal_m__t (module _ : Equal_m) t1 t2 = equal t1 t2
+let equal__local_m__t (module _ : Equal_m) t1 t2 = equal__local t1 t2
 
 module Private = struct
   let hashable = Hashtbl.Private.hashable

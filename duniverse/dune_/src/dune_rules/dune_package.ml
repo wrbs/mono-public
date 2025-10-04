@@ -104,7 +104,8 @@ module Lib = struct
     in
     let melange_runtime_deps = additional_paths (Lib_info.melange_runtime_deps info) in
     let jsoo_runtime = Lib_info.jsoo_runtime info in
-    let virtual_ = Option.is_some (Lib_info.virtual_ info) in
+    let wasmoo_runtime = Lib_info.wasmoo_runtime info in
+    let virtual_ = Lib_info.virtual_ info in
     let instrumentation_backend = Lib_info.instrumentation_backend info in
     let native_archives =
       match Lib_info.native_archives info with
@@ -137,6 +138,7 @@ module Lib = struct
        ; paths "foreign_dll_files" foreign_dll_files
        ; paths "native_archives" native_archives
        ; paths "jsoo_runtime" jsoo_runtime
+       ; paths "wasmoo_runtime" wasmoo_runtime
        ; Lib_dep.L.field_encode requires ~name:"requires"
        ; libs "ppx_runtime_deps" ppx_runtime_deps
        ; field_o "implements" (no_loc Lib_name.encode) implements
@@ -212,6 +214,7 @@ module Lib = struct
        and+ foreign_dll_files = paths "foreign_dll_files"
        and+ native_archives = paths "native_archives"
        and+ jsoo_runtime = paths "jsoo_runtime"
+       and+ wasmoo_runtime = paths "wasmoo_runtime"
        and+ melange_runtime_deps = paths "melange_runtime_deps"
        and+ requires = field_l "requires" (Lib_dep.decode ~allow_re_export:true)
        and+ ppx_runtime_deps = libs "ppx_runtime_deps"
@@ -244,13 +247,8 @@ module Lib = struct
          let preprocess = Preprocess.Per_module.no_preprocessing () in
          let virtual_deps = [] in
          let dune_version = None in
-         let virtual_ =
-           if virtual_ then Some (Lib_info.Source.External modules) else None
-         in
+         let entry_modules = Modules.entry_modules modules |> List.map ~f:Module.name in
          let modules = Modules.With_vlib.modules modules in
-         let entry_modules =
-           Modules.With_vlib.entry_modules modules |> List.map ~f:Module.name
-         in
          let wrapped =
            Some (Lib_info.Inherited.This (Modules.With_vlib.wrapped modules))
          in
@@ -281,6 +279,7 @@ module Lib = struct
            ~native_archives:(Files native_archives)
            ~foreign_dll_files
            ~jsoo_runtime
+           ~wasmoo_runtime
            ~preprocess
            ~enabled
            ~virtual_deps
@@ -308,14 +307,6 @@ module Lib = struct
          Some (External_location.Relative_to_findlib (opam_dir, local))
        in
        { info; main_module_name; external_location })
-  ;;
-
-  let main_module_name t = t.main_module_name
-
-  let wrapped t =
-    match Lib_info.modules t.info with
-    | External modules -> Option.map modules ~f:Modules.With_vlib.wrapped
-    | Local -> None
   ;;
 
   let info dp = dp.info
@@ -604,7 +595,7 @@ module Or_meta = struct
     match
       Vfile.parse_contents lexbuf ~f:(fun lang ->
         String_with_vars.set_decoding_env
-          (Pform.Env.initial lang.version)
+          (Pform.Env.initial ~stanza:lang.version ~extensions:[])
           (decode ~lang ~dir))
     with
     | contents -> Ok contents

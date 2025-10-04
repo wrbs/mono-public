@@ -6,7 +6,7 @@ module Stable = struct
   module V1 = struct
     include Base_bigstring
 
-    module Z : sig
+    module Z : sig @@ portable
       type t = (char, int8_unsigned_elt, c_layout) Array1.t
       [@@deriving bin_io ~localize, stable_witness]
     end = struct
@@ -29,15 +29,34 @@ module Unstable = T
 
 let create size = create size
 
-let sub_shared ?(pos = 0) ?len (bstr : t) =
+external unsafe_array1_sub
+  :  local_ ('a, 'b, 'c) Array1.t
+  -> int
+  -> int
+  -> ('a, 'b, 'c) Array1.t
+  @@ portable
+  = "caml_ba_sub"
+
+(* Potentially unsafe because input's data may be overwritten or destroyed when local
+   reference goes out of scope. *)
+let unsafe_sub_shared_of_local ?(pos = 0) ?len (bstr : t) =
   let len = get_opt_len bstr ~pos len in
-  Array1.sub bstr pos len
+  unsafe_array1_sub bstr pos len
+;;
+
+(* Calling with global [t] is safe because its data is assumed to persist. *)
+let sub_shared : ?pos:int -> ?len:int -> t -> t = unsafe_sub_shared_of_local
+
+(* Returning local [t] is safe because the reference cannot be held past the lifetime of
+   the input. *)
+let sub_shared_local : ?pos:int -> ?len:int -> local_ t -> local_ t =
+  unsafe_sub_shared_of_local
 ;;
 
 (* Destruction *)
 
-external unsafe_destroy : t -> unit = "bigstring_destroy_stub"
-external unsafe_destroy_and_resize : t -> len:int -> t = "bigstring_realloc"
+external unsafe_destroy : t -> unit @@ portable = "bigstring_destroy_stub"
+external unsafe_destroy_and_resize : t -> len:int -> t @@ portable = "bigstring_realloc"
 
 (* Reading / writing bin-prot *)
 
@@ -87,13 +106,10 @@ let read_bin_prot t ?pos ?len reader =
 
 let write_bin_prot_known_size t ?(pos = 0) write ~size:data_len v =
   let total_len = data_len + Bin_prot.Utils.size_header_length in
-  if pos < 0
-  then
-    failwiths ~here:[%here] "Bigstring.write_bin_prot: negative pos" pos [%sexp_of: int];
+  if pos < 0 then failwiths "Bigstring.write_bin_prot: negative pos" pos [%sexp_of: int];
   if pos + total_len > length t
   then
     failwiths
-      ~here:[%here]
       "Bigstring.write_bin_prot: not enough room"
       (`pos pos, `pos_after_writing (pos + total_len), `bigstring_length (length t))
       [%sexp_of:
@@ -103,7 +119,6 @@ let write_bin_prot_known_size t ?(pos = 0) write ~size:data_len v =
   if pos_after_data - pos <> total_len
   then
     failwiths
-      ~here:[%here]
       "Bigstring.write_bin_prot bug!"
       ( `pos_after_data pos_after_data
       , `start_pos pos
@@ -126,12 +141,12 @@ let write_bin_prot t ?pos (writer : _ Bin_prot.Type_class.writer) v =
 
 (* Hex dump *)
 
-include Hexdump.Of_indexable (struct
-  type nonrec t = t
+  include%template Hexdump.Of_indexable [@modality portable] (struct
+      type nonrec t = t
 
-  let length = length
-  let get = get
-end)
+      let length = length
+      let get = get
+    end)
 
 let rec last_nonmatch_plus_one ~buf ~min_pos ~pos ~char =
   let pos' = pos - 1 in
@@ -147,7 +162,7 @@ let get_tail_padded_fixed_string ~padding t ~pos ~len () =
   get_string t ~pos ~len:(data_end - pos)
 ;;
 
-let get_tail_padded_fixed_string_local ~padding t ~pos ~len () =
+let get_tail_padded_fixed_string_local ~padding t ~pos ~len () = exclave_
   let data_end =
     last_nonmatch_plus_one ~buf:t ~min_pos:pos ~pos:(pos + len) ~char:padding
   in
@@ -164,7 +179,7 @@ let[@cold] set_padded_fixed_string_failed ~head_or_tail ~value ~len =
     ()
 ;;
 
-let set_tail_padded_fixed_string ~padding t ~pos ~len value =
+let set_tail_padded_fixed_string ~padding t ~pos ~len (local_ value) =
   let slen = String.length value in
   if slen > len then set_padded_fixed_string_failed ~head_or_tail:"tail" ~value ~len;
   From_string.blit ~src:value ~dst:t ~src_pos:0 ~dst_pos:pos ~len:slen;
@@ -179,7 +194,7 @@ let rec first_nonmatch ~buf ~pos ~max_pos ~char =
   else pos
 ;;
 
-let set_head_padded_fixed_string ~padding t ~pos ~len value =
+let set_head_padded_fixed_string ~padding t ~pos ~len (local_ value) =
   let slen = String.length value in
   if slen > len then set_padded_fixed_string_failed ~head_or_tail:"head" ~value ~len;
   From_string.blit ~src:value ~dst:t ~src_pos:0 ~dst_pos:(pos + len - slen) ~len:slen;
@@ -193,7 +208,7 @@ let get_head_padded_fixed_string ~padding t ~pos ~len () =
   get_string t ~pos:data_begin ~len:(len - (data_begin - pos))
 ;;
 
-let get_head_padded_fixed_string_local ~padding t ~pos ~len () =
+let get_head_padded_fixed_string_local ~padding t ~pos ~len () = exclave_
   let data_begin = first_nonmatch ~buf:t ~pos ~max_pos:(pos + len - 1) ~char:padding in
   let len = len - (data_begin - pos) in
   Local.get_string t ~pos:data_begin ~len

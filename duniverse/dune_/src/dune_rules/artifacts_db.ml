@@ -13,32 +13,28 @@ let available_exes ~dir (exes : Executables.t) =
       (* Instead of making the binary unavailable, this will just
          fail when loading artifacts. This is clearly bad but
          "optional" executables shouldn't be used. *)
-      Preprocess.Per_module.with_instrumentation
+      Instrumentation.with_instrumentation
         exes.buildable.preprocess
         ~instrumentation_backend:(Lib.DB.instrumentation_backend libs)
       |> Resolve.Memo.read_memo
       >>| Preprocess.Per_module.pps
     in
-    let names = Nonempty_list.to_list exes.names in
-    let merlin_ident = Merlin_ident.for_exes ~names:(List.map ~f:snd names) in
     Lib.DB.resolve_user_written_deps
       libs
-      (`Exe names)
+      (`Exe exes.names)
       exes.buildable.libraries
       ~pps
       ~dune_version
       ~forbidden_libraries:exes.forbidden_libraries
       ~allow_overlaps:exes.buildable.allow_overlapping_dependencies
-      ~merlin_ident
   in
-  let open Memo.O in
+  (* CR-someday rgrinberg: what if a preprocessor is unavailable? *)
   let+ available = Lib.Compile.direct_requires compile_info in
   Resolve.is_ok available
 ;;
 
 let get_installed_binaries ~(context : Context.t) stanzas =
   let merge _ x y = Some (Appendable_list.( @ ) x y) in
-  let open Memo.O in
   Memo.List.map stanzas ~f:(fun d ->
     let dir = Path.Build.append_source (Context.build_dir context) (Dune_file.dir d) in
     let* expander = Expander0.get ~dir in
@@ -64,7 +60,7 @@ let get_installed_binaries ~(context : Context.t) stanzas =
       in
       Memo.List.map unexpanded_file_bindings ~f:(fun fb ->
         let+ p =
-          File_binding.Unexpanded.destination_relative_to_install_path
+          File_binding_expand.destination_relative_to_install_path
             fb
             ~section:Bin
             ~expand:expand_str
@@ -78,7 +74,7 @@ let get_installed_binaries ~(context : Context.t) stanzas =
         else None)
       >>| List.filter_opt
       >>| Filename.Map.of_list_reduce ~f:(fun _ y ->
-        (* CR-rgrinberg: we shouldn't allow duplicate bindings, but where's the
+        (* CR-someday rgrinberg: we shouldn't allow duplicate bindings, but where's the
            correct place for this validation? *)
         y)
       >>| Filename.Map.map ~f:Appendable_list.singleton

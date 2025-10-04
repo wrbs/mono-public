@@ -20,33 +20,50 @@ module Variable = struct
 
   let sexp_of_t { value; internal = _ } = [%message "" ~_:(value : Signal.t)]
   let uid t = Signal.uid t.internal.assigns_to_wire
-  let compare t1 t2 = Signal.Uid.compare (uid t1) (uid t2)
+  let compare t1 t2 = Signal.Type.Uid.compare (uid t1) (uid t2)
   let equal = [%compare.equal: t]
 
   include (val Comparator.make ~compare ~sexp_of_t)
 
-  let wire ~default =
+  let wire ~default () =
     let wire = Signal.wire (Signal.width default) in
     { value = wire; internal = { assigns_to_wire = wire; default } }
   ;;
 
-  let reg ?enable ~width spec =
+  let reg ?enable ?initialize_to ?reset_to ?clear ?clear_to spec ~width =
     let wire = Signal.wire width in
-    let reg = Signal.reg spec ?enable wire in
+    let reg = Signal.reg ?enable ?initialize_to ?reset_to ?clear ?clear_to spec wire in
     { value = reg; internal = { assigns_to_wire = wire; default = reg } }
   ;;
 
-  let pipeline ?enable ~width ~depth (spec : Reg_spec.t) =
+  let pipeline ?enable ?initialize_to ?reset_to ?clear ?clear_to spec ~width ~depth =
     if depth = 0
-    then
-      if (* use a wire - need to derive the default value *)
-         Signal.is_empty spec.reg_reset_value
-      then wire ~default:(Signal.zero width)
-      else wire ~default:spec.reg_reset_value
+    then (
+      (* use a wire - need to derive the default value *)
+      match reset_to with
+      | None -> wire ~default:(Signal.zero width) ()
+      | Some default -> wire ~default ())
     else (
-      let r = reg spec ?enable ~width in
+      let r = reg ?enable ?initialize_to ?reset_to ?clear ?clear_to spec ~width in
       (* delay the output by the pipeline length, minus 1 *)
-      { r with value = Signal.pipeline ~n:(depth - 1) spec ?enable r.value })
+      { r with
+        value =
+          Signal.pipeline
+            ?enable
+            ?initialize_to
+            ?reset_to
+            ?clear
+            ?clear_to
+            ~n:(depth - 1)
+            spec
+            r.value
+      })
+  ;;
+
+  let __ppx_auto_name t name =
+    (* Note the name provided by the ppx has been scoped already. *)
+    ignore (Signal.( -- ) t.value name : Signal.t);
+    t
   ;;
 end
 
@@ -62,6 +79,7 @@ type 'a cases = 'a case list [@@deriving sexp_of]
 
 let if_ sel on_true on_false = If (sel, on_true, on_false)
 let elif c t f = [ if_ c t f ]
+let else_ = Fn.id
 let when_ sel on_true = if_ sel on_true []
 let unless sel on_false = if_ sel [] on_false
 let switch sel cases = Switch (sel, cases)
@@ -80,7 +98,20 @@ let ( <-- ) (a : Variable.t) b =
   Assign (a, b)
 ;;
 
-let ( <--. ) (a : Variable.t) b = a <-- Signal.of_int ~width:(Signal.width a.value) b
+let ( <--. ) (a : Variable.t) b =
+  a <-- Signal.of_int_trunc ~width:(Signal.width a.value) b
+;;
+
+let ( <-:. ) (a : Variable.t) b =
+  a <-- Signal.of_unsigned_int ~width:(Signal.width a.value) b
+;;
+
+let ( <-+. ) (a : Variable.t) b =
+  a <-- Signal.of_signed_int ~width:(Signal.width a.value) b
+;;
+
+let incr ?(by = 1) (a : Variable.t) = a <-- Signal.(a.value +:. by)
+let decr ?(by = 1) (a : Variable.t) = a <-- Signal.(a.value -:. by)
 let list_of_set s = Set.fold s ~init:[] ~f:(fun l e -> e :: l)
 
 let rec find_targets set statements =
@@ -121,27 +152,31 @@ let rec compile_mux statements ~default =
     let default =
       match statement with
       | If (s, t, f) ->
-        let s = Signal.reduce ~f:Signal.( |: ) (Signal.bits_msb s) in
+        let s = Signal.any_bit_set s in
         let t = compile_mux t ~default in
         let f = compile_mux f ~default in
         Signal.mux s [ f; t ]
       | Assign (_, d) -> d
       | Switch (sel, cases) ->
-        (* This implementation encodes the matches in a linear fashion, which could lead
-           to long timing paths.  By analysing the [mtch] values for the whole switch
-           statement we could choose a more optimal solution.  Considerations.
-
-           - Are all [mtch] values constants?
-           - Are there linear runs of values? ie 0,1,2,3,4,5,6,7
-           - Is the set of values very sparse?
-           - Should we add an implementation hint?
-           - http://www.sunburst-design.com/papers/CummingsSNUG2005Israel_SystemVerilog_UniquePriority.pdf *)
-        let rec build = function
+        (* Encode the matches as a linear chain of mux's. Can be used when the matches are
+           not constants. *)
+        let rec build_generic = function
           | [] -> default
           | (mtch, case) :: t ->
-            Signal.mux (sel ==: mtch) [ build t; compile_mux case ~default ]
+            Signal.mux (sel ==: mtch) [ build_generic t; compile_mux case ~default ]
         in
-        build cases
+        (* Encode the matches using [cases]. *)
+        let build_constant_cases cases =
+          Signal.cases
+            ~default
+            sel
+            (List.map cases ~f:(fun (match_with, always) ->
+               match_with, compile_mux always ~default))
+        in
+        let constant_cases =
+          List.for_all cases ~f:(fun (match_with, _) -> Signal.Type.is_const match_with)
+        in
+        if constant_cases then build_constant_cases cases else build_generic cases
     in
     compile_mux statements ~default
 ;;
@@ -150,7 +185,7 @@ let compile statements =
   let targets = list_of_set (find_targets (Set.empty (module Variable)) statements) in
   List.iter targets ~f:(fun target ->
     let statements = filter_by_target target statements in
-    Signal.( <== )
+    Signal.( <-- )
       target.internal.assigns_to_wire
       (compile_mux statements ~default:target.internal.default))
 ;;
@@ -178,20 +213,44 @@ module State_machine = struct
     type t [@@deriving compare, enumerate, sexp_of]
   end
 
+  let apply_statemachine_attributes attributes ~state =
+    let attributes =
+      Option.value
+        ~default:
+          [ (* We choose a pretty aggressive default which is to code ALL statemachines as
+               one-hot by default. The experiments we performed showed better performance
+               and smaller area (more registers but fewer CLBs overall) for both very
+               small and very large statemachines. Which is not to say this is the final
+               word on the best possible design choice - users may still want to
+               selectively configure certain statemachines to a different encoding. *)
+            Rtl_attribute.Vivado.fsm_encoding `one_hot
+          ]
+        attributes
+    in
+    List.iter attributes ~f:(fun attr ->
+      ignore (Signal.add_attribute state attr : Signal.t))
+  ;;
+
   let create
+    (type a)
     ?(encoding = Encoding.Binary)
     ?(auto_wave_format = true)
+    ?attributes
     ?(enable = Signal.vdd)
-    (type a)
+    ?(unreachable = ([] : a list))
     (module State : State with type t = a)
     reg_spec
     =
     let module State = struct
       include State
+
+      let equal a b = compare a b = 0
+      let all = List.filter all ~f:(Fn.non (List.mem unreachable ~equal))
+
       include Comparator.Make (State)
 
       let name_by_index =
-        Array.of_list_map State.all ~f:(fun s -> Sexp.to_string [%sexp (s : State.t)])
+        Array.of_list_map all ~f:(fun s -> Sexp.to_string [%sexp (s : State.t)])
       ;;
     end
     in
@@ -199,11 +258,11 @@ module State_machine = struct
     let ls = if nstates = 1 then 1 else Int.ceil_log2 nstates in
     let state_bits i =
       match encoding with
-      | Binary -> Bits.of_int ~width:ls i
-      | Gray -> Bits.binary_to_gray (Bits.of_int ~width:ls i)
+      | Binary -> Bits.of_int_trunc ~width:ls i
+      | Gray -> Bits.binary_to_gray (Bits.of_int_trunc ~width:ls i)
       | Onehot ->
         let nstates' = if nstates = 1 then 1 else nstates - 1 in
-        Bits.(select (binary_to_onehot (of_int ~width:ls i)) nstates' 0)
+        Bits.(select (binary_to_onehot (of_int_trunc ~width:ls i)) ~high:nstates' ~low:0)
     in
     let state_signal i = state_bits i |> Bits.to_constant |> Signal.of_constant in
     let states = List.mapi State.all ~f:(fun i s -> s, (i, state_signal i)) in
@@ -211,15 +270,14 @@ module State_machine = struct
       match encoding with
       | Binary | Gray -> Variable.reg reg_spec ~enable ~width:ls
       | Onehot ->
-        Variable.reg
-          { reg_spec with
-            (* must be reset to get into state 0 *)
-            reg_clear_value = Signal.one nstates
-          ; reg_reset_value = Signal.one nstates
-          }
+        Variable.reg (* must be reset to get into state 0 *)
+          reg_spec
+          ~clear_to:(Signal.one nstates)
+          ~reset_to:(Signal.one nstates)
           ~enable
           ~width:nstates
     in
+    apply_statemachine_attributes attributes ~state:var.value;
     let find_state name state =
       match List.Assoc.find states state ~equal:[%compare.equal: State.t] with
       | Some x -> x
@@ -233,6 +291,23 @@ module State_machine = struct
     let set_next s = var <-- state_val "set_next" s in
     let current = var.value in
     let switch ?default cases =
+      let cases =
+        List.filter_map cases ~f:(fun (state, impl) ->
+          if List.mem unreachable state ~equal:State.equal
+          then
+            if List.is_empty impl
+            then
+              (* Lazy programmer convenience - you can speficy the state, but it must
+                    have an empty implementation. *)
+              None
+            else
+              raise_s
+                [%message
+                  "[Always.State_machine.switch] unreachable state provided with a \
+                   non-empty implementation"
+                    (state : State.t)]
+          else Some (state, impl))
+      in
       let rec unique set = function
         | [] -> set
         | (state, _) :: tl ->
@@ -274,28 +349,29 @@ module State_machine = struct
         proc
           (List.map cases ~f:(fun (s, c) ->
              let i, _ = find_state "switch" s in
-             when_ (Signal.bit current i) c))
+             when_ current.Signal.:(i) c))
     in
     let is s =
       match encoding with
       | Binary | Gray -> state_val "is" s ==: current
-      | Onehot -> Signal.bit var.value (fst (find_state "is" s))
+      | Onehot -> var.value.Signal.:(fst (find_state "is" s))
     in
     if auto_wave_format
     then (
       let wave_format =
-        let rec find_state i bits =
+        let rec state_map i =
           if i = nstates
-          then "-"
-          else if Bits.equal (state_bits i) bits
-          then State.name_by_index.(i)
-          else find_state (i + 1) bits
+          then []
+          else (state_bits i, State.name_by_index.(i)) :: state_map (i + 1)
         in
-        match encoding with
-        | Binary -> Wave_format.Index (Array.to_list State.name_by_index)
-        | Gray | Onehot -> Wave_format.Custom (find_state 0)
+        Wave_format.Map (state_map 0)
       in
       ignore (Signal.(var.value --$ wave_format) : Signal.t));
     { current; is; set_next; switch }
+  ;;
+
+  let __ppx_auto_name t name =
+    ignore (Signal.( -- ) t.current name : Signal.t);
+    t
   ;;
 end

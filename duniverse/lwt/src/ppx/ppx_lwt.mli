@@ -9,7 +9,7 @@
 (** {2 Ppx extensions}
 
     This Ppx extension adds various syntactic shortcut for lwt programming.
-    It needs {{:https://github.com/alainfrisch/ppx_tools}ppx_tools}.
+    It needs {{:https://github.com/ocaml-ppx/ppx_tools}ppx_tools}.
 
     To use it, simply use the ocamlfind package [lwt_ppx].
 
@@ -80,10 +80,10 @@ catch (fun () -> f x)
         prerr_endline msg;
         return ()
     | exn ->
-        Lwt.fail exn)
+        Lwt.reraise exn)
    ]}
 
-   Note that the [exn -> Lwt.fail exn] branch is automatically added
+   Note that the [exn -> Lwt.reraise exn] branch is automatically added
    when needed.
 
    - finalizer:

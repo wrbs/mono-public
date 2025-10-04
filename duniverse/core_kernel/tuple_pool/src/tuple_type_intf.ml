@@ -3,7 +3,7 @@ open! Import
 
 module type Slots = sig
   (** [Slots] has types [t1], ..., [t12] of arities 1 to 12 that are isomorphic to tuple
-      types of the corresponding arities.  Type [('a0, ..., 'a<N-1>) t<N>] corresponds to
+      types of the corresponding arities. Type [('a0, ..., 'a<N-1>) t<N>] corresponds to
       ['a0 * ... * 'a<N-1>].
 
       Each type [ti] is an instance of type [('tuple, 'variant) t], in which ['tuple] is
@@ -25,19 +25,19 @@ module type Slots = sig
       definition expands to:
 
       {[
-        type 'a slots = [ `Slots of ('a * 'a slots Pointer.t,
-                                     [ `S0 of 'a
-                                     | `S1 of 'a slots Pointer.t
-                                     ]
-                                    ) u
-                        ]
+        type 'a slots =
+          [ `Slots of
+            ('a * 'a slots Pointer.t, [ `S0 of 'a | `S1 of 'a slots Pointer.t ]) u
+          ]
       ]}
 
       Ultimately, a [Slots.t] is used as a phantom type that ensures consistent usage of
       the tuples in the data structure containing them. *)
 
-  type ('tuple, 'variant) u
-  type ('tuple, 'variant) t = [ `Slots of ('tuple, 'variant) u ] [@@deriving sexp_of]
+  type ('tuple, 'variant) u : immutable_data
+
+  type ('tuple, 'variant) t = [ `Slots of ('tuple, 'variant) u ] Modes.Immutable_data.t
+  [@@deriving sexp_of]
 
   val slots_per_tuple : (_, _) t -> int
 
@@ -53,146 +53,147 @@ module type Slots = sig
 
   type ('a0, 'a1, 'a2, 'a3, 'a4) t5 =
     ( 'a0 * 'a1 * 'a2 * 'a3 * 'a4
-    , [ `S0 of 'a0 | `S1 of 'a1 | `S2 of 'a2 | `S3 of 'a3 | `S4 of 'a4 ] )
-    t
+      , [ `S0 of 'a0 | `S1 of 'a1 | `S2 of 'a2 | `S3 of 'a3 | `S4 of 'a4 ] )
+      t
   [@@deriving sexp_of]
 
   type ('a0, 'a1, 'a2, 'a3, 'a4, 'a5) t6 =
     ( 'a0 * 'a1 * 'a2 * 'a3 * 'a4 * 'a5
-    , [ `S0 of 'a0 | `S1 of 'a1 | `S2 of 'a2 | `S3 of 'a3 | `S4 of 'a4 | `S5 of 'a5 ] )
-    t
+      , [ `S0 of 'a0 | `S1 of 'a1 | `S2 of 'a2 | `S3 of 'a3 | `S4 of 'a4 | `S5 of 'a5 ]
+      )
+      t
   [@@deriving sexp_of]
 
   type ('a0, 'a1, 'a2, 'a3, 'a4, 'a5, 'a6) t7 =
     ( 'a0 * 'a1 * 'a2 * 'a3 * 'a4 * 'a5 * 'a6
-    , [ `S0 of 'a0
-      | `S1 of 'a1
-      | `S2 of 'a2
-      | `S3 of 'a3
-      | `S4 of 'a4
-      | `S5 of 'a5
-      | `S6 of 'a6
-      ] )
-    t
+      , [ `S0 of 'a0
+        | `S1 of 'a1
+        | `S2 of 'a2
+        | `S3 of 'a3
+        | `S4 of 'a4
+        | `S5 of 'a5
+        | `S6 of 'a6
+        ] )
+      t
   [@@deriving sexp_of]
 
   type ('a0, 'a1, 'a2, 'a3, 'a4, 'a5, 'a6, 'a7) t8 =
     ( 'a0 * 'a1 * 'a2 * 'a3 * 'a4 * 'a5 * 'a6 * 'a7
-    , [ `S0 of 'a0
-      | `S1 of 'a1
-      | `S2 of 'a2
-      | `S3 of 'a3
-      | `S4 of 'a4
-      | `S5 of 'a5
-      | `S6 of 'a6
-      | `S7 of 'a7
-      ] )
-    t
+      , [ `S0 of 'a0
+        | `S1 of 'a1
+        | `S2 of 'a2
+        | `S3 of 'a3
+        | `S4 of 'a4
+        | `S5 of 'a5
+        | `S6 of 'a6
+        | `S7 of 'a7
+        ] )
+      t
   [@@deriving sexp_of]
 
   type ('a0, 'a1, 'a2, 'a3, 'a4, 'a5, 'a6, 'a7, 'a8) t9 =
     ( 'a0 * 'a1 * 'a2 * 'a3 * 'a4 * 'a5 * 'a6 * 'a7 * 'a8
-    , [ `S0 of 'a0
-      | `S1 of 'a1
-      | `S2 of 'a2
-      | `S3 of 'a3
-      | `S4 of 'a4
-      | `S5 of 'a5
-      | `S6 of 'a6
-      | `S7 of 'a7
-      | `S8 of 'a8
-      ] )
-    t
+      , [ `S0 of 'a0
+        | `S1 of 'a1
+        | `S2 of 'a2
+        | `S3 of 'a3
+        | `S4 of 'a4
+        | `S5 of 'a5
+        | `S6 of 'a6
+        | `S7 of 'a7
+        | `S8 of 'a8
+        ] )
+      t
   [@@deriving sexp_of]
 
   type ('a0, 'a1, 'a2, 'a3, 'a4, 'a5, 'a6, 'a7, 'a8, 'a9) t10 =
     ( 'a0 * 'a1 * 'a2 * 'a3 * 'a4 * 'a5 * 'a6 * 'a7 * 'a8 * 'a9
-    , [ `S0 of 'a0
-      | `S1 of 'a1
-      | `S2 of 'a2
-      | `S3 of 'a3
-      | `S4 of 'a4
-      | `S5 of 'a5
-      | `S6 of 'a6
-      | `S7 of 'a7
-      | `S8 of 'a8
-      | `S9 of 'a9
-      ] )
-    t
+      , [ `S0 of 'a0
+        | `S1 of 'a1
+        | `S2 of 'a2
+        | `S3 of 'a3
+        | `S4 of 'a4
+        | `S5 of 'a5
+        | `S6 of 'a6
+        | `S7 of 'a7
+        | `S8 of 'a8
+        | `S9 of 'a9
+        ] )
+      t
   [@@deriving sexp_of]
 
   type ('a0, 'a1, 'a2, 'a3, 'a4, 'a5, 'a6, 'a7, 'a8, 'a9, 'a10) t11 =
     ( 'a0 * 'a1 * 'a2 * 'a3 * 'a4 * 'a5 * 'a6 * 'a7 * 'a8 * 'a9 * 'a10
-    , [ `S0 of 'a0
-      | `S1 of 'a1
-      | `S2 of 'a2
-      | `S3 of 'a3
-      | `S4 of 'a4
-      | `S5 of 'a5
-      | `S6 of 'a6
-      | `S7 of 'a7
-      | `S8 of 'a8
-      | `S9 of 'a9
-      | `S10 of 'a10
-      ] )
-    t
+      , [ `S0 of 'a0
+        | `S1 of 'a1
+        | `S2 of 'a2
+        | `S3 of 'a3
+        | `S4 of 'a4
+        | `S5 of 'a5
+        | `S6 of 'a6
+        | `S7 of 'a7
+        | `S8 of 'a8
+        | `S9 of 'a9
+        | `S10 of 'a10
+        ] )
+      t
   [@@deriving sexp_of]
 
   type ('a0, 'a1, 'a2, 'a3, 'a4, 'a5, 'a6, 'a7, 'a8, 'a9, 'a10, 'a11) t12 =
     ( 'a0 * 'a1 * 'a2 * 'a3 * 'a4 * 'a5 * 'a6 * 'a7 * 'a8 * 'a9 * 'a10 * 'a11
-    , [ `S0 of 'a0
-      | `S1 of 'a1
-      | `S2 of 'a2
-      | `S3 of 'a3
-      | `S4 of 'a4
-      | `S5 of 'a5
-      | `S6 of 'a6
-      | `S7 of 'a7
-      | `S8 of 'a8
-      | `S9 of 'a9
-      | `S10 of 'a10
-      | `S11 of 'a11
-      ] )
-    t
+      , [ `S0 of 'a0
+        | `S1 of 'a1
+        | `S2 of 'a2
+        | `S3 of 'a3
+        | `S4 of 'a4
+        | `S5 of 'a5
+        | `S6 of 'a6
+        | `S7 of 'a7
+        | `S8 of 'a8
+        | `S9 of 'a9
+        | `S10 of 'a10
+        | `S11 of 'a11
+        ] )
+      t
   [@@deriving sexp_of]
 
   type ('a0, 'a1, 'a2, 'a3, 'a4, 'a5, 'a6, 'a7, 'a8, 'a9, 'a10, 'a11, 'a12) t13 =
     ( 'a0 * 'a1 * 'a2 * 'a3 * 'a4 * 'a5 * 'a6 * 'a7 * 'a8 * 'a9 * 'a10 * 'a11 * 'a12
-    , [ `S0 of 'a0
-      | `S1 of 'a1
-      | `S2 of 'a2
-      | `S3 of 'a3
-      | `S4 of 'a4
-      | `S5 of 'a5
-      | `S6 of 'a6
-      | `S7 of 'a7
-      | `S8 of 'a8
-      | `S9 of 'a9
-      | `S10 of 'a10
-      | `S11 of 'a11
-      | `S12 of 'a12
-      ] )
-    t
+      , [ `S0 of 'a0
+        | `S1 of 'a1
+        | `S2 of 'a2
+        | `S3 of 'a3
+        | `S4 of 'a4
+        | `S5 of 'a5
+        | `S6 of 'a6
+        | `S7 of 'a7
+        | `S8 of 'a8
+        | `S9 of 'a9
+        | `S10 of 'a10
+        | `S11 of 'a11
+        | `S12 of 'a12
+        ] )
+      t
   [@@deriving sexp_of]
 
   type ('a0, 'a1, 'a2, 'a3, 'a4, 'a5, 'a6, 'a7, 'a8, 'a9, 'a10, 'a11, 'a12, 'a13) t14 =
     ( 'a0 * 'a1 * 'a2 * 'a3 * 'a4 * 'a5 * 'a6 * 'a7 * 'a8 * 'a9 * 'a10 * 'a11 * 'a12 * 'a13
-    , [ `S0 of 'a0
-      | `S1 of 'a1
-      | `S2 of 'a2
-      | `S3 of 'a3
-      | `S4 of 'a4
-      | `S5 of 'a5
-      | `S6 of 'a6
-      | `S7 of 'a7
-      | `S8 of 'a8
-      | `S9 of 'a9
-      | `S10 of 'a10
-      | `S11 of 'a11
-      | `S12 of 'a12
-      | `S13 of 'a13
-      ] )
-    t
+      , [ `S0 of 'a0
+        | `S1 of 'a1
+        | `S2 of 'a2
+        | `S3 of 'a3
+        | `S4 of 'a4
+        | `S5 of 'a5
+        | `S6 of 'a6
+        | `S7 of 'a7
+        | `S8 of 'a8
+        | `S9 of 'a9
+        | `S10 of 'a10
+        | `S11 of 'a11
+        | `S12 of 'a12
+        | `S13 of 'a13
+        ] )
+      t
   [@@deriving sexp_of]
 
   val t1 : _ t1
@@ -213,7 +214,7 @@ end
 
 module type Slot = sig
   (** A [Slot.t] represents a slot in a tuple type. *)
-  type ('variant, 'a) t [@@deriving sexp_of]
+  type ('variant, 'a) t : immutable_data [@@deriving sexp_of]
 
   val equal : ('v, 'a) t -> ('v, 'a) t -> bool
 

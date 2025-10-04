@@ -6,7 +6,7 @@ let type_parameter ~core_type =
   | Ptyp_constr (longident_loc, [ type_parameter ]) ->
     (match
        Helpers.longident_is_like_t
-         longident_loc.txt
+         longident_loc
          ~primitive_name:None
          ~first_module_name:"Or_error"
      with
@@ -31,5 +31,5 @@ let maybe_match type_ { Ctx.version; _ } =
        (fun ctx children ->
          Helpers.apply_streamable_dot ctx ~functor_name:"Of_result" ~arguments:children)
    }
-    : Clause.Match.t)
+   : Clause.Match.t)
 ;;

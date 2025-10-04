@@ -1,23 +1,14 @@
+@@ portable
+
 (** A type for 8-bit characters. *)
 
 open! Import
 
 (** An alias for the type of characters. *)
-type t = char [@@deriving_inline enumerate, globalize, sexp, sexp_grammar]
+type t = char [@@deriving enumerate, globalize, sexp ~localize, sexp_grammar]
 
-include Ppx_enumerate_lib.Enumerable.S with type t := t
+include%template Identifiable.S [@mode local] [@modality portable] with type t := t
 
-val globalize : t -> t
-
-include Sexplib0.Sexpable.S with type t := t
-
-val t_sexp_grammar : t Sexplib0.Sexp_grammar.t
-
-[@@@end]
-
-include Identifiable.S with type t := t
-include Ppx_compare_lib.Equal.S_local with type t := t
-include Ppx_compare_lib.Comparable.S_local with type t := t
 include Invariant.S with type t := t
 module O : Comparisons.Infix with type t := t
 
@@ -62,7 +53,7 @@ val is_alphanum : t -> bool
 (** ' ' - '~' *)
 val is_print : t -> bool
 
-(** ' ' or '\t' or '\r' or '\n' *)
+(** ' ' or '\t' or '\r' or '\n' or '\011' (vertical tab) or '\012' (form feed) *)
 val is_whitespace : t -> bool
 
 (** Returns [Some i] if [is_digit c] and [None] otherwise. *)
@@ -92,16 +83,10 @@ val max_value : t
 (** [Caseless] compares and hashes characters ignoring case, so that for example
     [Caseless.equal 'A' 'a'] and [Caseless.('a' < 'B')] are [true]. *)
 module Caseless : sig
-  type nonrec t = t [@@deriving_inline hash, sexp, sexp_grammar]
+  type nonrec t = t [@@deriving hash, sexp ~localize, sexp_grammar]
 
-  include Ppx_hash_lib.Hashable.S with type t := t
-  include Sexplib0.Sexpable.S with type t := t
+  include%template Comparable.S [@modality portable] with type t := t
 
-  val t_sexp_grammar : t Sexplib0.Sexp_grammar.t
-
-  [@@@end]
-
-  include Comparable.S with type t := t
-  include Ppx_compare_lib.Equal.S_local with type t := t
-  include Ppx_compare_lib.Comparable.S_local with type t := t
+  include Ppx_compare_lib.Equal.S__local with type t := t
+  include Ppx_compare_lib.Comparable.S__local with type t := t
 end

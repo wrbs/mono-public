@@ -1,5 +1,4 @@
 opam-version: "2.0"
-version: "v0.17.0"
 maintainer: "Jane Street developers"
 authors: ["Jane Street Group, LLC"]
 homepage: "https://github.com/janestreet/async_js"
@@ -11,14 +10,15 @@ build: [
   ["dune" "build" "-p" name "-j" jobs]
 ]
 depends: [
-  "ocaml"            {>= "5.1.0"}
-  "async_kernel"     {>= "v0.17" & < "v0.18"}
-  "async_rpc_kernel" {>= "v0.17" & < "v0.18"}
-  "core"             {>= "v0.17" & < "v0.18"}
-  "ppx_jane"         {>= "v0.17" & < "v0.18"}
-  "dune"             {>= "3.11.0"}
-  "js_of_ocaml"      {>= "5.1.1" & < "5.7.0"}
-  "js_of_ocaml-ppx"  {>= "5.1.1" & < "5.7.0"}
+  "ocaml" {>= "5.1.0"}
+  "async_kernel"
+  "async_rpc_kernel"
+  "core"
+  "ppx_expect"
+  "ppx_jane"
+  "dune"             {>= "3.17.0"}
+  "js_of_ocaml"      {= "6.0.1+ox"}
+  "js_of_ocaml-ppx"  {= "6.0.1+ox"}
   "uri"              {>= "3.0.0"}
   "uri-sexp"         {>= "3.0.0"}
 ]

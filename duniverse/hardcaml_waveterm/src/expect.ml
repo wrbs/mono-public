@@ -3,11 +3,11 @@ open Hardcaml_waveterm_kernel.Expert
 module M = Expect_intf.M
 
 module Make
-  (Data : Data.S)
-  (Wave : Wave.M(Data).S)
-  (Waves : Waves.M(Data)(Wave).S)
-  (Render : Render.M(Data)(Wave)(Waves).S)
-  (Waveform : Waveform.M(Data)(Wave)(Waves)(Render).S) =
+    (Data : Data.S)
+    (Wave : Wave.M(Data).S)
+    (Waves : Waves.M(Data)(Wave).S)
+    (Render : Render.M(Data)(Wave)(Waves).S)
+    (Waveform : Waveform.M(Data)(Wave)(Waves)(Render).S) =
 struct
   module Serialize_waveform =
     Serialize_waveform.Make (Data) (Wave) (Waves) (Render) (Waveform)
@@ -65,5 +65,35 @@ struct
         else Printf.sprintf "%s.%s" serialize_to extension
       in
       Serialize_waveform.marshall t serialize_to)
+  ;;
+
+  let expect_exact
+    ?display_rules
+    ?(display_width = 90)
+    ?display_height
+    ?display_values
+    ?wave_width
+    ?wave_height
+    ?signals_width
+    ?start_cycle
+    ?signals_alignment
+    ?show_digest
+    ?serialize_to
+    t
+    =
+    Stdio.print_endline "";
+    expect
+      ?display_rules
+      ~display_width
+      ?display_height
+      ?display_values
+      ?wave_width
+      ?wave_height
+      ?signals_width
+      ?start_cycle
+      ?signals_alignment
+      ?show_digest
+      ?serialize_to
+      t
   ;;
 end

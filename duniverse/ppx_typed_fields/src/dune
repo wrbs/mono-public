@@ -4,6 +4,7 @@
  (kind ppx_deriver)
  (ppx_runtime_libraries base ppx_typed_fields.typed_fields_lib
    ppx_typed_fields.typed_variants_lib sexplib)
- (libraries base ppxlib)
+ (libraries base ppxlib ppxlib_jane)
  (preprocess
-  (pps ppxlib.metaquot ppx_string ppx_jane)))
+  (pps ppxlib.metaquot ppx_base -require-template-extension ppx_pipebang
+    ppx_string)))

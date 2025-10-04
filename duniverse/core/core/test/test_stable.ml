@@ -4,14 +4,10 @@ open! Expect_test_helpers_core
 let%expect_test "[sexp_of_int] respects [sexp_of_int_style]" =
   let sexp_of_int = Core.Core_stable.sexp_of_int in
   let r = Int_conversions.sexp_of_int_style in
-  let old = !r in
-  r := `Underscores;
-  print_s [%sexp (1234 : int)];
+  Dynamic.with_temporarily r `Underscores ~f:(fun () -> print_s [%sexp (1234 : int)]);
   [%expect {| 1_234 |}];
-  r := `No_underscores;
-  print_s [%sexp (1234 : int)];
-  [%expect {| 1234 |}];
-  r := old
+  Dynamic.with_temporarily r `No_underscores ~f:(fun () -> print_s [%sexp (1234 : int)]);
+  [%expect {| 1234 |}]
 ;;
 
 let%expect_test "older [int_of_sexp] supports both [sexp_of_int_style]s" =
@@ -19,19 +15,14 @@ let%expect_test "older [int_of_sexp] supports both [sexp_of_int_style]s" =
   let int_of_sexp = Sexplib.Std.int_of_sexp in
   let print () = print_s [%sexp (int_of_sexp (sexp_of_int 1234) : int)] in
   let r = Int_conversions.sexp_of_int_style in
-  let old = !r in
-  r := `Underscores;
-  print ();
+  Dynamic.with_temporarily r `Underscores ~f:print;
   [%expect {| 1_234 |}];
-  r := `No_underscores;
-  print ();
-  [%expect {| 1234 |}];
-  r := old
+  Dynamic.with_temporarily r `No_underscores ~f:print;
+  [%expect {| 1234 |}]
 ;;
 
 module _ = struct
-  let%test_module "Hashtbl.V1" =
-    (module Stable_unit_test.Make_unordered_container (struct
+  module%test [@name "Hashtbl.V1"] _ = Stable_unit_test.Make_unordered_container (struct
       module Hashable = Core_stable.Hashable.V1.Make (Int)
       module Table = Hashable.Table
 
@@ -58,12 +49,10 @@ module _ = struct
             } )
         ]
       ;;
-    end))
-  ;;
+    end)
 end
 
-let%test_module "Hash_set.V1" =
-  (module Stable_unit_test.Make_unordered_container (struct
+module%test [@name "Hash_set.V1"] _ = Stable_unit_test.Make_unordered_container (struct
     module Hashable = Core_stable.Hashable.V1.Make (Int)
     include Hashable.Hash_set
 
@@ -87,8 +76,7 @@ let%test_module "Hash_set.V1" =
         , { Test.sexps = [ "0" ]; bin_io_header = "\001"; bin_io_elements = [ "\000" ] } )
       ]
     ;;
-  end))
-;;
+  end)
 
 module _ = struct
   module type F = functor (Key : Stable) -> sig
@@ -97,33 +85,31 @@ module _ = struct
   end
 
   module Test (F : F) = Stable_unit_test.Make (struct
-    include F (Int)
+      include F (Int)
 
-    type nonrec t = string t [@@deriving sexp, bin_io]
+      type nonrec t = string t [@@deriving sexp, bin_io]
 
-    let equal = Map.equal String.equal
+      let equal = Map.equal String.equal
 
-    let tests =
-      [ ( Int.Map.of_alist_exn [ 1, "foo"; 2, "bar"; 3, "baz" ]
-        , "((1 foo) (2 bar) (3 baz))"
-        , "\003\001\003foo\002\003bar\003\003baz" )
-      ; Int.Map.empty, "()", "\000"
-      ; Int.Map.singleton 0 "foo", "((0 foo))", "\001\000\003foo"
-      ]
-    ;;
-  end)
-
-  let%test_module "Map.V1" = (module Test (Map.Stable.V1.Make))
-
-  let%test_module "Map.V1.M" =
-    (module struct
-      module F (Key : Stable) = struct
-        type 'a t = 'a Map.Stable.V1.M(Key).t [@@deriving bin_io, compare, sexp]
-      end
-
-      include Test (F)
+      let tests =
+        [ ( Int.Map.of_alist_exn [ 1, "foo"; 2, "bar"; 3, "baz" ]
+          , "((1 foo) (2 bar) (3 baz))"
+          , "\003\001\003foo\002\003bar\003\003baz" )
+        ; Int.Map.empty, "()", "\000"
+        ; Int.Map.singleton 0 "foo", "((0 foo))", "\001\000\003foo"
+        ]
+      ;;
     end)
-  ;;
+
+  module%test [@name "Map.V1"] _ = Test (Map.Stable.V1.Make)
+
+  module%test [@name "Map.V1.M"] _ = struct
+    module F (Key : Stable) = struct
+      type 'a t = 'a Map.Stable.V1.M(Key).t [@@deriving bin_io, compare, sexp]
+    end
+
+    include Test (F)
+  end
 end
 
 module _ = struct
@@ -132,29 +118,27 @@ module _ = struct
   end
 
   module Test (F : F) = Stable_unit_test.Make (struct
-    include F (Int)
+      include F (Int)
 
-    let equal = Set.equal
+      let equal = Set.equal
 
-    let tests =
-      [ ( Int.Set.of_list (List.init 10 ~f:Fn.id)
-        , "(0 1 2 3 4 5 6 7 8 9)"
-        , "\010\000\001\002\003\004\005\006\007\008\009" )
-      ; Int.Set.empty, "()", "\000"
-      ; Int.Set.singleton 0, "(0)", "\001\000"
-      ]
-    ;;
-  end)
-
-  let%test_module "Set.V1" = (module Test (Set.Stable.V1.Make))
-
-  let%test_module "Set.V1.M" =
-    (module struct
-      module F (Elt : Stable) = struct
-        type t = Set.Stable.V1.M(Elt).t [@@deriving bin_io, compare, sexp]
-      end
-
-      include Test (F)
+      let tests =
+        [ ( Int.Set.of_list (List.init 10 ~f:Fn.id)
+          , "(0 1 2 3 4 5 6 7 8 9)"
+          , "\010\000\001\002\003\004\005\006\007\008\009" )
+        ; Int.Set.empty, "()", "\000"
+        ; Int.Set.singleton 0, "(0)", "\001\000"
+        ]
+      ;;
     end)
-  ;;
+
+  module%test [@name "Set.V1"] _ = Test (Set.Stable.V1.Make)
+
+  module%test [@name "Set.V1.M"] _ = struct
+    module F (Elt : Stable) = struct
+      type t = Set.Stable.V1.M(Elt).t [@@deriving bin_io, compare, sexp]
+    end
+
+    include Test (F)
+  end
 end

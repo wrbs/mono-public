@@ -9,23 +9,21 @@ module Absolute = struct
 
   include (
     Float :
-      sig
-        type t = float [@@deriving bin_io, hash, typerep]
+    sig
+    @@ portable
+      type t = float [@@deriving bin_io ~localize, compare ~localize, hash, typerep]
 
-        include Comparable.S_common with type t := t
-
-        include module type of struct
-          include Float.O
-        end
-      end)
+      include%template
+        Comparable.S_common [@mode local] [@modality portable] with type t := t
+    end)
 
   (* due to precision limitations in float we can't expect better than microsecond
      precision *)
   include Float.Robust_compare.Make (struct
-    let robust_comparison_tolerance = 1E-6
-  end)
+      let robust_comparison_tolerance = 1E-6
+    end)
 
-  let diff t1 t2 = Span.of_sec (t1 - t2)
+  let diff t1 t2 = Span.of_sec (t1 -. t2)
   let add t span = t +. Span.to_sec span
   let sub t span = t -. Span.to_sec span
   let prev t = Float.one_ulp `Down t
@@ -112,12 +110,7 @@ end
 
 let next_multiple_internal ~can_equal_after ~base ~after ~interval =
   if Span.( <= ) interval Span.zero
-  then
-    failwiths
-      ~here:[%here]
-      "Time.next_multiple got nonpositive interval"
-      interval
-      [%sexp_of: Span.t];
+  then failwiths "Time.next_multiple got nonpositive interval" interval [%sexp_of: Span.t];
   let base_to_after = diff after base in
   if Span.( < ) base_to_after Span.zero
   then base (* [after < base], choose [k = 0]. *)

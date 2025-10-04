@@ -58,7 +58,7 @@ let same (t1 : _ t) (t2 : _ t) = phys_same t1 t2
 let same_as_packed (t1 : _ t) (Packed_.T t2) = same t1 t2
 
 let invariant invariant_a t =
-  Invariant.invariant [%here] t [%sexp_of: _ t] (fun () ->
+  Invariant.invariant t [%sexp_of: _ t] (fun () ->
     let check f = Invariant.check_field t f in
     Fields.iter
       ~state:ignore
@@ -116,30 +116,19 @@ let invariant invariant_a t =
 
 let value_exn t =
   match t.state with
-  | Created ->
-    failwiths
-      ~here:[%here]
-      "Observer.value_exn called without stabilizing"
-      t
-      [%sexp_of: _ t]
+  | Created -> failwiths "Observer.value_exn called without stabilizing" t [%sexp_of: _ t]
   | Disallowed | Unlinked ->
-    failwiths
-      ~here:[%here]
-      "Observer.value_exn called after disallow_future_use"
-      t
-      [%sexp_of: _ t]
+    failwiths "Observer.value_exn called after disallow_future_use" t [%sexp_of: _ t]
   | In_use ->
     let uopt = t.observing.value_opt in
     if Uopt.is_none uopt
-    then
-      failwiths ~here:[%here] "attempt to get value of an invalid node" t [%sexp_of: _ t];
+    then failwiths "attempt to get value of an invalid node" t [%sexp_of: _ t];
     Uopt.unsafe_value uopt
 ;;
 
 let on_update_exn t on_update_handler =
   match t.state with
-  | Disallowed | Unlinked ->
-    failwiths ~here:[%here] "on_update disallowed" t [%sexp_of: _ t]
+  | Disallowed | Unlinked -> failwiths "on_update disallowed" t [%sexp_of: _ t]
   | Created | In_use ->
     t.on_update_handlers <- on_update_handler :: t.on_update_handlers;
     (match t.state with
@@ -156,22 +145,22 @@ let on_update_exn t on_update_handler =
 let unlink_from_observing t =
   let prev = t.prev_in_observing in
   let next = t.next_in_observing in
-  t.prev_in_observing <- Uopt.none;
-  t.next_in_observing <- Uopt.none;
+  t.prev_in_observing <- Uopt.get_none ();
+  t.next_in_observing <- Uopt.get_none ();
   if Uopt.is_some next then (Uopt.unsafe_value next).prev_in_observing <- prev;
   if Uopt.is_some prev then (Uopt.unsafe_value prev).next_in_observing <- next;
   let observing = t.observing in
   if phys_equal t (Uopt.value_exn observing.observers) then observing.observers <- next;
   observing.num_on_update_handlers
-    <- observing.num_on_update_handlers - List.length t.on_update_handlers;
+  <- observing.num_on_update_handlers - List.length t.on_update_handlers;
   t.on_update_handlers <- []
 ;;
 
 let unlink_from_all t =
   let prev = t.prev_in_all in
   let next = t.next_in_all in
-  t.prev_in_all <- Uopt.none;
-  t.next_in_all <- Uopt.none;
+  t.prev_in_all <- Uopt.get_none ();
+  t.next_in_all <- Uopt.get_none ();
   if Uopt.is_some next then Packed_.set_prev_in_all (Uopt.unsafe_value next) prev;
   if Uopt.is_some prev then Packed_.set_next_in_all (Uopt.unsafe_value prev) next
 ;;

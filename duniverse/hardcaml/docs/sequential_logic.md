@@ -1,4 +1,4 @@
-# Sequential Logic
+# 2.2 Sequential Logic
 
 <!--
 ```ocaml
@@ -22,54 +22,27 @@ a type called a [`Reg_spec.t`](https://ocaml.org/p/hardcaml/latest/doc/Hardcaml/
 ```ocaml
 # open Hardcaml
 # let clock = Signal.input "clock" 1
-val clock : Signal.t = (wire (names (clock)) (width 1) (data_in empty))
+val clock : Signal.t = (wire (names (clock)) (width 1))
 # let clear = Signal.input "clear" 1
-val clear : Signal.t = (wire (names (clear)) (width 1) (data_in empty))
-# let spec = Reg_spec.create ~clock ~clear ()
-val spec : Reg_spec.t =
-  {Hardcaml.Reg_spec.reg_clock =
-    (wire (names (clock)) (width 1) (data_in empty));
-   reg_clock_edge = Hardcaml__.Edge.Rising; reg_reset = empty;
-   reg_reset_edge = Hardcaml__.Edge.Rising; reg_reset_value = empty;
-   reg_clear = (wire (names (clear)) (width 1) (data_in empty));
-   reg_clear_level = Hardcaml__.Level.High; reg_clear_value = empty;
-   reg_enable = empty}
+val clear : Signal.t = (wire (names (clear)) (width 1))
+# let spec = Signal.Reg_spec.create ~clock ~clear ()
+val spec : Signal.Reg_spec.t = <abstr>
 ```
 
 Multiple sequential elements are then able to refer to the same
 `Reg_spec.t`.
 
-`Reg_spec`s can be overridden and can change the value of the register
-when it is reset or cleared.
-
-```ocaml
-# let new_spec = Reg_spec.override spec ~clear_to:Signal.vdd
-val new_spec : Reg_spec.t =
-  {Hardcaml.Reg_spec.reg_clock =
-    (wire (names (clock)) (width 1) (data_in empty));
-   reg_clock_edge = Hardcaml__.Edge.Rising; reg_reset = empty;
-   reg_reset_edge = Hardcaml__.Edge.Rising; reg_reset_value = empty;
-   reg_clear = (wire (names (clear)) (width 1) (data_in empty));
-   reg_clear_level = Hardcaml__.Level.High;
-   reg_clear_value = (const (names (vdd)) (width 1) (value 0b1));
-   reg_enable = empty}
-```
-
-By default, registers start with the value `gnd` (or 0). Registers
-built with `new_spec` will start with the value `vdd` (or 1).
-
-# Registers, pipelines
+# Registers, Pipelines
 
 A simple register takes a signal as input and basically delays it for one cycle.
 
 ```ocaml
 # let d_in = Signal.input "d_in" 8
-val d_in : Reg_spec.signal = (wire (names (d_in)) (width 8) (data_in empty))
+val d_in : Signal.t = (wire (names (d_in)) (width 8))
 # let q_out = Signal.reg spec ~enable:Signal.vdd d_in
-val q_out : Reg_spec.signal =
+val q_out : Signal.t =
   (register (width 8)
- ((clock clock) (clock_edge Rising) (clear clear) (clear_level High)
-  (clear_to 0b00000000) (enable 0b1))
+ ((clock clock) (clock_edge Rising) (clear clear) (clear_to 0b00000000))
  (data_in d_in))
 ```
 
@@ -77,14 +50,13 @@ The pipeline function will delay its input for multiple cycles.
 
 ```ocaml
 # let q_out_after_3_clocks = Signal.pipeline spec ~enable:Signal.vdd ~n:3 d_in
-val q_out_after_3_clocks : Reg_spec.signal =
+val q_out_after_3_clocks : Signal.t =
   (register (width 8)
- ((clock clock) (clock_edge Rising) (clear clear) (clear_level High)
-  (clear_to 0b00000000) (enable 0b1))
+ ((clock clock) (clock_edge Rising) (clear clear) (clear_to 0b00000000))
  (data_in register))
 ```
 
-# Registers with feedback
+# Registers with Feedback
 
 We noted [previously](combinational_logic.md) that combinational
 logic could not contain cycles.  We can lift this restriction with
@@ -96,10 +68,9 @@ the next one.
 
 ```ocaml
 # let counter = Signal.reg_fb spec ~enable:Signal.vdd  ~width:8 ~f:(fun d -> Signal.(d +:. 1))
-val counter : Reg_spec.signal =
+val counter : Signal.t =
   (register (width 8)
- ((clock clock) (clock_edge Rising) (clear clear) (clear_level High)
-  (clear_to 0b00000000) (enable 0b1))
+ ((clock clock) (clock_edge Rising) (clear clear) (clear_to 0b00000000))
  (data_in wire))
 ```
 
@@ -111,16 +82,16 @@ passes its input through to its output.
 
 ```ocaml
 # let w = Signal.wire 1;;
-val w : Reg_spec.signal = (wire (width 1) (data_in empty))
+val w : Signal.t = (wire (width 1))
 ```
 
 Wires can later be assigned an input driver.
 
 ```ocaml
-# Signal.(w <== vdd);;
+# Signal.(w <-- vdd);;
 - : unit = ()
 # w;;
-- : Reg_spec.signal = (wire (width 1) (data_in 0b1))
+- : Signal.t = (wire (width 1) (data_in 0b1))
 ```
 
 Apart from the fact they logically do nothing, they are really useful!
@@ -130,12 +101,11 @@ It is how the `reg_fb` function is implemented.
 # let reg_fb spec ~enable ~w f =
     let d = Signal.wire w in
     let q = Signal.reg spec ~enable (f d) in
-    Signal.(d <== q);
+    Signal.(d <-- q);
     q
 val reg_fb :
-  Reg_spec.t ->
-  enable:Reg_spec.signal ->
-  w:int -> (Reg_spec.signal -> Reg_spec.signal) -> Reg_spec.signal = <fun>
+  Signal.Reg_spec.t ->
+  enable:Signal.t -> w:int -> (Signal.t -> Signal.t) -> Signal.t = <fun>
 ```
 
 Without wires we cannot express the above function since the input
@@ -188,12 +158,11 @@ let data = Signal.input "data" 32;;
     ; write_address = address
     ; write_enable = write_enable
     ; write_data = data }
-val write_port : Reg_spec.signal Write_port.t =
-  {Hardcaml.Write_port.write_clock =
-    (wire (names (clock)) (width 1) (data_in empty));
-   write_address = (wire (names (address)) (width 8) (data_in empty));
-   write_enable = (wire (names (write_enable)) (width 1) (data_in empty));
-   write_data = (wire (names (data)) (width 32) (data_in empty))}
+val write_port : Signal.t Write_port.t =
+  {Hardcaml.Write_port.write_clock = (wire (names (clock)) (width 1));
+   write_address = (wire (names (address)) (width 8));
+   write_enable = (wire (names (write_enable)) (width 1));
+   write_data = (wire (names (data)) (width 32))}
 ```
 
 The memory is read asynchronously using `read_addresses`. The read data
@@ -201,14 +170,13 @@ is returned as an array, one for each read port.
 
 ```ocaml
 # let read_address = address
-val read_address : Reg_spec.signal =
-  (wire (names (address)) (width 8) (data_in empty))
+val read_address : Signal.t = (wire (names (address)) (width 8))
 # let q =
     Signal.multiport_memory
       256
       ~write_ports:[|write_port|]
       ~read_addresses:[|read_address|]
-val q : Reg_spec.signal array =
+val q : Signal.t array =
   [|(memory_read_port (width 32)
  ((memory multiport_memory) (read_addresses address)))|]
 ```
@@ -230,11 +198,10 @@ later.
     { Read_port.read_clock = clock
     ; read_address
     ; read_enable = Signal.input "read_enable" 1 }
-val read_port : Reg_spec.signal Read_port.t =
-  {Hardcaml.Read_port.read_clock =
-    (wire (names (clock)) (width 1) (data_in empty));
-   read_address = (wire (names (address)) (width 8) (data_in empty));
-   read_enable = (wire (names (read_enable)) (width 1) (data_in empty))}
+val read_port : Signal.t Read_port.t =
+  {Hardcaml.Read_port.read_clock = (wire (names (clock)) (width 1));
+   read_address = (wire (names (address)) (width 8));
+   read_enable = (wire (names (read_enable)) (width 1))}
 ```
 
 Each read port can have a different clock.
@@ -247,7 +214,7 @@ Each read port can have a different clock.
       ~write_ports:[|write_port|]
       ~read_ports:[|read_port|]
       ()
-val q : Reg_spec.signal array =
+val q : Signal.t array =
   [|(register (width 32) ((clock clock) (clock_edge Rising) (enable read_enable))
  (data_in memory_read_port))|]
 ```

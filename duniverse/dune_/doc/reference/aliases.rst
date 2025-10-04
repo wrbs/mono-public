@@ -69,6 +69,8 @@ Some aliases are defined and managed by Dune itself:
        aliases/all
        aliases/default
        aliases/install
+       aliases/pkg-install
+       aliases/empty
 
   .. grid-item::
 

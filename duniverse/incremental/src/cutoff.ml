@@ -14,7 +14,7 @@ type 'a t =
 [@@deriving sexp_of]
 
 let invariant _ t =
-  Invariant.invariant [%here] t [%sexp_of: _ t] (fun () ->
+  Invariant.invariant t [%sexp_of: _ t] (fun () ->
     match t with
     | Always | Never | Phys_equal | Compare _ | Equal _ | F _ -> ())
 ;;
@@ -22,8 +22,10 @@ let invariant _ t =
 let create f = F f
 let of_compare f = Compare f
 let of_equal f = Equal f
+let get_never () = Never
 let never = Never
 let always = Always
+let get_always () = Always
 let poly_equal = Equal Poly.equal
 
 let should_cutoff t ~old_value ~new_value =

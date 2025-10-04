@@ -11,28 +11,35 @@ let globalize_char = function
   | '\x00' .. '\xFF' as c -> c
 ;;
 
-external globalize_float : float -> float = "caml_obj_dup"
-external globalize_int : int -> int = "%identity"
-external globalize_int32 : int32 -> int32 = "caml_obj_dup"
-external globalize_int64 : int64 -> int64 = "caml_obj_dup"
-external globalize_nativeint : nativeint -> nativeint = "caml_obj_dup"
-external globalize_bytes : bytes -> bytes = "caml_obj_dup"
-external globalize_string : string -> string = "caml_obj_dup"
+external globalize_float : local_ float -> float @@ portable = "%obj_dup"
+external globalize_int : local_ int -> int @@ portable = "%identity"
+external globalize_int32 : local_ int32 -> int32 @@ portable = "%obj_dup"
+external globalize_int64 : local_ int64 -> int64 @@ portable = "%obj_dup"
+external globalize_nativeint : local_ nativeint -> nativeint @@ portable = "%obj_dup"
+external globalize_bytes : local_ bytes -> bytes @@ portable = "%obj_dup"
+external globalize_string : local_ string -> string @@ portable = "%obj_dup"
 
 let globalize_unit (() as u) = u
 
-external globalize_array' : 'a array -> 'a array = "caml_obj_dup"
+external globalize_array' : local_ 'a array -> 'a array @@ portable = "%obj_dup"
 
 let globalize_array _ a = globalize_array' a
 
-let rec globalize_list f = function
+external globalize_floatarray : local_ floatarray -> floatarray @@ portable = "%obj_dup"
+
+let[@tail_mod_cons] rec globalize_list f = function
   | [] -> []
-  | x :: xs -> f x :: globalize_list f xs
+  | x :: xs -> f x :: (globalize_list [@tailcall]) f xs
 ;;
 
 let globalize_option f = function
   | None -> None
   | Some x -> Some (f x)
+;;
+
+let globalize_or_null f = function
+  | Basement.Or_null_shim.Null -> Basement.Or_null_shim.Null
+  | This x -> This (f x)
 ;;
 
 let globalize_result globalize_a globalize_b t =
@@ -44,6 +51,6 @@ let globalize_result globalize_a globalize_b t =
 let globalize_ref' r = ref !r
 let globalize_ref _ r = globalize_ref' r
 
-external globalize_lazy_t_mono : 'a lazy_t -> 'a lazy_t = "%identity"
+external globalize_lazy_t_mono : local_ 'a lazy_t -> 'a lazy_t @@ portable = "%identity"
 
 let globalize_lazy_t _ t = globalize_lazy_t_mono t

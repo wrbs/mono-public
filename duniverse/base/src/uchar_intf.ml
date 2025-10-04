@@ -1,22 +1,28 @@
 open! Import
 
-(** Interface for encoding and decoding individual Unicode scalar values. See [String.Utf]
-    for working with Unicode strings. *)
-module type Utf = sig
-  (** [to_string] encodes a Unicode scalar value in this encoding.
+module Definitions = struct
+  (** Interface for encoding and decoding individual Unicode scalar values. See
+      [String.Utf] for working with Unicode strings. *)
+  module type Utf = sig
+    (** [to_string] encodes a Unicode scalar value in this encoding.
 
-      [of_string] interprets a string as one Unicode scalar value in this encoding, and
-      raises if the string cannot be interpreted as such. *)
-  include Stringable.S with type t := Uchar0.t
+        [of_string] interprets a string as one Unicode scalar value in this encoding, and
+        raises if the string cannot be interpreted as such. *)
+    include Stringable.S with type t := Uchar0.t
 
-  (** Returns the number of bytes used for a given scalar value in this encoding. *)
-  val byte_length : Uchar0.t -> int
+    (** Returns the number of bytes used for a given scalar value in this encoding. *)
+    val byte_length : Uchar0.t -> int
 
-  (** The name of this encoding scheme; e.g., "UTF-8". *)
-  val codec_name : string
+    (** The name of this encoding scheme; e.g., "UTF-8". *)
+    val codec_name : string
+  end
 end
 
-module type Uchar = sig
+module type Uchar = sig @@ portable
+  include module type of struct
+    include Definitions
+  end
+
   (** Unicode operations.
 
       A [Uchar.t] represents a Unicode scalar value, which is the basic unit of Unicode.
@@ -26,20 +32,11 @@ module type Uchar = sig
 
   open! Import
 
-  type t = Uchar0.t [@@deriving_inline hash, sexp, sexp_grammar]
-
-  include Ppx_hash_lib.Hashable.S with type t := t
-  include Sexplib0.Sexpable.S with type t := t
-
-  val t_sexp_grammar : t Sexplib0.Sexp_grammar.t
-
-  [@@@end]
-
+  type t = Uchar0.t [@@deriving hash, sexp ~localize, sexp_grammar]
   type uchar := t
 
-  include Comparable.S with type t := t
-  include Ppx_compare_lib.Comparable.S_local with type t := t
-  include Ppx_compare_lib.Equal.S_local with type t := t
+  include%template Comparable.S [@mode local] [@modality portable] with type t := t
+
   include Pretty_printer.S with type t := t
   include Invariant.S with type t := t
 
@@ -71,8 +68,8 @@ module type Uchar = sig
       [0x0000]...[0xD7FF] or [0xE000]...[0x10FFFF]). *)
   val int_is_scalar : int -> bool
 
-  (** [of_scalar_exn n] is [n] as a Unicode scalar value.  Raises if [not (int_is_scalar
-      i)]. *)
+  (** [of_scalar_exn n] is [n] as a Unicode scalar value. Raises if
+      [not (int_is_scalar i)]. *)
   val of_scalar : int -> t option
 
   val of_scalar_exn : int -> t
@@ -82,11 +79,11 @@ module type Uchar = sig
 
   (** Number of bytes needed to represent [t] in UTF-8. *)
   val utf_8_byte_length : t -> int
-    [@@deprecated "[since 2023-11] use [Utf8.byte_length]"]
+  [@@deprecated "[since 2023-11] use [Utf8.byte_length]"]
 
   (** Number of bytes needed to represent [t] in UTF-16. *)
   val utf_16_byte_length : t -> int
-    [@@deprecated "[since 2023-11] use [Utf16le.byte_length] or [Utf16be.byte_length]"]
+  [@@deprecated "[since 2023-11] use [Utf16le.byte_length] or [Utf16be.byte_length]"]
 
   val min_value : t
   val max_value : t
@@ -100,16 +97,8 @@ module type Uchar = sig
 
   (** Result of decoding a UTF codec that may contain invalid encodings. *)
   module Decode_result : sig
-    type t = Uchar0.utf_decode
-    [@@immediate] [@@deriving_inline compare, equal, hash, sexp_of]
-
-    include Ppx_compare_lib.Comparable.S with type t := t
-    include Ppx_compare_lib.Equal.S with type t := t
-    include Ppx_hash_lib.Hashable.S with type t := t
-
-    val sexp_of_t : t -> Sexplib0.Sexp.t
-
-    [@@@end]
+    type t : immediate = Uchar0.utf_decode
+    [@@deriving compare ~localize, equal ~localize, hash, sexp_of ~localize]
 
     (** [true] iff [t] represents a Unicode scalar value. *)
     val is_valid : t -> bool
@@ -141,6 +130,4 @@ module type Uchar = sig
 
   (** UTF-32 big-endian encoding. See [Utf] interface. *)
   module Utf32be : Utf
-
-  module type Utf = Utf
 end

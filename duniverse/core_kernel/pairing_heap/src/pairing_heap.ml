@@ -48,7 +48,7 @@ module Node : sig
   (** [allocate v ~pool] allocates a new node from the pool with no child or sibling *)
   val allocate : 'a -> pool:'a Pool.t -> id:Id.t -> 'a t
 
-  (** [free t ~pool] frees [t] for reuse.  It is an error to access [t] after this. *)
+  (** [free t ~pool] frees [t] for reuse. It is an error to access [t] after this. *)
   val free : 'a t -> pool:'a Pool.t -> unit
 
   (** a special [t] that represents the empty node *)
@@ -497,12 +497,12 @@ let iter t ~f =
 let length t = Node.Pool.length t.pool
 
 module C = Container.Make (struct
-  type nonrec 'a t = 'a t
+    type nonrec 'a t = 'a t
 
-  let fold = fold
-  let iter = `Custom iter
-  let length = `Custom length
-end)
+    let fold = fold
+    let iter = `Custom iter
+    let length = `Custom length
+  end)
 
 let is_empty t = Node.is_empty t.root
 let mem = C.mem

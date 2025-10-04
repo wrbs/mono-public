@@ -2,9 +2,23 @@ open Import
 open Memo.O
 
 module Alias_rules = struct
+  let check_empty ~loc ~dir alias =
+    match Alias.Name.compare (Alias.name alias) Alias0.empty with
+    | Lt | Gt -> Memo.return ()
+    | Eq ->
+      let* project = Dune_load.find_project ~dir in
+      if Dune_project.dune_version project >= (3, 20)
+      then
+        User_error.raise
+          ~loc
+          [ Pp.text "User-defined rules cannot be added to the 'empty' alias" ]
+      else Memo.return ()
+  ;;
+
   let add sctx ~alias ~loc build =
     let dir = Alias.dir alias in
-    Super_context.add_alias_action sctx alias ~dir ~loc build
+    check_empty ~loc ~dir alias
+    >>> Super_context.add_alias_action sctx alias ~dir ~loc build
   ;;
 
   let add_empty sctx ~loc ~alias =
@@ -60,11 +74,11 @@ let interpret_and_add_locks ~expander locks action =
 ;;
 
 let add_user_rule
-  sctx
-  ~dir
-  ~(rule : Rule_conf.t)
-  ~(action : _ Action_builder.With_targets.t)
-  ~expander
+      sctx
+      ~dir
+      ~(rule : Rule_conf.t)
+      ~(action : Action.Full.t Action_builder.With_targets.t)
+      ~expander
   =
   let action =
     let build = interpret_and_add_locks ~expander rule.locks action.build in
@@ -106,31 +120,15 @@ let user_rule sctx ?extra_bindings ~dir ~expander (rule : Rule_conf.t) =
       | Some bindings -> Expander.add_bindings expander ~bindings
     in
     let* action =
-      let+ (action : _ Action_builder.With_targets.t) =
-        let chdir = Expander.dir expander in
-        Action_unexpanded.expand
-          (snd rule.action)
-          ~loc:(fst rule.action)
-          ~chdir
-          ~expander
-          ~deps:rule.deps
-          ~targets
-          ~targets_dir:dir
-      in
-      if rule.patch_back_source_tree
-      then
-        Action_builder.With_targets.map action ~f:(fun action ->
-          (* Here we expect that [action.sandbox] is [Sandbox_config.default]
-             because the parsing of [rule] stanzas forbids having both a
-             sandboxing setting in [deps] and a [patch_back_source_tree] field
-             at the same time.
-
-             If we didn't have this restriction and [action.sandbox] was
-             something that didn't permit [Some Patch_back_source_tree], Dune
-             would crash in a way that would be difficult for the user to
-             understand. *)
-          Action.Full.add_sandbox Sandbox_mode.Set.patch_back_source_tree_only action)
-      else action
+      let chdir = Expander.dir expander in
+      Action_unexpanded.expand
+        (snd rule.action)
+        ~loc:(fst rule.action)
+        ~chdir
+        ~expander
+        ~deps:rule.deps
+        ~targets
+        ~targets_dir:dir
     in
     (match rule_kind ~rule ~action with
      | No_alias ->
@@ -139,18 +137,31 @@ let user_rule sctx ?extra_bindings ~dir ~expander (rule : Rule_conf.t) =
      | Aliases_with_targets (aliases, alias_target) ->
        let+ () =
          Memo.parallel_iter aliases ~f:(fun alias ->
+           let loc =
+             (* standard aliases don't have a loc *)
+             match Alias0.is_standard alias with
+             | true -> Loc.none
+             | false -> rule.loc
+           in
            let alias = Alias.make ~dir alias in
            Rules.Produce.Alias.add_deps
              alias
+             ~loc
              (Action_builder.path (Path.build alias_target)))
        and+ targets = add_user_rule sctx ~dir ~rule ~action ~expander in
        Some targets
      | Aliases_only aliases ->
        let+ () =
-         let action = interpret_and_add_locks ~expander rule.locks action.build in
-         Memo.parallel_iter aliases ~f:(fun alias ->
-           let alias = Alias.make ~dir alias in
-           Alias_rules.add sctx ~alias ~loc:rule.loc action)
+         match List.map ~f:(Alias.make ~dir) aliases with
+         | [] -> Code_error.raise "empty list of aliases" []
+         | alias :: extra_aliases ->
+           let loc = rule.loc in
+           interpret_and_add_locks ~expander rule.locks action.build
+           |> Alias_rules.add sctx ~alias ~loc
+           >>> Memo.parallel_iter extra_aliases ~f:(fun extra_alias ->
+             Dep.alias alias
+             |> Action_builder.dep
+             |> Rules.Produce.Alias.add_deps ~loc extra_alias)
        in
        None)
 ;;
@@ -173,8 +184,9 @@ let copy_files sctx ~dir ~expander ~src_dir (def : Copy_files.t) =
       Path.external_ (Path.External.of_string src_glob))
   in
   let since = 1, 3 in
-  if def.syntax_version < since
-     && not (Path.is_descendant glob_in_src ~of_:(Path.source src_dir))
+  if
+    def.syntax_version < since
+    && not (Path.is_descendant glob_in_src ~of_:(Path.source src_dir))
   then
     Dune_lang.Syntax.Error.since
       loc
@@ -227,6 +239,8 @@ let copy_files sctx ~dir ~expander ~src_dir (def : Copy_files.t) =
     in
     Build_system.eval_pred (File_selector.of_glob ~dir glob)
   in
+  if def.syntax_version >= (3, 17) && Filename_set.is_empty files
+  then User_error.raise ~loc [ Pp.textf "Does not match any files" ];
   (* CR-someday amokhov: We currently traverse the set [files] twice: first, to
      add the corresponding rules, and then to convert the files to [targets]. To
      do only one traversal we need [Memo.parallel_map_set]. *)
@@ -257,7 +271,8 @@ let copy_files sctx ~dir ~expander ~src_dir (def : Copy_files.t) =
   let+ () =
     Memo.Option.iter def.alias ~f:(fun alias ->
       let alias = Alias.make alias ~dir in
-      Rules.Produce.Alias.add_deps alias (Action_builder.path_set targets))
+      Alias_rules.check_empty ~loc ~dir alias
+      >>> Rules.Produce.Alias.add_deps alias (Action_builder.path_set targets))
   in
   targets
 ;;
@@ -272,7 +287,8 @@ let copy_files sctx ~dir ~expander ~src_dir (def : Copy_files.t) =
 let alias sctx ?extra_bindings ~dir ~expander (alias_conf : Alias_conf.t) =
   let alias = Alias.make ~dir alias_conf.name in
   let loc = alias_conf.loc in
-  Expander.eval_blang expander alias_conf.enabled_if
+  Alias_rules.check_empty ~loc ~dir alias
+  >>> Expander.eval_blang expander alias_conf.enabled_if
   >>= function
   | false -> Alias_rules.add_empty sctx ~loc ~alias
   | true ->

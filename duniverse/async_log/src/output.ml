@@ -63,7 +63,7 @@ let write_immediately w format msgs =
 ;;
 
 let write' w format msgs =
-  let%map w = w in
+  let%map w in
   write_immediately w format msgs
 ;;
 
@@ -158,8 +158,8 @@ end = struct
            in
            List.drop files i)
         >>= Deferred.List.map ~how:`Sequential ~f:(fun (_i, filename) ->
-              Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log (fun () ->
-                Unix.unlink filename))
+          Deferred.Or_error.try_with ~run:`Schedule ~rest:`Log (fun () ->
+            Unix.unlink filename))
       in
       ()
     ;;
@@ -263,7 +263,7 @@ end = struct
       in
       let log_files = Tail.create () in
       let t_deferred =
-        let%map absolute_basename = absolute_basename in
+        let%map absolute_basename in
         let dirname = Filename.dirname absolute_basename in
         let basename = Filename.basename absolute_basename in
         let filename =
@@ -314,61 +314,62 @@ end = struct
   end
 
   module Numbered = Make (struct
-    type t = int
+      type t = int
 
-    let create ?time_source:_ _ = 0
-    let rotate_one = ( + ) 1
+      let create ?time_source:_ _ = 0
+      let rotate_one = ( + ) 1
 
-    let to_string_opt = function
-      | 0 -> None
-      | x -> Some (Int.to_string x)
-    ;;
+      let to_string_opt = function
+        | 0 -> None
+        | x -> Some (Int.to_string x)
+      ;;
 
-    let cmp_newest_first = Int.ascending
+      let cmp_newest_first = Int.ascending
 
-    let of_string_opt = function
-      | None -> Some 0
-      | Some s ->
-        (try Some (Int.of_string s) with
-         | _ -> None)
-    ;;
-  end)
+      let of_string_opt = function
+        | None -> Some 0
+        | Some s ->
+          (try Some (Int.of_string s) with
+           | _ -> None)
+      ;;
+    end)
 
   module Timestamped = Make (struct
-    type t = Time_float.t
+      type t = Time_float.t
 
-    let create ?time_source _zone = now ~time_source
-    let rotate_one = Fn.id
+      let create ?time_source _zone = now ~time_source
+      let rotate_one = Fn.id
 
-    let to_string_opt ts =
-      Some (Time_float.to_filename_string ~zone:(force Time_float_unix.Zone.local) ts)
-    ;;
+      let to_string_opt ts =
+        Some (Time_float.to_filename_string ~zone:(force Time_float_unix.Zone.local) ts)
+      ;;
 
-    let cmp_newest_first = Time_float.descending
+      let cmp_newest_first = Time_float.descending
 
-    let of_string_opt = function
-      | None -> None
-      | Some s ->
-        (try
-           Some (Time_float.of_filename_string ~zone:(force Time_float_unix.Zone.local) s)
-         with
-         | _ -> None)
-    ;;
-  end)
+      let of_string_opt = function
+        | None -> None
+        | Some s ->
+          (try
+             Some
+               (Time_float.of_filename_string ~zone:(force Time_float_unix.Zone.local) s)
+           with
+           | _ -> None)
+      ;;
+    end)
 
   module Dated = Make (struct
-    type t = Date.t
+      type t = Date.t
 
-    let create ?time_source zone = Date.of_time (now ~time_source) ~zone
-    let rotate_one = Fn.id
-    let to_string_opt date = Some (Date.to_string date)
-    let cmp_newest_first = Date.descending
+      let create ?time_source zone = Date.of_time (now ~time_source) ~zone
+      let rotate_one = Fn.id
+      let to_string_opt date = Some (Date.to_string date)
+      let cmp_newest_first = Date.descending
 
-    let of_string_opt = function
-      | None -> None
-      | Some str -> Option.try_with (fun () -> Date.of_string str)
-    ;;
-  end)
+      let of_string_opt = function
+        | None -> None
+        | Some str -> Option.try_with (fun () -> Date.of_string str)
+      ;;
+    end)
 
   let create
     ?perm

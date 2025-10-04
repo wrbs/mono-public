@@ -136,9 +136,10 @@ val default_implementation : _ t -> (Loc.t * Lib_name.t) option
 val kind : _ t -> Lib_kind.t
 val synopsis : _ t -> string option
 val jsoo_runtime : 'path t -> 'path list
+val wasmoo_runtime : 'path t -> 'path list
 val melange_runtime_deps : 'path t -> 'path File_deps.t
 val obj_dir : 'path t -> 'path Obj_dir.t
-val virtual_ : _ t -> Modules.t Source.t option
+val virtual_ : _ t -> bool
 val entry_modules : _ t -> (Module_name.t list, User_message.t) result Source.t
 val main_module_name : _ t -> Main_module_name.t
 val wrapped : _ t -> Wrapped.t Inherited.t option
@@ -154,6 +155,7 @@ val enabled : _ t -> Enabled_status.t Memo.t
 val orig_src_dir : 'path t -> 'path option
 val version : _ t -> Package_version.t option
 val dune_version : _ t -> Dune_lang.Syntax.Version.t option
+val dynlink_supported : _ t -> bool
 
 (** Directory where the source files for the library are located. Returns the
     original src dir when it exists *)
@@ -162,7 +164,6 @@ val best_src_dir : 'path t -> 'path
 type external_ = Path.t t
 type local = Path.Build.t t
 
-val user_written_deps : _ t -> Lib_dep.t list
 val of_local : local -> external_
 val as_local_exn : external_ -> local
 val set_version : 'a t -> Package_version.t option -> 'a t
@@ -181,8 +182,6 @@ val for_dune_package
   -> public_headers:Path.t list
   -> modules:Modules.With_vlib.t
   -> Path.t t
-
-val map_path : Path.t t -> f:(Path.t -> Path.t) -> Path.t t
 
 type 'a path =
   | Local : Path.Build.t path
@@ -212,11 +211,12 @@ val create
   -> native_archives:'a native_archives
   -> foreign_dll_files:'a list
   -> jsoo_runtime:'a list
+  -> wasmoo_runtime:'a list
   -> preprocess:Preprocess.With_instrumentation.t Preprocess.Per_module.t
   -> enabled:Enabled_status.t Memo.t
   -> virtual_deps:(Loc.t * Lib_name.t) list
   -> dune_version:Dune_lang.Syntax.Version.t option
-  -> virtual_:Modules.t Source.t option
+  -> virtual_:bool
   -> entry_modules:(Module_name.t list, User_message.t) result Source.t
   -> implements:(Loc.t * Lib_name.t) option
   -> default_implementation:(Loc.t * Lib_name.t) option

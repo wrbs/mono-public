@@ -42,8 +42,8 @@ val supported_rpcs_exn : _ t -> Generic_rpc.t list
 val descriptions : _ t -> Rpc.Description.t list Or_error.t
 val descriptions_exn : _ t -> Rpc.Description.t list
 
-(** Print a description of every supported protocol. This is useful for demonstrating
-    the final set of protocols in an expect test. *)
+(** Print a description of every supported protocol. This is useful for demonstrating the
+    final set of protocols in an expect test. *)
 val print_shapes : _ t -> unit
 
 (** [of_list ts] results in a callee that implements everything that each element of [ts]
@@ -118,11 +118,15 @@ module Pipe_rpc : sig
   type ('q, 'r, 'e) implementation := 'q -> ('r Pipe.Reader.t, 'e) Result.t Deferred.t
 
   (** Create a callee which can implement a given rpc. *)
-  val singleton : ('q, 'r, 'e) Rpc.Pipe_rpc.t -> ('q, 'r, 'e) implementation t
+  val singleton
+    :  ?leave_open_on_exception:bool (** default: See [Async_rpc.Pipe_rpc.implement] *)
+    -> ('q, 'r, 'e) Rpc.Pipe_rpc.t
+    -> ('q, 'r, 'e) implementation t
 
   (** Extend a callee to be able to implement a given rpc. *)
   val add
-    :  ('q, 'r, 'e) implementation t
+    :  ?leave_open_on_exception:bool (** default: See [Async_rpc.Pipe_rpc.implement] *)
+    -> ('q, 'r, 'e) implementation t
     -> rpc:('q, 'r, 'e) Rpc.Pipe_rpc.t
     -> ('q, 'r, 'e) implementation t
 
@@ -169,11 +173,15 @@ module Pipe_rpc_direct : sig
     'q -> 'r Direct_stream_writer.t -> (unit, 'e) Result.t Deferred.t
 
   (** Create a callee which can implement a given rpc. *)
-  val singleton : ('q, 'r, 'e) Rpc.Pipe_rpc.t -> ('q, 'r, 'e) implementation t
+  val singleton
+    :  ?leave_open_on_exception:bool (** default: See [Async_rpc.Pipe_rpc.implement] *)
+    -> ('q, 'r, 'e) Rpc.Pipe_rpc.t
+    -> ('q, 'r, 'e) implementation t
 
   (** Extend a callee to be able to implement a given rpc. *)
   val add
-    :  ('q, 'r, 'e) implementation t
+    :  ?leave_open_on_exception:bool (** default: See [Async_rpc.Pipe_rpc.implement] *)
+    -> ('q, 'r, 'e) implementation t
     -> rpc:('q, 'r, 'e) Rpc.Pipe_rpc.t
     -> ('q, 'r, 'e) implementation t
 
@@ -211,11 +219,15 @@ module State_rpc : sig
     'q -> ('s * 'u Pipe.Reader.t, 'e) Result.t Deferred.t
 
   (** Create a callee which can implement a given rpc. *)
-  val singleton : ('q, 's, 'u, 'e) Rpc.State_rpc.t -> ('q, 's, 'u, 'e) implementation t
+  val singleton
+    :  ?leave_open_on_exception:bool (** default: See [Async_rpc.Pipe_rpc.implement] *)
+    -> ('q, 's, 'u, 'e) Rpc.State_rpc.t
+    -> ('q, 's, 'u, 'e) implementation t
 
   (** Extend a callee to be able to implement a given rpc. *)
   val add
-    :  ('q, 's, 'u, 'e) implementation t
+    :  ?leave_open_on_exception:bool (** default: See [Async_rpc.Pipe_rpc.implement] *)
+    -> ('q, 's, 'u, 'e) implementation t
     -> rpc:('q, 's, 'u, 'e) Rpc.State_rpc.t
     -> ('q, 's, 'u, 'e) implementation t
 
@@ -238,6 +250,63 @@ module State_rpc : sig
       it may be appropriate to drop the value from the pipe entirely. For such cases, use
       [Callee.map_response] instead. It gives you access to the pipe itself, not just the
       values inside it, allowing you to use something like [Pipe.filter_map]. *)
+  val map_update
+    :  ('q, 's, 'u1, 'e) implementation t
+    -> f:('u2 -> 'u1)
+    -> ('q, 's, 'u2, 'e) implementation t
+
+  (** Map over the update type of a callee, possibly filtering out some updates. *)
+  val filter_map_update
+    :  ('q, 's, 'u1, 'e) implementation t
+    -> f:('u2 -> 'u1 option)
+    -> ('q, 's, 'u2, 'e) implementation t
+
+  (** Map over the error type of a callee. *)
+  val map_error
+    :  ('q, 's, 'u, 'e1) implementation t
+    -> f:('e2 -> 'e1)
+    -> ('q, 's, 'u, 'e2) implementation t
+end
+
+(** High level functions for working with callees in the style of
+    [Async.Rpc.State_rpc.implement_direct].
+
+    This isn't quite a drop-in replacement because users will need to switch from
+    [Rpc.Pipe_rpc.Direct_stream_writer] to Babel's [Direct_stream_writer], but most of the
+    same functions are supported. *)
+module State_rpc_direct : sig
+  open Async_rpc_kernel
+  module Direct_stream_writer = Pipe_rpc_direct.Direct_stream_writer
+
+  type ('q, 's, 'u, 'e) implementation :=
+    'q -> 'u Direct_stream_writer.t -> ('s, 'e) Result.t Deferred.t
+
+  (** Create a callee which can implement a given rpc. *)
+  val singleton
+    :  ?leave_open_on_exception:bool (** default: See [Async_rpc.Pipe_rpc.implement] *)
+    -> ('q, 's, 'u, 'e) Rpc.State_rpc.t
+    -> ('q, 's, 'u, 'e) implementation t
+
+  (** Extend a callee to be able to implement a given rpc. *)
+  val add
+    :  ?leave_open_on_exception:bool (** default: See [Async_rpc.Pipe_rpc.implement] *)
+    -> ('q, 's, 'u, 'e) implementation t
+    -> rpc:('q, 's, 'u, 'e) Rpc.State_rpc.t
+    -> ('q, 's, 'u, 'e) implementation t
+
+  (** Map over the query type of a callee. *)
+  val map_query
+    :  ('q1, 's, 'u, 'e) implementation t
+    -> f:('q1 -> 'q2)
+    -> ('q2, 's, 'u, 'e) implementation t
+
+  (** Map over the state type of a callee. *)
+  val map_state
+    :  ('q, 's1, 'u, 'e) implementation t
+    -> f:('s2 -> 's1)
+    -> ('q, 's2, 'u, 'e) implementation t
+
+  (** Map over the update type of a callee. *)
   val map_update
     :  ('q, 's, 'u1, 'e) implementation t
     -> f:('u2 -> 'u1)
@@ -306,11 +375,15 @@ module Streamable_pipe_rpc : sig
   type ('q, 'r) implementation := 'q -> 'r Pipe.Reader.t Or_error.t Deferred.t
 
   (** Create a callee which can implement a given rpc. *)
-  val singleton : ('q, 'r) Streamable.Pipe_rpc.t -> ('q, 'r) implementation t
+  val singleton
+    :  ?leave_open_on_exception:bool (** default: See [Async_rpc.Pipe_rpc.implement] *)
+    -> ('q, 'r) Streamable.Pipe_rpc.t
+    -> ('q, 'r) implementation t
 
   (** Extend a callee to be able to implement a given rpc. *)
   val add
-    :  ('q, 'r) implementation t
+    :  ?leave_open_on_exception:bool (** default: See [Async_rpc.Pipe_rpc.implement] *)
+    -> ('q, 'r) implementation t
     -> rpc:('q, 'r) Streamable.Pipe_rpc.t
     -> ('q, 'r) implementation t
 
@@ -343,11 +416,15 @@ module Streamable_state_rpc : sig
   type ('q, 's, 'u) implementation := 'q -> ('s * 'u Pipe.Reader.t) Or_error.t Deferred.t
 
   (** Create a callee which can implement a given rpc. *)
-  val singleton : ('q, 's, 'u) Streamable.State_rpc.t -> ('q, 's, 'u) implementation t
+  val singleton
+    :  ?leave_open_on_exception:bool (** default: See [Async_rpc.Pipe_rpc.implement] *)
+    -> ('q, 's, 'u) Streamable.State_rpc.t
+    -> ('q, 's, 'u) implementation t
 
   (** Extend a callee to be able to implement a given rpc. *)
   val add
-    :  ('q, 's, 'u) implementation t
+    :  ?leave_open_on_exception:bool (** default: See [Async_rpc.Pipe_rpc.implement] *)
+    -> ('q, 's, 'u) implementation t
     -> rpc:('q, 's, 'u) Streamable.State_rpc.t
     -> ('q, 's, 'u) implementation t
 
@@ -369,8 +446,7 @@ module Streamable_state_rpc : sig
       sometimes it might not be possible to convert the response to the desired type, in
       which case it may be appropriate to drop the value from the pipe entirely. For such
       cases, use [Callee.map_response] instead. It gives you access to the pipe itself,
-      not just the values inside it, allowing you to use something like [Pipe.filter_map].
-  *)
+      not just the values inside it, allowing you to use something like [Pipe.filter_map]. *)
   val map_update
     :  ('q, 's, 'u1) implementation t
     -> f:('u2 -> 'u1)
@@ -388,10 +464,7 @@ end
     type as:
 
     {[
-      val map
-        :  ('a1 -> 'b1) t
-        -> f:(('a2 -> 'b2) -> 'a1 -> 'b1)
-        -> ('a2 -> 'b2) t
+      val map : ('a1 -> 'b1) t -> f:(('a2 -> 'b2) -> 'a1 -> 'b1) -> ('a2 -> 'b2) t
     ]}
 
     Most of the time, you probably would prefer to use more specialized functions, such as
@@ -413,8 +486,7 @@ val map : 'a t -> f:('b -> 'a) -> 'b t
     ]} *)
 val map_query : ('a -> 'b) t -> f:('a -> 'c) -> ('c -> 'b) t
 
-(** [map_response] is a specialization of [map] for the return type of an
-    implementation.
+(** [map_response] is a specialization of [map] for the return type of an implementation.
 
     In practice, most implementations will return deferreds or other complex types, so you
     should prefer to use more specialized functions, such as [Rpc.map_response].

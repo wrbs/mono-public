@@ -24,6 +24,8 @@ module Mutable = struct
   let to_constant t = t
   let to_string t = Constant.to_binary_string t
   let to_int t = Constant.to_int t
+  let equal (a : t) (b : t) = Bytes.equal (a :> bytes) (b :> bytes)
+  let equal_bits = equal
 
   let copy ~src ~dst =
     let words = words src in
@@ -32,8 +34,24 @@ module Mutable = struct
     done
   ;;
 
+  let randomize ~random_state t =
+    let words = words t in
+    for i = 0 to words - 1 do
+      unsafe_set_int64
+        t
+        i
+        (Splittable_random.int64 random_state ~lo:Int64.min_value ~hi:Int64.max_value)
+    done;
+    mask t
+  ;;
+
   let wire _ = empty
-  let ( -- ) a _ = a
+
+  let ( -- ) ~(loc : [%call_pos]) a _ =
+    ignore loc;
+    a
+  ;;
+
   let vdd = of_constant (Constant.of_int ~width:1 1)
   let gnd = of_constant (Constant.of_int ~width:1 0)
 
@@ -501,118 +519,179 @@ module Mutable = struct
   let copy_bits = copy
 
   module Comb = Comb.Make (struct
-    type t = Bits0.t
+      type t = Bits0.t
 
-    let equal = Bits0.Comparable.equal
-    let empty = empty
-    let is_empty = is_empty
-    let width = width
-    let of_constant = of_constant
-    let to_constant = to_constant
-    let add_widths w y = w + width y
+      let equal = Bits0.Comparable.equal
+      let empty = empty
+      let is_empty = is_empty
+      let width = width
+      let of_constant = of_constant
+      let to_constant = to_constant
+      let add_widths w y = w + width y
 
-    let concat_msb l =
-      let w = List.fold l ~init:0 ~f:add_widths in
-      let c = create w in
-      concat c l;
-      c
-    ;;
+      let concat_msb l =
+        let w = List.fold l ~init:0 ~f:add_widths in
+        let c = create w in
+        concat c l;
+        c
+      ;;
 
-    (* this is specialised to return an element from the input list, rather than
+      (* this is specialised to return an element from the input list, rather than
          construct a new output. *)
-    let mux sel l =
-      let idx = to_int sel in
-      mux_find idx 0 l
-    ;;
+      let mux sel l =
+        let idx = to_int sel in
+        mux_find idx 0 l
+      ;;
 
-    let select s h l =
-      let w = h - l + 1 in
-      let c = create w in
-      select c s h l;
-      c
-    ;;
+      let select s ~high:h ~low:l =
+        let w = h - l + 1 in
+        let c = create w in
+        select c s h l;
+        c
+      ;;
 
-    let ( -- ) = ( -- )
+      let ( -- ) = ( -- )
 
-    let ( &: ) a b =
-      let c = create (width a) in
-      ( &: ) c a b;
-      c
-    ;;
+      let ( &: ) a b =
+        let c = create (width a) in
+        ( &: ) c a b;
+        c
+      ;;
 
-    let ( |: ) a b =
-      let c = create (width a) in
-      ( |: ) c a b;
-      c
-    ;;
+      let ( |: ) a b =
+        let c = create (width a) in
+        ( |: ) c a b;
+        c
+      ;;
 
-    let ( ^: ) a b =
-      let c = create (width a) in
-      ( ^: ) c a b;
-      c
-    ;;
+      let ( ^: ) a b =
+        let c = create (width a) in
+        ( ^: ) c a b;
+        c
+      ;;
 
-    let ( ~: ) a =
-      let c = create (width a) in
-      ( ~: ) c a;
-      c
-    ;;
+      let ( ~: ) a =
+        let c = create (width a) in
+        ( ~: ) c a;
+        c
+      ;;
 
-    let ( +: ) a b =
-      let c = create (width a) in
-      ( +: ) c a b;
-      c
-    ;;
+      let ( +: ) a b =
+        let c = create (width a) in
+        ( +: ) c a b;
+        c
+      ;;
 
-    let ( -: ) a b =
-      let c = create (width a) in
-      ( -: ) c a b;
-      c
-    ;;
+      let ( -: ) a b =
+        let c = create (width a) in
+        ( -: ) c a b;
+        c
+      ;;
 
-    let ( *: ) a b =
-      let c = create (width a + width b) in
-      ( *: ) c a b;
-      c
-    ;;
+      let ( *: ) a b =
+        let c = create (width a + width b) in
+        ( *: ) c a b;
+        c
+      ;;
 
-    let ( *+ ) a b =
-      let c = create (width a + width b) in
-      ( *+ ) c a b;
-      c
-    ;;
+      let ( *+ ) a b =
+        let c = create (width a + width b) in
+        ( *+ ) c a b;
+        c
+      ;;
 
-    let ( ==: ) a b =
-      let c = create 1 in
-      ( ==: ) c a b;
-      c
-    ;;
+      let ( ==: ) a b =
+        let c = create 1 in
+        ( ==: ) c a b;
+        c
+      ;;
 
-    let ( <: ) a b =
-      let c = create 1 in
-      ( <: ) c a b;
-      c
-    ;;
+      let ( <: ) a b =
+        let c = create 1 in
+        ( <: ) c a b;
+        c
+      ;;
 
-    let to_string = to_string
-    let sexp_of_t (s : t) = [%sexp (to_constant s |> Constant.to_binary_string : string)]
-  end)
+      let rec cases ~default select = function
+        | [] -> default
+        | (match_with, value) :: rest ->
+          if equal select match_with then value else cases ~default select rest
+      ;;
+
+      let to_string = to_string
+
+      let sexp_of_t (s : t) =
+        [%sexp (to_constant s |> Constant.to_binary_string : string)]
+      ;;
+    end)
 end
 
 include (Mutable.Comb : Comb.S with type t := Bits0.t)
 include Bits0.Comparable
 
+let ( <--. ) a b = a := of_int_trunc ~width:(width !a) b
+let ( <-:. ) a b = a := of_unsigned_int ~width:(width !a) b
+let ( <-+. ) a b = a := of_signed_int ~width:(width !a) b
+
 (* Override the functor implementations, as these allocate less (to_int doesn't allocate
    at all) *)
-let to_int x = Constant.to_int x
-let to_int32 x = Constant.to_int32 x
+let to_int_trunc x = Constant.to_int x
+let to_int32_trunc x = Constant.to_int32 x
 let zero w = Bits0.create w
 let pp fmt t = Stdlib.Format.fprintf fmt "%s" (to_bstr t)
 
 (* Install pretty printer. *)
 module _ = Pretty_printer.Register (struct
-  type nonrec t = Bits0.t
+    type nonrec t = Bits0.t
 
-  let module_name = "Hardcaml.Bits"
-  let to_string = to_bstr
-end)
+    let module_name = "Hardcaml.Bits"
+    let to_string = to_bstr
+  end)
+
+module Binary = struct
+  type nonrec t = t [@@deriving compare]
+
+  let to_string t =
+    let width = width t in
+    let t = Constant.to_binary_string t in
+    [%string "%{width#Int}'b%{t#String}"]
+  ;;
+
+  let sexp_of_t t = [%sexp_of: string] (to_string t)
+end
+
+module Hex = struct
+  type nonrec t = t [@@deriving compare]
+
+  let to_string t =
+    let width = width t in
+    let t = Constant.to_hex_string ~signedness:Unsigned t in
+    [%string "%{width#Int}'h%{t#String}"]
+  ;;
+
+  let sexp_of_t t = [%sexp_of: string] (to_string t)
+end
+
+module Unsigned_int = struct
+  type nonrec t = t [@@deriving compare]
+
+  let to_string t =
+    let width = width t in
+    let t = Constant.to_bigint ~signedness:Unsigned t in
+    [%string "%{width#Int}'d%{t#Bigint}"]
+  ;;
+
+  let sexp_of_t t = [%sexp_of: string] (to_string t)
+end
+
+module Signed_int = struct
+  type nonrec t = t [@@deriving compare]
+
+  let to_string t =
+    let width = width t in
+    let t = Constant.to_bigint ~signedness:Signed t in
+    [%string "%{width#Int}'d%{t#Bigint}"]
+  ;;
+
+  let sexp_of_t t = [%sexp_of: string] (to_string t)
+end

@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - main
-      - bench/fix-melange-pupilfirst
 
 permissions:
   # deployments permission to deploy GitHub pages website
@@ -22,7 +21,7 @@ jobs:
         os:
           - ubuntu-latest
         ocaml-compiler:
-          - 4.14.x
+          - 5.1.x
 
     runs-on: ${{ matrix.os }}
 
@@ -31,7 +30,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Use OCaml ${{ matrix.ocaml-compiler }}
-        uses: ocaml/setup-ocaml@v2
+        uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
           opam-depext: false
@@ -84,8 +83,7 @@ jobs:
 
       - name: Install all deps
         working-directory: pupilfirst
-        run: |
-          opam install -y . --deps-only
+        run: opam install -y . --deps-only
 
       - name: Run pupilfirst benchmark
         working-directory: pupilfirst

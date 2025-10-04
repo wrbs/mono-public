@@ -1,11 +1,11 @@
-(** A [Bus] is a publisher/subscriber system within the memory space of the program.  A
-    bus has a mutable set of subscribers, which can be modified using [subscribe_exn] and
+(** A [Bus] is a publisher/subscriber system within the memory space of the program. A bus
+    has a mutable set of subscribers, which can be modified using [subscribe_exn] and
     [unsubscribe].
 
     [create] returns a [Bus.Read_write.t], which you can use to [write] values to the bus.
     [write] calls the callbacks of all current subscribers before returning. In a
     [('callback, 'phantom) Bus.t], ['phantom] is a read-write phantom type that controls
-    whether one can read values from or write values to the bus.  The phantom type states
+    whether one can read values from or write values to the bus. The phantom type states
     the capabilities one could ever have access to, not the capabilities that are
     immediately available. *)
 
@@ -14,23 +14,40 @@ open! Core
 (** [Callback_arity] states the type of callbacks stored in a bus. Using [Callback_arity]
     is an implementation technique that allows callbacks to be defined as ordinary n-ary
     curried functions (e.g., [a1 -> a2 -> a3 -> r]), instead of forcing n-ary-variadic
-    callbacks to use tuples (e.g., [a1 * a2 * a3 -> r]).  This also avoids extra
+    callbacks to use tuples (e.g., [a1 * a2 * a3 -> r]). This also avoids extra
     allocation.
 
     When reading the bus interface, keep in mind that each ['callback] is limited, through
     [create], to the types exposed by the variants in [Callback_arity].
 
-    Currently, only a 1-arity callback is provided with local_ annotations in order to
-    avoid an explosion due to the permutations of local_ args.  It is also relatively
-    cheap to make the one local arg a record with multiple fields. *)
+    For use cases where one requires an multi-arity bus with a more nuanced set of local
+    annotations than what is provided, consider packing the fields into a local record and
+    using [Arity1_local], as this is relatively cheap and avoids a blowup in the size of
+    [Callback_arity]. *)
+
 module Callback_arity : sig
   type _ t =
     | Arity1 : ('a -> unit) t
-    | Arity1_local : ('a -> unit) t
+    | Arity1_local : (local_ 'a -> unit) t
     | Arity2 : ('a -> 'b -> unit) t
+    | Arity2_local : (local_ 'a -> local_ 'b -> unit) t
     | Arity3 : ('a -> 'b -> 'c -> unit) t
+    | Arity3_local : (local_ 'a -> local_ 'b -> local_ 'c -> unit) t
     | Arity4 : ('a -> 'b -> 'c -> 'd -> unit) t
+    | Arity4_local : (local_ 'a -> local_ 'b -> local_ 'c -> local_ 'd -> unit) t
     | Arity5 : ('a -> 'b -> 'c -> 'd -> 'e -> unit) t
+    | Arity5_local :
+        (local_ 'a -> local_ 'b -> local_ 'c -> local_ 'd -> local_ 'e -> unit) t
+    | Arity6 : ('a -> 'b -> 'c -> 'd -> 'e -> 'f -> unit) t
+    | Arity6_local :
+        (local_ 'a
+         -> local_ 'b
+         -> local_ 'c
+         -> local_ 'd
+         -> local_ 'e
+         -> local_ 'f
+         -> unit)
+          t
   [@@deriving sexp_of]
 end
 
@@ -59,12 +76,12 @@ end
 
 val read_only : ('callback, _) t -> 'callback Read_only.t
 
-(** In [create_exn [%here] ArityN ~on_subscription_after_first_write ~on_callback_raise],
+(** In [create_exn ArityN ~on_subscription_after_first_write ~on_callback_raise],
     [[%here]] is stored in the resulting bus, and contained in [%sexp_of: t], which can
     help with debugging.
 
     If [on_subscription_after_first_write] is [Raise], then [subscribe_exn] will raise if
-    it is called after [write] has been called the first time.  If
+    it is called after [write] has been called the first time. If
     [on_subscription_after_first_write] is [Allow_and_send_last_value], then the bus will
     remember the last value written and will send it to new subscribers.
 
@@ -78,7 +95,7 @@ val read_only : ('callback, _) t -> 'callback Read_only.t
     [Callback_arity] that uses local_ args, because those args cannot be stored. *)
 val create_exn
   :  ?name:Info.t
-  -> Source_code_position.t
+  -> here:[%call_pos]
   -> 'callback Callback_arity.t
   -> on_subscription_after_first_write:On_subscription_after_first_write.t
   -> on_callback_raise:(Error.t -> unit)
@@ -89,21 +106,44 @@ val num_subscribers : (_, _) t -> int
 val is_closed : (_, _) t -> bool
 
 (** [close] disallows future [write]s -- once [close t] is called, all further calls to
-    [write t] will raise.  [close] is idempotent.  If [close] is called from within a
-    callback, the current message will still be sent to all subscribed callbacks that
-    have not yet seen it before the close takes effect. *)
+    [write t] will raise. [close] is idempotent. If [close] is called from within a
+    callback, the current message will still be sent to all subscribed callbacks that have
+    not yet seen it before the close takes effect. *)
 val close : 'callback Read_write.t -> unit
 
 (** [write] ... [write5] call all callbacks currently subscribed to the bus, with no
-    guarantee on the order in which they will be called.  [write] is non-allocating,
-    though the callbacks themselves may allocate.  Calling [writeN t] raises if called
-    from within a callback on [t] or when [is_closed t]. *)
+    guarantee on the order in which they will be called. [write] is non-allocating, though
+    the callbacks themselves may allocate. Calling [writeN t] raises if called from within
+    a callback on [t] or when [is_closed t]. *)
 
 val write : ('a -> unit) Read_write.t -> 'a -> unit
-val write_local : ('a -> unit) Read_write.t -> 'a -> unit
+val write_local : (local_ 'a -> unit) Read_write.t -> local_ 'a -> unit
 val write2 : ('a -> 'b -> unit) Read_write.t -> 'a -> 'b -> unit
+
+val write2_local
+  :  (local_ 'a -> local_ 'b -> unit) Read_write.t
+  -> local_ 'a
+  -> local_ 'b
+  -> unit
+
 val write3 : ('a -> 'b -> 'c -> unit) Read_write.t -> 'a -> 'b -> 'c -> unit
+
+val write3_local
+  :  (local_ 'a -> local_ 'b -> local_ 'c -> unit) Read_write.t
+  -> local_ 'a
+  -> local_ 'b
+  -> local_ 'c
+  -> unit
+
 val write4 : ('a -> 'b -> 'c -> 'd -> unit) Read_write.t -> 'a -> 'b -> 'c -> 'd -> unit
+
+val write4_local
+  :  (local_ 'a -> local_ 'b -> local_ 'c -> local_ 'd -> unit) Read_write.t
+  -> local_ 'a
+  -> local_ 'b
+  -> local_ 'c
+  -> local_ 'd
+  -> unit
 
 val write5
   :  ('a -> 'b -> 'c -> 'd -> 'e -> unit) Read_write.t
@@ -114,19 +154,49 @@ val write5
   -> 'e
   -> unit
 
+val write5_local
+  :  (local_ 'a -> local_ 'b -> local_ 'c -> local_ 'd -> local_ 'e -> unit) Read_write.t
+  -> local_ 'a
+  -> local_ 'b
+  -> local_ 'c
+  -> local_ 'd
+  -> local_ 'e
+  -> unit
+
+val write6
+  :  ('a -> 'b -> 'c -> 'd -> 'e -> 'f -> unit) Read_write.t
+  -> 'a
+  -> 'b
+  -> 'c
+  -> 'd
+  -> 'e
+  -> 'f
+  -> unit
+
+val write6_local
+  :  (local_ 'a -> local_ 'b -> local_ 'c -> local_ 'd -> local_ 'e -> local_ 'f -> unit)
+       Read_write.t
+  -> local_ 'a
+  -> local_ 'b
+  -> local_ 'c
+  -> local_ 'd
+  -> local_ 'e
+  -> local_ 'f
+  -> unit
+
 module Subscriber : sig
   type 'callback t [@@deriving sexp_of]
 end
 
-(** [subscribe_exn t [%here] ~f] adds the callback [f] to the set of [t]'s subscribers,
-    and returns a [Subscriber.t] that can later be used to [unsubscribe].  [[%here]] is
-    stored in the [Subscriber.t], and contained in [%sexp_of: Subscriber.t], which can
-    help with debugging.  If [subscribe_exn t] is called by a callback in [t], i.e.,
-    during [write t], the subscription takes effect for the next [write], but does not
-    affect the current [write].  [subscribe_exn] takes amortized constant time.
+(** [subscribe_exn t ~f] adds the callback [f] to the set of [t]'s subscribers, and
+    returns a [Subscriber.t] that can later be used to [unsubscribe]. [[%here]] is stored
+    in the [Subscriber.t], and contained in [%sexp_of: Subscriber.t], which can help with
+    debugging. If [subscribe_exn t] is called by a callback in [t], i.e., during
+    [write t], the subscription takes effect for the next [write], but does not affect the
+    current [write]. [subscribe_exn] takes amortized constant time.
 
     If [on_callback_raise] is supplied, then it will be called by [write] whenever [f]
-    raises; only if that subsequently raises will [t]'s [on_callback_raise] be called.  If
+    raises; only if that subsequently raises will [t]'s [on_callback_raise] be called. If
     [on_callback_raise] is not supplied, then [t]'s [on_callback_raise] will be called
     whenever [f] raises.
 
@@ -139,17 +209,17 @@ val subscribe_exn
   :  ?extract_exn:bool (** default is [false] *)
   -> ?on_callback_raise:(Error.t -> unit)
   -> ?on_close:(unit -> unit)
+  -> here:[%call_pos]
   -> ('callback, [> read ]) t
-  -> Source_code_position.t
   -> f:'callback
   -> 'callback Subscriber.t
 
-(** [iter_exn t [%here] ~f] is [ignore (subscribe_exn t [%here] ~callback:f)].  This
+(** [subscribe_permanently_exn t ~f] is [ignore (subscribe_exn t ~callback:f)]. This
     captures the common usage in which one never wants to unsubscribe from a bus. *)
-val iter_exn
+val subscribe_permanently_exn
   :  ?extract_exn:bool (** passed along to [subscribe_exn] *)
+  -> here:[%call_pos]
   -> ('callback, [> read ]) t
-  -> Source_code_position.t
   -> f:'callback
   -> unit
 
@@ -159,27 +229,30 @@ module Fold_arity : sig
     | Arity2 : ('a -> 'b -> unit, 's -> 'a -> 'b -> 's, 's) t
     | Arity3 : ('a -> 'b -> 'c -> unit, 's -> 'a -> 'b -> 'c -> 's, 's) t
     | Arity4 : ('a -> 'b -> 'c -> 'd -> unit, 's -> 'a -> 'b -> 'c -> 'd -> 's, 's) t
-    | Arity5
-        : ( 'a -> 'b -> 'c -> 'd -> 'e -> unit
-          , 's -> 'a -> 'b -> 'c -> 'd -> 'e -> 's
+    | Arity5 :
+        ('a -> 'b -> 'c -> 'd -> 'e -> unit, 's -> 'a -> 'b -> 'c -> 'd -> 'e -> 's, 's) t
+    | Arity6 :
+        ( 'a -> 'b -> 'c -> 'd -> 'e -> 'f -> unit
+          , 's -> 'a -> 'b -> 'c -> 'd -> 'e -> 'f -> 's
           , 's )
           t
   [@@deriving sexp_of]
 end
 
-(** [fold_exn t [%here] arity ~init ~f] folds over the bus events, threading a state value
-    to every call.  It is otherwise similar to [iter_exn]. *)
-val fold_exn
+(** [subscribe_permanently_with_state_exn t arity ~init ~f] folds over the bus events,
+    threading a state value to every call. It is otherwise similar to
+    [subscribe_permanently_exn]. *)
+val subscribe_permanently_with_state_exn
   :  ?extract_exn:bool (** passed along to [subscribe_exn] *)
+  -> here:[%call_pos]
   -> ('callback, [> read ]) t
-  -> Source_code_position.t
   -> ('callback, 'f, 's) Fold_arity.t
   -> init:'s
   -> f:'f
   -> unit
 
 (** [unsubscribe t subscriber] removes the callback corresponding to [subscriber] from
-    [t].  [unsubscribe] never raises and is idempotent.  As with [subscribe_exn],
-    [unsubscribe t] during [write t] takes effect after the current [write] finishes.
-    Also like [subscribe_exn], [unsubscribe] takes amortized constant time. *)
+    [t]. [unsubscribe] never raises and is idempotent. As with [subscribe_exn],
+    [unsubscribe t] during [write t] takes effect after the current [write] finishes. Also
+    like [subscribe_exn], [unsubscribe] takes amortized constant time. *)
 val unsubscribe : ('callback, [> read ]) t -> 'callback Subscriber.t -> unit

@@ -37,7 +37,7 @@ let offset t i = (t.front + i) land t.mask * slots_per_elt
 let capacity t = t.mask + 1
 
 let invariant t : unit =
-  Invariant.invariant [%here] t [%sexp_of: t] (fun () ->
+  Invariant.invariant t [%sexp_of: t] (fun () ->
     let check f = Invariant.check_field t f in
     Fields.iter
       ~num_jobs_run:(check (fun num_jobs_run -> assert (num_jobs_run >= 0)))
@@ -47,7 +47,7 @@ let invariant t : unit =
         (check (fun jobs ->
            for i = 0 to t.length - 1 do
              Execution_context.invariant
-               (Obj.obj (A.get jobs (offset t i)) : Execution_context.t)
+               (Obj.Expert.obj (A.get jobs (offset t i)) : Execution_context.t)
            done))
       ~mask:
         (check (fun mask ->
@@ -138,17 +138,29 @@ let can_run_a_job t = t.length > 0 && t.jobs_left_this_cycle > 0
 let run_job t (scheduler : Scheduler.t) execution_context f a =
   t.num_jobs_run <- t.num_jobs_run + 1;
   Scheduler.set_execution_context scheduler execution_context;
-  f a
+  Job_infos_for_cycle.Private.before_job_run scheduler.job_infos_for_cycle;
+  (* Note: If you are here because you have hit a segmentation fault on the following
+     line, the most likely reason for this is that some part of the program is enqueueing
+     jobs onto the async job queue (including e.g. by filling an ivar) in a non-thread
+     safe way. If using the [Async_unix] scheduler, running the program with
+     [ASYNC_CONFIG='((detect_invalid_access_from_thread true))'] will validate
+     accesses and show where the invalid access is coming from if there is one. *)
+  let result = f a in
+  Job_infos_for_cycle.Private.after_job_finished scheduler.job_infos_for_cycle;
+  result
 ;;
 
 let run_external_jobs t (scheduler : Scheduler.t) =
   let external_jobs = scheduler.external_jobs in
-  while Thread_safe_queue.length external_jobs > 0 do
-    let (External_job.T (execution_context, f, a)) =
-      Thread_safe_queue.dequeue_exn external_jobs
+  let[@inline] run_external_job job =
+    let%tydi (External_job.T { execution_context; f; a }) =
+      Capsule.Initial.Data.unwrap job
     in
     run_job t scheduler execution_context f a
-  done
+  in
+  (Mpsc_queue.dequeue_until_empty [@inlined hint])
+    ~f:run_external_job
+    external_jobs [@nontail]
 ;;
 
 let run_jobs (type a) t scheduler =
@@ -161,10 +173,10 @@ let run_jobs (type a) t scheduler =
     while can_run_a_job t do
       let this_job = offset t 0 in
       let execution_context : Execution_context.t =
-        Obj.obj (A.unsafe_get t.jobs this_job)
+        Obj.Expert.obj (A.unsafe_get t.jobs this_job)
       in
-      let f : a -> unit = Obj.obj (A.unsafe_get t.jobs (this_job + 1)) in
-      let a : a = Obj.obj (A.unsafe_get t.jobs (this_job + 2)) in
+      let f : a -> unit = Obj.Expert.obj (A.unsafe_get t.jobs (this_job + 1)) in
+      let a : a = Obj.Expert.obj (A.unsafe_get t.jobs (this_job + 2)) in
       (* We clear out the job right now so that it isn't live at the next minor
          collection.  We tried not doing this and saw significant (15% or so) performance
          hits due to spurious promotion. *)
@@ -184,6 +196,7 @@ let run_jobs (type a) t scheduler =
     Ok ()
   with
   | exn ->
+    Job_infos_for_cycle.Private.on_exception_in_run_jobs scheduler.job_infos_for_cycle;
     (* We call [Exn.backtrace] immediately after catching an unhandled exception, to
        ensure there is no intervening code that interferes with the global backtrace
        state. *)

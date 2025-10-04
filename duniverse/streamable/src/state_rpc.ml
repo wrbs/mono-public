@@ -20,6 +20,7 @@ module type S_plus = sig
 
     val implement
       :  ?on_exception:Rpc.On_exception.t
+      -> ?leave_open_on_exception:bool
       -> ('c -> query -> (state * update Pipe.Reader.t) Deferred.Or_error.t)
       -> 'c Rpc.Implementation.t
 
@@ -254,12 +255,16 @@ module Make (X : S) = struct
       type part = Intermediate.Part.t
     end
 
-    let implement' ?on_exception f =
-      Rpc.Pipe_rpc.implement ?on_exception rpc (fun c q ->
-        let open Deferred.Or_error.Let_syntax in
-        let%bind state_pipe, update_pipes = f c q in
-        return
-        @@ Pipe.create_reader ~close_on_exception:true (fun w ->
+    let implement' ?on_exception ?leave_open_on_exception f =
+      Rpc.Pipe_rpc.implement
+        ?on_exception
+        ~leave_open_on_exception:(Option.value leave_open_on_exception ~default:true)
+        rpc
+        (fun c q ->
+           let open Deferred.Or_error.Let_syntax in
+           let%bind state_pipe, update_pipes = f c q in
+           return
+           @@ Pipe.create_reader ~close_on_exception:true (fun w ->
              let open Deferred.Let_syntax in
              upon (Pipe.closed w) (fun () ->
                (match Pipe.read_now' update_pipes with
@@ -274,8 +279,8 @@ module Make (X : S) = struct
                write_msg w update_pipe ~constructor:(fun x -> Update x))))
     ;;
 
-    let implement ?on_exception f =
-      implement' ?on_exception (fun c q ->
+    let implement ?on_exception ?leave_open_on_exception f =
+      implement' ?on_exception ?leave_open_on_exception (fun c q ->
         let open Deferred.Or_error.Let_syntax in
         let%bind state, updates = f c q in
         return
@@ -285,23 +290,15 @@ module Make (X : S) = struct
     ;;
 
     let read_state r =
-      read_msg
-        (module State)
-        r
-        ~noun:"state"
-        ~match_:(function
-          | Response.State x -> Ok x
-          | Update _ -> Or_error.errorf "Streamable.State_rpc: incomplete state message")
+      read_msg (module State) r ~noun:"state" ~match_:(function
+        | Response.State x -> Ok x
+        | Update _ -> Or_error.errorf "Streamable.State_rpc: incomplete state message")
     ;;
 
     let read_update r =
-      read_msg
-        (module Update)
-        r
-        ~noun:"update"
-        ~match_:(function
-          | Response.Update x -> Ok x
-          | State _ -> Or_error.errorf "Streamable.State_rpc: incomplete update message")
+      read_msg (module Update) r ~noun:"update" ~match_:(function
+        | Response.Update x -> Ok x
+        | State _ -> Or_error.errorf "Streamable.State_rpc: incomplete update message")
     ;;
 
     let dispatch' conn query =
@@ -347,11 +344,14 @@ module Make (X : S) = struct
        and type update = X.update)
   ;;
 
-  let implement' = Underlying_rpc.implement'
+  let implement' = Underlying_rpc.implement' ~leave_open_on_exception:true
 
   let implement_direct ?on_exception f =
-    Rpc.Pipe_rpc.implement_direct ?on_exception Underlying_rpc.rpc (fun c q writer ->
-      f c q (Direct_writer.wrap writer))
+    Rpc.Pipe_rpc.implement_direct
+      ?on_exception
+      ~leave_open_on_exception:true
+      Underlying_rpc.rpc
+      (fun c q writer -> f c q (Direct_writer.wrap writer))
   ;;
 end
 
@@ -359,8 +359,13 @@ let description (type q s u) ((module X) : (q, s, u) t) = X.Underlying_rpc.descr
 let dispatch (type q s u) ((module X) : (q, s, u) t) = X.Underlying_rpc.dispatch
 let dispatch' (type q s u) ((module X) : (q, s, u) t) = X.Underlying_rpc.dispatch'
 
-let implement (type q s u) ?on_exception ((module X) : (q, s, u) t) =
-  X.Underlying_rpc.implement ?on_exception
+let implement
+  (type q s u)
+  ?on_exception
+  ?leave_open_on_exception
+  ((module X) : (q, s, u) t)
+  =
+  X.Underlying_rpc.implement ?on_exception ?leave_open_on_exception
 ;;
 
 let bin_query_shape (type q s u) ((module X) : (q, s, u) t) = X.bin_query.shape

@@ -36,16 +36,37 @@ module Private = struct
   let sexp_to_string_hum = sexp_to_string_hum
 end
 
+(* We pass [unix_error] to this function instead of the [error] and [function_name]
+   that it contains so as to generate as little code as possible at the
+   callsite, since any codepath reaching this function should be very cold. *)
+let[@cold] raise_improved_unix_error unix_error (local_ make_arg_sexps) =
+  match unix_error with
+  | Unix.Unix_error (error, function_name, _) ->
+    raise
+      (Unix.Unix_error
+         (error, function_name, sexp_to_string_hum (record (make_arg_sexps ()))))
+  | _ -> assert false
+;;
+
+let[@inline] improve_retry (local_ f) (local_ make_arg_sexps) =
+  try retry_until_no_eintr f with
+  | Unix.Unix_error _ as unix_error -> raise_improved_unix_error unix_error make_arg_sexps
+;;
+
+let[@inline] [@zero_alloc] improve_no_retry (local_ f) (local_ make_arg_sexps) =
+  try (f [@zero_alloc assume] [@inlined hint]) () with
+  | Unix.Unix_error _ as unix_error -> raise_improved_unix_error unix_error make_arg_sexps
+;;
+
 (* This wrapper improves the content of the Unix_error exception raised by the standard
    library (by including a sexp of the function arguments), and it optionally restarts
    syscalls on EINTR. *)
-let improve ?(restart = false) f make_arg_sexps =
-  try if restart then retry_until_no_eintr f else f () with
-  | Unix.Unix_error (e, s, _) ->
-    raise (Unix.Unix_error (e, s, sexp_to_string_hum (record (make_arg_sexps ()))))
+let[@inline always] improve ?(local_ restart = false) (local_ f) (local_ make_arg_sexps) =
+  if restart then improve_retry f make_arg_sexps else improve_no_retry f make_arg_sexps
 ;;
 
 module File_descr = File_descr
+module Locale = Locale
 
 let sprintf = Printf.sprintf
 
@@ -94,10 +115,11 @@ let read_assume_fd_is_nonblocking fd ?pos ?len buf =
 
 external unsafe_write_assume_fd_is_nonblocking
   :  File_descr.t
-  -> Bytes.t
+  -> Bytes.t @ shared
   -> pos:int
   -> len:int
   -> int
+  @@ portable
   = "core_unix_write_assume_fd_is_nonblocking_stub"
 
 let write_assume_fd_is_nonblocking fd ?pos ?len buf =
@@ -109,6 +131,10 @@ let write_assume_fd_is_nonblocking fd ?pos ?len buf =
 ;;
 
 (* Filesystem functions *)
+
+external major : device_id:int -> int = "core_unix_major_stub"
+external minor : device_id:int -> int = "core_unix_minor_stub"
+external makedev : major:int -> minor:int -> int = "core_unix_makedev_stub"
 
 external mknod
   :  string
@@ -212,13 +238,16 @@ module RLimit = struct
   external set : resource -> t -> unit = "core_unix_setrlimit"
 
   let get resource =
-    improve (fun () -> get resource) (fun () -> [ "resource", sexp_of_resource resource ])
+    improve
+      (stack_ fun () -> get resource)
+      (stack_ fun () -> [ "resource", sexp_of_resource resource ]) [@nontail]
   ;;
 
   let set resource t =
     improve
-      (fun () -> set resource t)
-      (fun () -> [ "resource", sexp_of_resource resource; "limit", sexp_of_t t ])
+      (stack_ fun () -> set resource t)
+      (stack_ fun () -> [ "resource", sexp_of_resource resource; "limit", sexp_of_t t ])
+    [@nontail]
   ;;
 end
 
@@ -522,7 +551,7 @@ module Utsname = struct
         ; version : string
         ; machine : string
         }
-      [@@deriving fields ~getters, bin_io, sexp, compare, stable_witness]
+      [@@deriving fields ~getters, bin_io, sexp, compare ~localize, stable_witness]
     end
   end
 
@@ -612,7 +641,8 @@ let dir_handle_r handle =
 
 let unary ?restart make_r f =
   ();
-  fun x -> improve ?restart (fun () -> f x) (fun () -> [ make_r x ])
+  fun x ->
+    improve ?restart (stack_ fun () -> f x) (stack_ fun () -> [ make_r x ]) [@nontail]
 ;;
 
 let unary_fd ?restart f = unary ?restart fd_r f
@@ -702,7 +732,7 @@ module Error = struct
     | ELOOP (** Too many levels of symbolic links *)
     | EOVERFLOW (** File size or position not representable *)
     | EUNKNOWNERR of int (** Unknown error *)
-  [@@deriving compare, sexp]
+  [@@deriving compare ~localize, sexp]
 
   let of_system_int ~errno = Unix_error.of_errno errno
   let message = Unix.error_message
@@ -714,8 +744,8 @@ end
 
 let putenv ~key ~data =
   improve
-    (fun () -> Unix.putenv key data)
-    (fun () -> [ "key", atom key; "data", atom data ])
+    (stack_ fun () -> Unix.putenv key data)
+    (stack_ fun () -> [ "key", atom key; "data", atom data ]) [@nontail]
 ;;
 
 let unsetenv name =
@@ -733,8 +763,8 @@ type process_status = Unix.process_status =
 [@@deriving sexp]
 
 module Exit = struct
-  type error = [ `Exit_non_zero of int ] [@@deriving compare, sexp]
-  type t = (unit, error) Result.t [@@deriving compare, sexp]
+  type error = [ `Exit_non_zero of int ] [@@deriving compare ~localize, sexp]
+  type t = (unit, error) Result.t [@@deriving compare ~localize, sexp]
 
   let to_string_hum = function
     | Ok () -> "exited normally"
@@ -767,9 +797,9 @@ module Exit_or_signal = struct
     [ Exit.error
     | `Signal of Signal.t
     ]
-  [@@deriving compare, sexp]
+  [@@deriving compare ~localize, sexp]
 
-  type t = (unit, error) Result.t [@@deriving compare, sexp]
+  type t = (unit, error) Result.t [@@deriving compare ~localize, sexp]
 
   let to_string_hum = function
     | (Ok () | Error #Exit.error) as e -> Exit.to_string_hum e
@@ -828,26 +858,69 @@ let prog_r prog = "prog", atom prog
 let args_r argv = "argv", sexp_of_array atom argv
 let env_r env = "env", sexp_of_array atom env
 
-let execv ~prog ~argv =
-  improve (fun () -> Unix.execv ~prog ~args:argv) (fun () -> [ prog_r prog; args_r argv ])
+(* There is literally nothing good to do if exec fails. Really, we should just abort,
+   probably. Raising an exception might allocate, which is quite unsafe. Even if I just
+   return an error code from the stub, what then? I'd have to just allocate and raise an
+   exception, and also zero-alloc checking won't even work, because i'll have to
+   unconditionally raise an exception. I am not sure what to do better here.
+
+   I'll just have the functions never_return and raise an exception (allocating.) Sigh.
+*)
+module Raw_exec = struct
+  external execv
+    :  prog:string
+    -> args:local_ string array
+    -> never_returns
+    = "core_unix_execv"
+
+  external execve
+    :  prog:string
+    -> args:local_ string array
+    -> env:local_ string array
+    -> never_returns
+    = "core_unix_execve"
+
+  external execvp
+    :  prog:string
+    -> args:local_ string array
+    -> never_returns
+    = "core_unix_execvp"
+
+  external execvpe
+    :  prog:string
+    -> args:local_ string array
+    -> env:local_ string array
+    -> never_returns
+    = "core_unix_execvpe"
+end
+
+(* We [@inline] the primary closure in each of the [exec*] functions below in order
+   to avoid *any* allocation (stack or heap) to minimize the chances of violating
+   async-signal-safety in the event we're running in the newly created child process
+   from a recent [fork()] call. *)
+
+let[@zero_alloc] execv ~prog ~argv =
+  improve_no_retry
+    (stack_ (fun [@inline] () -> Raw_exec.execv ~prog ~args:argv))
+    (stack_ fun () -> [ prog_r prog; args_r argv ]) [@nontail]
 ;;
 
-let execve ~prog ~argv ~env =
-  improve
-    (fun () -> Unix.execve ~prog ~args:argv ~env)
-    (fun () -> [ prog_r prog; args_r argv; env_r env ])
+let[@zero_alloc] execvp ~prog ~argv =
+  improve_no_retry
+    (stack_ (fun [@inline] () -> Raw_exec.execvp ~prog ~args:argv))
+    (stack_ fun () -> [ prog_r prog; args_r argv ]) [@nontail]
 ;;
 
-let execvp ~prog ~argv =
-  improve
-    (fun () -> Unix.execvp ~prog ~args:argv)
-    (fun () -> [ prog_r prog; args_r argv ])
+let[@zero_alloc] execve ~prog ~argv ~env =
+  improve_no_retry
+    (stack_ (fun [@inline] () -> Raw_exec.execve ~prog ~args:argv ~env))
+    (stack_ fun () -> [ prog_r prog; args_r argv; env_r env ]) [@nontail]
 ;;
 
-let execvpe ~prog ~argv ~env =
-  improve
-    (fun () -> Unix.execvpe ~prog ~args:argv ~env)
-    (fun () -> [ prog_r prog; args_r argv; env_r env ])
+let[@zero_alloc] execvpe ~prog ~argv ~env =
+  improve_no_retry
+    (stack_ (fun [@inline] () -> Raw_exec.execvpe ~prog ~args:argv ~env))
+    (stack_ fun () -> [ prog_r prog; args_r argv; env_r env ]) [@nontail]
 ;;
 
 module Env = struct
@@ -862,7 +935,7 @@ module Env = struct
   let current ~base () =
     let base =
       match base with
-      | Some v -> force v
+      | Some v -> v
       | None -> Array.to_list (Unix.environment ())
     in
     List.map base ~f:(fun s -> String.lsplit2_exn s ~on:'=')
@@ -903,7 +976,7 @@ module Pgid = struct
   let of_pid = Spawn.Pgid.of_pid
 end
 
-let exec_internal ~prog ~argv ~use_path ~env =
+let[@zero_alloc] exec_internal ~prog ~argv ~use_path ~env =
   match use_path, env with
   | false, None -> execv ~prog ~argv
   | false, Some env -> execve ~prog ~argv ~env
@@ -967,10 +1040,10 @@ let wait_gen ~mode (type a) (f : waitpid_result -> a option) ~restart wait_on : 
   let pid, status =
     improve
       ~restart
-      (fun () ->
+      (stack_ fun () ->
         let x, ps = Unix.waitpid ~mode pid in
         x, Exit_or_signal_or_stop.of_unix ps)
-      (fun () ->
+      (stack_ fun () ->
         [ "mode", sexp_of_list sexp_of_wait_flag mode; "pid", Int.sexp_of_t pid ])
   in
   let waitpid_result =
@@ -984,7 +1057,6 @@ let wait_gen ~mode (type a) (f : waitpid_result -> a option) ~restart wait_on : 
   | Some a -> a
   | None ->
     failwiths
-      ~here:[%here]
       "waitpid syscall returned invalid result for mode"
       (pid, mode, waitpid_result)
       [%sexp_of: int * mode * waitpid_result]
@@ -1023,7 +1095,6 @@ let waitpid_exn pid =
   if Result.is_error exit_or_signal
   then
     failwiths
-      ~here:[%here]
       "child process didn't exit with status 0"
       (`Child_pid pid, exit_or_signal)
       [%sexp_of: [ `Child_pid of Pid.t ] * Exit_or_signal.t]
@@ -1040,9 +1111,10 @@ let wait4 ?(restart = true) ~mode wait_on =
   let (x, ps), rusage =
     improve
       ~restart
-      (fun () -> wait4 mode pid)
-      (fun () ->
+      (stack_ fun () -> wait4 mode pid)
+      (stack_ fun () ->
         [ "mode", sexp_of_list sexp_of_wait_flag mode; "pid", Int.sexp_of_t pid ])
+    [@nontail]
   in
   if x = 0 then None else Some ((Pid.of_int x, Exit_or_signal_or_stop.of_unix ps), rusage)
 ;;
@@ -1065,8 +1137,8 @@ let wait_with_resource_usage ?restart wait_on =
 
 let system s =
   improve
-    (fun () -> Exit_or_signal.of_unix (Unix.system s))
-    (fun () -> [ "command", atom s ])
+    (stack_ fun () -> Exit_or_signal.of_unix (Unix.system s))
+    (stack_ fun () -> [ "command", atom s ]) [@nontail]
 ;;
 
 let getpid () = Pid.of_int (Unix.getpid ())
@@ -1095,7 +1167,12 @@ let gettid = Or_error.unimplemented "gettid is not supported on this system"
 
 [%%endif]
 
-let nice i = improve (fun () -> Unix.nice i) (fun () -> [ "priority", Int.sexp_of_t i ])
+let nice i =
+  improve
+    (stack_ fun () -> Unix.nice i)
+    (stack_ fun () -> [ "priority", Int.sexp_of_t i ]) [@nontail]
+;;
+
 let stdin = Unix.stdin
 let stdout = Unix.stdout
 let stderr = Unix.stderr
@@ -1138,12 +1215,17 @@ let openfile ?(perm = 0o644) ~mode filename =
       ()
   else
     improve
-      (fun () -> Unix.openfile filename ~mode ~perm)
-      (fun () -> [ filename_r filename; "mode", mode_sexp (); file_perm_r perm ])
+      (stack_ fun () -> Unix.openfile filename ~mode ~perm)
+      (stack_ fun () -> [ filename_r filename; "mode", mode_sexp (); file_perm_r perm ])
+    [@nontail]
 ;;
 
 let close ?restart = unary_fd ?restart Unix.close
-let with_close fd ~f = protect ~f:(fun () -> f fd) ~finally:(fun () -> close fd)
+
+let with_close fd ~f =
+  protect ~f:(stack_ fun () -> f fd) ~finally:(stack_ fun () -> close fd) [@nontail]
+;;
+
 let with_file ?perm file ~mode ~f = with_close (openfile file ~mode ?perm) ~f
 
 let read_write f ?restart ?pos ?len fd ~buf =
@@ -1156,8 +1238,8 @@ let read_write f ?restart ?pos ?len fd ~buf =
   in
   improve
     ?restart
-    (fun () -> f fd ~buf ~pos ~len)
-    (fun () -> [ fd_r fd; "pos", Int.sexp_of_t pos; len_r len ])
+    (stack_ fun () -> f fd ~buf ~pos ~len)
+    (stack_ fun () -> [ fd_r fd; "pos", Int.sexp_of_t pos; len_r len ]) [@nontail]
 ;;
 
 let read_write_string f ?restart ?pos ?len fd ~buf =
@@ -1170,8 +1252,8 @@ let read_write_string f ?restart ?pos ?len fd ~buf =
   in
   improve
     ?restart
-    (fun () -> f fd ~buf ~pos ~len)
-    (fun () -> [ fd_r fd; "pos", Int.sexp_of_t pos; len_r len ])
+    (stack_ fun () -> f fd ~buf ~pos ~len)
+    (stack_ fun () -> [ fd_r fd; "pos", Int.sexp_of_t pos; len_r len ]) [@nontail]
 ;;
 
 let read = read_write Unix.read
@@ -1225,19 +1307,49 @@ module Native_file = struct
 
   let lseek fd pos ~mode =
     improve
-      (fun () -> Unix.lseek fd pos ~mode)
-      (fun () -> [ fd_r fd; "pos", Int.sexp_of_t pos; "mode", sexp_of_seek_command mode ])
+      (stack_ fun () -> Unix.lseek fd pos ~mode)
+      (stack_ fun () ->
+        [ fd_r fd; "pos", Int.sexp_of_t pos; "mode", sexp_of_seek_command mode ])
+    [@nontail]
   ;;
 
   let truncate filename ~len =
     improve
-      (fun () -> Unix.truncate filename ~len)
-      (fun () -> [ filename_r filename; len_r len ])
+      (stack_ fun () -> Unix.truncate filename ~len)
+      (stack_ fun () -> [ filename_r filename; len_r len ]) [@nontail]
   ;;
 
   let ftruncate fd ~len =
-    improve (fun () -> Unix.ftruncate fd ~len) (fun () -> [ fd_r fd; len_r len ])
+    improve
+      (stack_ fun () -> Unix.ftruncate fd ~len)
+      (stack_ fun () -> [ fd_r fd; len_r len ]) [@nontail]
   ;;
+end
+
+module Ns_precision = struct
+  type stats =
+    { st_dev : int
+    ; st_ino : int
+    ; st_kind : file_kind
+    ; st_perm : file_perm
+    ; st_nlink : int
+    ; st_uid : int
+    ; st_gid : int
+    ; st_rdev : int
+    ; st_size : int64
+    ; st_atime : Time_ns.t
+    ; st_mtime : Time_ns.t
+    ; st_ctime : Time_ns.t
+    }
+  [@@deriving sexp]
+
+  external stat : string -> stats = "core_unix_ns_precision_stat"
+  external lstat : string -> stats = "core_unix_ns_precision_lstat"
+  external fstat : File_descr.t -> stats = "core_unix_ns_precision_fstat"
+
+  let stat = unary_filename stat
+  let lstat = unary_filename lstat
+  let fstat = unary_fd fstat
 end
 
 type lock_command = Unix.lock_command =
@@ -1255,8 +1367,9 @@ let lockf fd ~mode ~len =
     | _ -> failwith "~len passed to Unix.lockf too large to fit in native int"
   in
   improve
-    (fun () -> Unix.lockf fd ~mode ~len)
-    (fun () -> [ fd_r fd; "mode", sexp_of_lock_command mode; len_r len ])
+    (stack_ fun () -> Unix.lockf fd ~mode ~len)
+    (stack_ fun () -> [ fd_r fd; "mode", sexp_of_lock_command mode; len_r len ])
+  [@nontail]
 ;;
 
 module Flock_command : sig
@@ -1286,22 +1399,24 @@ let flock_blocking fd command = assert (real_flock ~blocking:true fd command)
 
 let lseek fd pos ~mode =
   improve
-    (fun () -> Unix.LargeFile.lseek fd pos ~mode)
-    (fun () -> [ fd_r fd; "pos", Int64.sexp_of_t pos; "mode", sexp_of_seek_command mode ])
+    (stack_ fun () -> Unix.LargeFile.lseek fd pos ~mode)
+    (stack_ fun () ->
+      [ fd_r fd; "pos", Int64.sexp_of_t pos; "mode", sexp_of_seek_command mode ])
+  [@nontail]
 ;;
 
 let len64_r len = "len", Int64.sexp_of_t len
 
 let truncate filename ~len =
   improve
-    (fun () -> Unix.LargeFile.truncate filename ~len)
-    (fun () -> [ filename_r filename; len64_r len ])
+    (stack_ fun () -> Unix.LargeFile.truncate filename ~len)
+    (stack_ fun () -> [ filename_r filename; len64_r len ]) [@nontail]
 ;;
 
 let ftruncate fd ~len =
   improve
-    (fun () -> Unix.LargeFile.ftruncate fd ~len)
-    (fun () -> [ fd_r fd; len64_r len ])
+    (stack_ fun () -> Unix.LargeFile.ftruncate fd ~len)
+    (stack_ fun () -> [ fd_r fd; len64_r len ]) [@nontail]
 ;;
 
 type stats = Unix.LargeFile.stats =
@@ -1324,8 +1439,31 @@ let stat = unary_filename Unix.LargeFile.stat
 let lstat = unary_filename Unix.LargeFile.lstat
 let fstat = unary_fd Unix.LargeFile.fstat
 
+module Statvfs = struct
+  (* WARNING: do not add, remove, or reorder fields from this record without also changing
+     [core_unix_statvfs_stub]. *)
+  type t =
+    { bsize : int (* file system block size *)
+    ; frsize : int (* fragment size *)
+    ; blocks : int (* size of fs in frsize units *)
+    ; bfree : int (* # free blocks *)
+    ; bavail : int (* # free blocks for non-root *)
+    ; files : int (* # inodes *)
+    ; ffree : int (* # free inodes *)
+    ; favail : int (* # free inodes for non-root *)
+    ; fsid : int (* file system ID *)
+    ; flag : int (* mount flags *)
+    ; namemax : int (* maximum filename length *)
+    }
+  [@@deriving sexp, bin_io]
+end
+
+external statvfs : string -> Statvfs.t = "core_unix_statvfs_stub"
+
 let src_dst f ~src ~dst =
-  improve (fun () -> f ~src ~dst) (fun () -> [ "src", atom src; "dst", atom dst ])
+  improve
+    (stack_ fun () -> f ~src ~dst)
+    (stack_ fun () -> [ "src", atom src; "dst", atom dst ]) [@nontail]
 ;;
 
 let unlink = unary_filename Unix.unlink
@@ -1333,23 +1471,27 @@ let rename = src_dst Unix.rename
 
 [%%if ocaml_version >= (4, 08, 0)]
 
-let unix_link ~src ~dst = Unix.link ~src ~dst ?follow:None
+let unix_link ~follow ~src ~dst = Unix.link ?follow ~src ~dst
 
 [%%else]
 
-let unix_link ~src ~dst = Unix.link ~src ~dst
+let unix_link ~follow ~src ~dst =
+  if Option.is_some follow
+  then raise (Unix_error (Unix.ENOSYS, "Core_unix.link:follow", ""));
+  Unix.link ~src ~dst
+;;
 
 [%%endif]
 
-let link ?(force = false) ~target ~link_name () =
+let link ?(force = false) ?follow ~target ~link_name () =
   improve
-    (fun () ->
+    (stack_ fun () ->
       if force
       then (
         try Unix.unlink link_name with
         | Unix_error (Unix.ENOENT, _, _) -> ());
-      unix_link ~src:target ~dst:link_name)
-    (fun () -> [ "target", atom target; "link_name", atom link_name ])
+      unix_link ~follow ~src:target ~dst:link_name)
+    (stack_ fun () -> [ "target", atom target; "link_name", atom link_name ]) [@nontail]
 ;;
 
 let map_file fd ?pos kind layout ~shared dims =
@@ -1365,41 +1507,44 @@ type access_permission = Unix.access_permission =
 
 let chmod filename ~perm =
   improve
-    (fun () -> Unix.chmod filename ~perm)
-    (fun () -> [ filename_r filename; file_perm_r perm ])
+    (stack_ fun () -> Unix.chmod filename ~perm)
+    (stack_ fun () -> [ filename_r filename; file_perm_r perm ]) [@nontail]
 ;;
 
 let fchmod fd ~perm =
-  improve (fun () -> Unix.fchmod fd ~perm) (fun () -> [ fd_r fd; file_perm_r perm ])
+  improve
+    (stack_ fun () -> Unix.fchmod fd ~perm)
+    (stack_ fun () -> [ fd_r fd; file_perm_r perm ]) [@nontail]
 ;;
 
 let chown filename ~uid ~gid =
   improve
-    (fun () -> Unix.chown filename ~uid ~gid)
-    (fun () -> [ filename_r filename; uid_r uid; gid_r gid ])
+    (stack_ fun () -> Unix.chown filename ~uid ~gid)
+    (stack_ fun () -> [ filename_r filename; uid_r uid; gid_r gid ]) [@nontail]
 ;;
 
 let fchown fd ~uid ~gid =
   improve
-    (fun () -> Unix.fchown fd ~uid ~gid)
-    (fun () -> [ fd_r fd; uid_r uid; gid_r gid ])
+    (stack_ fun () -> Unix.fchown fd ~uid ~gid)
+    (stack_ fun () -> [ fd_r fd; uid_r uid; gid_r gid ]) [@nontail]
 ;;
 
 let umask mode =
   improve
-    (fun () -> Unix.umask mode)
-    (fun () -> [ "mode", atom (Printf.sprintf "0o%o" mode) ])
+    (stack_ fun () -> Unix.umask mode)
+    (stack_ fun () -> [ "mode", atom (Printf.sprintf "0o%o" mode) ]) [@nontail]
 ;;
 
 let access filename ~perm =
   improve
-    (fun () -> Unix.access filename ~perm)
-    (fun () ->
+    (stack_ fun () -> Unix.access filename ~perm)
+    (stack_ fun () ->
       [ filename_r filename; "perm", sexp_of_list sexp_of_access_permission perm ])
+  [@nontail]
 ;;
 
 let access filename perm =
-  Result.try_with (fun () ->
+  Result.try_with (stack_ fun () ->
     access
       filename
       ~perm:
@@ -1408,6 +1553,7 @@ let access filename perm =
           | `Write -> Unix.W_OK
           | `Exec -> Unix.X_OK
           | `Exists -> Unix.F_OK)))
+  [@nontail]
 ;;
 
 let access_exn filename perm = Result.ok_exn (access filename perm)
@@ -1418,18 +1564,18 @@ let remove = unary_filename remove
 
 let dup ?close_on_exec fd =
   improve
-    (fun () -> Unix.dup ?cloexec:close_on_exec fd)
-    (fun () -> [ fd_r fd; close_on_exec_r close_on_exec ])
+    (stack_ fun () -> Unix.dup ?cloexec:close_on_exec fd)
+    (stack_ fun () -> [ fd_r fd; close_on_exec_r close_on_exec ]) [@nontail]
 ;;
 
 let dup2 ?close_on_exec ~src ~dst () =
   improve
-    (fun () -> Unix.dup2 ?cloexec:close_on_exec ~src ~dst)
-    (fun () ->
+    (stack_ fun () -> Unix.dup2 ?cloexec:close_on_exec ~src ~dst)
+    (stack_ fun () ->
       [ "src", File_descr.sexp_of_t src
       ; "dst", File_descr.sexp_of_t dst
       ; close_on_exec_r close_on_exec
-      ])
+      ]) [@nontail]
 ;;
 
 let set_nonblock = unary_fd Unix.set_nonblock
@@ -1503,12 +1649,12 @@ module Open_flags = struct
   let access_modes = [ rdonly, "rdonly"; rdwr, "rdwr"; wronly, "wronly" ]
 
   include Flags.Make (struct
-    let allow_intersecting = true
-    let should_print_error = true
-    let known = known
-    let remove_zero_flags = true
-    (* remove non existing flags, like cloexec on centos5 *)
-  end)
+      let allow_intersecting = true
+      let should_print_error = true
+      let known = known
+      let remove_zero_flags = true
+      (* remove non existing flags, like cloexec on centos5 *)
+    end)
 
   (* The lower two bits of the open flags are used to specify the access mode:
      rdonly, wronly, rdwr.  So, we have some code to treat those two bits together rather
@@ -1567,8 +1713,8 @@ module Mkdir : sig
 end = struct
   let[@inline always] improve_mkdir mkdir dirname ~perm =
     improve
-      (fun () -> mkdir dirname ~perm)
-      (fun () -> [ dirname_r dirname; file_perm_r perm ])
+      (stack_ fun () -> mkdir dirname ~perm)
+      (stack_ fun () -> [ dirname_r dirname; file_perm_r perm ]) [@nontail]
   ;;
 
   let mkdir = improve_mkdir Unix.mkdir
@@ -1683,8 +1829,8 @@ let pipe ?close_on_exec () = Unix.pipe ?cloexec:close_on_exec ()
 
 let mkfifo name ~perm =
   improve
-    (fun () -> Unix.mkfifo name ~perm)
-    (fun () -> [ "name", atom name; file_perm_r perm ])
+    (stack_ fun () -> Unix.mkfifo name ~perm)
+    (stack_ fun () -> [ "name", atom name; file_perm_r perm ]) [@nontail]
 ;;
 
 module Process_info = struct
@@ -1790,8 +1936,8 @@ end = struct
       Sys.getenv "PATH"
       |> Option.value_map ~f:(String.split ~on:':') ~default:[ "/bin"; "/usr/bin" ]
       |> List.map ~f:(function
-           | "" -> "."
-           | x -> x)
+        | "" -> "."
+        | x -> x)
   ;;
 
   let candidate_paths ?prog_search_path prog =
@@ -1877,7 +2023,7 @@ let create_process_with_fds
   ()
   =
   improve
-    (fun () ->
+    (stack_ fun () ->
       let env_assignments = Env.expand env in
       Execvp_emulation.run
         ~prog
@@ -1896,11 +2042,12 @@ let create_process_with_fds
             ~stdout
             ~stderr)
         ())
-    (fun () ->
+    (stack_ fun () ->
       (match working_dir with
        | None -> []
        | Some working_dir -> [ "working_dir", atom working_dir ])
       @ [ "prog", atom prog; "args", sexp_of_list atom args; "env", sexp_of_env env ])
+  [@nontail]
 ;;
 
 let create_process_env ?working_dir ?prog_search_path ?argv0 ?setpgid ~prog ~args ~env () =
@@ -1921,12 +2068,14 @@ let create_process_env ?working_dir ?prog_search_path ?argv0 ?setpgid ~prog ~arg
 
 let create_process ~prog ~args =
   improve
-    (fun () -> create_process_env ~prog ~args ~env:(`Extend []) ())
-    (fun () -> [ "prog", atom prog; "args", sexp_of_list atom args ])
+    (stack_ fun () -> create_process_env ~prog ~args ~env:(`Extend []) ())
+    (stack_ fun () -> [ "prog", atom prog; "args", sexp_of_list atom args ]) [@nontail]
 ;;
 
 let make_open_process f command =
-  improve (fun () -> f command) (fun () -> [ "command", atom command ])
+  improve
+    (stack_ fun () -> f command)
+    (stack_ fun () -> [ "command", atom command ]) [@nontail]
 ;;
 
 let open_process_in = make_open_process Unix.open_process_in
@@ -1943,10 +2092,11 @@ end
 
 let open_process_full command ~env =
   improve
-    (fun () ->
+    (stack_ fun () ->
       let stdout, stdin, stderr = Unix.open_process_full command ~env in
       { Process_channels.stdin; stdout; stderr })
-    (fun () -> [ "command", atom command; "env", sexp_of_array atom env ])
+    (stack_ fun () -> [ "command", atom command; "env", sexp_of_array atom env ])
+  [@nontail]
 ;;
 
 let close_process_in ic = Exit_or_signal.of_unix (Unix.close_process_in ic)
@@ -1971,8 +2121,8 @@ let getpgid pid =
 
 let symlink ~target ~link_name =
   improve
-    (fun () -> Unix.symlink ?to_dir:None ~src:target ~dst:link_name)
-    (fun () -> [ "target", atom target; "link_name", atom link_name ])
+    (stack_ fun () -> Unix.symlink ?to_dir:None ~src:target ~dst:link_name)
+    (stack_ fun () -> [ "target", atom target; "link_name", atom link_name ]) [@nontail]
 ;;
 
 let readlink = unary_filename Unix.readlink
@@ -1998,7 +2148,7 @@ type select_timeout =
 let select ?restart ~read ~write ~except ~timeout () =
   improve
     ?restart
-    (fun () ->
+    (stack_ fun () ->
       let timeout =
         match timeout with
         | `Never -> -1.
@@ -2010,12 +2160,12 @@ let select ?restart ~read ~write ~except ~timeout () =
       in
       let read, write, except = Unix.select ~read ~write ~except ~timeout in
       { Select_fds.read; write; except })
-    (fun () ->
+    (stack_ fun () ->
       [ "read", sexp_of_list File_descr.sexp_of_t read
       ; "write", sexp_of_list File_descr.sexp_of_t write
       ; "except", sexp_of_list File_descr.sexp_of_t except
       ; "timeout", [%sexp_of: select_timeout] timeout
-      ])
+      ]) [@nontail]
 ;;
 
 let pause = Unix.pause
@@ -2100,7 +2250,15 @@ type tm = Unix.tm =
 let time = Unix.time
 let gettimeofday = Unix.gettimeofday
 
-external strftime : Unix.tm -> string -> string = "core_time_ns_strftime"
+let locale_to_native = function
+  | None -> Locale.Expert.native_zero
+  | Some locale -> Locale.Expert.to_native locale
+;;
+
+external strftime : nativeint -> Unix.tm -> string -> string = "core_time_ns_strftime"
+
+let strftime ?locale tm s = strftime (locale_to_native locale) tm s
+
 external localtime : float -> Unix.tm = "core_localtime"
 external gmtime : float -> Unix.tm = "core_gmtime"
 external timegm : Unix.tm -> float = "core_timegm" (* the inverse of gmtime *)
@@ -2111,15 +2269,34 @@ let sleep = Unix.sleep
 let times = Unix.times
 let utimes = Unix.utimes
 
+external utimensat
+  :  relative_to:Unix.file_descr option
+  -> follow_symlinks:bool
+  -> path:string
+  -> access:Int63.t option
+  -> modif:Int63.t option
+  -> unit
+  = "core_unix_utimensat"
+
+let utimensat ?relative_to ?(follow_symlinks = true) ~path ~access ~modif () =
+  utimensat
+    ~relative_to
+    ~follow_symlinks
+    ~path
+    ~access:(Option.map access ~f:Time_ns.to_int63_ns_since_epoch)
+    ~modif:(Option.map modif ~f:Time_ns.to_int63_ns_since_epoch)
+;;
+
 external strptime
-  :  allow_trailing_input:bool
+  :  nativeint
+  -> allow_trailing_input:bool
   -> fmt:string
   -> string
   -> Unix.tm
   = "core_unix_strptime"
 
-let strptime ?(allow_trailing_input = false) ~fmt s =
-  strptime ~allow_trailing_input ~fmt s
+let strptime ?locale ?(allow_trailing_input = false) ~fmt s =
+  strptime (locale_to_native locale) ~allow_trailing_input ~fmt s
 ;;
 
 type interval_timer = Unix.interval_timer =
@@ -2140,14 +2317,18 @@ let getuid = Unix.getuid
 let geteuid = Unix.geteuid
 
 let setuid uid =
-  improve (fun () -> Unix.setuid uid) (fun () -> [ "uid", Int.sexp_of_t uid ])
+  improve
+    (stack_ fun () -> Unix.setuid uid)
+    (stack_ fun () -> [ "uid", Int.sexp_of_t uid ]) [@nontail]
 ;;
 
 let getgid = Unix.getgid
 let getegid = Unix.getegid
 
 let setgid gid =
-  improve (fun () -> Unix.setgid gid) (fun () -> [ "gid", Int.sexp_of_t gid ])
+  improve
+    (stack_ fun () -> Unix.setgid gid)
+    (stack_ fun () -> [ "gid", Int.sexp_of_t gid ]) [@nontail]
 ;;
 
 let getgroups = Unix.getgroups
@@ -2204,7 +2385,7 @@ module Passwd = struct
     ; dir : string
     ; shell : string
     }
-  [@@deriving compare, fields ~getters, sexp]
+  [@@deriving compare ~localize, fields ~getters, sexp]
 
   let of_unix u =
     let module U = Unix in
@@ -2237,7 +2418,7 @@ module Passwd = struct
 
     let setpwent = core_setpwent
     let getpwent_exn () = of_unix (core_getpwent ())
-    let getpwent () = Option.try_with (fun () -> getpwent_exn ())
+    let getpwent () = Option.try_with (stack_ fun () -> getpwent_exn ()) [@nontail]
     let endpwent = core_endpwent
 
     external getpwnam_r : bigstring -> bigstring -> passwd_entry = "core_unix_getpwnam_r"
@@ -2262,7 +2443,7 @@ module Passwd = struct
   let pwdb_lock = Error_checking_mutex.create ()
 
   let getpwents () =
-    Error_checking_mutex.critical_section pwdb_lock ~f:(fun () ->
+    Error_checking_mutex.critical_section pwdb_lock ~f:(stack_ fun () ->
       Low_level.setpwent ();
       Exn.protect
         ~f:(fun () ->
@@ -2273,6 +2454,7 @@ module Passwd = struct
           in
           loop [])
         ~finally:(fun () -> Low_level.endpwent ()))
+    [@nontail]
   ;;
 end
 
@@ -2359,6 +2541,7 @@ module Inet_addr0 = struct
         (* Unix.inet_addr is represented as either a "struct in_addr" or a "struct
            in6_addr" stuffed into an O'Caml string, so polymorphic compare will work. *)
         let compare = Poly.compare
+        let compare__local = Poly.compare__local
         let hash_fold_t hash (t : t) = hash_fold_int hash (Hashtbl.hash t)
         let hash = Ppx_hash_lib.Std.Hash.of_fold hash_fold_t
       end
@@ -2371,58 +2554,59 @@ module Inet_addr0 = struct
 
       include T1
       include Comparable.Make (T1)
+      module Table = Hashtbl.Make (T1)
     end
   end
 
   include Stable.V1
 
   include Stable_unit_test.Make (struct
-    type nonrec t = t [@@deriving sexp, bin_io]
+      type nonrec t = t [@@deriving sexp, bin_io]
 
-    let equal = equal
+      let equal = equal
 
-    let tests =
-      (* IPv4 *)
-      [ of_string "0.0.0.0", "0.0.0.0", "\0070.0.0.0"
-      ; of_string "10.0.0.0", "10.0.0.0", "\00810.0.0.0"
-      ; of_string "127.0.0.1", "127.0.0.1", "\009127.0.0.1"
-      ; of_string "192.168.1.101", "192.168.1.101", "\013192.168.1.101"
-      ; of_string "255.255.255.255", "255.255.255.255", "\015255.255.255.255" (* IPv6 *)
-      ; ( of_string "2001:0db8:85a3:0000:0000:8a2e:0370:7334"
-        , "2001:db8:85a3::8a2e:370:7334"
-        , "\0282001:db8:85a3::8a2e:370:7334" )
-      ; ( of_string "2001:db8:85a3:0:0:8a2e:370:7334"
-        , "2001:db8:85a3::8a2e:370:7334"
-        , "\0282001:db8:85a3::8a2e:370:7334" )
-      ; ( of_string "2001:db8:85a3::8a2e:370:7334"
-        , "2001:db8:85a3::8a2e:370:7334"
-        , "\0282001:db8:85a3::8a2e:370:7334" )
-      ; of_string "0:0:0:0:0:0:0:1", "::1", "\003::1"
-      ; of_string "::1", "::1", "\003::1"
-      ; of_string "0:0:0:0:0:0:0:0", "::", "\002::"
-      ; of_string "::", "::", "\002::"
-      ; of_string "::ffff:c000:0280", "::ffff:192.0.2.128", "\018::ffff:192.0.2.128"
-      ; of_string "::ffff:192.0.2.128", "::ffff:192.0.2.128", "\018::ffff:192.0.2.128"
-      ; of_string "2001:0db8::0001", "2001:db8::1", "\0112001:db8::1"
-      ; of_string "2001:db8::1", "2001:db8::1", "\0112001:db8::1"
-      ; of_string "2001:db8::2:1", "2001:db8::2:1", "\0132001:db8::2:1"
-      ; ( of_string "2001:db8:0000:1:1:1:1:1"
-        , "2001:db8:0:1:1:1:1:1"
-        , "\0202001:db8:0:1:1:1:1:1" )
-      ; ( of_string "2001:db8::1:1:1:1:1"
-        , "2001:db8:0:1:1:1:1:1"
-        , "\0202001:db8:0:1:1:1:1:1" )
-      ; ( of_string "2001:db8:0:1:1:1:1:1"
-        , "2001:db8:0:1:1:1:1:1"
-        , "\0202001:db8:0:1:1:1:1:1" )
-      ; of_string "2001:db8:0:0:1:0:0:1", "2001:db8::1:0:0:1", "\0172001:db8::1:0:0:1"
-      ; of_string "2001:db8:0:0:1::1", "2001:db8::1:0:0:1", "\0172001:db8::1:0:0:1"
-      ; of_string "2001:db8::1:0:0:1", "2001:db8::1:0:0:1", "\0172001:db8::1:0:0:1"
-      ; of_string "2001:DB8::1", "2001:db8::1", "\0112001:db8::1"
-      ; of_string "2001:db8::1", "2001:db8::1", "\0112001:db8::1"
-      ]
-    ;;
-  end)
+      let tests =
+        (* IPv4 *)
+        [ of_string "0.0.0.0", "0.0.0.0", "\0070.0.0.0"
+        ; of_string "10.0.0.0", "10.0.0.0", "\00810.0.0.0"
+        ; of_string "127.0.0.1", "127.0.0.1", "\009127.0.0.1"
+        ; of_string "192.168.1.101", "192.168.1.101", "\013192.168.1.101"
+        ; of_string "255.255.255.255", "255.255.255.255", "\015255.255.255.255" (* IPv6 *)
+        ; ( of_string "2001:0db8:85a3:0000:0000:8a2e:0370:7334"
+          , "2001:db8:85a3::8a2e:370:7334"
+          , "\0282001:db8:85a3::8a2e:370:7334" )
+        ; ( of_string "2001:db8:85a3:0:0:8a2e:370:7334"
+          , "2001:db8:85a3::8a2e:370:7334"
+          , "\0282001:db8:85a3::8a2e:370:7334" )
+        ; ( of_string "2001:db8:85a3::8a2e:370:7334"
+          , "2001:db8:85a3::8a2e:370:7334"
+          , "\0282001:db8:85a3::8a2e:370:7334" )
+        ; of_string "0:0:0:0:0:0:0:1", "::1", "\003::1"
+        ; of_string "::1", "::1", "\003::1"
+        ; of_string "0:0:0:0:0:0:0:0", "::", "\002::"
+        ; of_string "::", "::", "\002::"
+        ; of_string "::ffff:c000:0280", "::ffff:192.0.2.128", "\018::ffff:192.0.2.128"
+        ; of_string "::ffff:192.0.2.128", "::ffff:192.0.2.128", "\018::ffff:192.0.2.128"
+        ; of_string "2001:0db8::0001", "2001:db8::1", "\0112001:db8::1"
+        ; of_string "2001:db8::1", "2001:db8::1", "\0112001:db8::1"
+        ; of_string "2001:db8::2:1", "2001:db8::2:1", "\0132001:db8::2:1"
+        ; ( of_string "2001:db8:0000:1:1:1:1:1"
+          , "2001:db8:0:1:1:1:1:1"
+          , "\0202001:db8:0:1:1:1:1:1" )
+        ; ( of_string "2001:db8::1:1:1:1:1"
+          , "2001:db8:0:1:1:1:1:1"
+          , "\0202001:db8:0:1:1:1:1:1" )
+        ; ( of_string "2001:db8:0:1:1:1:1:1"
+          , "2001:db8:0:1:1:1:1:1"
+          , "\0202001:db8:0:1:1:1:1:1" )
+        ; of_string "2001:db8:0:0:1:0:0:1", "2001:db8::1:0:0:1", "\0172001:db8::1:0:0:1"
+        ; of_string "2001:db8:0:0:1::1", "2001:db8::1:0:0:1", "\0172001:db8::1:0:0:1"
+        ; of_string "2001:db8::1:0:0:1", "2001:db8::1:0:0:1", "\0172001:db8::1:0:0:1"
+        ; of_string "2001:DB8::1", "2001:db8::1", "\0112001:db8::1"
+        ; of_string "2001:db8::1", "2001:db8::1", "\0112001:db8::1"
+        ]
+      ;;
+    end)
 
   let arg_type = Core.Command.Arg_type.create of_string
 end
@@ -2506,14 +2690,15 @@ module Inet_addr = struct
   external inet4_addr_to_int63_exn : t -> Int63.t = "core_unix_inet4_addr_to_int63_exn"
 end
 
-(** IPv6 addresses are not supported.
+(** {v
+ IPv6 addresses are not supported.
     The RFC regarding how to properly format an IPv6 string is...painful.
 
     Note the 0010 and 0000:
     # "2a03:2880:0010:1f03:face:b00c:0000:0025" |> Unix.Inet_addr.of_string |!
     Unix.Inet_addr.to_string ;;
     - : string = "2a03:2880:10:1f03:face:b00c:0:25"
-*)
+    v} *)
 
 module Cidr = struct
   module Stable = struct
@@ -2525,7 +2710,7 @@ module Cidr = struct
           { address : int32 (* IPv4 only *)
           ; bits : int
           }
-        [@@deriving fields ~getters, bin_io, compare, hash, stable_witness]
+        [@@deriving fields ~getters, bin_io, compare ~localize, hash, stable_witness]
 
         let normalized_address ~base ~bits =
           if bits = 0
@@ -2561,15 +2746,15 @@ module Cidr = struct
       module T1 = Sexpable.Stable.Of_stringable.V1 (T0)
 
       module T2 = Comparator.Stable.V1.Make (struct
-        include T0
-        include T1
-      end)
+          include T0
+          include T1
+        end)
 
       module T3 = Comparable.Stable.V1.With_stable_witness.Make (struct
-        include T0
-        include T1
-        include T2
-      end)
+          include T0
+          include T1
+          include T2
+        end)
 
       include T0
       include T1
@@ -2619,12 +2804,12 @@ module Cidr = struct
   ;;
 
   include Identifiable.Make_using_comparator (struct
-    let module_name = "Core_unix.Cidr"
+      let module_name = "Core_unix.Cidr"
 
-    include Stable.V1.T0
-    include Stable.V1.T1
-    include Stable.V1.T2
-  end)
+      include Stable.V1.T0
+      include Stable.V1.T1
+      include Stable.V1.T2
+    end)
 
   let arg_type = Core.Command.Arg_type.create of_string
 end
@@ -2712,7 +2897,7 @@ type socket_type = Unix.socket_type =
 type sockaddr = Unix.sockaddr =
   | ADDR_UNIX of string
   | ADDR_INET of Inet_addr.t * int
-[@@deriving compare, sexp_of, bin_io]
+[@@deriving compare ~localize, sexp_of, bin_io]
 
 type sockaddr_blocking_sexp = Unix.sockaddr =
   | ADDR_UNIX of string
@@ -2725,13 +2910,13 @@ let addr_r addr = "addr", sexp_of_sockaddr addr
 
 let socket_or_pair f ?close_on_exec ~domain ~kind ~protocol () =
   improve
-    (fun () -> f ?cloexec:close_on_exec ~domain ~kind ~protocol)
-    (fun () ->
+    (stack_ fun () -> f ?cloexec:close_on_exec ~domain ~kind ~protocol)
+    (stack_ fun () ->
       [ "domain", sexp_of_socket_domain domain
       ; "kind", sexp_of_socket_type kind
       ; "protocol", Int.sexp_of_t protocol
       ; close_on_exec_r close_on_exec
-      ])
+      ]) [@nontail]
 ;;
 
 let socket = socket_or_pair Unix.socket
@@ -2740,8 +2925,8 @@ let socketpair = socket_or_pair Unix.socketpair
 let accept ?close_on_exec fd =
   let fd, addr =
     improve
-      (fun () -> Unix.accept ?cloexec:close_on_exec fd)
-      (fun () -> [ fd_r fd; close_on_exec_r close_on_exec ])
+      (stack_ fun () -> Unix.accept ?cloexec:close_on_exec fd)
+      (stack_ fun () -> [ fd_r fd; close_on_exec_r close_on_exec ]) [@nontail]
   in
   let addr =
     match addr with
@@ -2785,20 +2970,20 @@ let with_socket_length_restriction_workaround f fd ~addr =
 
 let bind fd ~addr =
   improve
-    (fun () -> with_socket_length_restriction_workaround Unix.bind fd ~addr)
-    (fun () -> [ fd_r fd; addr_r addr ])
+    (stack_ fun () -> with_socket_length_restriction_workaround Unix.bind fd ~addr)
+    (stack_ fun () -> [ fd_r fd; addr_r addr ]) [@nontail]
 ;;
 
 let connect fd ~addr =
   improve
-    (fun () -> with_socket_length_restriction_workaround Unix.connect fd ~addr)
-    (fun () -> [ fd_r fd; addr_r addr ])
+    (stack_ fun () -> with_socket_length_restriction_workaround Unix.connect fd ~addr)
+    (stack_ fun () -> [ fd_r fd; addr_r addr ]) [@nontail]
 ;;
 
 let listen fd ~backlog =
   improve
-    (fun () -> Unix.listen fd ~max:backlog)
-    (fun () -> [ fd_r fd; "backlog", Int.sexp_of_t backlog ])
+    (stack_ fun () -> Unix.listen fd ~max:backlog)
+    (stack_ fun () -> [ fd_r fd; "backlog", Int.sexp_of_t backlog ]) [@nontail]
 ;;
 
 type shutdown_command = Unix.shutdown_command =
@@ -2809,11 +2994,11 @@ type shutdown_command = Unix.shutdown_command =
 
 let shutdown fd ~mode =
   improve
-    (fun () ->
+    (stack_ fun () ->
       try Unix.shutdown fd ~mode with
       (* the error below is benign, it means that the other side disconnected *)
       | Unix.Unix_error (Unix.ENOTCONN, _, _) -> ())
-    (fun () -> [ fd_r fd; "mode", sexp_of_shutdown_command mode ])
+    (stack_ fun () -> [ fd_r fd; "mode", sexp_of_shutdown_command mode ]) [@nontail]
 ;;
 
 let getsockname = unary_fd Unix.getsockname
@@ -2827,13 +3012,13 @@ type msg_flag = Unix.msg_flag =
 
 let recv_send f fd ~buf ~pos ~len ~mode =
   improve
-    (fun () -> f fd ~buf ~pos ~len ~mode)
-    (fun () ->
+    (stack_ fun () -> f fd ~buf ~pos ~len ~mode)
+    (stack_ fun () ->
       [ fd_r fd
       ; "pos", Int.sexp_of_t pos
       ; len_r len
       ; "mode", sexp_of_list sexp_of_msg_flag mode
-      ])
+      ]) [@nontail]
 ;;
 
 let recv = recv_send Unix.recv
@@ -2843,14 +3028,14 @@ let send_substring = recv_send Unix.send_substring
 
 let sendto fd ~buf ~pos ~len ~mode ~addr =
   improve
-    (fun () -> Unix.sendto fd ~buf ~pos ~len ~mode ~addr)
-    (fun () ->
+    (stack_ fun () -> Unix.sendto fd ~buf ~pos ~len ~mode ~addr)
+    (stack_ fun () ->
       [ fd_r fd
       ; "pos", Int.sexp_of_t pos
       ; len_r len
       ; "mode", sexp_of_list sexp_of_msg_flag mode
       ; "addr", sexp_of_sockaddr addr
-      ])
+      ]) [@nontail]
 ;;
 
 [%%if ocaml_version >= (4, 05, 0)]
@@ -2867,14 +3052,14 @@ let unix_sendto_substring fd ~buf ~pos ~len ~mode addr =
 
 let sendto_substring fd ~buf ~pos ~len ~mode ~addr =
   improve
-    (fun () -> unix_sendto_substring fd ~buf ~pos ~len ~mode addr)
-    (fun () ->
+    (stack_ fun () -> unix_sendto_substring fd ~buf ~pos ~len ~mode addr)
+    (stack_ fun () ->
       [ fd_r fd
       ; "pos", Int.sexp_of_t pos
       ; len_r len
       ; "mode", sexp_of_list sexp_of_msg_flag mode
       ; "addr", sexp_of_sockaddr addr
-      ])
+      ]) [@nontail]
 ;;
 
 [%%if ocaml_version >= (4, 12, 0)]
@@ -2930,12 +3115,15 @@ type socket_float_option = Unix.socket_float_option =
 
 let make_sockopt get set sexp_of_opt sexp_of_val =
   let getsockopt fd opt =
-    improve (fun () -> get fd opt) (fun () -> [ fd_r fd; "opt", sexp_of_opt opt ])
+    improve
+      (stack_ fun () -> get fd opt)
+      (stack_ fun () -> [ fd_r fd; "opt", sexp_of_opt opt ]) [@nontail]
   in
   let setsockopt fd opt value =
     improve
-      (fun () -> set fd opt value)
-      (fun () -> [ fd_r fd; "opt", sexp_of_opt opt; "val", sexp_of_val value ])
+      (stack_ fun () -> set fd opt value)
+      (stack_ fun () -> [ fd_r fd; "opt", sexp_of_opt opt; "val", sexp_of_val value ])
+    [@nontail]
   in
   getsockopt, setsockopt
 ;;
@@ -3011,15 +3199,17 @@ let set_mcast_ifname fd ifname =
 ;;
 
 let open_connection addr =
-  improve (fun () -> Unix.open_connection addr) (fun () -> [ addr_r addr ])
+  improve
+    (stack_ fun () -> Unix.open_connection addr)
+    (stack_ fun () -> [ addr_r addr ]) [@nontail]
 ;;
 
 let shutdown_connection = Unix.shutdown_connection
 
 let establish_server handle_connection ~addr =
   improve
-    (fun () -> Unix.establish_server handle_connection ~addr)
-    (fun () -> [ addr_r addr ])
+    (stack_ fun () -> Unix.establish_server handle_connection ~addr)
+    (stack_ fun () -> [ addr_r addr ]) [@nontail]
 ;;
 
 type addr_info = Unix.addr_info =
@@ -3051,12 +3241,12 @@ type getaddrinfo_option = Unix.getaddrinfo_option =
 
 let getaddrinfo host service opts =
   improve
-    (fun () -> Unix.getaddrinfo host service opts)
-    (fun () ->
+    (stack_ fun () -> Unix.getaddrinfo host service opts)
+    (stack_ fun () ->
       [ "host", atom host
       ; "service", atom service
       ; "opts", sexp_of_list sexp_of_getaddrinfo_option opts
-      ])
+      ]) [@nontail]
 ;;
 
 type name_info = Unix.name_info =
@@ -3075,7 +3265,7 @@ type getnameinfo_option = Unix.getnameinfo_option =
 
 let getnameinfo addr opts =
   improve
-    (fun () ->
+    (stack_ fun () ->
       try Unix.getnameinfo addr opts with
       | Stdlib.Not_found ->
         raise
@@ -3084,10 +3274,10 @@ let getnameinfo addr opts =
                "Unix.getnameinfo: not found"
                  (addr : sockaddr)
                  (opts : getnameinfo_option list)]))
-    (fun () ->
+    (stack_ fun () ->
       [ "addr", sexp_of_sockaddr addr
       ; "opts", sexp_of_list sexp_of_getnameinfo_option opts
-      ])
+      ]) [@nontail]
 ;;
 
 module Terminal_io = struct
@@ -3143,14 +3333,15 @@ module Terminal_io = struct
 
   let tcsetattr t fd ~mode =
     improve
-      (fun () -> Unix.tcsetattr fd ~mode t)
-      (fun () -> [ fd_r fd; "mode", sexp_of_setattr_when mode; "termios", sexp_of_t t ])
+      (stack_ fun () -> Unix.tcsetattr fd ~mode t)
+      (stack_ fun () ->
+        [ fd_r fd; "mode", sexp_of_setattr_when mode; "termios", sexp_of_t t ]) [@nontail]
   ;;
 
   let tcsendbreak fd ~duration =
     improve
-      (fun () -> Unix.tcsendbreak fd ~duration)
-      (fun () -> [ fd_r fd; "duration", Int.sexp_of_t duration ])
+      (stack_ fun () -> Unix.tcsendbreak fd ~duration)
+      (stack_ fun () -> [ fd_r fd; "duration", Int.sexp_of_t duration ]) [@nontail]
   ;;
 
   let tcdrain = unary_fd Unix.tcdrain
@@ -3163,8 +3354,8 @@ module Terminal_io = struct
 
   let tcflush fd ~mode =
     improve
-      (fun () -> Unix.tcflush fd ~mode)
-      (fun () -> [ fd_r fd; "mode", sexp_of_flush_queue mode ])
+      (stack_ fun () -> Unix.tcflush fd ~mode)
+      (stack_ fun () -> [ fd_r fd; "mode", sexp_of_flush_queue mode ]) [@nontail]
   ;;
 
   type flow_action = Unix.flow_action =
@@ -3176,8 +3367,8 @@ module Terminal_io = struct
 
   let tcflow fd ~mode =
     improve
-      (fun () -> Unix.tcflow fd ~mode)
-      (fun () -> [ fd_r fd; "mode", sexp_of_flow_action mode ])
+      (stack_ fun () -> Unix.tcflow fd ~mode)
+      (stack_ fun () -> [ fd_r fd; "mode", sexp_of_flow_action mode ]) [@nontail]
   ;;
 
   let setsid = Unix.setsid
@@ -3236,7 +3427,7 @@ module Ifaddr = struct
         | Running
         | Slave
         | Up
-      [@@deriving sexp, compare, enumerate]
+      [@@deriving sexp, compare ~localize, enumerate]
     end
 
     include T
@@ -3364,7 +3555,7 @@ module Stable = struct
   module Utsname = Utsname.Stable
 end
 
-let exec ~prog ~argv ?(use_path = true) ?env () =
+let exec ~prog ~argv ?(local_ use_path = true) ?env () =
   let argv = Array.of_list argv in
   let env = Option.map env ~f:Env.expand_array in
   exec_internal ~prog ~argv ~use_path ~env

@@ -6,166 +6,87 @@ open! Expect_test_helpers_core
 open! Expect_test_helpers_async
 module Time_ns = Core.Core_private.Time_ns_alternate_sexp
 
-let sec = Time_ns.Span.of_sec
-
-let advance_by_span time_source span =
-  let to_ = Time_ns.add (Synchronous_time_source.now time_source) span in
-  Synchronous_time_source.advance_by_alarms time_source ~to_ |> ok_exn
+let advance_by_alarms_by time_source span =
+  Synchronous_time_source.advance_by_alarms_by time_source span |> ok_exn
 ;;
 
-let heartbeat_every = sec 2.
-let heartbeat_timeout = sec 10.
-let yield () = Async_kernel_scheduler.yield_until_no_jobs_remain ()
-
-let establish_connection transport time_source description =
-  let conn =
-    Connection.create
-      ~connection_state:(fun _ -> ())
-      ~heartbeat_config:
-        (Connection.Heartbeat_config.create
-           ~timeout:heartbeat_timeout
-           ~send_every:heartbeat_every
-           ())
-      ~description
-      ~time_source
-      transport
+let test_connection_with_time_source_not_equal_to_wall_clock () =
+  let print_emphasized str = print_endline ("-----" ^ str ^ "-----") in
+  let heartbeat_every = Time_ns.Span.of_sec 2. in
+  let heartbeat_timeout = Time_ns.Span.of_sec 10. in
+  let%bind ( `Server (server_time_source, server_conn)
+           , `Client (client_time_source, client_conn) )
+    =
+    Test_helpers.setup_server_and_client_connection ~heartbeat_timeout ~heartbeat_every
   in
-  Deferred.upon conn (fun conn ->
-    let conn = Result.ok_exn conn in
-    let () =
-      Deferred.upon (Connection.close_reason conn ~on_close:`started) (fun reason ->
-        print_s
-          [%message
-            "connection closed"
-              ~now:(Synchronous_time_source.now time_source : Time_ns.t)
-              (description : Info.t)
-              (reason : Info.t)])
-    in
-    let () =
-      Connection.add_heartbeat_callback conn (fun () ->
-        print_s
-          [%message
-            "received heartbeat"
-              ~now:(Synchronous_time_source.now time_source : Time_ns.t)
-              (description : Info.t)])
-    in
-    ());
-  conn >>| Result.ok_exn
+  let yield_and_print_liveness () =
+    let%map () = Async_kernel_scheduler.yield_until_no_jobs_remain () in
+    print_s
+      [%message "" ~last_seen_alive:(Connection.last_seen_alive server_conn : Time_ns.t)];
+    print_s
+      [%message "" ~last_seen_alive:(Connection.last_seen_alive client_conn : Time_ns.t)]
+  in
+  print_emphasized "Advancing time by 0 to init";
+  advance_by_alarms_by client_time_source Time_ns.Span.zero;
+  advance_by_alarms_by server_time_source Time_ns.Span.zero;
+  let%bind () = yield_and_print_liveness () in
+  print_emphasized "Advancing time by heartbeat_every to show a heartbeat";
+  advance_by_alarms_by server_time_source heartbeat_every;
+  advance_by_alarms_by client_time_source heartbeat_every;
+  let%bind () = yield_and_print_liveness () in
+  print_emphasized
+    "Advancing only server time by heartbeat_timeout to show heartbeats just before a \
+     timeout";
+  advance_by_alarms_by server_time_source heartbeat_timeout;
+  let%bind () = yield_and_print_liveness () in
+  print_emphasized
+    "Advancing only server time by another heartbeat_every to force one more heartbeat \
+     and cause a timeout";
+  advance_by_alarms_by server_time_source heartbeat_every;
+  let%bind () = yield_and_print_liveness () in
+  Deferred.all_unit
+    [ Connection.close_finished server_conn; Connection.close_finished client_conn ]
 ;;
 
 let%expect_test "test connection with time_source <> wall_clock" =
-  let server_time_source = Synchronous_time_source.create ~now:Time_ns.epoch () in
-  let client_time_source = Synchronous_time_source.create ~now:Time_ns.epoch () in
-  let server_r, server_w = Pipe.create () in
-  let client_r, client_w = Pipe.create () in
-  let server_transport =
-    Pipe_transport.create Pipe_transport.Kind.bigstring client_r server_w
-  in
-  let client_transport =
-    Pipe_transport.create Pipe_transport.Kind.bigstring server_r client_w
-  in
-  let server_conn =
-    establish_connection
-      server_transport
-      (Synchronous_time_source.read_only server_time_source)
-      (Info.of_string "server")
-  in
-  let client_conn =
-    establish_connection
-      client_transport
-      (Synchronous_time_source.read_only client_time_source)
-      (Info.of_string "client")
-  in
-  let%bind server_conn, client_conn = Deferred.both server_conn client_conn in
-  [%expect {| |}];
-  let print_liveness conn =
-    print_s [%message "" ~last_seen_alive:(Connection.last_seen_alive conn : Time_ns.t)]
-  in
-  advance_by_span client_time_source Time_ns.Span.zero;
-  advance_by_span server_time_source Time_ns.Span.zero;
-  let%bind () = yield () in
+  let%bind () = test_connection_with_time_source_not_equal_to_wall_clock () in
   [%expect
     {|
-    ("received heartbeat"
-      (now         "1970-01-01 00:00:00Z")
-      (description server))
-    ("received heartbeat"
-      (now         "1970-01-01 00:00:00Z")
-      (description client))
-    |}];
-  print_liveness server_conn;
-  print_liveness client_conn;
-  [%expect
-    {|
+    -----Advancing time by 0 to init-----
+    ("received heartbeat"(now"1970-01-01 00:00:00Z")(description server))
+    ("received heartbeat"(now"1970-01-01 00:00:00Z")(description client))
     (last_seen_alive "1970-01-01 00:00:00Z")
     (last_seen_alive "1970-01-01 00:00:00Z")
-    |}];
-  advance_by_span server_time_source heartbeat_every;
-  advance_by_span client_time_source heartbeat_every;
-  let%bind () = yield () in
-  [%expect
-    {|
-    ("received heartbeat"
-      (now         "1970-01-01 00:00:02Z")
-      (description client))
-    ("received heartbeat"
-      (now         "1970-01-01 00:00:02Z")
-      (description server))
-    |}];
-  print_liveness server_conn;
-  print_liveness client_conn;
-  [%expect
-    {|
+    -----Advancing time by heartbeat_every to show a heartbeat-----
+    ("received heartbeat"(now"1970-01-01 00:00:02Z")(description client))
+    ("received heartbeat"(now"1970-01-01 00:00:02Z")(description server))
     (last_seen_alive "1970-01-01 00:00:02Z")
     (last_seen_alive "1970-01-01 00:00:02Z")
-    |}];
-  advance_by_span server_time_source heartbeat_timeout;
-  let%bind () = yield () in
-  [%expect
-    {|
-    ("received heartbeat"
-      (now         "1970-01-01 00:00:02Z")
-      (description client))
-    ("received heartbeat"
-      (now         "1970-01-01 00:00:02Z")
-      (description client))
-    ("received heartbeat"
-      (now         "1970-01-01 00:00:02Z")
-      (description client))
-    ("received heartbeat"
-      (now         "1970-01-01 00:00:02Z")
-      (description client))
-    ("received heartbeat"
-      (now         "1970-01-01 00:00:02Z")
-      (description client))
-    |}];
-  print_liveness server_conn;
-  print_liveness client_conn;
-  [%expect
-    {|
+    -----Advancing only server time by heartbeat_timeout to show heartbeats just before a timeout-----
+    ("received heartbeat"(now"1970-01-01 00:00:02Z")(description client))
+    ("received heartbeat"(now"1970-01-01 00:00:02Z")(description client))
+    ("received heartbeat"(now"1970-01-01 00:00:02Z")(description client))
+    ("received heartbeat"(now"1970-01-01 00:00:02Z")(description client))
+    ("received heartbeat"(now"1970-01-01 00:00:02Z")(description client))
     (last_seen_alive "1970-01-01 00:00:02Z")
     (last_seen_alive "1970-01-01 00:00:02Z")
-    |}];
-  advance_by_span server_time_source heartbeat_every;
-  let%bind () = yield () in
-  [%expect
-    {|
+    -----Advancing only server time by another heartbeat_every to force one more heartbeat and cause a timeout-----
     ("connection closed"
       (now         "1970-01-01 00:00:14Z")
       (description server)
-      (reason      "No heartbeats received for 10s."))
+      (reason (
+        ("Connection closed by local side:"
+         "No heartbeats received for 10s. Last seen at: 1969-12-31 19:00:02-05:00, now: 1969-12-31 19:00:14-05:00.")
+        (connection_description server))))
     ("connection closed"
       (now         "1970-01-01 00:00:02Z")
       (description client)
-      (reason      "EOF or connection closed"))
-    |}];
-  print_liveness server_conn;
-  print_liveness client_conn;
-  [%expect
-    {|
+      (reason (
+        ("Connection closed by remote side:"
+         "No heartbeats received for 10s. Last seen at: 1969-12-31 19:00:02-05:00, now: 1969-12-31 19:00:14-05:00.")
+        (connection_description client))))
     (last_seen_alive "1970-01-01 00:00:02Z")
     (last_seen_alive "1970-01-01 00:00:02Z")
     |}];
-  Deferred.all_unit
-    [ Connection.close_finished server_conn; Connection.close_finished client_conn ]
+  return ()
 ;;

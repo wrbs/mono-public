@@ -8,8 +8,7 @@ open! Import
     The name of the interface reflects the fact that the interface only gives you access
     to the seconds of the [t]. But you can use this interface with types that have higher
     precision than that, hence the rounding implied in the name of
-    [to_int63_seconds_round_down_exn].
-*)
+    [to_int63_seconds_round_down_exn]. *)
 module type Time_in_seconds = sig
   module Span : sig
     type t
@@ -31,6 +30,17 @@ module type Time_in_seconds = sig
   val to_span_since_epoch : t -> Span.t
 end
 
+(** When there is a backwards DST transition, some local times can occur twice. Some
+    functions that operate on local times accept an optional [Earlier_or_later.t], which
+    allows the user to explicitly specify whether the earlier or later of the two absolute
+    times corresponding to an ambiguous local time is intended. *)
+module Earlier_or_later = struct
+  type t =
+    | Earlier
+    | Later
+  [@@deriving compare ~localize, enumerate, equal ~localize, hash, sexp_of]
+end
+
 (** This is the interface of [Zone], but not the interface of [Time.Zone] or
     [Time_ns.Zone]. For those, look at [Time_intf.Zone] *)
 module type S = sig
@@ -38,41 +48,58 @@ module type S = sig
 
   (** The type of a time-zone.
 
-      bin_io and sexp representations of Zone.t are the name of the zone, and
-      not the full data that is read from disk when Zone.find is called.  The
-      full Zone.t is reconstructed on the receiving/reading side by reloading
-      the zone file from disk.  Any zone name that is accepted by [find] is
-      acceptable in the bin_io and sexp representations. *)
-  type t [@@deriving sexp_of, compare]
+      bin_io and sexp representations of Zone.t are the name of the zone, and not the full
+      data that is read from disk when Zone.find is called. The full Zone.t is
+      reconstructed on the receiving/reading side by reloading the zone file from disk.
+      Any zone name that is accepted by [find] is acceptable in the bin_io and sexp
+      representations. *)
+  type t : sync_data [@@deriving sexp_of, compare ~localize]
 
-  (** [input_tz_file ~zonename ~filename] read in [filename] and return [t]
-      with [name t] = [zonename] *)
+  (** [input_tz_file ~zonename ~filename] read in [filename] and return [t] with [name t]
+      = [zonename] *)
   val input_tz_file : zonename:string -> filename:string -> t
 
-  (** [likely_machine_zones] is a list of zone names that will be searched
-      first when trying to determine the machine zone of a box.  Setting this
-      to a likely set of zones for your application will speed the very first
-      use of the local timezone. *)
-  val likely_machine_zones : string list ref
+  (** [likely_machine_zones] is a list of zone names that will be searched first when
+      trying to determine the machine zone of a box. Setting this to a likely set of zones
+      for your application will speed the very first use of the local timezone. *)
+  val likely_machine_zones : string list Atomic.t
 
-  (** [of_utc_offset offset] returns a timezone with a static UTC offset (given in
-      hours). *)
+  module Time_in_seconds : Time_in_seconds
+  module Earlier_or_later = Earlier_or_later
+
+  (** [of_utc_offset offset] returns a timezone with a static UTC offset (given in hours). *)
   val of_utc_offset : hours:int -> t
 
+  (** Like [of_utc_offset], but overriding the default name. These zones can only be
+      reliably transferred over sexp or bin-io using [Stable.Full_data]; see below. *)
   val of_utc_offset_explicit_name : name:string -> hours:int -> t
 
-  (** [utc] the UTC time zone.  Included for convenience *)
+  (** Returns a timezone with a static UTC offset in units of seconds. Rounds input to the
+      next lower unit of seconds if necessary. These zones can only be reliably
+      transferred over sexp or bin-io using [Stable.Full_data]; see below. *)
+  val of_utc_offset_in_seconds_round_down : ?name:string -> Time_in_seconds.Span.t -> t
+
+  (** Returns a timezone with a fixed offset relative to the given [t] in units of
+      seconds. This time zone doesn't represent any real place, but may be convenient for
+      testing or for other non-real-time purposes. Rounds [span] to the next lower unit of
+      seconds if necessary. These zones can only be reliably transferred over sexp or
+      bin-io using [Stable.Full_data]; see below. *)
+  val add_offset_in_seconds_round_down
+    :  t
+    -> name:string
+    -> span:Time_in_seconds.Span.t
+    -> t
+
+  (** [utc] the UTC time zone. Included for convenience *)
   val utc : t
 
-  val name : t -> string
+  val%template name : t @ m -> string @ m [@@mode m = (local, global)]
 
   (** [original_filename t] return the filename [t] was loaded from (if any) *)
   val original_filename : t -> string option
 
   (** [digest t] return the MD5 digest of the file the t was created from (if any) *)
   val digest : t -> Md5.t option
-
-  module Time_in_seconds : Time_in_seconds
 
   (** For performance testing only; [reset_transition_cache t] resets an internal cache in
       [t] used to speed up repeated lookups of the same clock shift transition. *)
@@ -82,7 +109,7 @@ module type S = sig
       both ends. Every time belongs to exactly one such range. The times of DST
       transitions themselves belong to the range for which they are the lower bound. *)
   module Index : sig
-    type t [@@immediate]
+    type t : immediate
 
     val next : t -> t
     val prev : t -> t
@@ -91,7 +118,13 @@ module type S = sig
   (** Gets the index of a time. *)
   val index : t -> Time_in_seconds.t -> Index.t
 
-  val index_of_date_and_ofday : t -> Time_in_seconds.Date_and_ofday.t -> Index.t
+  (** Gets the index of an date and time of day in this zone. When there are two
+      occurrences, the result is determined by [prefer]. *)
+  val index_of_date_and_ofday
+    :  ?prefer:Earlier_or_later.t (** default: [Later] *)
+    -> t
+    -> Time_in_seconds.Date_and_ofday.t
+    -> Index.t
 
   (** Gets the UTC offset of times in a specific range.
 
@@ -122,13 +155,20 @@ end
 module type S_stable = sig
   type t
 
+  (** Transfers the full contents of a time zone including all DST transitions, while
+      other protocols such as [Timezone.Stable.V1] serialize only the name. This protocol
+      is required when talking to platforms that do not have access to a time zone
+      database, or for time zones that do not come from either [Timezone.find] or
+      [of_utc_offset]. *)
   module Full_data : sig
-    module V1 :
-      Stable_module_types.With_stable_witness.S0_without_comparator with type t = t
+    module%template V1 :
+      Stable_module_types.With_stable_witness.S0_without_comparator
+      [@mode local]
+      with type t = t
   end
 end
 
-module type Zone = sig
+module type Zone = sig @@ portable
   module type S = S
   module type S_stable = S_stable
 

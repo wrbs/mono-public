@@ -14,7 +14,7 @@
     Consult the {{!basics}basics}, {{!examples}examples} and
     {{!limitations}limitations}.
 
-    {e 3.16.0 — {{:https://github.com/ocaml/dune }homepage}} *)
+    {e 3.20.2 — {{:https://github.com/ocaml/dune }homepage}} *)
 
 (** {1 Interface} *)
 
@@ -138,8 +138,9 @@ module A : sig
   (** Additional text properties. *)
 
   val bold      : style
-  val italic    : style
   val dim       : style
+  val faint     : style
+  val italic    : style
   val underline : style
   val blink     : style
   val reverse   : style

@@ -19,11 +19,11 @@
 let src = Logs.Src.create "conduit_mirage" ~doc:"Conduit Mirage"
 
 module Log = (val Logs.src_log src : Logs.LOG)
-open Sexplib.Conv
+open Sexplib0.Sexp_conv
 
 let ( >>= ) = Lwt.( >>= )
 let ( >|= ) = Lwt.( >|= )
-let fail fmt = Fmt.kstr (fun s -> Lwt.fail (Failure s)) fmt
+let fail fmt = Fmt.failwith fmt
 let err_tcp_not_supported = fail "%s: TCP is not supported"
 let err_tls_not_supported = fail "%s: TLS is not supported"
 
@@ -103,8 +103,7 @@ module TCP (S : Tcpip.Stack.V4V6) = struct
   type t = S.t
 
   let err_tcp e =
-    Lwt.fail
-    @@ Failure (Format.asprintf "TCP connection failed: %a" S.TCP.pp_error e)
+    Format.kasprintf failwith "TCP connection failed: %a" S.TCP.pp_error e
 
   let connect (t : t) (c : client) =
     match c with
@@ -178,9 +177,14 @@ let tls_client ~host ~authenticator x =
   let peer_name =
     Result.to_option (Result.bind (Domain_name.of_string host) Domain_name.host)
   in
-  `TLS (Tls.Config.client ?peer_name ~authenticator (), x)
+  match Tls.Config.client ?peer_name ~authenticator () with
+  | Error (`Msg msg) -> failwith ("tls configuration problem: " ^ msg)
+  | Ok cfg -> `TLS (cfg, x)
 
-let tls_server ?authenticator x = `TLS (Tls.Config.server ?authenticator (), x)
+let tls_server ?authenticator x =
+  match Tls.Config.server ?authenticator () with
+  | Error (`Msg msg) -> failwith ("tls configuration problem: " ^ msg)
+  | Ok cfg -> `TLS (cfg, x)
 
 module TLS (S : S) = struct
   module TLS = Tls_mirage.Make (S.Flow)
@@ -262,11 +266,9 @@ module TLS (S : S) = struct
     | _ -> S.listen t s (fun f -> fn (Clear f))
 end
 
-module Endpoint (P : Mirage_clock.PCLOCK) = struct
-  module Ca_certs = Ca_certs_nss.Make (P)
-
+module Endpoint = struct
   let nss_authenticator =
-    match Ca_certs.authenticator () with
+    match Ca_certs_nss.authenticator () with
     | Ok a -> a
     | Error (`Msg msg) -> failwith msg
 

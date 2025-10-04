@@ -4,6 +4,7 @@
 (* This module generates lookup tables to detect integer overflow when calculating integer
    exponents.  At index [e], [table.[e]^e] will not overflow, but [(table[e] + 1)^e]
    will. *)
+module Z = Zarith.Z
 
 type mode =
   | Normal
@@ -28,19 +29,6 @@ let oc, mode =
   | _ -> failwith "bad command line arguments"
 ;;
 
-module Big_int = struct
-  include Big_int
-
-  let ( > ) = gt_big_int
-  let ( <= ) = le_big_int
-  let ( ^ ) = power_big_int_positive_int
-  let ( - ) = sub_big_int
-  let ( + ) = add_big_int
-  let one = unit_big_int
-  let sqrt = sqrt_big_int
-  let to_string = string_of_big_int
-end
-
 module Array = StdLabels.Array
 
 type generated_type =
@@ -52,16 +40,16 @@ type generated_type =
 let max_big_int_for_bits bits =
   let shift = bits - 1 in
   (* sign bit *)
-  Big_int.(shift_left_big_int one shift - one)
+  Z.(shift_left one shift - one)
 ;;
 
 let safe_to_print_as_int =
   let int31_max = max_big_int_for_bits 31 in
-  fun x -> Big_int.(x <= int31_max)
+  fun x -> x <= int31_max
 ;;
 
 let format_entry typ b =
-  let s = Big_int.to_string b in
+  let s = Z.to_string b in
   match typ with
   | Int ->
     if safe_to_print_as_int b then s else Printf.sprintf "Stdlib.Int64.to_int %sL" s
@@ -99,16 +87,16 @@ let generate_negative_bounds = function
 ;;
 
 let highest_base exponent max_val =
-  let open Big_int in
+  let open Z in
   match exponent with
   | 0 | 1 -> max_val
   | 2 -> sqrt max_val
   | _ ->
     let rec search possible_base =
-      if possible_base ^ exponent > max_val
+      if possible_base ** exponent > max_val
       then (
         let res = possible_base - one in
-        assert (res ^ exponent <= max_val);
+        assert (res ** exponent <= max_val);
         res)
       else search (possible_base + one)
     in
@@ -128,13 +116,14 @@ let gen_array ~typ ~bits ~sign ~indent =
   let bounds =
     match sign with
     | Pos -> pos_bounds
-    | Neg -> Array.map pos_bounds ~f:Big_int.minus_big_int
+    | Neg -> Array.map pos_bounds ~f:Z.( ~- )
   in
+  pr "Iarray.unsafe_of_array__promise_no_mutation (";
   pr "[| %s" (format_entry typ bounds.(0));
   for i = 1 to Array.length bounds - 1 do
     pr ";  %s" (format_entry typ bounds.(i))
   done;
-  pr "|]"
+  pr "|])"
 ;;
 
 let gen_bounds typ =
@@ -151,22 +140,27 @@ let gen_bounds typ =
        | Pos -> "positive"
        | Neg -> "negative")
   in
-  pr "let %s : %s array =" (array_name typ Pos) (ocaml_type_name typ);
+  pr "let %s : %s iarray =" (array_name typ Pos) (ocaml_type_name typ);
+  pr "  Portability_hacks.Cross.Portable.(cross (iarray infer))";
+  pr "  (";
   (match typ with
    | Int ->
      pr "  match Int_conversions.num_bits_int with";
-     pr "  | 32 -> Array.map %s ~f:Stdlib.Int32.to_int" (array_name Int32 Pos);
+     pr "  | 32 -> Iarray.map %s ~f:Stdlib.Int32.to_int" (array_name Int32 Pos);
      pr "  | 63 ->";
      gen_array ~typ ~bits:63 ~sign:Pos ~indent:4;
      pr "  | 31 ->";
      gen_array ~typ ~bits:31 ~sign:Pos ~indent:4;
      pr "  | _ -> assert false"
    | _ -> gen_array ~typ ~bits:(bits typ) ~sign:Pos ~indent:2);
-  pr "";
+  pr "  )";
   if generate_negative_bounds typ
   then (
-    pr "let %s : %s array =" (array_name typ Neg) (ocaml_type_name typ);
-    gen_array ~typ ~bits:(bits typ) ~sign:Neg ~indent:2)
+    pr "let %s : %s iarray =" (array_name typ Neg) (ocaml_type_name typ);
+    pr "  Portability_hacks.Cross.Portable.(cross (iarray infer))";
+    pr "  (";
+    gen_array ~typ ~bits:(bits typ) ~sign:Neg ~indent:2;
+    pr "  )")
 ;;
 
 let () =
@@ -174,7 +168,7 @@ let () =
   pr "";
   pr "open! Import";
   pr "";
-  pr "module Array = Array0";
+  pr "module Iarray = Iarray0";
   pr "";
   pr "(* We have to use Int64.to_int_exn instead of int constants to make";
   pr "   sure that file can be preprocessed on 32-bit machines. *)";

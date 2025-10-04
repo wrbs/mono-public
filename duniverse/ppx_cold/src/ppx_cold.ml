@@ -1,4 +1,4 @@
-open Base
+open Stdppx
 open Ppxlib
 
 let payload_never ~loc =
@@ -16,7 +16,7 @@ let expand_cold_attribute attr =
   ; Loc.make ~loc "ocaml.specialise", payload
   ]
   |> List.map ~f:(fun (name, payload) ->
-       Ast_builder.Default.attribute ~loc ~name ~payload)
+    Ast_builder.Default.attribute ~loc ~name ~payload)
 ;;
 
 class attributes_mapper =

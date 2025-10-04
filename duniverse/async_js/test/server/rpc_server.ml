@@ -22,7 +22,10 @@ let start_http_server () =
   let reader, writer = Pipe.create () in
   let implementations = [ implementation_send_string; implementation_close_connection ] in
   let implementations =
-    Rpc.Implementations.create_exn ~implementations ~on_unknown_rpc:`Raise
+    Rpc.Implementations.create_exn
+      ~implementations
+      ~on_unknown_rpc:`Raise
+      ~on_exception:Log_on_background_exn
   in
   let%bind server =
     let on_handler_error inet err =
@@ -60,6 +63,7 @@ let run_test f =
   let web_server = Or_error.ok_exn web_server in
   let web_port = Cohttp_async.Server.listening_on web_server in
   Web_testing.Test_client.with_client (fun client -> f web_port connection_pipe client)
+  >>| ok_exn
 ;;
 
 (* Cleanup error from non-deterministic bits *)
@@ -115,8 +119,12 @@ let wait_for_the_page_to_be_loaded client =
       the_page_should_load_in_much_less_time_than_this_even_on_hydra
       (Web_testing.Test_client.until_text client ~text:"Ready" `Exists)
   with
-  | `Timeout -> print_endline "Timeout"
-  | `Result () -> print_endline "Loaded"
+  | `Timeout ->
+    print_endline "Timeout";
+    Or_error.error_s [%message "Timed out waiting for the page to load"]
+  | `Result r ->
+    print_endline "Loaded";
+    r
 ;;
 
 let print_when_connection_established_exn conn ~f =
@@ -141,6 +149,7 @@ let%expect_test _ =
     Pipe.read pipe
   in
   run_test (fun web_port connection_pipe client ->
+    let open Deferred.Or_error.Let_syntax in
     let%bind () =
       Web_testing.Test_client.navigate client (sprintf "http://localhost:%i/" web_port)
     in
@@ -148,38 +157,52 @@ let%expect_test _ =
     let%bind () = wait_for_the_page_to_be_loaded client in
     [%expect {| Loaded |}];
     (* synchronous failure (attempted use of port 20) *)
-    let%bind () = dispatch_and_print "ws://localhost:20/" in
+    let%bind.Deferred () = dispatch_and_print "ws://localhost:20/" in
     [%expect {| "WebSocket connection failed (Abnormal_closure)" |}];
     (* synchronous failure (invalid url) *)
-    let%bind () = dispatch_and_print "ws://in valid/" in
+    let%bind.Deferred () = dispatch_and_print "ws://in valid/" in
     [%expect {| "WebSocket connection failed (Abnormal_closure)" |}];
     (* null-byte at the end of a URL looks like it gets stripped now?
        This used to fail but now it's ok *)
     let conn = read_new connection_pipe in
     print_when_connection_established_exn conn ~f:Rpc.Connection.close;
-    let%bind () = dispatch_and_print (sprintf "ws://localhost:%d/\000" web_port) in
+    let%bind.Deferred () =
+      dispatch_and_print (sprintf "ws://localhost:%d/\000" web_port)
+    in
     [%expect
       {|
       New connection
-      ((rpc_error (Connection_closed ("RPC transport stopped")))
+      ((rpc_error
+        (Connection_closed
+         (("EOF or connection closed"
+           (connection_description
+            (websocket
+             (uri ((scheme (ws)) (host (localhost)) (port PORT) (path /%00)))))))))
        (connection_description
         (websocket
          (uri ((scheme (ws)) (host (localhost)) (port PORT) (path /%00)))))
        (rpc_name send-string) (rpc_version 1))
       |}];
-    let%bind () = dispatch_and_print (sprintf "wss://localhost:%d/" web_port) in
+    let%bind.Deferred () = dispatch_and_print (sprintf "wss://localhost:%d/" web_port) in
     [%expect {| "WebSocket connection failed (Abnormal_closure)" |}];
     (* immediate failure *)
-    let%bind () = dispatch_and_print (sprintf "ws://shouldnt-resolve.fakedomain.com/") in
+    let%bind.Deferred () =
+      dispatch_and_print (sprintf "ws://shouldnt-resolve.fakedomain.com/")
+    in
     [%expect {| "WebSocket connection failed (Abnormal_closure)" |}];
     (* successful connection, close after handshake *)
     let conn = read_new connection_pipe in
     print_when_connection_established_exn conn ~f:Rpc.Connection.close;
-    let%bind () = dispatch_and_print (sprintf "ws://localhost:%d/" web_port) in
+    let%bind.Deferred () = dispatch_and_print (sprintf "ws://localhost:%d/" web_port) in
     [%expect
       {|
       New connection
-      ((rpc_error (Connection_closed ("RPC transport stopped")))
+      ((rpc_error
+        (Connection_closed
+         (("EOF or connection closed"
+           (connection_description
+            (websocket
+             (uri ((scheme (ws)) (host (localhost)) (port PORT) (path /)))))))))
        (connection_description
         (websocket (uri ((scheme (ws)) (host (localhost)) (port PORT) (path /)))))
        (rpc_name send-string) (rpc_version 1))
@@ -187,9 +210,10 @@ let%expect_test _ =
     (* successful connection *)
     let conn = read_new connection_pipe in
     print_when_connection_established_exn conn ~f:(fun (_ : Rpc.Connection.t) ->
-      return ());
-    let%bind () = dispatch_and_print (sprintf "ws://localhost:%d/" web_port) in
-    [%expect {|
+      Deferred.return ());
+    let%bind.Deferred () = dispatch_and_print (sprintf "ws://localhost:%d/" web_port) in
+    [%expect
+      {|
       New connection
       "OK from client"
       |}];

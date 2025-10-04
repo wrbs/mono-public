@@ -118,9 +118,9 @@ let get ~field_diffs ~builder =
         [%e expr]])
     ~init:
       [%expr
-        fun ~from ~to_ ->
+        fun ~from ~to_ -> exclave_
           if Base.phys_equal from to_
-          then Optional_diff.none
+          then Optional_diff.get_none ()
           else (
             (* let { x = from_x ; y = from_y ; ... } in
                let { x = to_x; y = to_y ; ... } in
@@ -168,7 +168,7 @@ let get ~field_diffs ~builder =
                       ~init:
                         [%expr
                           match diff with
-                          | [] -> Optional_diff.none
+                          | [] -> Optional_diff.get_none ()
                           | _ :: _ -> Optional_diff.return diff]]]])]
 ;;
 
@@ -177,7 +177,7 @@ let apply ~field_diffs ~local_apply ~builder =
     List.map (Field_diffs.to_list field_diffs) ~f:(fun diff -> diff.Field_diff.field_name)
   in
   let open (val builder : Builder.S) in
-  let return_expr expr = if local_apply then [%expr [%e expr]] else expr in
+  let return_expr expr = if local_apply then [%expr exclave_ [%e expr]] else expr in
   let apply_field_diff ~field_name d =
     let txt = with_prefix ~field_name in
     [%expr
@@ -195,49 +195,51 @@ let apply ~field_diffs ~local_apply ~builder =
     ~init:
       [%expr
         fun derived_on diff ->
-          (* {[ let { x = derived_on_x ; y = derived_on_y ; ... } = derived_on ]} *)
-          let [%p record ~field_names (Some Prefix.derived_on) |> p] = derived_on in
           [%e
-            match field_diffs with
-            | Single { field_name; field_diff = _ } ->
-              let txt = with_prefix ~field_name in
+            return_expr
               [%expr
-                let [%p txt None |> p] =
-                  let [%p variant_row ~field_name "d" |> p] = diff in
-                  [%e apply_field_diff ~field_name (Text "d" |> e)]
-                in
-                [%e return_expr (record ~field_names None |> e)]]
-            | Multi field_diffs ->
-              List.fold_right
-                field_diffs
-                ~f:(fun { field_name; field_diff = _ } expr ->
-                  let txt = with_prefix ~field_name in
-                  (* {[ let x, diff =
+                (* {[ let { x = derived_on_x ; y = derived_on_y ; ... } = derived_on ]} *)
+                let [%p record ~field_names (Some Prefix.derived_on) |> p] = derived_on in
+                [%e
+                  match field_diffs with
+                  | Single { field_name; field_diff = _ } ->
+                    let txt = with_prefix ~field_name in
+                    [%expr
+                      let [%p txt None |> p] =
+                        let [%p variant_row ~field_name "d" |> p] = diff in
+                        [%e apply_field_diff ~field_name (Text "d" |> e)]
+                      in
+                      [%e record ~field_names None |> e]]
+                  | Multi field_diffs ->
+                    List.fold_right
+                      field_diffs
+                      ~f:(fun { field_name; field_diff = _ } expr ->
+                        let txt = with_prefix ~field_name in
+                        (* {[ let x, diff =
                           match diff with
                           | T1 d :: tl -> X.Diff.apply_exn derived_on1 d, tl
                           | _ -> derived_on1, diff
                        in
                        (* ... *)
                      ]}
-                  *)
-                  [%expr
-                    let [%p txt None |> p], diff =
-                      match diff with
-                      | [%p variant_row ~field_name "d" |> p] :: tl ->
-                        [%e apply_field_diff ~field_name (Text "d" |> e)], tl
-                      | _ -> [%e txt (Some Prefix.derived_on) |> e], diff
-                    in
-                    [%e expr]])
-                ~init:
-                  (* {[ match diff with
+                        *)
+                        [%expr
+                          let [%p txt None |> p], diff =
+                            match diff with
+                            | [%p variant_row ~field_name "d" |> p] :: tl ->
+                              [%e apply_field_diff ~field_name (Text "d" |> e)], tl
+                            | _ -> [%e txt (Some Prefix.derived_on) |> e], diff
+                          in
+                          [%e expr]])
+                      ~init:
+                        (* {[ match diff with
                        | [] -> { x ; y ; ... }
                        | _ :: _ -> BUG
                      ]}*)
-                  (return_expr
-                     [%expr
-                       match diff with
-                       | [] -> [%e record ~field_names None |> e]
-                       | _ :: _ -> failwith "BUG: non-empty diff after apply"])]]
+                        [%expr
+                          match diff with
+                          | [] -> [%e record ~field_names None |> e]
+                          | _ :: _ -> failwith "BUG: non-empty diff after apply"]]]]]
 ;;
 
 let of_list ~field_diffs ~builder =
@@ -247,11 +249,11 @@ let of_list ~field_diffs ~builder =
     match field_diffs with
     | Field_diffs.Single { field_name; field_diff = _ } ->
       [%expr
-        fun ts ->
+        fun ts -> exclave_
           match
             Base.List.map ts ~f:(function [%p variant_row ~field_name "x" |> p] -> x)
           with
-          | [] -> Optional_diff.none
+          | [] -> Optional_diff.get_none ()
           | l ->
             Optional_diff.map
               ([%e of_list_fn ~field_name |> e] l)
@@ -292,24 +294,25 @@ let of_list ~field_diffs ~builder =
               | Some d -> loop ([%e variant_row ~field_name "d" |> e] :: acc) tl]
       in
       [%expr
-        function
-        | [] -> Optional_diff.none
-        | _ :: _ as ts ->
-          (match Base.List.concat ts |> Base.List.stable_sort ~compare:compare_rank with
-           | [] -> Optional_diff.return []
-           | _ :: _ as diff ->
-             let diff =
-               let rec loop acc l =
-                 [%e
-                   pexp_match
-                     [%expr l]
-                     (* | [] -> List.rev acc *)
-                     (case ~lhs:[%pat? []] ~guard:None ~rhs:[%expr Base.List.rev acc]
-                      :: List.map field_diffs ~f:match_case)]
+        fun l -> exclave_
+          match l with
+          | [] -> Optional_diff.get_none ()
+          | _ :: _ as ts ->
+            (match Base.List.concat ts |> Base.List.stable_sort ~compare:compare_rank with
+             | [] -> Optional_diff.return []
+             | _ :: _ as diff ->
+               let diff =
+                 let rec loop acc l =
+                   [%e
+                     pexp_match
+                       [%expr l]
+                       (* | [] -> List.rev acc *)
+                       (case ~lhs:[%pat? []] ~guard:None ~rhs:[%expr Base.List.rev acc]
+                        :: List.map field_diffs ~f:match_case)]
+                 in
+                 loop [] diff
                in
-               loop [] diff
-             in
-             Optional_diff.return diff)]
+               Optional_diff.return diff)]
   in
   List.fold
     (Field_diffs.to_list field_diffs)

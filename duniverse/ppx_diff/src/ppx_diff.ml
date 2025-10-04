@@ -52,7 +52,7 @@ let generate context type_to_diff_declaration ~how_to_diff : Items.t =
       Diff_atomic.create ~type_to_diff_declaration ~atomic ~builder ~sig_or_struct
   in
   let prefix =
-    { Items.sig_items = [%sig: open! Diffable.For_ppx]
+    { Items.sig_items = [ [%sigi: open! Diffable.For_ppx] ]
     ; struct_items = Ok [%str open! Diffable.For_ppx]
     }
   in
@@ -67,6 +67,7 @@ let validate_rec_flag (td : How_to_diff.t Type_declaration.t) rec_flag ~builder 
   | Recursive -> ()
   | Nonrecursive ->
     (match td.kind with
+     | Abstract -> ()
      | Type_kind.Core (Constr { type_name; module_ = None; _ }, _)
        when Type_name.( = ) type_name td.name -> ()
      | _ ->
@@ -118,18 +119,18 @@ let generator sig_or_struct ~f =
       +> What_to_derive.Extra.arg
       +> arg "stable_version" (Ast_pattern.eint __))
     (fun ~(loc : Location.t)
-         ~path:(_ : string)
-         ((rec_flag : rec_flag), (type_declarations : type_declaration list))
-         how
-         key
-         elt
-         extra_derive
-         stable_version ->
+      ~path:(_ : string)
+      ((rec_flag : rec_flag), (type_declarations : type_declaration list))
+      how
+      key
+      elt
+      extra_derive
+      stable_version ->
       let (builder : Builder.t) =
         Builder.create
           (module struct
             include (val Ast_builder.make loc)
-            include (val Ppxlib_jane.Ast_builder.make loc)
+            module Jane_ast = (val Ppxlib_jane.Ast_builder.make loc)
           end)
       in
       let how_to_diff = How_to_diff.Maybe_abstract.create ~how ~key ~elt ~builder in

@@ -23,7 +23,7 @@ module Min_recursive_calls = struct
       List.map grammars ~f:on_grammar
       |> List.min_elt ~compare:[%compare: int]
       |> Option.value ~default:0
-    | Lazy lazy_grammar -> on_grammar (Lazy.force lazy_grammar)
+    | Lazy lazy_grammar -> on_grammar (Portable_lazy.force lazy_grammar)
     | List list_grammar -> on_list_grammar list_grammar
     | Variant { case_sensitivity = _; clauses } ->
       let clauses = List.map ~f:without_tag_list clauses in
@@ -44,10 +44,8 @@ module Min_recursive_calls = struct
     | Many _ -> 0
     | Fields { allow_extra_fields = _; fields } ->
       let fields = List.map fields ~f:without_tag_list in
-      List.sum
-        (module Int)
-        fields
-        ~f:(fun { name = _; required = _; args } -> on_list_grammar args)
+      List.sum (module Int) fields ~f:(fun { name = _; required = _; args } ->
+        on_list_grammar args)
   ;;
 end
 
@@ -104,7 +102,7 @@ module Generate = struct
     | Tagged { key = _; value = _; grammar } -> on_grammar grammar
     | Option grammar ->
       let value_gen = on_grammar grammar in
-      let old = !Sexplib0.Sexp_conv.write_old_option_format in
+      let old = Dynamic.get Sexplib0.Sexp_conv.write_old_option_format in
       [ true, 1., Generator.return (Sexp.Atom "none")
       ; true, 1., Generator.return (Sexp.Atom "None")
       ; old, 2., Generator.return (Sexp.List [])
@@ -113,13 +111,14 @@ module Generate = struct
       ; old, 2., Generator.map value_gen ~f:(fun sexp -> Sexp.List [ sexp ])
       ]
       |> List.filter_map ~f:(fun (keep, weight, gen) ->
-           if keep then Some (weight, gen) else None)
+        if keep then Some (weight, gen) else None)
       |> Generator.weighted_union
     | Union grammars ->
       recursive_union
         (List.map grammars ~f:(fun grammar ->
            on_grammar grammar, Min_recursive_calls.on_grammar grammar))
-    | Lazy lazy_grammar -> Generator.of_lazy (Lazy.map lazy_grammar ~f:on_grammar)
+    | Lazy lazy_grammar ->
+      Generator.of_lazy (lazy (on_grammar (Portable_lazy.force lazy_grammar)))
     | List list_grammar ->
       let list_gen = on_list_grammar list_grammar in
       Generator.map list_gen ~f:(fun list -> Sexp.List list)
@@ -147,7 +146,7 @@ module Generate = struct
     | Tyvar _ | Recursive _ ->
       raise_s
         [%message
-          "Unexpected [Tyvar] or [Tycon] after [unroll_tycon]"
+          "Unexpected [Tyvar] or [Recursive] after [unroll_tycon]"
             ~grammar:(grammar : Sexp_grammar.grammar)]
 
   and on_list_grammar list_grammar =

@@ -1,4 +1,4 @@
-open! Core
+open! Base
 
 module Make (Leaf_data : T1) : sig
   module rec Tree : sig
@@ -21,7 +21,7 @@ module Make (Leaf_data : T1) : sig
   module type S = sig
     module Typed_field : Typed_fields_lib.S
 
-    val children : 'a Typed_field.t -> 'a Tree.t
+    val children : 'a Typed_field.t @ local -> 'a Tree.t
   end
 
   type 'a t = 'a Tree.t

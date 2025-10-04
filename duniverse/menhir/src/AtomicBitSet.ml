@@ -119,16 +119,16 @@ let pop x =
 let empty =
   0
 
-let is_empty s =
+let[@inline] is_empty s =
   s = 0
 
 let singleton =
   bit
 
-let add i s =
+let[@inline] add i s =
   (bit i) lor s
 
-let remove i s =
+let[@inline] remove i s =
   (lnot (bit i)) land s
 
 let rec fold_delta delta f s accu =
@@ -163,7 +163,7 @@ let rec iter f s =
     f (tib x);
     iter f s
 
-let is_singleton s =
+let[@inline] is_singleton s =
   (* Test whether only one bit is set in [ss]. We do this by turning
      off the rightmost bit, then comparing to zero. *)
   s land (s - 1) = 0
@@ -176,16 +176,16 @@ let elements s =
   (* Note: the list is produced in decreasing order. *)
   fold (fun tl hd -> tl :: hd) s []
 
-let subset s1 s2 =
+let[@inline] subset s1 s2 =
   s1 land s2 = s1
 
-let mem i s =
+let[@inline] mem i s =
   subset (singleton i) s
 
-let union s1 s2 =
+let[@inline] union s1 s2 =
   s1 lor s2
 
-let inter s1 s2 =
+let[@inline] inter s1 s2 =
   s1 land s2
 
 let minimum s =
@@ -198,16 +198,44 @@ let minimum s =
 let choose =
   minimum
 
+(* [fill_down s] fills a bit set with 1's, starting at the most significant
+   set bit. In other words, it replaces all 0's with 1's, except for the
+   leading zeros. *)
+let[@inline] fill_down s =
+  let s = s lor (s lsr 1) in
+  let s = s lor (s lsr 2) in
+  let s = s lor (s lsr 4) in
+  let s = s lor (s lsr 8) in
+  let s = s lor (s lsr 16) in
+  let s = s lor (s lsr 32) in (* needed only on 64-bit machines *)
+  s
+
+let maximum s =
+  if s = 0 then
+    raise Not_found
+  else if mem (bound - 1) s then
+    bound - 1
+  else
+    (* We compute the maximum element of the set [s] as follows. First, we
+       compute [fill_down s], whose bit pattern is a nonempty sequence of 0's
+       followed with a nonempty sequence of 1's. Then, we negate this pattern:
+       we obtain a nonempty sequence of 1's followed with a nonempty sequence
+       of 0's. We use [minimum] to obtain the minimum element of this set, and
+       subtract 1. *)
+    (* This approach may seem complex, but allows us to rely on [minimum],
+       which (hopefully) we have implemented in an efficient way. *)
+    minimum (lnot (fill_down s)) - 1
+
 let compare : t -> t -> int =
   compare (* this is [Generic.compare] *)
 
 let equal : t -> t -> bool =
   (=)
 
-let disjoint s1 s2 =
+let[@inline] disjoint s1 s2 =
   is_empty (inter s1 s2)
 
-let quick_subset s1 s2 =
+let[@inline] quick_subset s1 s2 =
   inter s1 s2 <> 0
 
 (* [lsb x] keeps only the smallest set bit of [x]. E.g 0110 maps to 0010.
@@ -259,3 +287,20 @@ let extract_shared_prefix ss1 ss2 =
     let r1 = ss1 land rest_mask in
     let r2 = ss2 land rest_mask in
     (common, (r1, r2))
+
+let[@inline] diff s1 s2 =
+  s1 land lnot s2
+
+(* [above x s] is the subset { y ∈ s | x < y }. *)
+
+let[@inline] above x s =
+  (* A mask with only [x] set. *)
+  let mask = bit x in
+  (* A mask with all elements less than or equal to [x] set. *)
+  let mask = mask lor (mask - 1) in
+  (* Remove these elements. *)
+  diff s mask
+
+let[@inline] shift s delta =
+  assert (0 <= delta && delta <= bound);
+  (s lsl delta, s lsr (bound - delta))

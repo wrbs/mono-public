@@ -2,6 +2,17 @@ module Promote = struct
   type t =
     | Automatically
     | Never
+
+  let equal a b =
+    match a, b with
+    | Automatically, Automatically | Never, Never -> true
+    | _, _ -> false
+  ;;
+
+  let to_dyn = function
+    | Automatically -> Dyn.variant "Automatically" []
+    | Never -> Dyn.variant "Never" []
+  ;;
 end
 
 let report_errors_config = ref Report_errors_config.default
@@ -15,8 +26,8 @@ let debug_backtraces b =
 ;;
 
 let debug_load_dir = ref false
-let diff_command = ref None
 let promote = ref None
 let force = ref false
 let always_show_command_line = ref false
 let display = ref Display.Quiet
+let can_go_in_shared_cache_default = ref false

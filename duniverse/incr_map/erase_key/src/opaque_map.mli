@@ -1,9 +1,11 @@
+@@ portable
+
 open! Core
 
 module Key : sig
-  type t [@@deriving sexp, bin_io]
+  type t : value mod contended portable [@@deriving sexp, bin_io]
 
-  include Comparable.S with type t := t
+  include Comparable.S [@mode portable] with type t := t
 
   val to_string : t -> string
   val zero : t
@@ -15,7 +17,7 @@ module Key : sig
   end
 end
 
-type 'a t = (Key.t, 'a, Key.comparator_witness) Map.t
+type 'a t : value mod contended portable with 'a = 'a Key.Map.t
 [@@deriving sexp, compare, equal, bin_io]
 
 include Diffable.S1 with type 'a t := 'a t
@@ -26,9 +28,9 @@ val erase_key_incrementally
   :  ?data_equal:('data -> 'data -> bool)
   -> (('key, 'data, _) Map.t, 'w) Incremental.t
   -> get:(key:'key -> data:'data -> 'a)
-       (** Make the result value from the key & data of the original map. Most of the time you
-      just want [fun ~key ~data -> (key,data)], but the presence of this argument
-      effectively lets you fuse a [mapi] operation into this one *)
+       (** Make the result value from the key & data of the original map. Most of the time
+           you just want [fun ~key ~data -> (key,data)], but the presence of this argument
+           effectively lets you fuse a [mapi] operation into this one *)
   -> ('a t, 'w) Incremental.t
 
 (** [empty], [of_list], and [of_array] won't give you nice incrementality like

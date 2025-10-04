@@ -1,7 +1,7 @@
 open Import
 open Memo.O
 
-let ocaml_flags t ~dir (spec : Ocaml_flags.Spec.t) =
+let ocaml_flags t ~dir (spec : Dune_lang.Ocaml_flags.Spec.t) =
   let* expander = Super_context.expander t ~dir in
   let* flags =
     let+ ocaml_flags = Ocaml_flags_db.ocaml_flags_env ~dir in
@@ -22,7 +22,6 @@ let ocaml_flags t ~dir (spec : Ocaml_flags.Spec.t) =
 ;;
 
 let gen_select_rules sctx ~dir compile_info =
-  let open Memo.O in
   Lib.Compile.resolved_selects compile_info
   |> Resolve.Memo.read_memo
   >>= Memo.parallel_iter ~f:(fun { Lib.Compile.Resolved_select.dst_fn; src_fn } ->
@@ -40,12 +39,11 @@ let gen_select_rules sctx ~dir compile_info =
           Action.Full.make (Copy_line_directive.action context ~src ~dst))))
 ;;
 
-let with_lib_deps (t : Context.t) compile_info ~dir ~f =
+let with_lib_deps (t : Context.t) merlin_ident ~dir ~f =
   let prefix =
     if Context.merlin t
     then
-      Lib.Compile.merlin_ident compile_info
-      |> Merlin_ident.merlin_file_path dir
+      Merlin_ident.merlin_file_path dir merlin_ident
       |> Path.build
       |> Action_builder.path
       |> Action_builder.goal
@@ -64,30 +62,55 @@ type kind =
       ; empty_module_interface_if_absent : bool
       }
 
+let fold_resolve (t : _ Preprocess.t) ~init ~f =
+  match t with
+  | Pps t -> Resolve.Memo.List.fold_left t.pps ~init ~f
+  | No_preprocessing | Action _ | Future_syntax _ -> Resolve.Memo.return init
+;;
+
+let instrumentation_deps t ~instrumentation_backend =
+  let open Resolve.Memo.O in
+  let f = function
+    | Preprocess.With_instrumentation.Ordinary _ -> Resolve.Memo.return []
+    | Instrumentation_backend { libname; deps; flags = _ } ->
+      instrumentation_backend libname
+      >>| (function
+       | Some _ -> deps
+       | None -> [])
+  in
+  Instrumentation.fold t ~init:[] ~f:(fun t init ->
+    let f acc t =
+      let+ x = f t in
+      x :: acc
+    in
+    fold_resolve t ~init ~f)
+  >>| List.rev
+  >>| List.flatten
+;;
+
 let modules_rules
-  ~preprocess
-  ~preprocessor_deps
-  ~lint
-  ~empty_module_interface_if_absent
-  sctx
-  expander
-  ~dir
-  scope
-  modules
-  ~lib_name
-  ~empty_intf_modules
+      ~preprocess
+      ~preprocessor_deps
+      ~lint
+      ~empty_module_interface_if_absent
+      sctx
+      expander
+      ~dir
+      scope
+      modules
+      ~lib_name
+      ~empty_intf_modules
   =
   let* pp =
     let instrumentation_backend = Lib.DB.instrumentation_backend (Scope.libs scope) in
     let* preprocess_with_instrumentation =
       (* TODO wrong and blocks loading all the rules in this directory *)
-      Resolve.Memo.read_memo
-        (Preprocess.Per_module.with_instrumentation preprocess ~instrumentation_backend)
+      Instrumentation.with_instrumentation preprocess ~instrumentation_backend
+      |> Resolve.Memo.read_memo
     in
     let* instrumentation_deps =
       (* TODO wrong and blocks loading all the rules in this directory *)
-      Resolve.Memo.read_memo
-        (Preprocess.Per_module.instrumentation_deps preprocess ~instrumentation_backend)
+      instrumentation_deps preprocess ~instrumentation_backend |> Resolve.Memo.read_memo
     in
     Pp_spec_rules.make
       sctx

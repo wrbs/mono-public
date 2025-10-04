@@ -14,41 +14,121 @@
 (* Sets over ordered types *)
 
 open! Import
-include Set_intf
+include Set_intf.Definitions
 
 let with_return = With_return.with_return
 
 module Tree0 = struct
+  (* Weight-balanced trees, where the weight of each tree is [length t + 1]. We store
+     [weight] at each node to make balance operations cheap, and computing length just
+     requires subtracting 1. Conveniently, for the node N=(L,k,R), wt(N)=wt(L)+wt(R).
+
+     Weight-balanced trees of this form are originally defined in [1]. The balancing
+     algorithm depends on two parameters: delta and gamma. Delta controls the balance
+     invariant: for sibling subtrees A and B, [wt(A) <= wt(B) * delta] and vice versa.
+     Gamma is used during rotation to decide whether to use a single or double rotation. A
+     single left-rotation suffices for (_, (A, B)) if [wt(A) < wt(B) * gamma]. The valid
+     bounds for these parameters and their performance impact are analyzed in [2].
+
+     Of the options presented in [2], we choose (delta, gamma) = (5/2, 3/2). This choice
+     is good by three criteria. One, it has the best performance in the paper's
+     benchmarks. Two, it yields average tree heights in our own tests comparable to our
+     previous implementation based on AVL trees. Three, we can implement these comparisons
+     efficiently with just two bit shifts and one addition each.
+
+     We define the weight comparisons below as [is_too_heavy] and [may_rotate_just_once].
+
+     [1] Binary search trees of bounded balance, Nievergelt and Reingold, SIAM Journal on
+     Computing Vol. 2, Iss. 1 (1973). https://dl.acm.org/doi/pdf/10.1145/800152.804906
+
+     [2] Balancing weight-balanced trees, Hirai and Yamamoto, JFP 21 (3): 287–307, 2011.
+     https://yoichihirai.com/bst.pdf *)
+
   type 'a t =
     | Empty
     (* Leaf is the same as Node with empty children but uses less space. *)
-    | Leaf of { elt : 'a }
+    | Leaf of { global_ elt : 'a }
     | Node of
-        { left : 'a t
-        ; elt : 'a
-        ; right : 'a t
-        ; height : int
-        ; size : int
+        { global_ left : 'a t
+        ; global_ elt : 'a
+        ; global_ right : 'a t
+        ; weight : int
         }
 
   type 'a tree = 'a t
 
-  (* Sets are represented by balanced binary trees (the heights of the children differ by
-     at most 2. *)
-  let[@inline always] height = function
-    | Empty -> 0
-    | Leaf { elt = _ } -> 1
-    | Node { left = _; elt = _; right = _; height = h; size = _ } -> h
+  let globalize0 : 'a. local_ 'a t -> 'a t = function
+    | Empty -> Empty
+    | Leaf { elt } -> Leaf { elt }
+    | Node { left; elt; right; weight } -> Node { left; elt; right; weight }
+  ;;
+
+  (* Checks for failure of the balance invariant in one direction:
+
+     {[ not (wt(A) <= wt(B) * 5/2) ]}
+
+     We negate it by changing [<=] to [>].
+
+     {[ wt(A) > wt(B) * 5/2 ]}
+
+     We avoid division by multiplying both sides by two.
+
+     {[ wt(A) * 2 > wt(B) * 5 ]}
+
+     We stick to powers of two by changing [x * 5] to [x * 4 + x].
+
+     {[ wt(A) * 2 > wt(B) * 4 + wt(B) ]}
+
+     And we avoid multiplication by using shifts for multiplication by 2 and by 4.
+
+     {[ wt(A) << 1 > wt(B) << 2 + wt(B) ]}
+  *)
+  let is_too_heavy ~weight:wtA ~for_weight:wtB =
+    (* See? Just like above! *)
+    wtA lsl 1 > (wtB lsl 2) + wtB
+  [@@inline always]
+  ;;
+
+  (* Checks if we can use a single rotation for the currently-lower siblings:
+
+     {[ wt(A) < wt(B) * 3/2 ]}
+
+     We avoid division by multiplying both sides by two.
+
+     {[ wt(A) * 2 < wt(B) * 3 ]}
+
+     We stick to powers of two by changing [x * 3] to [x * 2 + x].
+
+     {[ wt(A) * 2 < wt(B) * 2 + wt(B) ]}
+
+     We incur one fewer multiplication by moving [wt(B) * 2] to the left.
+
+     {[ (wt(A) - wt(B)) * 2 < wt(B) ]}
+
+     And we avoid multiplication by using shift for multiplication by 2.
+
+     {[ (wt(A) - wt(B)) << 1 < wt(B) ]}
+  *)
+  let may_rotate_just_once ~inner_sibling_weight:wtA ~outer_sibling_weight:wtB =
+    (* See? Just like above! *)
+    (wtA - wtB) lsl 1 < wtB
+  [@@inline always]
+  ;;
+
+  let[@inline always] weight = function
+    | Empty -> 1
+    | Leaf { elt = _ } -> 2
+    | Node { left = _; elt = _; right = _; weight = w } -> w
   ;;
 
   let[@inline always] length = function
     | Empty -> 0
     | Leaf { elt = _ } -> 1
-    | Node { left = _; elt = _; right = _; height = _; size = s } -> s
+    | Node { left = _; elt = _; right = _; weight = w } -> w - 1
   ;;
 
-  let invariants =
-    let in_range lower upper compare_elt v =
+  let order_invariants =
+    let in_range ~lower ~upper compare_elt v =
       (match lower with
        | None -> true
        | Some lower -> compare_elt lower v < 0)
@@ -57,22 +137,33 @@ module Tree0 = struct
       | None -> true
       | Some upper -> compare_elt v upper < 0
     in
-    let rec loop lower upper compare_elt t =
+    let rec loop ~lower ~upper compare_elt t =
       match t with
       | Empty -> true
-      | Leaf { elt = v } -> in_range lower upper compare_elt v
-      | Node { left = l; elt = v; right = r; height = h; size = n } ->
-        let hl = height l
-        and hr = height r in
-        abs (hl - hr) <= 2
-        && h = max hl hr + 1
-        && n = length l + length r + 1
-        && in_range lower upper compare_elt v
-        && loop lower (Some v) compare_elt l
-        && loop (Some v) upper compare_elt r
+      | Leaf { elt = v } -> in_range ~lower ~upper compare_elt v
+      | Node { left = l; elt = v; right = r; weight = _ } ->
+        in_range ~lower ~upper compare_elt v
+        && loop ~lower ~upper:(Some v) compare_elt l
+        && loop ~lower:(Some v) ~upper compare_elt r
     in
-    fun t ~compare_elt -> loop None None compare_elt t
+    fun t ~compare_elt -> loop ~lower:None ~upper:None compare_elt t
   ;;
+
+  let rec balance_invariants t =
+    match t with
+    | Empty | Leaf _ -> true
+    | Node { left = l; elt = _; right = r; weight = w } ->
+      let wl = weight l
+      and wr = weight r in
+      w = wl + wr
+      && w > 2
+      && (not (is_too_heavy ~weight:wl ~for_weight:wr))
+      && (not (is_too_heavy ~weight:wr ~for_weight:wl))
+      && balance_invariants l
+      && balance_invariants r
+  ;;
+
+  let invariants t ~compare_elt = order_invariants t ~compare_elt && balance_invariants t
 
   let is_empty = function
     | Empty -> true
@@ -81,18 +172,13 @@ module Tree0 = struct
 
   (* Creates a new node with left son l, value v and right son r.
      We must have all elements of l < v < all elements of r.
-     l and r must be balanced and | height l - height r | <= 2. *)
+     l and r must be balanced and neither [is_too_heavy] for the other. *)
 
   let[@inline always] create l v r =
-    let hl = (height [@inlined]) l in
-    let hr = (height [@inlined]) r in
-    let h = if hl >= hr then hl + 1 else hr + 1 in
-    if h = 1
-    then Leaf { elt = v }
-    else (
-      let sl = (length [@inlined]) l in
-      let sr = (length [@inlined]) r in
-      Node { left = l; elt = v; right = r; height = h; size = sl + sr + 1 })
+    let wl = (weight [@inlined]) l in
+    let wr = (weight [@inlined]) r in
+    let w = wl + wr in
+    if w = 2 then Leaf { elt = v } else Node { left = l; elt = v; right = r; weight = w }
   ;;
 
   (* We must call [f] with increasing indexes, because the bin_prot reader in
@@ -158,42 +244,42 @@ module Tree0 = struct
   ;;
 
   (* Same as create, but performs one step of rebalancing if necessary.
-     Assumes l and r balanced and | height l - height r | <= 3. *)
+     Assumes l and r balanced and either [is_too_heavy] by at most 1. *)
 
   let bal l v r =
-    let hl = (height [@inlined]) l in
-    let hr = (height [@inlined]) r in
-    if hl > hr + 2
+    let wl = (weight [@inlined]) l in
+    let wr = (weight [@inlined]) r in
+    if is_too_heavy ~weight:wl ~for_weight:wr
     then (
       match l with
       | Empty -> assert false
-      | Leaf { elt = _ } -> assert false (* because h(l)>h(r)+2 and h(leaf)=1 *)
-      | Node { left = ll; elt = lv; right = lr; height = _; size = _ } ->
-        if height ll >= height lr
+      | Leaf { elt = _ } -> assert false (* a leaf never [is_too_heavy] *)
+      | Node { left = ll; elt = lv; right = lr; weight = _ } ->
+        if may_rotate_just_once
+             ~inner_sibling_weight:(weight lr)
+             ~outer_sibling_weight:(weight ll)
         then create ll lv (create lr v r)
         else (
           match lr with
           | Empty -> assert false
-          | Leaf { elt = lrv } ->
-            assert (is_empty ll);
-            create (create ll lv Empty) lrv (create Empty v r)
-          | Node { left = lrl; elt = lrv; right = lrr; height = _; size = _ } ->
+          | Leaf { elt = lrv } -> create (create ll lv Empty) lrv (create Empty v r)
+          | Node { left = lrl; elt = lrv; right = lrr; weight = _ } ->
             create (create ll lv lrl) lrv (create lrr v r)))
-    else if hr > hl + 2
+    else if is_too_heavy ~weight:wr ~for_weight:wl
     then (
       match r with
       | Empty -> assert false
-      | Leaf { elt = _ } -> assert false (* because h(r)>h(l)+2 and h(leaf)=1 *)
-      | Node { left = rl; elt = rv; right = rr; height = _; size = _ } ->
-        if height rr >= height rl
+      | Leaf { elt = _ } -> assert false (* a leaf never [is_too_heavy] *)
+      | Node { left = rl; elt = rv; right = rr; weight = _ } ->
+        if may_rotate_just_once
+             ~inner_sibling_weight:(weight rl)
+             ~outer_sibling_weight:(weight rr)
         then create (create l v rl) rv rr
         else (
           match rl with
           | Empty -> assert false
-          | Leaf { elt = rlv } ->
-            assert (is_empty rr);
-            create (create l v Empty) rlv (create Empty rv rr)
-          | Node { left = rll; elt = rlv; right = rlr; height = _; size = _ } ->
+          | Leaf { elt = rlv } -> create (create l v Empty) rlv (create Empty rv rr)
+          | Node { left = rll; elt = rlv; right = rlr; weight = _ } ->
             create (create l v rll) rlv (create rlr rv rr)))
     else (create [@inlined]) l v r
   ;;
@@ -212,7 +298,7 @@ module Tree0 = struct
         else if c < 0
         then create (Leaf { elt = x }) v Empty
         else create Empty v (Leaf { elt = x })
-      | Node { left = l; elt = v; right = r; height = _; size = _ } ->
+      | Node { left = l; elt = v; right = r; weight = _ } ->
         let c = compare_elt x v in
         if c = 0
         then Exn.raise_without_backtrace Same
@@ -228,81 +314,155 @@ module Tree0 = struct
   let rec add_min x t =
     match t with
     | Empty -> Leaf { elt = x }
-    | Leaf { elt = _ } -> Node { left = Empty; elt = x; right = t; height = 2; size = 2 }
-    | Node { left = l; elt = v; right = r; height = _; size = _ } -> bal (add_min x l) v r
+    | Leaf { elt = _ } -> Node { left = Empty; elt = x; right = t; weight = 3 }
+    | Node { left = l; elt = v; right = r; weight = _ } -> bal (add_min x l) v r
   ;;
 
   (* specialization of [add] that assumes that [x] is greater than all existing elements *)
   let rec add_max t x =
     match t with
     | Empty -> Leaf { elt = x }
-    | Leaf { elt = _ } -> Node { left = t; elt = x; right = Empty; height = 2; size = 2 }
-    | Node { left = l; elt = v; right = r; height = _; size = _ } -> bal l v (add_max r x)
+    | Leaf { elt = _ } -> Node { left = t; elt = x; right = Empty; weight = 3 }
+    | Node { left = l; elt = v; right = r; weight = _ } -> bal l v (add_max r x)
   ;;
 
-  (* Same as create and bal, but no assumptions are made on the relative heights of l and
-     r. *)
-  let rec join l v r =
-    match l, r with
-    | Empty, _ -> add_min v r
-    | _, Empty -> add_max l v
-    | Leaf { elt = lv }, _ -> add_min lv (add_min v r)
-    | _, Leaf { elt = rv } -> add_max (add_max l v) rv
-    | ( Node { left = ll; elt = lv; right = lr; height = lh; size = _ }
-      , Node { left = rl; elt = rv; right = rr; height = rh; size = _ } ) ->
-      if lh > rh + 2
-      then bal ll lv (join lr v r)
-      else if rh > lh + 2
-      then bal (join l v rl) rv rr
-      else create l v r
-  ;;
+  (* The [join] algorithm is taken from the github implementation[3] of [4]. It is like
+     [create] and [bal], and works on trees of arbitrary weight.
+
+     We adapt our functions from [include/pam/balance_utils.h]. We use the name [join] for
+     [node_join], [join_rotating_right] for [right_join], and [join_rotating_left] for
+     [left_join]. We use our [may_rotate_just_once] where they use [is_single_rotation].
+
+     In the two recursive helpers, we've moved the initial balance check to just outside
+     the recursive call instead of just inside the function definition, since the
+     condition is known the first time we call it.
+
+     [3] https://github.com/cmuparlay/PAM/tree/2a30a856a55698c7aa7e7ebf86ee826864bbcf86
+
+     [4] Just Join for Parallel Ordered Sets; Blelloch, Ferizovic, and Sun; SPAA ’16, July
+     11-13, 20. https://www.cs.cmu.edu/~guyb/papers/BFS16.pdf *)
+  include struct
+    open struct
+      (* These helpers are intended only to be called from [join]. *)
+
+      (* For [join_rotating_right l lv m rv r], the arguments correspond to an
+         unbalanced tree with the shape:
+         {v
+                 rv
+                /  \
+              lv    r
+             /  \
+            l    m
+         v}
+
+         Precondition: [create l lv m] [is_too_heavy] for [r], and [r = Node _]. *)
+      let rec join_rotating_right l lv m rv r =
+        let mr =
+          (* Recur down [m]'s right side until [create m rv r] is balanced. *)
+          match m with
+          | Node { left = ml; elt = mv; right = mr; weight = mw }
+            when is_too_heavy ~weight:mw ~for_weight:(weight r) ->
+            join_rotating_right ml mv mr rv r
+          | _ -> create m rv r
+        in
+        (* Since [r] is a [Node], [mr] must be a [Node]. *)
+        match mr with
+        | Empty -> assert false
+        | Leaf _ -> assert false
+        | Node { left = m; elt = rv; right = r; weight = mrw } ->
+          (* Now re-add [l] with 0-2 rotations. Proven sufficient in literature above. *)
+          let lw = weight l in
+          (match m with
+           | Node { left = ml; elt = mv; right = mr; weight = mw }
+             when is_too_heavy ~weight:mrw ~for_weight:lw ->
+             if may_rotate_just_once
+                  ~inner_sibling_weight:mw
+                  ~outer_sibling_weight:(weight r)
+             then create (create l lv m) rv r
+             else create (create l lv ml) mv (create mr rv r)
+           | _ -> create l lv mr)
+      ;;
+
+      (* Rotating left proceeds symmetrically to rotating right. *)
+
+      (* For [join_rotating_left l lv m rv r], the arguments correspond to an
+         unbalanced tree with the shape:
+         {v
+                 lv
+                /  \
+               l   rv
+                  /  \
+                 m    r
+         v}
+
+         Precondition: [create m rv r] [is_too_heavy] for [l], and [l = Node _]. *)
+      let rec join_rotating_left l lv m rv r =
+        let lm =
+          (* Recur down [m]'s left side until [create l lv m] is balanced. *)
+          match m with
+          | Node { left = ml; elt = mv; right = mr; weight = mw }
+            when is_too_heavy ~weight:mw ~for_weight:(weight l) ->
+            join_rotating_left l lv ml mv mr
+          | _ -> create l lv m
+        in
+        (* Since [l] is a [Node], [lm] must be a [Node]. *)
+        match lm with
+        | Empty -> assert false
+        | Leaf _ -> assert false
+        | Node { left = l; elt = lv; right = m; weight = lmw } ->
+          (* Now re-add [r] with 0-2 rotations. Proven sufficient in literature above. *)
+          let rw = weight r in
+          (match m with
+           | Node { left = ml; elt = mv; right = mr; weight = mw }
+             when is_too_heavy ~weight:lmw ~for_weight:rw ->
+             if may_rotate_just_once
+                  ~inner_sibling_weight:mw
+                  ~outer_sibling_weight:(weight l)
+             then create l lv (create m rv r)
+             else create (create l lv ml) mv (create mr rv r)
+           | _ -> create lm rv r)
+      ;;
+    end
+
+    (* Like [create] and [bal], for arbitrary height differences. See more detailed
+       comment at start of [include struct ...] above. *)
+    let join l v r =
+      (* Cases adding just one or two values are straightforward. *)
+      match l, r with
+      | Empty, _ -> add_min v r
+      | _, Empty -> add_max l v
+      | Leaf { elt = lv }, _ -> add_min lv (add_min v r)
+      | _, Leaf { elt = rv } -> add_max (add_max l v) rv
+      | ( Node { left = ll; elt = lv; right = lr; weight = lw }
+        , Node { left = rl; elt = rv; right = rr; weight = rw } ) ->
+        (* Otherwise, recur down the heavier side and rotate toward the lighter side. *)
+        if is_too_heavy ~weight:lw ~for_weight:rw
+        then join_rotating_right ll lv lr v r
+        else if is_too_heavy ~weight:rw ~for_weight:lw
+        then join_rotating_left l v rl rv rr
+        else create l v r
+    ;;
+  end
+
+  let return_none () = None
 
   (* Smallest and greatest element of a set *)
-  let rec min_elt = function
-    | Empty -> None
-    | Leaf { elt = v } | Node { left = Empty; elt = v; right = _; height = _; size = _ }
-      -> Some v
-    | Node { left = l; elt = _; right = _; height = _; size = _ } -> min_elt l
+  let rec call_with_min_elt ~none ~some = function
+    | Empty -> none ()
+    | Leaf { elt = v } | Node { left = Empty; elt = v; right = _; weight = _ } -> some v
+    | Node { left = l; elt = _; right = _; weight = _ } -> call_with_min_elt l ~none ~some
   ;;
 
-  exception Set_min_elt_exn_of_empty_set [@@deriving_inline sexp]
-
-  let () =
-    Sexplib0.Sexp_conv.Exn_converter.add
-      [%extension_constructor Set_min_elt_exn_of_empty_set]
-      (function
-      | Set_min_elt_exn_of_empty_set ->
-        Sexplib0.Sexp.Atom "set.ml.Tree0.Set_min_elt_exn_of_empty_set"
-      | _ -> assert false)
-  ;;
-
-  [@@@end]
-
-  exception Set_max_elt_exn_of_empty_set [@@deriving_inline sexp]
-
-  let () =
-    Sexplib0.Sexp_conv.Exn_converter.add
-      [%extension_constructor Set_max_elt_exn_of_empty_set]
-      (function
-      | Set_max_elt_exn_of_empty_set ->
-        Sexplib0.Sexp.Atom "set.ml.Tree0.Set_max_elt_exn_of_empty_set"
-      | _ -> assert false)
-  ;;
-
-  [@@@end]
-
-  let min_elt_exn t =
-    match min_elt t with
-    | None -> raise Set_min_elt_exn_of_empty_set
-    | Some v -> v
-  ;;
+  let raise_min_elt_exn () = Error.raise_s (Atom "Set.min_elt_exn: empty set")
+  let min_elt t = call_with_min_elt t ~none:return_none ~some:Option.return
+  let min_elt_exn t = call_with_min_elt t ~none:raise_min_elt_exn ~some:Fn.id
 
   let fold_until t ~init ~f ~finish =
     let rec fold_until_helper ~f t acc =
       match t with
       | Empty -> Container.Continue_or_stop.Continue acc
       | Leaf { elt = value } -> f acc value [@nontail]
-      | Node { left; elt = value; right; height = _; size = _ } ->
+      | Node { left; elt = value; right; weight = _ } ->
         (match fold_until_helper ~f left acc with
          | Stop _a as x -> x
          | Continue acc ->
@@ -315,31 +475,27 @@ module Tree0 = struct
     | Stop x -> x
   ;;
 
-  let rec max_elt = function
-    | Empty -> None
-    | Leaf { elt = v } | Node { left = _; elt = v; right = Empty; height = _; size = _ }
-      -> Some v
-    | Node { left = _; elt = _; right = r; height = _; size = _ } -> max_elt r
+  let rec call_with_max_elt ~none ~some = function
+    | Empty -> none ()
+    | Leaf { elt = v } | Node { left = _; elt = v; right = Empty; weight = _ } -> some v
+    | Node { left = _; elt = _; right = r; weight = _ } -> call_with_max_elt r ~none ~some
   ;;
 
-  let max_elt_exn t =
-    match max_elt t with
-    | None -> raise Set_max_elt_exn_of_empty_set
-    | Some v -> v
-  ;;
+  let raise_max_elt_exn () = Error.raise_s (Atom "Set.max_elt_exn: empty set")
+  let max_elt t = call_with_max_elt t ~none:return_none ~some:Option.return
+  let max_elt_exn t = call_with_max_elt t ~none:raise_max_elt_exn ~some:Fn.id
 
   (* Remove the smallest element of the given set *)
 
   let rec remove_min_elt = function
     | Empty -> invalid_arg "Set.remove_min_elt"
     | Leaf { elt = _ } -> Empty
-    | Node { left = Empty; elt = _; right = r; height = _; size = _ } -> r
-    | Node { left = l; elt = v; right = r; height = _; size = _ } ->
-      bal (remove_min_elt l) v r
+    | Node { left = Empty; elt = _; right = r; weight = _ } -> r
+    | Node { left = l; elt = v; right = r; weight = _ } -> bal (remove_min_elt l) v r
   ;;
 
   (* Merge two trees l and r into one.  All elements of l must precede the elements of r.
-     Assume | height l - height r | <= 2. *)
+     Assume either l or r [is_too_heavy] by at most 1. *)
   let merge t1 t2 =
     match t1, t2 with
     | Empty, t -> t
@@ -348,7 +504,7 @@ module Tree0 = struct
   ;;
 
   (* Merge two trees l and r into one.  All elements of l must precede the elements of r.
-     No assumption on the heights of l and r. *)
+     No assumption on the weights of l and r. *)
   let concat t1 t2 =
     match t1, t2 with
     | Empty, t | t, Empty -> t
@@ -366,7 +522,7 @@ module Tree0 = struct
         else if c < 0
         then Empty, None, Leaf { elt = v }
         else Leaf { elt = v }, None, Empty
-      | Node { left = l; elt = v; right = r; height = _; size = _ } ->
+      | Node { left = l; elt = v; right = r; weight = _ } ->
         let c = compare_elt x v in
         if c = 0
         then l, Some v, r
@@ -386,7 +542,7 @@ module Tree0 = struct
     | Empty -> Empty, Empty
     | Leaf { elt = v } ->
       if compare_elt x v >= 0 then Leaf { elt = v }, Empty else Empty, Leaf { elt = v }
-    | Node { left = l; elt = v; right = r; height = _; size = _ } ->
+    | Node { left = l; elt = v; right = r; weight = _ } ->
       let c = compare_elt x v in
       if c = 0
       then add_max l v, r
@@ -404,7 +560,7 @@ module Tree0 = struct
     | Empty -> Empty, Empty
     | Leaf { elt = v } ->
       if compare_elt x v > 0 then Leaf { elt = v }, Empty else Empty, Leaf { elt = v }
-    | Node { left = l; elt = v; right = r; height = _; size = _ } ->
+    | Node { left = l; elt = v; right = r; weight = _ } ->
       let c = compare_elt x v in
       if c = 0
       then l, add_min v r
@@ -419,15 +575,13 @@ module Tree0 = struct
 
   (* Implementation of the set operations *)
 
-  let empty = Empty
-
   let rec mem t x ~compare_elt =
     match t with
     | Empty -> false
     | Leaf { elt = v } ->
       let c = compare_elt x v in
       c = 0
-    | Node { left = l; elt = v; right = r; height = _; size = _ } ->
+    | Node { left = l; elt = v; right = r; weight = _ } ->
       let c = compare_elt x v in
       c = 0 || mem (if c < 0 then l else r) x ~compare_elt
   ;;
@@ -440,7 +594,7 @@ module Tree0 = struct
       | Empty -> Exn.raise_without_backtrace Same
       | Leaf { elt = v } ->
         if compare_elt x v = 0 then Empty else Exn.raise_without_backtrace Same
-      | Node { left = l; elt = v; right = r; height = _; size = _ } ->
+      | Node { left = l; elt = v; right = r; weight = _ } ->
         let c = compare_elt x v in
         if c = 0 then merge l r else if c < 0 then bal (aux l) v r else bal l v (aux r)
     in
@@ -453,7 +607,7 @@ module Tree0 = struct
       match t with
       | Empty -> Exn.raise_without_backtrace Same
       | Leaf { elt = _ } -> if i = 0 then Empty else Exn.raise_without_backtrace Same
-      | Node { left = l; elt = v; right = r; height = _; size = _ } ->
+      | Node { left = l; elt = v; right = r; weight = _ } ->
         let l_size = length l in
         let c = Poly.compare i l_size in
         if c = 0
@@ -473,21 +627,14 @@ module Tree0 = struct
       else (
         match s1, s2 with
         | Empty, t | t, Empty -> t
-        | Leaf { elt = v1 }, _ ->
-          union (Node { left = Empty; elt = v1; right = Empty; height = 1; size = 1 }) s2
-        | _, Leaf { elt = v2 } ->
-          union s1 (Node { left = Empty; elt = v2; right = Empty; height = 1; size = 1 })
-        | ( Node { left = l1; elt = v1; right = r1; height = h1; size = _ }
-          , Node { left = l2; elt = v2; right = r2; height = h2; size = _ } ) ->
-          if h1 >= h2
-          then
-            if h2 = 1
-            then add s1 v2 ~compare_elt
-            else (
-              let l2, _, r2 = split s2 v1 ~compare_elt in
-              join (union l1 l2) v1 (union r1 r2))
-          else if h1 = 1
-          then add s2 v1 ~compare_elt
+        | Leaf { elt = v1 }, _ -> add s2 v1 ~compare_elt
+        | _, Leaf { elt = v2 } -> add s1 v2 ~compare_elt
+        | ( Node { left = l1; elt = v1; right = r1; weight = w1 }
+          , Node { left = l2; elt = v2; right = r2; weight = w2 } ) ->
+          if w1 >= w2
+          then (
+            let l2, _, r2 = split s2 v1 ~compare_elt in
+            join (union l1 l2) v1 (union r1 r2))
           else (
             let l1, _, r1 = split s1 v2 ~compare_elt in
             join (union l1 l2) v2 (union r1 r2)))
@@ -496,8 +643,8 @@ module Tree0 = struct
   ;;
 
   let union_list ~comparator ~to_tree xs =
-    let compare_elt = comparator.Comparator.compare in
-    List.fold xs ~init:empty ~f:(fun ac x -> union ac (to_tree x) ~compare_elt)
+    let compare_elt = Comparator.compare comparator in
+    List.fold xs ~init:Empty ~f:(fun ac x -> union ac (to_tree x) ~compare_elt)
   ;;
 
   let inter s1 s2 ~compare_elt =
@@ -509,7 +656,7 @@ module Tree0 = struct
         | Empty, _ | _, Empty -> Empty
         | (Leaf { elt } as singleton), other_set | other_set, (Leaf { elt } as singleton)
           -> if mem other_set elt ~compare_elt then singleton else Empty
-        | Node { left = l1; elt = v1; right = r1; height = _; size = _ }, t2 ->
+        | Node { left = l1; elt = v1; right = r1; weight = _ }, t2 ->
           (match split t2 v1 ~compare_elt with
            | l2, None, r2 -> concat (inter l1 l2) (inter r1 r2)
            | l2, Some v1, r2 -> join (inter l1 l2) v1 (inter r1 r2)))
@@ -526,8 +673,8 @@ module Tree0 = struct
         | Empty, _ -> Empty
         | t1, Empty -> t1
         | Leaf { elt = v1 }, t2 ->
-          diff (Node { left = Empty; elt = v1; right = Empty; height = 1; size = 1 }) t2
-        | Node { left = l1; elt = v1; right = r1; height = _; size = _ }, t2 ->
+          diff (Node { left = Empty; elt = v1; right = Empty; weight = 2 }) t2
+        | Node { left = l1; elt = v1; right = r1; weight = _ }, t2 ->
           (match split t2 v1 ~compare_elt with
            | l2, None, r2 -> join (diff l1 l2) v1 (diff r1 r2)
            | l2, Some _, r2 -> concat (diff l1 l2) (diff r1 r2)))
@@ -547,16 +694,14 @@ module Tree0 = struct
       match s with
       | Empty -> e
       | Leaf { elt = v } -> More (v, Empty, e)
-      | Node { left = l; elt = v; right = r; height = _; size = _ } ->
-        cons l (More (v, r, e))
+      | Node { left = l; elt = v; right = r; weight = _ } -> cons l (More (v, r, e))
     ;;
 
     let rec cons_right s (e : (_, decreasing) t) : (_, decreasing) t =
       match s with
       | Empty -> e
       | Leaf { elt = v } -> More (v, Empty, e)
-      | Node { left = l; elt = v; right = r; height = _; size = _ } ->
-        cons_right r (More (v, l, e))
+      | Node { left = l; elt = v; right = r; weight = _ } -> cons_right r (More (v, l, e))
     ;;
 
     let of_set s : (_, increasing) t = cons s End
@@ -567,11 +712,10 @@ module Tree0 = struct
         match t with
         | Empty -> e
         | Leaf { elt = v } ->
-          loop (Node { left = Empty; elt = v; right = Empty; height = 1; size = 1 }) e
-        | Node { left = _; elt = v; right = r; height = _; size = _ }
-          when compare v key < 0 -> loop r e
-        | Node { left = l; elt = v; right = r; height = _; size = _ } ->
-          loop l (More (v, r, e))
+          loop (Node { left = Empty; elt = v; right = Empty; weight = 2 }) e
+        | Node { left = _; elt = v; right = r; weight = _ } when compare v key < 0 ->
+          loop r e
+        | Node { left = l; elt = v; right = r; weight = _ } -> loop l (More (v, r, e))
       in
       loop t End
     ;;
@@ -581,11 +725,10 @@ module Tree0 = struct
         match t with
         | Empty -> e
         | Leaf { elt = v } ->
-          loop (Node { left = Empty; elt = v; right = Empty; height = 1; size = 1 }) e
-        | Node { left = l; elt = v; right = _; height = _; size = _ }
-          when compare v key > 0 -> loop l e
-        | Node { left = l; elt = v; right = r; height = _; size = _ } ->
-          loop r (More (v, l, e))
+          loop (Node { left = Empty; elt = v; right = Empty; weight = 2 }) e
+        | Node { left = l; elt = v; right = _; weight = _ } when compare v key > 0 ->
+          loop l e
+        | Node { left = l; elt = v; right = r; weight = _ } -> loop r (More (v, l, e))
       in
       loop t End
     ;;
@@ -672,7 +815,7 @@ module Tree0 = struct
     let init =
       match from_elt with
       | None -> Enum.of_set t
-      | Some key -> Enum.starting_at_increasing t key comparator.Comparator.compare
+      | Some key -> Enum.starting_at_increasing t key (Comparator.compare comparator)
     in
     Sequence.unfold_step ~init ~f:next
   ;;
@@ -687,7 +830,7 @@ module Tree0 = struct
     let init =
       match from_elt with
       | None -> Enum.of_set_right t
-      | Some key -> Enum.starting_at_decreasing t key comparator.Comparator.compare
+      | Some key -> Enum.starting_at_decreasing t key (Comparator.compare comparator)
     in
     Sequence.unfold_step ~init ~f:next
   ;;
@@ -700,7 +843,7 @@ module Tree0 = struct
     t
     =
     let inclusive_bound side t bound =
-      let compare_elt = comparator.Comparator.compare in
+      let compare_elt = Comparator.compare comparator in
       let l, maybe, r = split t bound ~compare_elt in
       let t = side (l, r) in
       match maybe with
@@ -720,7 +863,7 @@ module Tree0 = struct
     match t with
     | Empty -> None
     | Leaf { elt = v } -> if f v then Some v else None
-    | Node { left = l; elt = v; right = r; height = _; size = _ } ->
+    | Node { left = l; elt = v; right = r; weight = _ } ->
       if f v
       then (
         match find_first_satisfying l ~f with
@@ -733,7 +876,7 @@ module Tree0 = struct
     match t with
     | Empty -> None
     | Leaf { elt = v } -> if f v then Some v else None
-    | Node { left = l; elt = v; right = r; height = _; size = _ } ->
+    | Node { left = l; elt = v; right = r; weight = _ } ->
       if f v
       then (
         match find_last_satisfying r ~f with
@@ -787,8 +930,8 @@ module Tree0 = struct
       (to_sequence comparator ~order ?greater_or_equal_to ?less_or_equal_to t')
       ~compare:
         (match order with
-         | `Increasing -> comparator.compare
-         | `Decreasing -> Fn.flip comparator.compare)
+         | `Increasing -> Comparator.compare comparator
+         | `Decreasing -> Fn.flip (Comparator.compare comparator))
   ;;
 
   let compare compare_elt s1 s2 =
@@ -807,31 +950,26 @@ module Tree0 = struct
       | Empty, _ -> true
       | _, Empty -> false
       | Leaf { elt = v1 }, t2 -> mem t2 v1 ~compare_elt
-      | Node { left = l1; elt = v1; right = r1; height = _; size = _ }, Leaf { elt = v2 }
-        ->
+      | Node { left = l1; elt = v1; right = r1; weight = _ }, Leaf { elt = v2 } ->
         (match l1, r1 with
          | Empty, Empty ->
            (* This case shouldn't occur in practice because we should have constructed
               a Leaf {elt=rather} than a Node with two Empty subtrees *)
            compare_elt v1 v2 = 0
          | _, _ -> false)
-      | ( Node { left = l1; elt = v1; right = r1; height = _; size = _ }
-        , (Node { left = l2; elt = v2; right = r2; height = _; size = _ } as t2) ) ->
+      | ( Node { left = l1; elt = v1; right = r1; weight = _ }
+        , (Node { left = l2; elt = v2; right = r2; weight = _ } as t2) ) ->
         let c = compare_elt v1 v2 in
         if c = 0
         then
           phys_equal s1 s2 || (is_subset l1 ~of_:l2 && is_subset r1 ~of_:r2)
-          (* Note that height and size don't matter here. *)
+          (* Note that weight doesn't matter here. *)
         else if c < 0
         then
-          is_subset
-            (Node { left = l1; elt = v1; right = Empty; height = 0; size = 0 })
-            ~of_:l2
+          is_subset (Node { left = l1; elt = v1; right = Empty; weight = 0 }) ~of_:l2
           && is_subset r1 ~of_:t2
         else
-          is_subset
-            (Node { left = Empty; elt = v1; right = r1; height = 0; size = 0 })
-            ~of_:r2
+          is_subset (Node { left = Empty; elt = v1; right = r1; weight = 0 }) ~of_:r2
           && is_subset l1 ~of_:t2
     in
     is_subset s1 ~of_:s2
@@ -842,7 +980,7 @@ module Tree0 = struct
     | Empty, _ | _, Empty -> true
     | Leaf { elt }, other_set | other_set, Leaf { elt } ->
       not (mem other_set elt ~compare_elt)
-    | Node { left = l1; elt = v1; right = r1; height = _; size = _ }, t2 ->
+    | Node { left = l1; elt = v1; right = r1; weight = _ }, t2 ->
       if phys_equal s1 s2
       then false
       else (
@@ -856,7 +994,7 @@ module Tree0 = struct
     let rec iter = function
       | Empty -> ()
       | Leaf { elt = v } -> f v
-      | Node { left = l; elt = v; right = r; height = _; size = _ } ->
+      | Node { left = l; elt = v; right = r; weight = _ } ->
         iter l;
         f v;
         iter r
@@ -870,7 +1008,7 @@ module Tree0 = struct
     match s with
     | Empty -> accu
     | Leaf { elt = v } -> f accu v
-    | Node { left = l; elt = v; right = r; height = _; size = _ } ->
+    | Node { left = l; elt = v; right = r; weight = _ } ->
       fold ~f r ~init:(f (fold ~f l ~init:accu) v)
   ;;
 
@@ -885,7 +1023,7 @@ module Tree0 = struct
     match s with
     | Empty -> accu
     | Leaf { elt = v } -> f v accu
-    | Node { left = l; elt = v; right = r; height = _; size = _ } ->
+    | Node { left = l; elt = v; right = r; weight = _ } ->
       fold_right ~f l ~init:(f v (fold_right ~f r ~init:accu))
   ;;
 
@@ -893,7 +1031,7 @@ module Tree0 = struct
     match t with
     | Empty -> true
     | Leaf { elt = v } -> p v
-    | Node { left = l; elt = v; right = r; height = _; size = _ } ->
+    | Node { left = l; elt = v; right = r; weight = _ } ->
       p v && for_all ~f:p l && for_all ~f:p r
   ;;
 
@@ -901,7 +1039,7 @@ module Tree0 = struct
     match t with
     | Empty -> false
     | Leaf { elt = v } -> p v
-    | Node { left = l; elt = v; right = r; height = _; size = _ } ->
+    | Node { left = l; elt = v; right = r; weight = _ } ->
       p v || exists ~f:p l || exists ~f:p r
   ;;
 
@@ -909,7 +1047,7 @@ module Tree0 = struct
     let rec filt = function
       | Empty -> Empty
       | Leaf { elt = v } as t -> if p v then t else Empty
-      | Node { left = l; elt = v; right = r; height = _; size = _ } as t ->
+      | Node { left = l; elt = v; right = r; weight = _ } as t ->
         let l' = filt l in
         let keep_v = p v in
         let r' = filt r in
@@ -929,7 +1067,7 @@ module Tree0 = struct
         (match p v with
          | None -> accu
          | Some v -> add accu v ~compare_elt)
-      | Node { left = l; elt = v; right = r; height = _; size = _ } ->
+      | Node { left = l; elt = v; right = r; weight = _ } ->
         filt
           (filt
              (match p v with
@@ -945,7 +1083,7 @@ module Tree0 = struct
     let rec loop = function
       | Empty -> Empty, Empty
       | Leaf { elt = v } as t -> if p v then t, Empty else Empty, t
-      | Node { left = l; elt = v; right = r; height = _; size = _ } as t ->
+      | Node { left = l; elt = v; right = r; weight = _ } as t ->
         let l't, l'f = loop l in
         let keep_v_t = p v in
         let r't, r'f = loop r in
@@ -964,50 +1102,42 @@ module Tree0 = struct
   let rec elements_aux accu = function
     | Empty -> accu
     | Leaf { elt = v } -> v :: accu
-    | Node { left = l; elt = v; right = r; height = _; size = _ } ->
+    | Node { left = l; elt = v; right = r; weight = _ } ->
       elements_aux (v :: elements_aux accu r) l
   ;;
 
   let elements s = elements_aux [] s
 
-  let choose t =
-    match t with
-    | Empty -> None
-    | Leaf { elt = v } -> Some v
-    | Node { left = _; elt = v; right = _; height = _; size = _ } -> Some v
+  let call_with_choose ~none ~some = function
+    | Empty -> none ()
+    | Leaf { elt = v } -> some v
+    | Node { left = _; elt = v; right = _; weight = _ } -> some v
   ;;
 
-  let choose_exn =
-    let not_found = Not_found_s (Atom "Set.choose_exn: empty set") in
-    let choose_exn t =
-      match choose t with
-      | None -> raise not_found
-      | Some v -> v
-    in
-    (* named to preserve symbol in compiled binary *)
-    choose_exn
-  ;;
+  let raise_choose_exn () = Error.raise_s (Atom "Set.choose_exn: empty set")
+  let choose t = call_with_choose t ~none:return_none ~some:Option.return
+  let choose_exn t = call_with_choose t ~none:raise_choose_exn ~some:Fn.id
 
   let of_list lst ~compare_elt =
-    List.fold lst ~init:empty ~f:(fun t x -> add t x ~compare_elt)
+    List.fold lst ~init:Empty ~f:(fun t x -> add t x ~compare_elt)
   ;;
 
   let of_sequence sequence ~compare_elt =
-    Sequence.fold sequence ~init:empty ~f:(fun t x -> add t x ~compare_elt)
+    Sequence.fold sequence ~init:Empty ~f:(fun t x -> add t x ~compare_elt)
   ;;
 
   let to_list s = elements s
 
   let of_array a ~compare_elt =
-    Array.fold a ~init:empty ~f:(fun t x -> add t x ~compare_elt)
+    Array.fold a ~init:Empty ~f:(fun t x -> add t x ~compare_elt)
   ;;
 
   (* faster but equivalent to [Array.of_list (to_list t)] *)
   let to_array = function
     | Empty -> [||]
     | Leaf { elt = v } -> [| v |]
-    | Node { left = l; elt = v; right = r; height = _; size = s } ->
-      let res = Array.create ~len:s v in
+    | Node { left = l; elt = v; right = r; weight = w } ->
+      let res = Array.create ~len:(w - 1) v in
       let pos_ref = ref 0 in
       let rec loop = function
         (* Invariant: on entry and on exit to [loop], !pos_ref is the next
@@ -1016,7 +1146,7 @@ module Tree0 = struct
         | Leaf { elt = v } ->
           res.(!pos_ref) <- v;
           incr pos_ref
-        | Node { left = l; elt = v; right = r; height = _; size = _ } ->
+        | Node { left = l; elt = v; right = r; weight = _ } ->
           loop l;
           res.(!pos_ref) <- v;
           incr pos_ref;
@@ -1030,7 +1160,7 @@ module Tree0 = struct
   ;;
 
   let map t ~f ~compare_elt =
-    fold t ~init:empty ~f:(fun t x -> add t (f x) ~compare_elt) [@nontail]
+    fold t ~init:Empty ~f:(fun t x -> add t (f x) ~compare_elt) [@nontail]
   ;;
 
   let group_by set ~equiv =
@@ -1051,7 +1181,7 @@ module Tree0 = struct
     match t with
     | Empty -> None
     | Leaf { elt = v } -> if f v then Some v else None
-    | Node { left = l; elt = v; right = r; height = _; size = _ } ->
+    | Node { left = l; elt = v; right = r; weight = _ } ->
       if f v
       then Some v
       else (
@@ -1064,7 +1194,7 @@ module Tree0 = struct
     match t with
     | Empty -> None
     | Leaf { elt = v } -> f v
-    | Node { left = l; elt = v; right = r; height = _; size = _ } ->
+    | Node { left = l; elt = v; right = r; weight = _ } ->
       (match f v with
        | Some _ as r -> r
        | None ->
@@ -1075,33 +1205,37 @@ module Tree0 = struct
 
   let find_exn t ~f =
     match find t ~f with
-    | None -> failwith "Set.find_exn failed to find a matching element"
+    | None -> Error.raise_s (Atom "Set.find_exn: failed to find a matching element")
     | Some e -> e
+  ;;
+
+  let rank t elt ~compare_elt =
+    let rec local_ loop t acc =
+      match t with
+      | Empty -> None
+      | Leaf { elt = elt' } -> if compare_elt elt' elt = 0 then Some acc else None
+      | Node { left = l; elt = elt'; right = r; weight = _ } ->
+        let c = compare_elt elt' elt in
+        if c = 0
+        then Some (acc + length l)
+        else if c > 0
+        then loop l acc
+        else loop r (acc + length l + 1)
+    in
+    loop t 0 [@nontail]
   ;;
 
   let rec nth t i =
     match t with
     | Empty -> None
     | Leaf { elt = v } -> if i = 0 then Some v else None
-    | Node { left = l; elt = v; right = r; height = _; size = s } ->
-      if i >= s
+    | Node { left = l; elt = v; right = r; weight = w } ->
+      if i >= w - 1
       then None
       else (
         let l_size = length l in
         let c = Poly.compare i l_size in
         if c < 0 then nth l i else if c = 0 then Some v else nth r (i - l_size - 1))
-  ;;
-
-  let stable_dedup_list xs ~compare_elt =
-    let rec loop xs leftovers already_seen =
-      match xs with
-      | [] -> List.rev leftovers
-      | hd :: tl ->
-        if mem already_seen hd ~compare_elt
-        then loop tl leftovers already_seen
-        else loop tl (hd :: leftovers) (add already_seen hd ~compare_elt)
-    in
-    loop xs [] empty
   ;;
 
   let t_of_sexp_direct a_of_sexp sexp ~compare_elt =
@@ -1112,7 +1246,7 @@ module Tree0 = struct
       if length set = List.length lst
       then set
       else (
-        let set = ref empty in
+        let set = ref Empty in
         List.iter2_exn lst elt_lst ~f:(fun el_sexp el ->
           if mem !set el ~compare_elt
           then of_sexp_error "Set.t_of_sexp: duplicate element in set" el_sexp
@@ -1157,19 +1291,24 @@ type ('a, 'comparator) t =
        to the functional value in the comparator.
        Note that this does not affect polymorphic [compare]: that still produces
        nonsense. *)
-    comparator : ('a, 'comparator) Comparator.t
+    global_ comparator : ('a, 'comparator) Comparator.t
   ; tree : 'a Tree0.t
   }
 
 type ('a, 'comparator) tree = 'a Tree0.t
 
+let globalize0 (local_ { comparator; tree }) =
+  { comparator; tree = Tree0.globalize0 tree }
+;;
+
+let globalize _ _ t = globalize0 t
 let like { tree = _; comparator } tree = { tree; comparator }
 
 let like_maybe_no_op ({ tree = old_tree; comparator } as old_t) tree =
   if phys_equal old_tree tree then old_t else { tree; comparator }
 ;;
 
-let compare_elt t = t.comparator.Comparator.compare
+let compare_elt t = Comparator.compare t.comparator
 
 module Accessors = struct
   let comparator t = t.comparator
@@ -1211,8 +1350,14 @@ module Accessors = struct
     Tree0.symmetric_diff t1.tree t2.tree ~compare_elt:(compare_elt t1)
   ;;
 
-  let compare_direct t1 t2 = Tree0.compare (compare_elt t1) t1.tree t2.tree
-  let equal t1 t2 = Tree0.equal t1.tree t2.tree ~compare_elt:(compare_elt t1)
+  let%template[@mode m = (local, global)] compare_direct t1 t2 =
+    Tree0.compare (compare_elt t1) t1.tree t2.tree
+  ;;
+
+  let%template[@mode m = (local, global)] equal t1 t2 =
+    Tree0.equal t1.tree t2.tree ~compare_elt:(compare_elt t1)
+  ;;
+
   let is_subset t ~of_ = Tree0.is_subset t.tree ~of_:of_.tree ~compare_elt:(compare_elt t)
 
   let are_disjoint t1 t2 =
@@ -1227,7 +1372,7 @@ module Accessors = struct
         (to_named_tree subset)
         ~of_:(to_named_tree superset)
         ~compare_elt:(compare_elt subset.set)
-        ~sexp_of_elt:subset.set.comparator.sexp_of_t
+        ~sexp_of_elt:(Comparator.sexp_of_t subset.set.comparator)
     ;;
 
     let equal t1 t2 =
@@ -1259,6 +1404,7 @@ module Accessors = struct
 
   let group_by t ~equiv = List.map (Tree0.group_by t.tree ~equiv) ~f:(like t)
   let nth t i = Tree0.nth t.tree i
+  let rank t v = Tree0.rank t.tree v ~compare_elt:(compare_elt t)
   let remove_index t i = like t (Tree0.remove_index t.tree i ~compare_elt:(compare_elt t))
   let sexp_of_t sexp_of_a _ t = Tree0.sexp_of_t sexp_of_a t.tree
 
@@ -1291,17 +1437,23 @@ include Accessors
 
 let compare _ _ t1 t2 = compare_direct t1 t2
 
+let%template[@mode local] compare _ _ t1 t2 =
+  compare_direct (globalize0 t1) (globalize0 t2)
+;;
+
 module Tree = struct
   type ('a, 'comparator) t = ('a, 'comparator) tree
 
-  let ce comparator = comparator.Comparator.compare
+  let globalize0 = Tree0.globalize0
+  let globalize _ _ t = globalize0 t
+  let ce comparator = Comparator.compare comparator
 
   let t_of_sexp_direct ~comparator a_of_sexp sexp =
     Tree0.t_of_sexp_direct ~compare_elt:(ce comparator) a_of_sexp sexp
   ;;
 
-  let empty_without_value_restriction = Tree0.empty
-  let empty ~comparator:_ = empty_without_value_restriction
+  let empty_without_value_restriction = Tree0.Empty
+  let empty ~comparator:_ = Tree0.Empty
   let singleton ~comparator:_ e = Tree0.singleton e
   let length t = Tree0.length t
   let invariants ~comparator t = Tree0.invariants t ~compare_elt:(ce comparator)
@@ -1342,8 +1494,14 @@ module Tree = struct
     Tree0.symmetric_diff t1 t2 ~compare_elt:(ce comparator)
   ;;
 
-  let compare_direct ~comparator t1 t2 = Tree0.compare (ce comparator) t1 t2
-  let equal ~comparator t1 t2 = Tree0.equal t1 t2 ~compare_elt:(ce comparator)
+  let%template[@mode m = (local, global)] compare_direct ~comparator t1 t2 =
+    Tree0.compare (ce comparator) t1 t2
+  ;;
+
+  let%template[@mode m = (local, global)] equal ~comparator t1 t2 =
+    Tree0.equal t1 t2 ~compare_elt:(ce comparator)
+  ;;
+
   let is_subset ~comparator t ~of_ = Tree0.is_subset t ~of_ ~compare_elt:(ce comparator)
 
   let are_disjoint ~comparator t1 t2 =
@@ -1364,16 +1522,12 @@ module Tree = struct
 
   let of_sorted_array ~comparator a = Tree0.of_sorted_array a ~compare_elt:(ce comparator)
   let union_list ~comparator l = Tree0.union_list l ~to_tree:Fn.id ~comparator
-
-  let stable_dedup_list ~comparator xs =
-    Tree0.stable_dedup_list xs ~compare_elt:(ce comparator)
-  ;;
-
   let group_by t ~equiv = Tree0.group_by t ~equiv
   let split ~comparator t a = Tree0.split t a ~compare_elt:(ce comparator)
   let split_le_gt ~comparator t a = Tree0.split_le_gt t a ~compare_elt:(ce comparator)
   let split_lt_ge ~comparator t a = Tree0.split_lt_ge t a ~compare_elt:(ce comparator)
   let nth t i = Tree0.nth t i
+  let rank ~comparator t v = Tree0.rank t v ~compare_elt:(ce comparator)
   let remove_index ~comparator t i = Tree0.remove_index t i ~compare_elt:(ce comparator)
   let sexp_of_t sexp_of_a _ t = Tree0.sexp_of_t sexp_of_a t
   let to_tree t = t
@@ -1403,7 +1557,7 @@ module Tree = struct
         t1
         ~of_:t2
         ~compare_elt:(ce comparator)
-        ~sexp_of_elt:comparator.Comparator.sexp_of_t
+        ~sexp_of_elt:(Comparator.sexp_of_t comparator)
     ;;
 
     let equal ~comparator t1 t2 =
@@ -1411,7 +1565,7 @@ module Tree = struct
         t1
         t2
         ~compare_elt:(ce comparator)
-        ~sexp_of_elt:comparator.Comparator.sexp_of_t
+        ~sexp_of_elt:(Comparator.sexp_of_t comparator)
     ;;
   end
 end
@@ -1427,13 +1581,15 @@ module Using_comparator = struct
   let t_of_sexp_direct ~comparator a_of_sexp sexp =
     of_tree
       ~comparator
-      (Tree0.t_of_sexp_direct ~compare_elt:comparator.compare a_of_sexp sexp)
+      (Tree0.t_of_sexp_direct ~compare_elt:(Comparator.compare comparator) a_of_sexp sexp)
   ;;
 
-  let empty ~comparator = { comparator; tree = Tree0.empty }
+  let%template empty ~(comparator @ p) = { comparator; tree = Tree0.Empty }
+  [@@mode p = (portable, nonportable)]
+  ;;
 
-  module Empty_without_value_restriction (Elt : Comparator.S1) = struct
-    let empty = { comparator = Elt.comparator; tree = Tree0.empty }
+  module%template.portable Empty_without_value_restriction (Elt : Comparator.S1) = struct
+    let empty = { comparator = Elt.comparator; tree = Tree0.Empty }
   end
 
   let singleton ~comparator e = { comparator; tree = Tree0.singleton e }
@@ -1444,7 +1600,7 @@ module Using_comparator = struct
 
   let of_sorted_array_unchecked ~comparator array =
     let tree =
-      Tree0.of_sorted_array_unchecked array ~compare_elt:comparator.Comparator.compare
+      Tree0.of_sorted_array_unchecked array ~compare_elt:(Comparator.compare comparator)
     in
     { comparator; tree }
   ;;
@@ -1455,33 +1611,33 @@ module Using_comparator = struct
 
   let of_sorted_array ~comparator array =
     Or_error.Monad_infix.(
-      Tree0.of_sorted_array array ~compare_elt:comparator.Comparator.compare
+      Tree0.of_sorted_array array ~compare_elt:(Comparator.compare comparator)
       >>| fun tree -> { comparator; tree })
   ;;
 
   let of_list ~comparator l =
-    { comparator; tree = Tree0.of_list l ~compare_elt:comparator.Comparator.compare }
+    { comparator; tree = Tree0.of_list l ~compare_elt:(Comparator.compare comparator) }
   ;;
 
   let of_sequence ~comparator s =
-    { comparator; tree = Tree0.of_sequence s ~compare_elt:comparator.Comparator.compare }
+    { comparator
+    ; tree = Tree0.of_sequence s ~compare_elt:(Comparator.compare comparator)
+    }
   ;;
 
   let of_array ~comparator a =
-    { comparator; tree = Tree0.of_array a ~compare_elt:comparator.Comparator.compare }
-  ;;
-
-  let stable_dedup_list ~comparator xs =
-    Tree0.stable_dedup_list xs ~compare_elt:comparator.Comparator.compare
+    { comparator; tree = Tree0.of_array a ~compare_elt:(Comparator.compare comparator) }
   ;;
 
   let map ~comparator t ~f =
-    { comparator; tree = Tree0.map t.tree ~f ~compare_elt:comparator.Comparator.compare }
+    { comparator
+    ; tree = Tree0.map t.tree ~f ~compare_elt:(Comparator.compare comparator)
+    }
   ;;
 
   let filter_map ~comparator t ~f =
     { comparator
-    ; tree = Tree0.filter_map t.tree ~f ~compare_elt:comparator.Comparator.compare
+    ; tree = Tree0.filter_map t.tree ~f ~compare_elt:(Comparator.compare comparator)
     }
   ;;
 
@@ -1490,6 +1646,12 @@ end
 
 let to_comparator = Comparator.of_module
 let empty m = Using_comparator.empty ~comparator:(to_comparator m)
+
+let%template empty (type cw : value mod portable) (m : (_, cw) Comparator.Module.t) =
+  (Using_comparator.empty [@mode portable]) ~comparator:(to_comparator m)
+[@@mode portable]
+;;
+
 let singleton m a = Using_comparator.singleton ~comparator:(to_comparator m) a
 let union_list m a = Using_comparator.union_list ~comparator:(to_comparator m) a
 
@@ -1505,52 +1667,36 @@ let of_sorted_array m a = Using_comparator.of_sorted_array ~comparator:(to_compa
 let of_list m a = Using_comparator.of_list ~comparator:(to_comparator m) a
 let of_sequence m a = Using_comparator.of_sequence ~comparator:(to_comparator m) a
 let of_array m a = Using_comparator.of_array ~comparator:(to_comparator m) a
-
-let stable_dedup_list m a =
-  Using_comparator.stable_dedup_list ~comparator:(to_comparator m) a
-;;
-
 let map m a ~f = Using_comparator.map ~comparator:(to_comparator m) a ~f
 let filter_map m a ~f = Using_comparator.filter_map ~comparator:(to_comparator m) a ~f
 let to_tree = Using_comparator.to_tree
 let of_tree m t = Using_comparator.of_tree ~comparator:(to_comparator m) t
 
 module M (Elt : sig
-  type t
-  type comparator_witness
-end) =
+    type t
+    type comparator_witness
+  end) =
 struct
   type nonrec t = (Elt.t, Elt.comparator_witness) t
 end
 
 module type Sexp_of_m = sig
-  type t [@@deriving_inline sexp_of]
-
-  val sexp_of_t : t -> Sexplib0.Sexp.t
-
-  [@@@end]
+  type t [@@deriving sexp_of]
 end
 
 module type M_of_sexp = sig
-  type t [@@deriving_inline of_sexp]
-
-  val t_of_sexp : Sexplib0.Sexp.t -> t
-
-  [@@@end]
+  type t [@@deriving of_sexp]
 
   include Comparator.S with type t := t
 end
 
 module type M_sexp_grammar = sig
-  type t [@@deriving_inline sexp_grammar]
-
-  val t_sexp_grammar : t Sexplib0.Sexp_grammar.t
-
-  [@@@end]
+  type t [@@deriving sexp_grammar]
 end
 
 module type Compare_m = sig end
 module type Equal_m = sig end
+module type Globalize_m = sig end
 module type Hash_fold_m = Hasher.S
 
 let sexp_of_m__t (type elt) (module Elt : Sexp_of_m with type t = elt) t =
@@ -1574,6 +1720,13 @@ let m__t_sexp_grammar (type elt) (module Elt : M_sexp_grammar with type t = elt)
 let compare_m__t (module _ : Compare_m) t1 t2 = compare_direct t1 t2
 let equal_m__t (module _ : Equal_m) t1 t2 = equal t1 t2
 
+let%template compare_m__t__local (module _ : Compare_m) t1 t2 =
+  (compare_direct [@mode local]) t1 t2
+;;
+
+let%template equal_m__t__local (module _ : Equal_m) t1 t2 = (equal [@mode local]) t1 t2
+let globalize_m__t (module _ : Globalize_m) (local_ t) = globalize0 t
+
 let hash_fold_m__t (type elt) (module Elt : Hash_fold_m with type t = elt) state =
   hash_fold_direct Elt.hash_fold_t state
 ;;
@@ -1591,7 +1744,8 @@ module Poly = struct
 
   let comparator = Comparator.Poly.comparator
 
-  include Using_comparator.Empty_without_value_restriction (Comparator.Poly)
+  include%template
+    Using_comparator.Empty_without_value_restriction [@modality portable] (Comparator.Poly)
 
   let singleton a = Using_comparator.singleton ~comparator a
   let union_list a = Using_comparator.union_list ~comparator a
@@ -1608,9 +1762,52 @@ module Poly = struct
   let of_list a = Using_comparator.of_list ~comparator a
   let of_sequence a = Using_comparator.of_sequence ~comparator a
   let of_array a = Using_comparator.of_array ~comparator a
-  let stable_dedup_list a = Using_comparator.stable_dedup_list ~comparator a
   let map a ~f = Using_comparator.map ~comparator a ~f
   let filter_map a ~f = Using_comparator.filter_map ~comparator a ~f
   let of_tree tree = { comparator; tree }
   let to_tree t = t.tree
+end
+
+module Private = struct
+  module Tree = struct
+    type 'a t = 'a Tree0.t
+
+    let balance_invariants t = Tree0.balance_invariants t
+
+    let are_balanced t1 t2 =
+      let w1 = Tree0.weight t1
+      and w2 = Tree0.weight t2 in
+      (not (Tree0.is_too_heavy ~weight:w1 ~for_weight:w2))
+      && not (Tree0.is_too_heavy ~weight:w2 ~for_weight:w1)
+    ;;
+
+    let are_almost_balanced t1 t2 =
+      let w1 = Tree0.weight t1
+      and w2 = Tree0.weight t2 in
+      match t1, t2 with
+      | Node node, _ when Tree0.is_too_heavy ~weight:w1 ~for_weight:w2 ->
+        (not (Tree0.is_too_heavy ~weight:(w1 - 1) ~for_weight:w2))
+        && Tree0.may_rotate_just_once
+             ~inner_sibling_weight:(Tree0.weight node.right)
+             ~outer_sibling_weight:(Tree0.weight node.left)
+      | _, Node node when Tree0.is_too_heavy ~weight:w2 ~for_weight:w1 ->
+        (not (Tree0.is_too_heavy ~weight:(w2 - 1) ~for_weight:w1))
+        && Tree0.may_rotate_just_once
+             ~inner_sibling_weight:(Tree0.weight node.left)
+             ~outer_sibling_weight:(Tree0.weight node.right)
+      | _ -> true
+    ;;
+
+    let expose t =
+      match (t : _ Tree0.t) with
+      | Empty -> None
+      | Leaf { elt } -> Some (Tree0.Empty, elt, Tree0.Empty)
+      | Node { left; elt; right; _ } -> Some (left, elt, right)
+    ;;
+
+    let empty = Tree0.Empty
+    let create_if_balanced = Tree0.create
+    let create_if_almost_balanced = Tree0.bal
+    let create_even_if_completely_unbalanced = Tree0.join
+  end
 end

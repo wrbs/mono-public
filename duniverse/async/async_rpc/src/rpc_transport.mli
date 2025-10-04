@@ -32,9 +32,9 @@ val of_reader_writer : ?max_message_size:int -> Async_reader.t -> Async_writer.t
 
 val of_fd
   :  ?buffer_age_limit:Async_writer.buffer_age_limit
-       (** Note: Reducing [reader_buffer_size] and [writer_buffer_size] below 128KiB can have
-      unintuitive effects on program memory usage, see the documentation of
-      [Reader.create] and [Writer.create] for more details. *)
+       (** Note: Reducing [reader_buffer_size] and [writer_buffer_size] below 128KiB can
+           have unintuitive effects on program memory usage, see the documentation of
+           [Reader.create] and [Writer.create] for more details. *)
   -> ?reader_buffer_size:int
   -> ?writer_buffer_size:int
   -> max_message_size:int
@@ -57,7 +57,7 @@ module Tcp : sig
     -> ?max_message_size:int
     -> ?make_transport:transport_maker
          (** default is [of_fd] (as opposed to [Rpc_transport_low_latency]) *)
-    -> ?auth:('address -> bool)
+    -> ?auth:('address -> bool Deferred.t)
     -> ?on_handler_error:[ `Raise | `Ignore | `Call of 'address -> exn -> unit ]
          (** default is [`Ignore] *)
     -> (client_addr:'address
@@ -76,7 +76,7 @@ module Tcp : sig
     -> ?time_source:[> read ] Time_source.T1.t
     -> ?max_message_size:int
     -> ?make_transport:transport_maker
-    -> ?auth:(Socket.Address.Inet.t -> bool)
+    -> ?auth:(Socket.Address.Inet.t -> bool Deferred.t)
     -> ?on_handler_error:
          [ `Raise | `Ignore | `Call of Socket.Address.Inet.t -> exn -> unit ]
     -> (client_addr:Socket.Address.Inet.t
@@ -95,7 +95,7 @@ module Tcp : sig
     -> ?time_source:[> read ] Time_source.T1.t
     -> ?max_message_size:int
     -> ?make_transport:transport_maker
-    -> ?auth:(Socket.Address.Unix.t -> bool)
+    -> ?auth:(Socket.Address.Unix.t -> bool Deferred.t)
     -> ?on_handler_error:
          [ `Raise | `Ignore | `Call of Socket.Address.Unix.t -> exn -> unit ]
     -> (client_addr:Socket.Address.Unix.t

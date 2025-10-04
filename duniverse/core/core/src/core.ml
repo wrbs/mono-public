@@ -1,15 +1,16 @@
 (** Core greatly expands the functionality available in Base while still remaining
-    platform-agnostic.  Core changes more frequently (i.e., is less stable) than Base.
+    platform-agnostic. Core changes more frequently (i.e., is less stable) than Base.
 
     Some modules are mere extensions of their counterparts in Base, usually adding generic
     functionality by including functors that make them binable, comparable, sexpable,
-    blitable, etc.  The bulk of Core, though, is modules providing entirely new
+    blitable, etc. The bulk of Core, though, is modules providing entirely new
     functionality. *)
 
 open! Import
 module Applicative = Applicative
 module Arg = Arg
 module Array = Array
+module Atomic = Atomic
 module Avltree = Avltree
 module Backtrace = Backtrace
 module Bag = Bag
@@ -27,7 +28,7 @@ module Bounded_index = Bounded_index
 module Buffer = Base.Buffer
 module Byte_units = Byte_units
 module Bytes = Bytes
-module Caml = struct end [@@deprecated "[since 2023-01] use Stdlib instead of Caml"]
+module Capsule = Portable.Capsule
 module Char = Char
 module Command = Command_internal
 module Comparable = Comparable
@@ -35,6 +36,7 @@ module Comparator = Comparator
 module Comparisons = Comparisons
 module Container = Container
 module Container_intf = Container_intf
+module Container_with_local = Base.Container_with_local
 module Continue_or_stop = Continue_or_stop
 
 module Core_kernel_stable = Stable
@@ -48,6 +50,7 @@ module Deque = Deque
 module Deriving_hash = Deriving_hash
 module Digest = Md5 [@@ocaml.deprecated "[since 2017-05] Use Md5 instead."]
 module Doubly_linked = Doubly_linked
+module Dynamic = Base.Dynamic
 module Either = Either
 module Ephemeron = Stdlib.Ephemeron
 module Equal = Equal
@@ -74,6 +77,7 @@ module Heap_block = Heap_block
 module Hexdump = Hexdump
 module Hexdump_intf = Hexdump_intf
 module Host_and_port = Host_and_port
+module Iarray = Iarray
 module Identifiable = Identifiable
 module Immediate_option = Immediate_option
 module Immediate_option_intf = Immediate_option_intf
@@ -100,6 +104,7 @@ module Map_intf = Map_intf
 module Maybe_bound = Maybe_bound
 module Md5 = Md5
 module Memo = Memo
+module Modes = Modes
 module Monad = Monad
 module Month = Month
 
@@ -109,12 +114,14 @@ module Mutex = struct end
 module Nativeint = Nativeint
 module No_polymorphic_compare = No_polymorphic_compare
 module Nothing = Nothing
+module Obj = Base.Obj
 module Only_in_test = Only_in_test
 module Option = Option
 module Option_array = Option_array
 module Optional_syntax = Optional_syntax
 module Optional_syntax_intf = Optional_syntax_intf
 module Or_error = Or_error
+module Or_null = Base.Or_null
 module Ordered_collection_common = Ordered_collection_common
 module Ordering = Ordering
 module Out_channel = Out_channel
@@ -122,6 +129,8 @@ module Percent = Percent
 module Perms = Perms
 module Pid = Pid
 module Poly = Poly
+module Portability_hacks = Base.Portability_hacks
+module Portable_lazy = Portable_lazy
 module Pretty_printer = Pretty_printer
 module Printexc = Printexc
 module Printf = Printf
@@ -159,11 +168,9 @@ module Sys = Core_sys
 module Thread = struct end
 [@@deprecated "[since 2021-04] Use [Core_thread] or [Caml_threads.Thread]"]
 
-module Time = Time_float
-[@@deprecated "[since 2021-11] Use [Time_float] or [Time_float_unix] instead"]
-
 module Time_float = Time_float
 module Time_ns = Time_ns
+module Timezone = Timezone
 module Tuple = Tuple
 module Tuple2 = Tuple.T2
 module Tuple3 = Tuple.T3
@@ -198,7 +205,11 @@ include Not_found
 
 (** {2 Top-level values} *)
 
-external phys_equal : ('a[@local_opt]) -> ('a[@local_opt]) -> bool = "%eq"
+external phys_equal
+  : ('a : value_or_null).
+  ('a[@local_opt]) -> ('a[@local_opt]) -> bool
+  @@ portable
+  = "%eq"
 
 type 'a _maybe_bound = 'a Maybe_bound.t =
   | Incl of 'a
@@ -207,12 +218,12 @@ type 'a _maybe_bound = 'a Maybe_bound.t =
 
 let am_running_test = am_running_test
 let does_raise = Exn.does_raise
-let sec = Time_float.Span.of_sec
+let sec = Span_float.of_sec
 let ( ^/ ) = Filename.concat
 
 (** We perform these side effects here because we want them to run for any code that uses
-    [Core].  If this were in another module in [Core] that was not used in some program,
-    then the side effects might not be run in that program.  This will run as long as the
+    [Core]. If this were in another module in [Core] that was not used in some program,
+    then the side effects might not be run in that program. This will run as long as the
     program refers to at least one value directly in Core; referring to values in
     [Core.Bool], for example, is not sufficient. *)
 let () = Exn.initialize_module ()

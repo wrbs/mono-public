@@ -162,6 +162,8 @@ If the previous rule doesn't apply, i.e., no ancestor directory has a
 file named ``dune-workspace``, then the current directory will be used
 as root.
 
+.. _forcing-root:
+
 Forcing the Root (for Scripts)
 ------------------------------
 
@@ -258,7 +260,7 @@ Running Tests
 There are two ways to run tests:
 
 -  ``dune build @runtest``
--  ``dune test`` (or the more explicit ``dune runtest``)
+-  ``dune test`` (or its alias ``dune runtest``)
 
 The two commands are equivalent, and they will run all the tests defined in the
 current directory and its children directories recursively. You can also run the tests in a

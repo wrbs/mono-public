@@ -1,4 +1,5 @@
 open Import
+open Memo.O
 
 let mdx_version_required = "1.6.0"
 
@@ -35,7 +36,7 @@ module Files = struct
     let open Action_builder.O in
     let+ () = Action_builder.path src
     and+ () = Action_builder.path (Path.build corrected) in
-    Action.Full.make (Action.diff ~optional:false src corrected)
+    Action.Full.make (Promote.Diff_action.diff ~optional:false src corrected)
   ;;
 end
 
@@ -129,7 +130,6 @@ module Deps = struct
     match dirs_and_files ~version ~dir t_list with
     | Error e -> Memo.return (Error e)
     | Ok (dirs, files) ->
-      let open Memo.O in
       let dep_set = Dep.Set.of_files files in
       let+ l = Memo.parallel_map dirs ~f:(fun dir -> Source_deps.files dir >>| fst) in
       Ok (Dep.Set.union_all (dep_set :: l))
@@ -283,7 +283,6 @@ let () =
 (** Returns the list of files (in _build) to be passed to mdx for the given
     stanza and context *)
 let files_to_mdx t ~sctx ~dir =
-  let open Memo.O in
   let must_mdx src_path =
     let file = Path.Source.basename src_path in
     let standard = default_files_of_version t.version in
@@ -308,7 +307,6 @@ let gen_rules_for_single_file stanza ~sctx ~dir ~expander ~mdx_prog ~mdx_prog_ge
     Files.from_source_file ~mdx_dir src
   in
   (* Add the rule for generating the .mdx.deps file with ocaml-mdx deps *)
-  let open Memo.O in
   let* () = Super_context.add_rule sctx ~loc ~dir (Deps.rule ~dir ~mdx_prog files)
   and* () =
     (* Add the rule for generating the .corrected file using ocaml-mdx test *)
@@ -411,7 +409,6 @@ let name = "mdx_gen"
 
 let mdx_prog_gen t ~sctx ~dir ~scope ~mdx_prog =
   let loc = t.loc in
-  let open Memo.O in
   let* ocaml_toolchain = Context.ocaml (Super_context.context sctx) in
   (* Libs from the libraries field should have their include directories sent to
      mdx *)
@@ -424,11 +421,16 @@ let mdx_prog_gen t ~sctx ~dir ~scope ~mdx_prog =
             let+ lib = Lib.DB.resolve (Scope.libs scope) lib in
             Some lib
           | _ -> Resolve.Memo.return None)
+      and+ lib_config =
+        Resolve.Memo.lift_memo
+        @@ Memo.O.(
+             let+ ocaml = Super_context.context sctx |> Context.ocaml in
+             ocaml.lib_config)
       in
       let mode = ocaml_toolchain |> Ocaml_toolchain.best_mode in
       let open Command.Args in
       S
-        (Lib_flags.L.include_paths libs_to_include (Ocaml mode)
+        (Lib_flags.L.include_paths libs_to_include (Ocaml mode) lib_config
          |> Path.Set.to_list_map ~f:(fun p -> S [ A "--directory"; Path p ]))
     in
     let open Command.Args in
@@ -453,17 +455,14 @@ let mdx_prog_gen t ~sctx ~dir ~scope ~mdx_prog =
   let lib name = Lib_dep.Direct (loc, Lib_name.of_string name) in
   let* cctx =
     let compile_info =
-      let names = [ t.loc, name ] in
-      let merlin_ident = Merlin_ident.for_exes ~names:(List.map ~f:snd names) in
       Lib.DB.resolve_user_written_deps
         (Scope.libs scope)
-        (`Exe names)
+        (`Exe Nonempty_list.[ t.loc, name ])
         ~allow_overlaps:false
         ~forbidden_libraries:[]
         (lib "mdx.test" :: lib "mdx.top" :: t.libraries)
         ~pps:[]
         ~dune_version
-        ~merlin_ident
     in
     let requires_compile = Lib.Compile.direct_requires compile_info
     and requires_link = Lib.Compile.requires_link compile_info in
@@ -482,7 +481,7 @@ let mdx_prog_gen t ~sctx ~dir ~scope ~mdx_prog =
       ~requires_compile
       ~requires_link
       ~opaque:(Explicit false)
-      ~js_of_ocaml:None
+      ~js_of_ocaml:(Js_of_ocaml.Mode.Pair.make None)
       ~melange_package_name:None
       ~package:None
       ()
@@ -501,7 +500,6 @@ let mdx_prog_gen t ~sctx ~dir ~scope ~mdx_prog =
 
 (** Generates the rules for a given mdx stanza *)
 let gen_rules t ~sctx ~dir ~scope ~expander =
-  let open Memo.O in
   let register_rules () =
     let* files_to_mdx = files_to_mdx t ~sctx ~dir in
     let mdx_prog =

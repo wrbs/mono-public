@@ -28,11 +28,14 @@ module Variant_constructor = struct
   type t =
     { name : string
     ; loc : Location.t
+    ; has_non_value_flag : bool
     ; kind :
         [ `Normal of core_type list * core_type option
         | `Normal_inline_record of label_declaration list * core_type option
         | `Polymorphic of core_type option
         ]
+    ; vars : core_type list
+    (* variables in a gadt constructor. See comment above [alpha_rename_if_gadt] *)
     }
 
   let args t =
@@ -58,7 +61,7 @@ module Variant_constructor = struct
      but not the expressivity of GADTs. It's not clearly useful though. *)
   let is_gadt t = Option.is_some (return_ty_opt t)
 
-  let pattern_without_binding { name; loc; kind } =
+  let pattern_without_binding { name; loc; kind; has_non_value_flag = _; vars = _ } =
     match kind with
     | `Normal ([], _) -> ppat_construct ~loc (Located.lident ~loc name) None
     | `Normal (_ :: _, _) | `Normal_inline_record _ ->
@@ -79,10 +82,21 @@ module Variant_constructor = struct
     Create.lambda_sig t.loc arg_types body_ty
   ;;
 
+  let has_getter t =
+    (* We cannot generate a getter for GADTs in the case that we have existentially
+       quantified type vars. Further we can't generate _regular_ getter functions
+       when the GADT is non-regular. For the time being we skip generating getters
+       for GADTs altogether.
+
+       We also do not currently support generating getters for types with non-value
+       layouts. *)
+    not (t.has_non_value_flag || is_gadt t)
+  ;;
+
   let to_getter_type t ~lhs:input_type =
-    if is_gadt t (* see getter_opt below for why *)
-    then None
-    else (
+    match has_getter t with
+    | false -> None
+    | true ->
       let variant_for_label (ld : label_declaration) =
         ptyp_variant
           ~loc:ld.pld_loc
@@ -100,10 +114,10 @@ module Variant_constructor = struct
         | `Normal_inline_record (fields, _) ->
           ptyp_tuple ~loc (List.map fields ~f:variant_for_label)
       in
-      Some (ptyp_arrow ~loc Nolabel input_type [%type: [%t result_type] option]))
+      Some (ptyp_arrow ~loc Nolabel input_type [%type: [%t result_type] option])
   ;;
 
-  let to_getter_case { loc; name; kind } =
+  let to_getter_case { loc; name; kind; has_non_value_flag = _; vars = _ } =
     let pat, idents =
       match kind with
       | `Polymorphic None -> ppat_variant ~loc name None, []
@@ -149,30 +163,76 @@ let variant_name_to_string v =
 ;;
 
 module Inspect = struct
+  let non_value_row_field = Attribute.declare_flag "variants.non_value" Rtag
+
+  let non_value_constructor_declaration =
+    Attribute.declare_flag "variants.non_value" Constructor_declaration
+  ;;
+
   let row_field loc rf : Variant_constructor.t =
+    let has_non_value_flag = Attribute.has_flag non_value_row_field rf in
     match rf.prf_desc with
     | Rtag ({ txt = name; _ }, true, _) | Rtag ({ txt = name; _ }, _, []) ->
-      { name; loc; kind = `Polymorphic None }
+      { name; loc; has_non_value_flag; kind = `Polymorphic None; vars = [] }
     | Rtag ({ txt = name; _ }, false, tp :: _) ->
-      { name; loc; kind = `Polymorphic (Some tp) }
+      { name; loc; has_non_value_flag; kind = `Polymorphic (Some tp); vars = [] }
     | Rinherit _ ->
       Location.raise_errorf
         ~loc
         "ppx_variants_conv: polymorphic variant inclusion is not supported"
   ;;
 
+  (* Constructors that use GADT syntax have their own namespace of type variables. We
+     alpha-rename because we combine these types for the signatures of derived functions
+     like [fold] and [iter].
+
+     For example, in [type _ t = F64 : ('a : float64) . 'a t | V : 'a t], there are two
+     distinct type variables called ['a]. For the first constructor, this function returns
+     [F64 : ('fresh1 : float64) . 'fresh1 t] and [[("fresh1", Some float64)]]. For the
+     second, this returns [V : 'fresh2 t] and [[("fresh2", None)]].
+  *)
+  let alpha_rename_if_gadt cd =
+    if Option.is_some cd.pcd_res
+    then (
+      let cd, renaming =
+        Alpha_renaming.fold_map#constructor_declaration cd Alpha_renaming.empty
+      in
+      let pcd_vars =
+        Ppxlib_jane.Shim.Constructor_declaration.extract_vars_with_jkind_annotations cd
+      in
+      let bound_vars = List.map pcd_vars ~f:(fun (s, jkind) -> s.txt, jkind) in
+      let bound_vars_names = List.map ~f:fst bound_vars |> Set.of_list (module String) in
+      (* All free vars not bound get jkind [None] *)
+      let free_vars_names =
+        Alpha_renaming.range renaming
+        |> List.filter ~f:(fun s -> not (Set.mem bound_vars_names s))
+      in
+      cd, bound_vars @ List.map ~f:(fun s -> s, None) free_vars_names)
+    else cd, []
+  ;;
+
   let constructor cd : Variant_constructor.t =
+    let has_non_value_flag = Attribute.has_flag non_value_constructor_declaration cd in
+    let cd, vars = alpha_rename_if_gadt cd in
+    let vars =
+      List.map vars ~f:(fun (s, jkind) ->
+        Ppxlib_jane.Ast_builder.Default.Latest.ptyp_var s jkind ~loc:cd.pcd_loc)
+    in
     let kind =
       match cd.pcd_args with
-      | Pcstr_tuple pcd_args -> `Normal (pcd_args, cd.pcd_res)
+      | Pcstr_tuple pcd_args ->
+        let core_types =
+          List.map pcd_args ~f:Ppxlib_jane.Shim.Pcstr_tuple_arg.to_core_type
+        in
+        `Normal (core_types, cd.pcd_res)
       | Pcstr_record fields -> `Normal_inline_record (fields, cd.pcd_res)
     in
-    { name = cd.pcd_name.txt; loc = cd.pcd_name.loc; kind }
+    { name = cd.pcd_name.txt; loc = cd.pcd_name.loc; has_non_value_flag; kind; vars }
   ;;
 
   let type_decl td =
     let loc = td.ptype_loc in
-    match td.ptype_kind with
+    match Ppxlib_jane.Shim.Type_kind.of_parsetree td.ptype_kind with
     | Ptype_variant cds ->
       let cds = List.map cds ~f:constructor in
       let names_as_string = Hashtbl.create (module String) in
@@ -188,7 +248,8 @@ module Inspect = struct
             name'
             s);
       cds
-    | Ptype_record _ | Ptype_open -> raise_unsupported loc
+    | Ptype_record _ | Ptype_record_unboxed_product _ | Ptype_open ->
+      raise_unsupported loc
     | Ptype_abstract ->
       (match td.ptype_manifest with
        | Some { ptyp_desc = Ptyp_variant (row_fields, Closed, None); _ } ->
@@ -206,10 +267,35 @@ let variants_module = function
   | type_name -> "Variants_of_" ^ type_name
 ;;
 
+(* Extract name and jkind from type parameters, generating names for [_] parameters *)
+let name_params params =
+  List.map params ~f:(fun (ty, _) ->
+    let loc = ty.ptyp_loc in
+    let ptyp_desc = Ppxlib_jane.Shim.Core_type_desc.of_parsetree ty.ptyp_desc in
+    match ptyp_desc with
+    | Ptyp_var (name, jkind) -> { loc; txt = name }, jkind
+    | Ptyp_any jkind -> { loc; txt = gen_symbol ~prefix:"param" () }, jkind
+    | _ ->
+      Location.raise_errorf
+        ~loc
+        "Error in ppx_variants_conv: expected either a wildcard (e.g. _) or variable \
+         (e.g. 'a), but found a different type parameter construct: %s"
+        (Ppxlib_jane.Language_feature_name.of_core_type_desc ptyp_desc))
+;;
+
 module Gen_sig = struct
   let label_arg _loc name ty = Asttypes.Labelled (variant_name_to_string name), ty
 
-  let val_ ~loc name type_ =
+  let val_ ~loc ~univars name type_ =
+    let type_ =
+      match univars with
+      | [] -> type_
+      | _ ->
+        let univars =
+          List.map univars ~f:Ppxlib_jane.get_type_param_name_and_jkind_of_core_type
+        in
+        Ppxlib_jane.Ast_builder.Default.ptyp_poly ~loc univars type_
+    in
     psig_value ~loc (value_description ~loc ~name:(Located.mk ~loc name) ~type_ ~prim:[])
   ;;
 
@@ -222,7 +308,7 @@ module Gen_sig = struct
     label_arg loc v.Variant_constructor.name (f ~variant)
   ;;
 
-  let v_fold_fun ~variant_type loc variants =
+  let v_fold_fun ~variant_type ~params loc variants =
     let acc i = ptyp_var ~loc ("acc__" ^ Int.to_string i) in
     let f i v =
       variant_arg
@@ -233,17 +319,49 @@ module Gen_sig = struct
     let types = List.mapi variants ~f in
     let init_ty = label_arg loc "init" (acc 0) in
     let t = Create.lambda_sig loc (init_ty :: types) (acc (List.length variants)) in
-    val_ ~loc "fold" t
+    let vars_in_gadt_cases = List.concat_map variants ~f:(fun v -> v.vars) in
+    (* Universally quantifying all type variables allows us to give jkind annotations to
+       type variables. There are a few sources of type variables here.
+
+        1. Non-gadt constructors share the type variables of the type constructor, [params].
+        2. GADT constuctors each have their own scope, whose variables are alpha renamed
+            then stored in each [Variant_constructor.t]'s [vars] field.
+        3. We use [acc] to create new variables.
+
+       For example, consider [type 'a t = A of 'a | B : 'a -> 'a t].
+
+       [A]'s ['a] is the same as the type parameter, but [B]'s ['a] is actually in its own
+       scope (and gets alpha-renamed in [alpha_rename_if_gadt]). Thus, we generate the
+       following.
+
+       {[
+         val fold
+           : 'acc__0 'acc__1 'acc__2 'a 'a__001_.
+           init:'acc__0
+           -> a:('acc__0 -> ('a -> 'a t) Variantslib.Variant.t -> 'acc__1)
+           -> b:('acc__1 -> ('a__001_ -> 'a__001_ t) Variantslib.Variant.t -> 'acc__2)
+           -> 'acc__2
+       ]}
+
+       ['a] comes from [params] and ['a__001_] comes from [vars_in_gadt_cases].
+    *)
+    let univars =
+      List.init (List.length variants + 1) ~f:acc @ params @ vars_in_gadt_cases
+    in
+    val_ ~loc ~univars "fold" t
   ;;
 
-  let v_iter_fun ~variant_type loc variants =
+  let v_iter_fun ~variant_type ~params loc variants =
     let f = variant_arg ~variant_type (fun ~variant -> [%type: [%t variant] -> unit]) in
     let types = List.map variants ~f in
+    (* See note in [v_fold_fun] *)
+    let vars_in_gadt_cases = List.concat_map variants ~f:(fun v -> v.vars) in
+    let univars = params @ vars_in_gadt_cases in
     let t = Create.lambda_sig loc types [%type: unit] in
-    val_ ~loc "iter" t
+    val_ ~loc ~univars "iter" t
   ;;
 
-  let v_map_fun_opt ~variant_type loc variants =
+  let v_map_fun_opt ~variant_type ~params loc variants =
     let module V = Variant_constructor in
     if List.exists variants ~f:V.is_gadt
     then None
@@ -261,10 +379,11 @@ module Gen_sig = struct
       in
       let types = List.map variants ~f in
       let t = Create.lambda_sig loc ((Nolabel, variant_type) :: types) result_type in
-      Some (val_ ~loc "map" t))
+      let univars = [%type: 'result__] :: params in
+      Some (val_ ~loc ~univars "map" t))
   ;;
 
-  let v_make_matcher_fun_opt ~variant_type loc variants =
+  let v_make_matcher_fun_opt ~variant_type ~params loc variants =
     let module V = Variant_constructor in
     if List.exists variants ~f:V.is_gadt
     then None
@@ -294,7 +413,10 @@ module Gen_sig = struct
           [%type:
             ([%t variant_type] -> [%t result_type]) * [%t acc (List.length variants)]]
       in
-      Some (val_ ~loc "make_matcher" t))
+      let univars =
+        ([%type: 'result__] :: List.init (List.length variants + 1) ~f:acc) @ params
+      in
+      Some (val_ ~loc ~univars "make_matcher" t))
   ;;
 
   let v_descriptions ~variant_type:_ loc _ =
@@ -309,20 +431,23 @@ module Gen_sig = struct
     val_ ~loc "to_name" [%type: [%t variant_type] -> string]
   ;;
 
-  let variant ~variant_type ~ty_name loc variants =
+  let variant ~variant_type ~ty_name ~params loc variants =
     let tester_type = [%type: [%t variant_type] -> bool] in
     let helpers, variant_defs =
       List.unzip
         (List.map variants ~f:(fun v ->
            let module V = Variant_constructor in
+           let univars = params @ v.V.vars in
            let return_ty = V.return_ty v ~variant_type in
            let constructor_type = V.to_fun_type v ~rhs:return_ty in
            let getter_type_opt = V.to_getter_type v ~lhs:return_ty in
            let name = variant_name_to_string v.V.name in
-           ( ( val_ ~loc name constructor_type
-             , val_ ~loc ("is_" ^ name) tester_type
-             , Option.map getter_type_opt ~f:(val_ ~loc (name ^ "_val")) )
-           , val_ ~loc name [%type: [%t constructor_type] Variantslib.Variant.t] )))
+           ( ( val_ ~loc ~univars name constructor_type
+             , val_ ~loc ~univars ("is_" ^ name) tester_type
+             , Option.map getter_type_opt ~f:(val_ ~loc ~univars:params (name ^ "_val"))
+             )
+           , val_ ~loc ~univars name [%type: [%t constructor_type] Variantslib.Variant.t]
+           )))
     in
     let constructors, testers, getters = List.unzip3 helpers in
     constructors
@@ -338,13 +463,13 @@ module Gen_sig = struct
                   ~loc
                   (variant_defs
                    @ List.filter_opt
-                       [ Some (v_fold_fun ~variant_type loc variants)
-                       ; Some (v_iter_fun ~variant_type loc variants)
-                       ; v_map_fun_opt ~variant_type loc variants
-                       ; v_make_matcher_fun_opt ~variant_type loc variants
-                       ; Some (v_to_rank_fun ~variant_type loc variants)
-                       ; Some (v_to_name_fun ~variant_type loc variants)
-                       ; Some (v_descriptions ~variant_type loc variants)
+                       [ Some (v_fold_fun ~variant_type ~params loc variants)
+                       ; Some (v_iter_fun ~variant_type ~params loc variants)
+                       ; v_map_fun_opt ~variant_type ~params loc variants
+                       ; v_make_matcher_fun_opt ~variant_type ~params loc variants
+                       ; Some (v_to_rank_fun ~variant_type ~univars:params loc variants)
+                       ; Some (v_to_name_fun ~variant_type ~univars:params loc variants)
+                       ; Some (v_descriptions ~variant_type ~univars:params loc variants)
                        ])))
       ]
   ;;
@@ -352,8 +477,13 @@ module Gen_sig = struct
   let variants_of_td td =
     let ty_name = td.ptype_name.txt in
     let loc = td.ptype_loc in
-    let variant_type = core_type_of_type_declaration td in
-    variant ~variant_type ~ty_name loc (Inspect.type_decl td)
+    let params = name_params td.ptype_params in
+    let params =
+      List.map params ~f:(fun (name, jkind) ->
+        Ppxlib_jane.Ast_builder.Default.Latest.ptyp_var ~loc name.txt jkind)
+    in
+    let variant_type = ptyp_constr ~loc (Located.map lident td.ptype_name) params in
+    variant ~variant_type ~ty_name ~params loc (Inspect.type_decl td)
   ;;
 
   let generate ~loc ~path:_ (rec_flag, tds) =
@@ -370,41 +500,22 @@ module Gen_sig = struct
 end
 
 module Gen_str = struct
-  (** Replace type variables with locally abstract type, say ['a] with [a], and return the
-      set of locally abstract types created this way. *)
-  let newtypes =
-    let newtype_visitor =
-      object
-        inherit [label list] Ast_traverse.fold_map as super
-
-        method! core_type core_type acc =
-          match core_type.ptyp_desc with
-          | Ptyp_var label ->
-            let loc = core_type.ptyp_loc in
-            let ty = ptyp_constr ~loc { loc; txt = Longident.Lident label } [] in
-            ty, label :: acc
-          | Ptyp_any ->
-            let label = gen_symbol () in
-            let loc = core_type.ptyp_loc in
-            let ty = ptyp_constr ~loc { loc; txt = Longident.Lident label } [] in
-            ty, label :: acc
-          | _ -> super#core_type core_type acc
-      end
+  let locally_abstract_match loc cases ~td =
+    let params = name_params td.ptype_params in
+    let variant_ty =
+      ptyp_constr
+        ~loc
+        (Located.map lident td.ptype_name)
+        (List.map params ~f:(fun (name, _) ->
+           ptyp_constr ~loc { loc; txt = Longident.Lident name.txt } []))
     in
-    fun ty ->
-      let ty, labels = newtype_visitor#core_type ty [] in
-      ty, List.dedup_and_sort ~compare:String.compare labels
-  ;;
-
-  let locally_abstract_match loc cases ~variant_ty =
-    let variant_ty, lbls = newtypes variant_ty in
     let match_expr = pexp_match ~loc [%expr t] cases in
     let fun_expr = [%expr fun (t : [%t variant_ty]) -> [%e match_expr]] in
-    List.fold_right lbls ~init:fun_expr ~f:(fun txt acc ->
-      pexp_newtype ~loc { txt; loc } acc)
+    List.fold_right params ~init:fun_expr ~f:(fun (name, jkind) acc ->
+      Ppxlib_jane.Ast_builder.Default.pexp_newtype ~loc name jkind acc)
   ;;
 
-  let helpers_and_variants loc ~variant_ty variants =
+  let helpers_and_variants loc ~td variants =
     let multiple_cases = List.length variants > 1 in
     let module V = Variant_constructor in
     let helpers, variants =
@@ -463,7 +574,7 @@ module Gen_str = struct
           in
           let body =
             if Variant_constructor.is_gadt v
-            then locally_abstract_match loc cases ~variant_ty
+            then locally_abstract_match loc cases ~td
             else pexp_function ~loc cases
           in
           [%stri let [%p pvar ~loc name] = [%e body] [@@warning "-4"]]
@@ -479,11 +590,7 @@ module Gen_str = struct
           match_fun ~name ~true_case ~false_expr:[%expr false]
         in
         let getter_opt =
-          (* We cannot generate a getter for GADTs in the case that we have existentially
-             quantified type vars. Further we can't generate _regular_ getter functions
-             when the GADT is non-regular. For the time being we skip generating getters
-             for GADTs altogether *)
-          if Variant_constructor.is_gadt v
+          if not (Variant_constructor.has_getter v)
           then None
           else (
             let name = uncapitalized ^ "_val" in
@@ -670,34 +777,32 @@ module Gen_str = struct
     List.map pattern_and_rhs ~f:(fun (pattern, rhs) -> case ~guard:None ~lhs:pattern ~rhs)
   ;;
 
-  let v_to_rank loc variants ~variant_ty =
+  let v_to_rank loc variants ~td =
     let cases =
       case_analysis_ignoring_values variants ~f:(fun ~rank ~name:_ -> eint ~loc rank)
     in
     let body =
       if List.exists variants ~f:Variant_constructor.is_gadt
-      then locally_abstract_match loc cases ~variant_ty
+      then locally_abstract_match loc cases ~td
       else pexp_function ~loc cases
     in
     [%stri let to_rank = [%e body]]
   ;;
 
-  let v_to_name loc variants ~variant_ty =
+  let v_to_name loc variants ~td =
     let cases =
       case_analysis_ignoring_values variants ~f:(fun ~rank:_ ~name -> estring ~loc name)
     in
     let body =
       if List.exists variants ~f:Variant_constructor.is_gadt
-      then locally_abstract_match loc cases ~variant_ty
+      then locally_abstract_match loc cases ~td
       else pexp_function ~loc cases
     in
     [%stri let to_name = [%e body]]
   ;;
 
-  let variant ~variant_name ~variant_ty loc ty =
-    let constructors, testers, getters, variants =
-      helpers_and_variants loc ~variant_ty ty
-    in
+  let variant ~variant_name ~td loc ty =
+    let constructors, testers, getters, variants = helpers_and_variants loc ~td ty in
     constructors
     @ testers
     @ getters
@@ -715,8 +820,8 @@ module Gen_str = struct
                        ; Some (v_iter_fun loc ty)
                        ; v_map_fun_opt loc ty
                        ; v_make_matcher_fun_opt loc ty
-                       ; Some (v_to_rank loc ty ~variant_ty)
-                       ; Some (v_to_name loc ty ~variant_ty)
+                       ; Some (v_to_rank loc ty ~td)
+                       ; Some (v_to_name loc ty ~td)
                        ; Some (v_descriptions loc ty)
                        ])))
       ]
@@ -725,8 +830,7 @@ module Gen_str = struct
   let variants_of_td td =
     let variant_name = td.ptype_name.txt in
     let loc = td.ptype_loc in
-    let variant_ty = core_type_of_type_declaration td in
-    variant ~variant_name ~variant_ty loc (Inspect.type_decl td)
+    variant ~variant_name ~td loc (Inspect.type_decl td)
   ;;
 
   let generate ~loc ~path:_ (rec_flag, tds) =

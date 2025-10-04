@@ -37,6 +37,7 @@ let with_server_and_client' ~rpc ~f ~on_writer =
     Rpc.Implementations.create_exn
       ~implementations:[ implementation ]
       ~on_unknown_rpc:`Raise
+      ~on_exception:Log_on_background_exn
   in
   let%bind server =
     Rpc.Connection.serve
@@ -80,15 +81,15 @@ let%expect_test "[Direct_stream_writer.Expert.schedule_write] never becomes dete
       in
       List.init 100 ~f:ignore
       |> List.fold ~init:None ~f:(fun last_scheduled_response () ->
-           match
-             Rpc.Pipe_rpc.Direct_stream_writer.Expert.schedule_write
-               writer
-               ~buf
-               ~pos:0
-               ~len:(Bigstring.length buf)
-           with
-           | `Closed -> last_scheduled_response
-           | `Flushed { g = d } -> Some d)
+        match
+          Rpc.Pipe_rpc.Direct_stream_writer.Expert.schedule_write
+            writer
+            ~buf
+            ~pos:0
+            ~len:(Bigstring.length buf)
+        with
+        | `Closed -> last_scheduled_response
+        | `Flushed { global = d } -> Some d)
       |> Ivar.fill_exn scheduled_response)
     ~f:(fun (_ : (Socket.Address.Inet.t, int) Tcp.Server.t) connection ->
       let%bind (_ : Bigstring.t Pipe.Reader.t), metadata =
@@ -102,15 +103,63 @@ let%expect_test "[Direct_stream_writer.Expert.schedule_write] never becomes dete
       [%expect {| (Empty) |}];
       let%bind reason = Rpc.Pipe_rpc.close_reason metadata in
       print_s ([%sexp_of: Rpc.Pipe_close_reason.t] reason);
-      [%expect {| (Error (Connection_closed (Rpc.Connection.close))) |}];
+      [%expect
+        {|
+        (Error
+         (Connection_closed
+          ((("Connection closed by local side:" Rpc.Connection.close)
+            (connection_description ("Client connected via TCP" 0.0.0.0:PORT))))))
+        |}];
       return ())
+;;
+
+let%expect_test "[Direct_stream_writer.Expert.schedule_write] raises if stopped before \
+                 the implementation completes"
+  =
+  Dynamic.set_root Backtrace.elide true;
+  let%map () =
+    with_server_and_client'
+      ~rpc:rpc_with_pushback
+      ~on_writer:(fun writer ->
+        let response = Bigstring.create 1_000 in
+        let buf =
+          Bin_prot.Writer.to_bigstring [%bin_writer: Bigstring.Stable.V1.t] response
+        in
+        let (`Closed | `Flushed { global = (_ : unit Deferred.t) }) =
+          Rpc.Pipe_rpc.Direct_stream_writer.Expert.schedule_write
+            writer
+            ~buf
+            ~pos:0
+            ~len:(Bigstring.length buf)
+        in
+        Rpc.Pipe_rpc.Direct_stream_writer.close writer)
+      ~f:(fun (_ : (Socket.Address.Inet.t, int) Tcp.Server.t) connection ->
+        let%bind (_ : Bigstring.t Pipe.Reader.t), (_ : Rpc.Pipe_rpc.Metadata.t) =
+          Rpc.Pipe_rpc.dispatch_exn rpc_with_pushback connection ()
+        in
+        let%bind () =
+          Rpc.Connection.close_reason connection ~on_close:`finished
+          >>| [%sexp_of: Info.t]
+          >>| print_s
+        in
+        [%expect
+          {|
+          (("Connection closed by remote side:"
+            ("exn raised in RPC connection loop"
+             (monitor.ml.Error ("Ivar.fill_exn called on full ivar" (t (Full _)))
+              ("<backtrace elided in test>" "Caught by monitor RPC connection loop"))))
+           (connection_description ("Client connected via TCP" 0.0.0.0:PORT)))
+          |}];
+        return ())
+  in
+  Dynamic.set_root Backtrace.elide false
 ;;
 
 let%expect_test "[Direct_stream_writer.Group]: [send_last_value_on_add] sends values \
                  written with [write] and [Expert.write]"
   =
   let group =
-    Rpc.Pipe_rpc.Direct_stream_writer.Group.create ~send_last_value_on_add:true ()
+    Rpc.Pipe_rpc.Direct_stream_writer.Group.create_sending_last_value_on_add ()
   in
   with_server_and_client group ~rpc ~f:(fun _ connection ->
     let%bind pipe1, (_ : Rpc.Pipe_rpc.Metadata.t) =
@@ -146,7 +195,7 @@ let%expect_test "[Direct_stream_writer.Group]: [send_last_value_on_add] will sav
                  written when there are no writers"
   =
   let group =
-    Rpc.Pipe_rpc.Direct_stream_writer.Group.create ~send_last_value_on_add:true ()
+    Rpc.Pipe_rpc.Direct_stream_writer.Group.create_sending_last_value_on_add ()
   in
   let last_value = ref 0 in
   let write_and_record_last_value value =
@@ -194,7 +243,7 @@ let%expect_test "[Direct_stream_writer.Group]: [send_last_value_on_add] works wi
       ()
   in
   let group =
-    Rpc.Pipe_rpc.Direct_stream_writer.Group.create ~send_last_value_on_add:true ()
+    Rpc.Pipe_rpc.Direct_stream_writer.Group.create_sending_last_value_on_add ()
   in
   with_server_and_client group ~rpc ~f:(fun _ connection ->
     let%bind pipe1, (_ : Rpc.Pipe_rpc.Metadata.t) =

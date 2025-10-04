@@ -1,4 +1,6 @@
-(** This module extends {{!Base.Bytes}[Base.Bytes]}. *)
+@@ portable
+
+(** This module extends {{!Base.Bytes} [Base.Bytes]}. *)
 
 open! Import
 
@@ -24,12 +26,13 @@ val gen_with_length : int -> char Quickcheck.Generator.t -> t Quickcheck.Generat
     interface uniformity with other stable types. *)
 module Stable : sig
   module V1 : sig
-    type nonrec t = t [@@deriving bin_io ~localize, equal]
+    type nonrec t = t [@@deriving bin_io ~localize, equal ~localize, globalize]
     type nonrec comparator_witness = comparator_witness
 
-    include
+    include%template
       Stable_module_types.With_stable_witness.S0
-        with type t := t
-        with type comparator_witness := comparator_witness
+      [@mode local]
+      with type t := t
+      with type comparator_witness := comparator_witness
   end
 end

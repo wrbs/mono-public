@@ -5,7 +5,7 @@
 
     This is an IO module for {!Notty}.
 
-    {e 3.16.0 — {{:https://github.com/ocaml/dune }homepage}} *)
+    {e 3.20.2 — {{:https://github.com/ocaml/dune }homepage}} *)
 
 open Notty
 

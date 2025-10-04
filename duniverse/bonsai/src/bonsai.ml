@@ -19,38 +19,41 @@ module Private = struct
   module Path = Path
   module Action = Action
   module Stabilization_tracker = Stabilization_tracker
+  module Enable_computation_watcher = Enable_computation_watcher
   module Node_path = Node_path
   module Graph_info = Graph_info
   module Instrumentation = Instrumentation
-  module Flatten_values = Flatten_values
   module Constant_fold = Constant_fold
   module Skeleton = Skeleton
   module Transform = Transform
   module Linter = Linter
   module Trampoline = Trampoline
   module Annotate_incr = Annotate_incr
+  module Computation_watcher = Computation_watcher
+  module For_proc = Cont.For_proc
 
-  let path = Proc_layer2.path
-  let gather = Eval.gather
+  let path ~(here : [%call_pos]) (local_ graph) = Cont.path ~here graph
+  let gather = Gather.gather
   let pre_process = Pre_process.pre_process
   let reveal_value = Cont.Conv.reveal_value
   let conceal_value = Cont.Conv.conceal_value
   let top_level_handle = Cont.Conv.top_level_handle
   let handle = Cont.Conv.handle
   let perform = Cont.Conv.perform
+  let read = Proc_min.read
   let set_perform_on_exception = Cont.Expert.For_bonsai_internal.set_perform_on_exception
 end
 
-include Proc_layer2
+module Cont = struct
+  include Cont
 
-module For_open = struct
-  module Computation = Computation
-  module Effect = Effect
-  module Value = Value
+  module Bonsai = struct
+    include Cont
+  end
 end
 
-module Cont = Cont
+include Cont
 
-module Arrow_deprecated = struct
-  include Legacy_api
+module For_open = struct
+  module Effect = Effect
 end

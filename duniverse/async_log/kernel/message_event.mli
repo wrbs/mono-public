@@ -9,8 +9,7 @@ open! Import
     (This module's signature is tight / bare to keep the type extensible and
     backwards-compatible with previous behaviour, but this isn't intended to deter any
     users who may wish for an accessor to be added, especially for newer structured info
-    in [Message_sexp.t].)
-*)
+    in [Message_sexp.t].) *)
 type t
 
 val create
@@ -42,6 +41,7 @@ val stringify_message_and_map : t -> f:(string -> string) -> t
 val downgrade_to_unstructured_and_map : t -> f:(Sexp_or_string.t -> Sexp_or_string.t) -> t
 
 val set_level : t -> level:Level.t option -> t
+val map_time : t -> f:(Time_float.t -> Time_float.t) -> t
 val to_serialized_message_lossy : t -> Message.t
 val of_serialized_message : Message.t -> t
 

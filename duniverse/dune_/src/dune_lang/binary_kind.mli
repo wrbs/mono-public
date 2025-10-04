@@ -1,4 +1,5 @@
 (** Linking modes for binaries *)
+open Import
 
 type t =
   | C
@@ -6,11 +7,10 @@ type t =
   | Object
   | Shared_object
   | Plugin
-  | Js
 
 val compare : t -> t -> Ordering.t
 
-include Dune_sexp.Conv.S with type t := t
+include Conv.S with type t := t
 
 val all : t list
 val to_dyn : t -> Dyn.t

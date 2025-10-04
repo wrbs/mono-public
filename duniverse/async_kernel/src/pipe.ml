@@ -15,14 +15,18 @@ module Flushed_result = struct
 
   let equal = [%compare.equal: t]
 
-  let combine (l : t Deferred.t list) =
+  let combine (l : t list) =
+    match List.mem l `Reader_closed ~equal with
+    | true -> `Reader_closed
+    | false -> `Ok
+  ;;
+
+  let wait_and_combine (l : t Deferred.t list) =
     match l with
     | [ x ] -> x
     | l ->
       let%map l = Deferred.all l in
-      (match List.mem l `Reader_closed ~equal with
-       | true -> `Reader_closed
-       | false -> `Ok)
+      combine l
   ;;
 end
 
@@ -63,8 +67,7 @@ end = struct
     { pipe_id : int
     ; (* [values_read] reflects whether values the consumer has read from the pipe have been
          sent downstream or if not, holds an ivar that is to be filled when they are. *)
-      mutable
-        values_read :
+      mutable values_read :
         [ `Have_been_sent_downstream | `Have_not_been_sent_downstream of unit Ivar.t ]
     ; (* [downstream_flushed ()] returns when all prior values that the consumer has
          passed downstream have been flushed all the way down the chain of pipes. *)
@@ -231,7 +234,7 @@ type ('a, 'phantom) t =
   ; (* [closed] is filled when we close the write end of the pipe. *)
     closed : unit Ivar.t
   ; (* [read_closed] is filled when we close the read end of the pipe. *)
-    read_closed : unit Ivar.t
+    read_closed : [ `Closed_while_empty | `Closed_while_not_empty ] Set_once.t
   ; (* [consumers] is a list of all consumers that may be handling values read from the
        pipe. *)
     mutable consumers : Consumer.t list
@@ -251,7 +254,7 @@ let hash t = Hashtbl.hash t.id
 let equal (t1 : (_, _) t) t2 = phys_equal t1 t2
 let compare t1 t2 = Int.compare t1.id t2.id
 let is_closed t = Ivar.is_full t.closed
-let is_read_closed t = Ivar.is_full t.read_closed
+let is_read_closed t = Set_once.is_some t.read_closed
 let closed t = Ivar.read t.closed
 let pushback t = Ivar.read t.pushback
 let length t = Queue.length t.buffer
@@ -330,7 +333,7 @@ let create_internal ~size_budget ~info ~initial_buffer =
     { id = !id_ref
     ; info
     ; closed = Ivar.create ()
-    ; read_closed = Ivar.create ()
+    ; read_closed = Set_once.create ()
     ; size_budget
     ; reserved_space = 0
     ; pushback = Ivar.create ()
@@ -384,14 +387,50 @@ let close t =
     update_pushback t)
 ;;
 
+let consumed_values_sent_downstream_and_flushed t =
+  let closed_while_not_empty =
+    (* Since we've dropped some values from the pipe without sending them to
+       consumers, the consumers will not be aware of the pipe not having been fully
+       consumed.
+       Hence, we're overriding the result with [`Reader_closed] in that case.
+
+       An argument can be made that the consumer should always return
+       `Reader_closed if they've closed the reader, but this code makes sure that
+       the less confusing result is returned regardless.
+    *)
+    Set_once.get t.read_closed
+    |> Option.map ~f:(function
+      | `Closed_while_empty -> `Ok
+      | `Closed_while_not_empty -> `Reader_closed)
+    |> Option.to_list
+  in
+  if List.is_empty t.consumers
+  then return (Flushed_result.combine (`Ok :: closed_while_not_empty))
+  else
+    Flushed_result.wait_and_combine
+      (List.map closed_while_not_empty ~f:Deferred.return
+       @ List.map t.consumers ~f:Consumer.values_sent_downstream_and_flushed)
+;;
+
+let fill_blocked_flushes_on_read_closed t =
+  if not (Queue.is_empty t.blocked_flushes)
+  then (
+    let blocked_flushes = Queue.copy t.blocked_flushes in
+    Queue.clear t.blocked_flushes;
+    let values_flushed = consumed_values_sent_downstream_and_flushed t in
+    Eager_deferred0.upon values_flushed (fun (_ : Flushed_result.t) ->
+      Queue.iter blocked_flushes ~f:(fun flush -> Blocked_flush.fill flush `Reader_closed)))
+;;
+
 let close_read t =
   if !show_debug_messages then eprints "close_read" t [%sexp_of: (_, _) t];
   if !check_invariant then invariant t;
   if not (is_read_closed t)
   then (
-    Ivar.fill_exn t.read_closed ();
-    Queue.iter t.blocked_flushes ~f:(fun flush -> Blocked_flush.fill flush `Reader_closed);
-    Queue.clear t.blocked_flushes;
+    Set_once.set_exn
+      t.read_closed
+      (if is_empty t then `Closed_while_empty else `Closed_while_not_empty);
+    fill_blocked_flushes_on_read_closed t;
     Queue.clear t.buffer;
     t.reserved_space <- 0;
     update_pushback t;
@@ -430,20 +469,6 @@ let create_writer ?size_budget f =
   w
 ;;
 
-let consumed_values_sent_downstream_and_flushed t =
-  if List.is_empty t.consumers
-  then return `Ok
-  else
-    Flushed_result.combine
-      (List.map t.consumers ~f:Consumer.values_sent_downstream_and_flushed)
-;;
-
-let eager_upon d f =
-  match Deferred.peek d with
-  | Some v -> f v
-  | None -> upon d f
-;;
-
 let values_were_read t consumer =
   Option.iter consumer ~f:Consumer.start;
   let values_flushed = lazy (consumed_values_sent_downstream_and_flushed t) in
@@ -451,7 +476,7 @@ let values_were_read t consumer =
     t.blocked_flushes
     ~while_:(fun flush -> t.num_values_read >= flush.fill_when_num_values_read)
     ~f:(fun flush ->
-      eager_upon (force values_flushed) (fun flush_result ->
+      Eager_deferred0.upon (force values_flushed) (fun flush_result ->
         Blocked_flush.fill flush flush_result))
 ;;
 
@@ -741,7 +766,7 @@ let upstream_flushed t =
   else
     Bag.to_list t.upstream_flusheds
     |> List.map ~f:(fun f -> f ())
-    |> Flushed_result.combine
+    |> Flushed_result.wait_and_combine
 ;;
 
 let add_upstream_flushed t upstream_flushed = Bag.add t.upstream_flusheds upstream_flushed
@@ -798,6 +823,7 @@ module Flushed = struct
 end
 
 let fold_gen
+  ?(send_values_downstream = true)
   (read_now : ?consumer:Consumer.t -> _ Reader.t -> _)
   ?(flushed = Flushed.When_value_read)
   t
@@ -830,7 +856,8 @@ let fold_gen
       | `Ok v -> f b v continue
       | `Nothing_available -> values_available t >>> fun _ -> loop b
     and continue b =
-      Option.iter consumer ~f:Consumer.values_sent_downstream;
+      if send_values_downstream
+      then Option.iter consumer ~f:Consumer.values_sent_downstream;
       loop b
     in
     loop init)
@@ -929,6 +956,45 @@ let iter_without_pushback
 
 let drain t = iter' t ~f:(fun _ -> return ())
 let drain_and_count t = fold' t ~init:0 ~f:(fun sum q -> return (sum + Queue.length q))
+
+let iter_parallel ?(continue_on_error = false) ?(rest = `Raise) t ~max_concurrent_jobs ~f =
+  if max_concurrent_jobs <= 0
+  then
+    raise_s [%message "max_concurrent_jobs must be positive" (max_concurrent_jobs : int)];
+  let active_jobs = Bag.create () in
+  let wait_for_all_currently_active_jobs () =
+    Bag.to_list active_jobs |> Deferred.all |> Deferred.ignore_m
+  in
+  let consumer =
+    add_consumer t ~downstream_flushed:(fun () ->
+      let%map () = wait_for_all_currently_active_jobs () in
+      `Ok)
+  in
+  let throttle = Throttle.create' ~rest ~continue_on_error ~max_concurrent_jobs in
+  let f () a loop =
+    let complete = Throttle.enqueue' throttle (fun () -> f a) in
+    let elt = Bag.add active_jobs complete in
+    Consumer.values_sent_downstream consumer;
+    upon complete (fun result ->
+      Bag.remove active_jobs elt;
+      match result with
+      | `Ok () -> ()
+      | `Aborted -> (* This case should be unreachable, we don't kill the throttle *) ()
+      | `Raised exn -> raise exn);
+    Eager_deferred0.upon (Throttle.capacity_available throttle) loop
+  in
+  let%bind () =
+    fold_gen
+      ~send_values_downstream:false
+      read_now
+      ~flushed:(Consumer consumer)
+      t
+      ~init:()
+      ~f
+  in
+  (* By this point all remaining jobs must be in the [active_jobs] bag. *)
+  wait_for_all_currently_active_jobs ()
+;;
 
 let read_all input =
   let result = Queue.create () in
@@ -1069,7 +1135,18 @@ let map' ?max_queue_length input ~f =
   map_gen (read_now' ?max_queue_length) write' input ~f:(fun q k -> f q >>> k)
 ;;
 
-let map input ~f = map_gen read_now write input ~f:(fun a k -> k (f a))
+let map ?(max_batch_size = 1) input ~f =
+  if max_batch_size = 1
+  then map_gen read_now write input ~f:(fun a k -> k (f a))
+  else
+    map_gen (read_now' ~max_queue_length:max_batch_size) write' input ~f:(fun q k ->
+      (* The implementation is inlined here to avoid allocating a
+         bunch of options to return to filter_map in the happy path. *)
+      let result = Queue.create () in
+      Queue.iter q ~f:(fun a ->
+        if not (is_read_closed input) then Queue.enqueue result (f a));
+      k result)
+;;
 
 let concat_map_list ?max_queue_length input ~f =
   map_gen (read_now' ?max_queue_length) write' input ~f:(fun q k ->
@@ -1296,6 +1373,12 @@ let concat inputs =
     Deferred.List.iter ~how:`Sequential inputs ~f:(fun input -> transfer_id input w))
 ;;
 
+let join_deferred input =
+  create_reader_not_close_on_exception (fun writer ->
+    let%bind input in
+    transfer' input writer ~f:return)
+;;
+
 let fork t ~pushback_uses =
   let reader0, writer0 = create () in
   let reader1, writer1 = create () in
@@ -1304,13 +1387,14 @@ let fork t ~pushback_uses =
     add_consumer t ~downstream_flushed:(fun () ->
       let some_reader_was_closed = !some_reader_was_closed in
       match%map
-        Flushed_result.combine [ downstream_flushed writer0; downstream_flushed writer1 ]
+        Flushed_result.wait_and_combine
+          [ downstream_flushed writer0; downstream_flushed writer1 ]
       with
       | `Reader_closed -> `Reader_closed
       | `Ok ->
         (* In this case, there could have been no pending items in [writer0] nor in
            [writer1], in which case we could have had a closed pipe that missed some
-           writes, but [Flushed_result.combine] would still have returned [`Ok] *)
+           writes, but [Flushed_result.wait_and_combine] would still have returned [`Ok] *)
         if some_reader_was_closed then `Reader_closed else `Ok)
   in
   don't_wait_for

@@ -5,8 +5,11 @@
  (name async_js_test)
  (public_name async_js.async_test)
  (libraries js_of_ocaml async_kernel async_js
-   bonsai_test_handle_garbage_collector)
+   bonsai_test_handle_garbage_collector ppx_expect.config_types)
  (js_of_ocaml
   (javascript_files ./runtime.js))
  (preprocess
-  (pps ppx_jane)))
+  (pps ppx_jane))
+ (wasm_of_ocaml
+  (javascript_files ./runtime.js)
+  (wasm_files runtime.wat)))

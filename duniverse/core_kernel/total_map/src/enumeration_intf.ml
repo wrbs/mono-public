@@ -16,15 +16,15 @@ module type S_fc = sig
   include S with type t := enumerable_t
 end
 
-module type Enumeration = sig
+module type Enumeration = sig @@ portable
   type ('a, 'witness) t = private { all : 'a list }
 
   module type S = S with type ('a, 'witness) enumeration := ('a, 'witness) t
   module type S_fc = S_fc with type ('a, 'witness) enumeration := ('a, 'witness) t
 
-  module Make (T : sig
-    type t [@@deriving enumerate]
-  end) : S with type t := T.t
+  module%template.portable Make (T : sig
+      type t [@@deriving enumerate]
+    end) : S with type t := T.t
 
   val make : all:'a list -> (module S_fc with type enumerable_t = 'a)
 end

@@ -6,6 +6,7 @@ open! Import
 module Display = struct
   type t =
     | Short_box
+    | Medium_box
     | Tall_box
     | Line
     | Blank
@@ -13,7 +14,7 @@ module Display = struct
   [@@deriving compare, sexp_of]
 end
 
-module type Grid = sig
+module type Grid = sig @@ portable
   module Display = Display
 
   type t [@@deriving sexp_of]

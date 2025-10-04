@@ -1,12 +1,12 @@
 open! Import
 open! Std_internal
 
-module type S = sig
+module type S = sig @@ portable
   type t [@@deriving hash]
 
-  include Identifiable with type t := t
+  include%template Identifiable.S [@mode local] with type t := t
 
-  (** [create index ~min ~max] raises if [index < min || index > max].  The resulting [t]
+  (** [create index ~min ~max] raises if [index < min || index > max]. The resulting [t]
       is only equal to other [t] if all three fields are the same. *)
   val create : int -> min:int -> max:int -> t
 
@@ -28,14 +28,15 @@ module type S = sig
   val max_index : t -> int
 
   (** [num_indexes t] returns the number of valid indexes in the range. Equal to
-      [max_index t - min_index t + 1]*)
+      [max_index t - min_index t + 1] *)
   val num_indexes : t -> int
 
   module Stable : sig
-    module V1 :
+    module%template V1 :
       Stable_comparable.With_stable_witness.V1
-        with type t = t
-        with type comparator_witness = comparator_witness
+      [@mode local]
+      with type t = t
+      with type comparator_witness = comparator_witness
   end
 end
 
@@ -54,7 +55,7 @@ module type Bounded_index = sig
   module type S = S
 
   module Make (M : sig
-    val label : string
-    val module_name : string
-  end) : S
+      val label : string
+      val module_name : string
+    end) : S
 end

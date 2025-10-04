@@ -109,7 +109,7 @@ module Render = struct
     assert (new_pos = st.current);
     if line_comment then st.last_comment_row <- st.current.row;
     st.row_shift
-      <- { st.row_shift with Rel_pos.row = st.row_shift.Rel_pos.row + row_delta }
+    <- { st.row_shift with Rel_pos.row = st.row_shift.Rel_pos.row + row_delta }
   ;;
 
   let rec render_t putc ~anchor (st : state) t =
@@ -157,7 +157,7 @@ module Forget = struct
   (* In cps to prevent non-tail recursion.
      The polymorphism in the signature ensures that each function returns
      only through the continuation. *)
-  module Cps : sig
+  module Cps : sig @@ portable
     val forget_t : t -> (Type.t -> 'r) -> 'r
     val forget_toc : t_or_comment -> (Type.t option -> 'r) -> 'r
     val forget_tocs : t_or_comment list -> (Type.t list -> 'r) -> 'r

@@ -3,8 +3,11 @@ open! Import
 
 type 'a t = int
 
-module type S = Syscall_result_intf.S with type 'a syscall_result := 'a t
-module type Arg = Syscall_result_intf.Arg
+[%%template
+[@@@mode.default m = (global, local)]
+
+module type S = Syscall_result_intf.S [@mode m] with type 'a syscall_result := 'a t
+module type Arg = Syscall_result_intf.Arg [@mode m]]
 
 let create_error err = -Unix_error.to_errno err
 let is_ok t = Int.O.(t >= 0)
@@ -12,18 +15,13 @@ let is_error t = Int.O.(t < 0)
 
 let error_code_exn t =
   if is_ok t
-  then
-    failwiths
-      ~here:[%here]
-      "Syscall_result.error_code_exn received success value"
-      t
-      [%sexp_of: int]
+  then failwiths "Syscall_result.error_code_exn received success value" t [%sexp_of: int]
   else -t
 ;;
 
 let error_exn t = Unix_error.of_errno (error_code_exn t)
 
-module Make (M : Arg) () = struct
+module%template [@mode m = (global, local)] Make (M : Arg [@mode m]) () = struct
   (* The only reason to have one of these per functor invocation is to make it trivial to
      get the type right. *)
   let preallocated_errnos : (_, Unix_error.t) Result.t array =
@@ -41,8 +39,8 @@ module Make (M : Arg) () = struct
 
   type nonrec t = M.t t
 
-  let compare = Int.compare
-  let equal = Int.equal
+  let[@mode m = (global, m)] compare = (Int.compare [@mode m])
+  let[@mode m = (global, m)] equal = (Int.equal [@mode m])
 
   let preallocated_ms =
     let rec loop i rev_acc =
@@ -90,17 +88,12 @@ module Make (M : Arg) () = struct
   let ok_exn t =
     if is_ok t
     then M.of_int_exn t
-    else failwiths ~here:[%here] "Syscall_result.ok_exn received error value" t sexp_of_t
+    else failwiths "Syscall_result.ok_exn received error value" t sexp_of_t
   ;;
 
   let error_code_exn t =
     if is_ok t
-    then
-      failwiths
-        ~here:[%here]
-        "Syscall_result.error_code_exn received success value"
-        t
-        sexp_of_t
+    then failwiths "Syscall_result.error_code_exn received success value" t sexp_of_t
     else -t
   ;;
 
@@ -108,12 +101,7 @@ module Make (M : Arg) () = struct
 
   let reinterpret_error_exn t =
     if is_ok t
-    then
-      failwiths
-        ~here:[%here]
-        "Syscall_result.cast_error_exn received success value"
-        t
-        sexp_of_t
+    then failwiths "Syscall_result.cast_error_exn received success value" t sexp_of_t
     else t
   ;;
 
@@ -149,19 +137,19 @@ module Make (M : Arg) () = struct
   end
 end
 
-module Int = Make (Int) ()
+module Int = Make [@mode local] (Int) ()
 
 module Unit =
-  Make
+  Make [@mode local]
     (struct
-      type t = unit [@@deriving sexp_of, compare]
+      type t = unit [@@deriving sexp_of, compare ~localize]
 
       let of_int_exn n = assert (n = 0)
       let to_int () = 0
     end)
     ()
 
-module File_descr = Make (File_descr) ()
+module File_descr = Make [@mode local] (File_descr) ()
 
 let unit = Unit.create_ok ()
 let ignore_ok_value t = Core.Int.min t 0

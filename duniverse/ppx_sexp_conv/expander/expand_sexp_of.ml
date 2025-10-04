@@ -1,28 +1,61 @@
-open! Base
+open! Stdppx
 open! Ppxlib
 open Ast_builder.Default
 open Helpers
 open Lifted.Monad_infix
 
+let fmt ~localize : _ format =
+  match localize with
+  | false -> "sexp_of_%s"
+  | true -> "sexp_of_%s__local"
+;;
+
+let list_map ~loc ~localize =
+  match localize with
+  | false -> [%expr Sexplib0.Sexp_conv.list_map]
+  | true -> [%expr Sexplib0.Sexp_conv.list_map__local]
+;;
+
+let sexp_of_opaque ~loc ~localize =
+  match localize with
+  | false -> [%expr (Sexplib0.Sexp_conv.sexp_of_opaque : _ -> _)]
+  | true -> [%expr (Sexplib0.Sexp_conv.sexp_of_opaque : _ @ local -> _ @ local)]
+;;
+
 (* Generates the signature for type conversion to S-expressions *)
 module Sig_generate_sexp_of = struct
-  let type_of_sexp_of ~loc t =
+  let type_of_sexp_of ~loc t ~localize =
     let loc = { loc with loc_ghost = true } in
-    [%type: [%t t] -> Sexplib0.Sexp.t]
+    match localize with
+    | false -> [%type: [%t t] -> Sexplib0.Sexp.t]
+    | true -> [%type: [%t t] @ local -> Sexplib0.Sexp.t @ local]
   ;;
 
-  let mk_type td = combinator_type_of_type_declaration td ~f:type_of_sexp_of
+  let mk_type td ~localize ~universally_quantify_if_jkind_annot =
+    let td = name_type_params_in_td td in
+    let typ = combinator_type_of_type_declaration td ~f:(type_of_sexp_of ~localize) in
+    let vars = List.map td.ptype_params ~f:Ppxlib_jane.get_type_param_name_and_jkind in
+    if universally_quantify_if_jkind_annot
+       && List.exists vars ~f:(fun (_, jkind) -> Option.is_some jkind)
+    then Ppxlib_jane.Ast_builder.Default.ptyp_poly ~loc:td.ptype_loc vars typ
+    else typ
+  ;;
 
-  let mk_sig ~loc:_ ~path:_ (_rf, tds) =
-    List.map tds ~f:(fun td ->
-      let loc = td.ptype_loc in
-      psig_value
-        ~loc
-        (value_description
-           ~loc
-           ~name:(Located.map (( ^ ) "sexp_of_") td.ptype_name)
-           ~type_:(mk_type td)
-           ~prim:[]))
+  let mk_val td ~localize ~portable =
+    let loc = td.ptype_loc in
+    let name = Located.map (Printf.sprintf (fmt ~localize)) td.ptype_name in
+    psig_value
+      ~loc
+      (Ppxlib_jane.Ast_builder.Default.value_description
+         ~loc
+         ~name
+         ~type_:(mk_type td ~localize ~universally_quantify_if_jkind_annot:true)
+         ~modalities:(if portable then [ Ppxlib_jane.Modality "portable" ] else [])
+         ~prim:[])
+  ;;
+
+  let mk_sig ~loc:_ ~path:_ (_rf, tds) ~localize ~portable =
+    List.map tds ~f:(mk_val ~localize ~portable)
   ;;
 
   let mk_sig_exn ~loc:_ ~path:_ _te = []
@@ -32,71 +65,80 @@ module Str_generate_sexp_of = struct
   module Types_being_defined = struct
     type t =
       | Nonrec
-      | Rec of Set.M(String).t
+      | Rec of String.Set.t
 
     let to_rec_flag = function
       | Nonrec -> Nonrecursive
       | Rec _ -> Recursive
     ;;
 
-    let to_values_being_defined = function
-      | Nonrec -> Set.empty (module String)
-      | Rec types -> Set.map (module String) types ~f:(fun s -> "sexp_of_" ^ s)
+    let to_values_being_defined t ~localize =
+      match t with
+      | Nonrec -> String.Set.empty
+      | Rec types -> String.Set.map (Printf.sprintf (fmt ~localize)) types
     ;;
   end
 
-  let sexp_of_type_constr ~loc id args =
-    type_constr_conv ~loc id ~f:(fun s -> "sexp_of_" ^ s) args
+  let sexp_of_pattern id ~localize =
+    Ppx_helpers.type_constr_conv_pattern id ~f:(Printf.sprintf (fmt ~localize))
+  ;;
+
+  let sexp_of_type_constr ~loc id args ~localize =
+    type_constr_conv ~loc id ~f:(Printf.sprintf (fmt ~localize)) args
   ;;
 
   (* Conversion of types *)
-  let rec sexp_of_type ~renaming typ : Conversion.t =
+  let rec sexp_of_type ~renaming typ ~localize : Conversion.t =
     let loc = { typ.ptyp_loc with loc_ghost = true } in
-    match Ppxlib_jane.Jane_syntax.Core_type.of_ast typ with
-    | Some (Jtyp_tuple alist, (_ : attributes)) ->
-      Conversion.of_lambda [ sexp_of_labeled_tuple ~renaming ~loc alist ]
-    | Some (Jtyp_layout _, _) | None ->
+    match Ppxlib_jane.Shim.Core_type.of_parsetree typ with
+    | _ when Option.is_some (Attribute.get Attrs.opaque typ) ->
+      Conversion.of_reference_exn (sexp_of_opaque ~loc ~localize)
+    | { ptyp_desc = Ptyp_any _; _ } ->
+      Conversion.of_lambda [ ppat_any ~loc --> [%expr Sexplib0.Sexp.Atom "_"] ]
+    | { ptyp_desc = Ptyp_tuple labeled_tps; _ } ->
+      (match Ppxlib_jane.as_unlabeled_tuple labeled_tps with
+       | Some tps -> Conversion.of_lambda [ sexp_of_tuple ~renaming (loc, tps) ~localize ]
+       | None ->
+         Conversion.of_lambda
+           [ sexp_of_labeled_tuple ~renaming ~loc labeled_tps ~localize ])
+    | { ptyp_desc = Ptyp_var (parm, _); _ } ->
+      (match Renaming.binding_kind renaming parm ~loc with
+       | Universally_bound fresh ->
+         Conversion.of_reference_exn (Fresh_name.expression fresh)
+       | Existentially_bound -> sexp_of_type ~renaming [%type: _] ~localize)
+    | { ptyp_desc = Ptyp_constr (id, args); _ } ->
       (match typ with
-       | _ when Option.is_some (Attribute.get Attrs.opaque typ) ->
-         Conversion.of_reference_exn [%expr Sexplib0.Sexp_conv.sexp_of_opaque]
-       | [%type: _] ->
-         Conversion.of_lambda [ ppat_any ~loc --> [%expr Sexplib0.Sexp.Atom "_"] ]
        | [%type: [%t? _] sexp_opaque] ->
-         Conversion.of_reference_exn [%expr Sexplib0.Sexp_conv.sexp_of_opaque]
-       | { ptyp_desc = Ptyp_tuple tp; _ } ->
-         Conversion.of_lambda [ sexp_of_tuple ~renaming (loc, tp) ]
-       | { ptyp_desc = Ptyp_var parm; _ } ->
-         (match Renaming.binding_kind renaming parm ~loc with
-          | Universally_bound fresh ->
-            Conversion.of_reference_exn (Fresh_name.expression fresh)
-          | Existentially_bound -> sexp_of_type ~renaming [%type: _])
-       | { ptyp_desc = Ptyp_constr (id, args); _ } ->
+         Conversion.of_reference_exn (sexp_of_opaque ~loc ~localize)
+       | _ ->
          Conversion.of_reference_exn
            (sexp_of_type_constr
               ~loc
               id
               (List.map args ~f:(fun tp ->
-                 Conversion.to_expression ~loc (sexp_of_type ~renaming tp))))
-       | { ptyp_desc = Ptyp_arrow (_, _, _); _ } ->
-         Conversion.of_lambda
-           [ ppat_any ~loc
-             --> [%expr Sexplib0.Sexp_conv.sexp_of_fun Sexplib0.Sexp_conv.ignore]
-           ]
-       | { ptyp_desc = Ptyp_variant (row_fields, Closed, _); _ } ->
-         sexp_of_variant ~renaming (loc, row_fields)
-       | { ptyp_desc = Ptyp_poly (parms, poly_tp); _ } ->
-         sexp_of_poly ~renaming parms poly_tp
-       | { ptyp_desc = Ptyp_variant (_, Open, _); _ }
-       | { ptyp_desc = Ptyp_object (_, _); _ }
-       | { ptyp_desc = Ptyp_class (_, _); _ }
-       | { ptyp_desc = Ptyp_alias (_, _); _ }
-       | { ptyp_desc = Ptyp_package _; _ }
-       | { ptyp_desc = Ptyp_extension _; _ } ->
-         Location.raise_errorf ~loc "Type unsupported for ppx [sexp_of] conversion")
+                 Conversion.to_expression
+                   ~loc
+                   (sexp_of_type ~renaming tp ~localize)
+                   ~localize))
+              ~localize))
+    | { ptyp_desc = Ptyp_arrow (_, _, _, _, _); _ } ->
+      Conversion.of_lambda
+        [ ppat_any ~loc
+          --> [%expr Sexplib0.Sexp_conv.sexp_of_fun Sexplib0.Sexp_conv.ignore]
+        ]
+    | { ptyp_desc = Ptyp_variant (row_fields, Closed, _); _ } ->
+      sexp_of_variant ~renaming (loc, row_fields) ~localize
+    | { ptyp_desc = Ptyp_poly (parms, poly_tp); _ } ->
+      sexp_of_poly ~renaming parms poly_tp ~localize
+    | core_type ->
+      Location.raise_errorf
+        ~loc
+        "Type unsupported for ppx [sexp_of] conversion (%s)"
+        (Ppxlib_jane.Language_feature_name.of_core_type_desc core_type.ptyp_desc)
 
   (* Conversion of (unlabeled) tuples *)
-  and sexp_of_tuple ~renaming (loc, tps) =
-    let fps = List.map ~f:(fun tp -> sexp_of_type ~renaming tp) tps in
+  and sexp_of_tuple ~renaming (loc, tps) ~localize =
+    let fps = List.map ~f:(fun tp -> sexp_of_type ~renaming tp ~localize) tps in
     let ({ bindings; arguments; converted } : Conversion.Apply_all.t) =
       Conversion.apply_all ~loc fps
     in
@@ -105,16 +147,15 @@ module Str_generate_sexp_of = struct
     ppat_tuple ~loc arguments --> expr
 
   (* Conversion of labeled tuples *)
-  and sexp_of_labeled_tuple ~renaming ~loc alist =
-    assert (Labeled_tuple.is_valid alist);
+  and sexp_of_labeled_tuple ~renaming ~loc alist ~localize =
     let ({ bindings; arguments; converted } : Conversion.Apply_all.t) =
-      List.map alist ~f:(fun (_, core_type) -> sexp_of_type ~renaming core_type)
+      List.map alist ~f:(fun (_, core_type) -> sexp_of_type ~renaming core_type ~localize)
       |> Conversion.apply_all ~loc
     in
     let expr =
       let sexp_exprs =
         (* Constructor inference allows to to leave off [Sexplib0.Sexp.] here. *)
-        List.map2_exn alist converted ~f:(fun (label_option, _) expr ->
+        List.map2 alist converted ~f:(fun (label_option, _) expr ->
           [%expr
             List
               [ Atom [%e estring ~loc (Labeled_tuple.atom_of_label label_option)]
@@ -125,14 +166,18 @@ module Str_generate_sexp_of = struct
       |> pexp_let ~loc Nonrecursive bindings
     in
     let pat =
-      ( List.map2_exn alist arguments ~f:(fun (label_option, _) arg -> label_option, arg)
-      , Closed )
-      |> Ppxlib_jane.Jane_syntax.Labeled_tuples.pat_of ~loc
+      Ppxlib_jane.Ast_builder.Default.ppat_tuple
+        ~loc
+        (List.map2 alist arguments ~f:(fun (label_option, _) arg -> label_option, arg))
+        Closed
     in
     pat --> expr
 
   (* Conversion of variant types *)
-  and sexp_of_variant ~renaming ((loc, row_fields) : Location.t * row_field list)
+  and sexp_of_variant
+    ~renaming
+    ((loc, row_fields) : Location.t * row_field list)
+    ~localize
     : Conversion.t
     =
     let item row =
@@ -144,42 +189,51 @@ module Str_generate_sexp_of = struct
         when Option.is_some (Attribute.get Attrs.list_poly row) ->
         (match tp with
          | [%type: [%t? tp] list] ->
-           let cnv_expr = Conversion.to_expression ~loc (sexp_of_type ~renaming tp) in
+           let cnv_expr =
+             Conversion.to_expression ~loc (sexp_of_type ~renaming tp ~localize) ~localize
+           in
            let name = Fresh_name.create "l" ~loc in
            ppat_variant ~loc cnstr (Some (Fresh_name.pattern name))
            --> [%expr
                  Sexplib0.Sexp.List
                    (Sexplib0.Sexp.Atom [%e estring ~loc cnstr]
-                    :: Sexplib0.Sexp_conv.list_map
+                    :: [%e list_map ~loc ~localize]
                          [%e cnv_expr]
                          [%e Fresh_name.expression name])]
          | _ -> Attrs.invalid_attribute ~loc Attrs.list_poly "_ list")
       | Rtag ({ txt = cnstr; _ }, _, [ [%type: [%t? tp] sexp_list] ]) ->
-        let cnv_expr = Conversion.to_expression ~loc (sexp_of_type ~renaming tp) in
+        let cnv_expr =
+          Conversion.to_expression ~loc (sexp_of_type ~renaming tp ~localize) ~localize
+        in
         let name = Fresh_name.create "l" ~loc in
         ppat_variant ~loc cnstr (Some (Fresh_name.pattern name))
         --> [%expr
               Sexplib0.Sexp.List
                 (Sexplib0.Sexp.Atom [%e estring ~loc cnstr]
-                 :: Sexplib0.Sexp_conv.list_map
+                 :: [%e list_map ~loc ~localize]
                       [%e cnv_expr]
                       [%e Fresh_name.expression name])]
       | Rtag ({ txt = cnstr; _ }, false, [ tp ]) ->
         let cnstr_expr = [%expr Sexplib0.Sexp.Atom [%e estring ~loc cnstr]] in
         let fresh = Fresh_name.create "v" ~loc in
         let cnstr_arg =
-          Conversion.apply ~loc (sexp_of_type ~renaming tp) (Fresh_name.expression fresh)
+          Conversion.apply
+            ~loc
+            (sexp_of_type ~renaming tp ~localize)
+            (Fresh_name.expression fresh)
         in
         let expr = [%expr Sexplib0.Sexp.List [%e elist ~loc [ cnstr_expr; cnstr_arg ]]] in
         ppat_variant ~loc cnstr (Some (Fresh_name.pattern fresh)) --> expr
       | Rinherit { ptyp_desc = Ptyp_constr (id, []); _ } ->
         let name = Fresh_name.create "v" ~loc in
         ppat_alias ~loc (ppat_type ~loc id) (Fresh_name.to_string_loc name)
-        --> sexp_of_type_constr ~loc id [ Fresh_name.expression name ]
+        --> sexp_of_type_constr ~loc id [ Fresh_name.expression name ] ~localize
       | Rtag (_, true, [ _ ]) | Rtag (_, _, _ :: _ :: _) ->
         Location.raise_errorf ~loc "unsupported: polymorphic variant intersection type"
       | Rinherit ({ ptyp_desc = Ptyp_constr (id, _ :: _); _ } as typ) ->
-        let call = Conversion.to_expression ~loc (sexp_of_type ~renaming typ) in
+        let call =
+          Conversion.to_expression ~loc (sexp_of_type ~renaming typ ~localize) ~localize
+        in
         let name = Fresh_name.create "v" ~loc in
         ppat_alias ~loc (ppat_type ~loc id) (Fresh_name.to_string_loc name)
         --> [%expr [%e call] [%e Fresh_name.expression name]]
@@ -193,16 +247,14 @@ module Str_generate_sexp_of = struct
     Conversion.of_lambda (List.map ~f:item row_fields)
 
   (* Polymorphic record fields *)
-  and sexp_of_poly ~renaming parms tp =
+  and sexp_of_poly ~renaming parms tp ~localize =
     let loc = tp.ptyp_loc in
     let renaming =
-      List.fold_left
-        parms
-        ~init:renaming
-        ~f:(Renaming.add_universally_bound ~prefix:"_of_")
+      List.fold_left parms ~init:renaming ~f:(fun renaming (name, _jkind) ->
+        Renaming.add_universally_bound renaming name ~prefix:"_of_")
     in
     let bindings =
-      let mk_binding parm =
+      let mk_binding (parm, _jkind) =
         let name =
           match Renaming.binding_kind renaming parm.txt ~loc:parm.loc with
           | Universally_bound name -> name
@@ -211,11 +263,11 @@ module Str_generate_sexp_of = struct
         value_binding
           ~loc
           ~pat:(Fresh_name.pattern name)
-          ~expr:[%expr Sexplib0.Sexp_conv.sexp_of_opaque]
+          ~expr:(sexp_of_opaque ~loc ~localize)
       in
       List.map ~f:mk_binding parms
     in
-    Conversion.bind (sexp_of_type ~renaming tp) bindings
+    Conversion.bind (sexp_of_type ~renaming tp ~localize) bindings
   ;;
 
   (* Conversion of record types *)
@@ -229,11 +281,23 @@ module Str_generate_sexp_of = struct
     | Inspect_value of (location -> expression -> expression)
     | Inspect_sexp of (cnv_expr:expression -> location -> expression -> expression)
 
-  let sexp_of_record_field ~renaming ~bnds patt expr name tp ?sexp_of is_empty_expr =
+  let sexp_of_record_field
+    ~renaming
+    ~bnds
+    patt
+    expr
+    name
+    tp
+    ?sexp_of
+    is_empty_expr
+    ~localize
+    =
     let loc = tp.ptyp_loc in
     let fresh = Fresh_name.create name ~loc in
     let patt = mk_rec_patt loc patt name fresh in
-    let cnv_expr = Conversion.to_expression ~loc (sexp_of_type ~renaming tp) in
+    let cnv_expr =
+      Conversion.to_expression ~loc (sexp_of_type ~renaming tp ~localize) ~localize
+    in
     let cnv_expr =
       match sexp_of with
       | None -> cnv_expr
@@ -261,7 +325,7 @@ module Str_generate_sexp_of = struct
                       ]
                   in
                   ([%e Fresh_name.expression bnd] :: [%e Fresh_name.expression bnds]
-                    : _ Stdlib.List.t))]
+                   : _ Stdlib.List.t))]
             | Inspect_sexp is_empty_expr ->
               [%expr
                 let [%p Fresh_name.pattern arg] =
@@ -277,7 +341,7 @@ module Str_generate_sexp_of = struct
                       ]
                   in
                   ([%e Fresh_name.expression bnd] :: [%e Fresh_name.expression bnds]
-                    : _ Stdlib.List.t))]]
+                   : _ Stdlib.List.t))]]
         in
         [%e expr]]
     in
@@ -295,9 +359,9 @@ module Str_generate_sexp_of = struct
         object
           inherit Ast_traverse.iter as super
 
-          method! core_type_desc =
-            function
-            | Ptyp_var v ->
+          method! core_type_desc t =
+            match Ppxlib_jane.Shim.Core_type_desc.of_parsetree t with
+            | Ptyp_var (v, _) ->
               Location.raise_errorf
                 ~loc
                 "[@%s] was used, but the type of the field contains a type variable: '%s.\n\
@@ -305,7 +369,7 @@ module Str_generate_sexp_of = struct
                  Consider using [@sexp_drop_if _] or [@sexp_drop_default.sexp] instead."
                 attr_name
                 v
-            | t -> super#core_type_desc t
+            | _ -> super#core_type_desc t
         end
       in
       iter#core_type
@@ -321,7 +385,7 @@ module Str_generate_sexp_of = struct
             method! core_type_desc =
               function
               | Ptyp_constr ({ loc = _; txt = Lident s }, _) as t ->
-                if Set.mem types_being_defined s
+                if String.Set.mem s types_being_defined
                 then
                   Location.raise_errorf
                     ~loc
@@ -353,6 +417,7 @@ module Str_generate_sexp_of = struct
     tp
     ?sexp_of
     default
+    ~localize
     =
     let is_empty =
       let inspect_value equality_f =
@@ -363,22 +428,6 @@ module Str_generate_sexp_of = struct
         Inspect_sexp
           (fun ~cnv_expr loc sexp_expr ->
             [%expr Sexplib0.Sexp_conv.( = ) ([%e cnv_expr] [%e default]) [%e sexp_expr]])
-        |> Lifted.return
-      | No_arg ->
-        inspect_value (fun loc ->
-          [%expr
-            Sexplib0.Sexp_conv.( = ) [@ocaml.ppwarning
-                                       "[@sexp_drop_default] is deprecated: please use \
-                                        one of:\n\
-                                        - [@sexp_drop_default f] and give an explicit \
-                                        equality function ([f = Poly.(=)] corresponds to \
-                                        the old behavior)\n\
-                                        - [@sexp_drop_default.compare] if the type \
-                                        supports [%compare]\n\
-                                        - [@sexp_drop_default.equal] if the type \
-                                        supports [%equal]\n\
-                                        - [@sexp_drop_default.sexp] if you want to \
-                                        compare the sexp representations\n"]])
         |> Lifted.return
       | Func lifted -> lifted >>| fun f -> inspect_value (fun _ -> f)
       | Compare ->
@@ -400,10 +449,17 @@ module Str_generate_sexp_of = struct
           [%expr [%equal: [%t tp]]])
         |> Lifted.return
     in
-    is_empty >>| sexp_of_record_field ~renaming ~bnds patt expr name tp ?sexp_of
+    is_empty >>| sexp_of_record_field ~renaming ~bnds patt expr name tp ?sexp_of ~localize
   ;;
 
-  let sexp_of_label_declaration_list ~types_being_defined ~renaming loc flds ~wrap_expr =
+  let sexp_of_label_declaration_list
+    ~types_being_defined
+    ~renaming
+    loc
+    flds
+    ~wrap_expr
+    ~localize
+    =
     let bnds = Fresh_name.create "bnds" ~loc in
     let list_empty_expr =
       Inspect_value
@@ -434,7 +490,9 @@ module Str_generate_sexp_of = struct
         let arg = Fresh_name.create "arg" ~loc in
         let patt = mk_rec_patt loc patt name fresh in
         let vname = Fresh_name.expression v in
-        let cnv_expr = Conversion.apply ~loc (sexp_of_type ~renaming tp) vname in
+        let cnv_expr =
+          Conversion.apply ~loc (sexp_of_type ~renaming tp ~localize) vname
+        in
         let expr =
           [%expr
             let [%p Fresh_name.pattern bnds] =
@@ -449,7 +507,7 @@ module Str_generate_sexp_of = struct
                     ]
                 in
                 ([%e Fresh_name.expression bnd] :: [%e Fresh_name.expression bnds]
-                  : _ Stdlib.List.t)
+                 : _ Stdlib.List.t)
             in
             [%e expr]]
         in
@@ -466,7 +524,7 @@ module Str_generate_sexp_of = struct
                   Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom [%e estring ~loc name] ]
                 in
                 ([%e Fresh_name.expression bnd] :: [%e Fresh_name.expression bnds]
-                  : _ Stdlib.List.t))
+                 : _ Stdlib.List.t))
               else [%e Fresh_name.expression bnds]
             in
             [%e expr]]
@@ -482,8 +540,11 @@ module Str_generate_sexp_of = struct
           tp
           ~sexp_of:
             (* deliberately using whatever [sexp_of_list] is in scope *)
-            [%expr sexp_of_list]
+            (match localize with
+             | false -> [%expr sexp_of_list]
+             | true -> [%expr sexp_of_list__local])
           list_empty_expr
+          ~localize
         |> Lifted.return
       | Sexp_array tp ->
         sexp_of_record_field
@@ -495,8 +556,11 @@ module Str_generate_sexp_of = struct
           tp
           ~sexp_of:
             (* deliberately using whatever [sexp_of_array] is in scope *)
-            [%expr sexp_of_array]
+            (match localize with
+             | false -> [%expr sexp_of_array]
+             | true -> [%expr sexp_of_array__local])
           array_empty_expr
+          ~localize
         |> Lifted.return
       | Specific (Drop_default how) ->
         let tp = ld.pld_type in
@@ -512,7 +576,8 @@ module Str_generate_sexp_of = struct
                  patt
                  expr
                  name
-                 tp)
+                 tp
+                 ~localize)
       | Specific (Drop_if test) ->
         test
         >>| fun test ->
@@ -525,12 +590,15 @@ module Str_generate_sexp_of = struct
           name
           tp
           (Inspect_value (fun loc expr -> [%expr [%e test] [%e expr]]))
+          ~localize
       | Omit_nil ->
         let tp = ld.pld_type in
         let patt = mk_rec_patt loc patt name fresh in
         let vname = Fresh_name.expression fresh in
         let arg = Fresh_name.create "arg" ~loc in
-        let cnv_expr = Conversion.apply ~loc (sexp_of_type ~renaming tp) vname in
+        let cnv_expr =
+          Conversion.apply ~loc (sexp_of_type ~renaming tp ~localize) vname
+        in
         let bnds_expr =
           [%expr
             match [%e cnv_expr] with
@@ -541,7 +609,7 @@ module Str_generate_sexp_of = struct
                  ; [%e Fresh_name.expression arg]
                  ]
                :: [%e Fresh_name.expression bnds]
-                : _ Stdlib.List.t)]
+               : _ Stdlib.List.t)]
         in
         ( patt
         , [%expr
@@ -553,7 +621,9 @@ module Str_generate_sexp_of = struct
         let patt = mk_rec_patt loc patt name fresh in
         let vname = Fresh_name.expression fresh in
         let arg = Fresh_name.create "arg" ~loc in
-        let cnv_expr = Conversion.apply ~loc (sexp_of_type ~renaming tp) vname in
+        let cnv_expr =
+          Conversion.apply ~loc (sexp_of_type ~renaming tp ~localize) vname
+        in
         let bnds_expr =
           [%expr
             let [%p Fresh_name.pattern arg] = [%e cnv_expr] in
@@ -562,7 +632,7 @@ module Str_generate_sexp_of = struct
                ; [%e Fresh_name.expression arg]
                ]
              :: [%e Fresh_name.expression bnds]
-              : _ Stdlib.List.t)]
+             : _ Stdlib.List.t)]
         in
         ( patt
         , [%expr
@@ -590,6 +660,7 @@ module Str_generate_sexp_of = struct
     constr_lid
     constr_str
     args
+    ~localize
     =
     match args with
     | Pcstr_record lds ->
@@ -600,6 +671,7 @@ module Str_generate_sexp_of = struct
         loc
         lds
         ~wrap_expr:(fun expr -> [%expr Sexplib0.Sexp.List ([%e cnstr_expr] :: [%e expr])])
+        ~localize
       >>| fun (patt, expr) -> ppat_construct ~loc constr_lid (Some patt) --> expr
     | Pcstr_tuple pcd_args ->
       (match pcd_args with
@@ -608,32 +680,43 @@ module Str_generate_sexp_of = struct
          --> [%expr Sexplib0.Sexp.Atom [%e constr_str]]
          |> Lifted.return
        | args ->
+         let args = List.map args ~f:Ppxlib_jane.Shim.Pcstr_tuple_arg.to_core_type in
          (match args with
           | [ tp ] when Option.is_some (Attribute.get inline_attr row) ->
             (match tp with
              | [%type: [%t? tp] list] ->
-               let cnv_expr = Conversion.to_expression ~loc (sexp_of_type ~renaming tp) in
+               let cnv_expr =
+                 Conversion.to_expression
+                   ~loc
+                   (sexp_of_type ~renaming tp ~localize)
+                   ~localize
+               in
                let name = Fresh_name.create "l" ~loc in
                ppat_construct ~loc constr_lid (Some (Fresh_name.pattern name))
                --> [%expr
                      Sexplib0.Sexp.List
                        (Sexplib0.Sexp.Atom [%e constr_str]
-                        :: Sexplib0.Sexp_conv.list_map
+                        :: [%e list_map ~loc ~localize]
                              [%e cnv_expr]
                              [%e Fresh_name.expression name])]
              | _ -> Attrs.invalid_attribute ~loc inline_attr "_ list")
           | [ [%type: [%t? tp] sexp_list] ] ->
-            let cnv_expr = Conversion.to_expression ~loc (sexp_of_type ~renaming tp) in
+            let cnv_expr =
+              Conversion.to_expression
+                ~loc
+                (sexp_of_type ~renaming tp ~localize)
+                ~localize
+            in
             let name = Fresh_name.create "l" ~loc in
             ppat_construct ~loc constr_lid (Some (Fresh_name.pattern name))
             --> [%expr
                   Sexplib0.Sexp.List
                     (Sexplib0.Sexp.Atom [%e constr_str]
-                     :: Sexplib0.Sexp_conv.list_map
+                     :: [%e list_map ~loc ~localize]
                           [%e cnv_expr]
                           [%e Fresh_name.expression name])]
           | _ ->
-            let sexp_of_args = List.map ~f:(sexp_of_type ~renaming) args in
+            let sexp_of_args = List.map ~f:(sexp_of_type ~renaming ~localize) args in
             let cnstr_expr = [%expr Sexplib0.Sexp.Atom [%e constr_str]] in
             let ({ bindings; arguments; converted } : Conversion.Apply_all.t) =
               Conversion.apply_all ~loc sexp_of_args
@@ -652,7 +735,7 @@ module Str_generate_sexp_of = struct
          |> Lifted.return)
   ;;
 
-  let sexp_of_sum ~types_being_defined ~renaming tps cds =
+  let sexp_of_sum ~types_being_defined ~renaming tps cds ~localize =
     List.map cds ~f:(fun cd ->
       let renaming =
         Renaming.with_constructor_declaration renaming ~type_parameters:tps cd
@@ -667,7 +750,8 @@ module Str_generate_sexp_of = struct
         ~loc:cd.pcd_loc
         constr_lid
         constr_str
-        cd.pcd_args)
+        cd.pcd_args
+        ~localize)
     |> Lifted.all
     >>| Conversion.of_lambda
   ;;
@@ -677,20 +761,21 @@ module Str_generate_sexp_of = struct
 
   (* Generate code from type definitions *)
 
-  let sexp_of_td ~types_being_defined td =
+  let sexp_of_td ~types_being_defined td ~localize ~portable =
     let td = name_type_params_in_td td in
-    let tps = List.map td.ptype_params ~f:get_type_param_name in
+    let tps = List.map td.ptype_params ~f:Ppxlib_jane.get_type_param_name_and_jkind in
     let { ptype_name = { txt = type_name; loc = _ }; ptype_loc = loc; _ } = td in
     let renaming = Renaming.of_type_declaration td ~prefix:"_of_" in
     let body =
       let body =
-        match td.ptype_kind with
+        match Ppxlib_jane.Shim.Type_kind.of_parsetree td.ptype_kind with
         | Ptype_variant cds ->
           sexp_of_sum
             ~renaming
             ~types_being_defined
-            (List.map tps ~f:(fun x -> x.txt))
+            (List.map tps ~f:(fun (x, _) -> x.txt))
             cds
+            ~localize
         | Ptype_record lds ->
           sexp_of_label_declaration_list
             ~renaming
@@ -698,13 +783,16 @@ module Str_generate_sexp_of = struct
             lds
             ~types_being_defined
             ~wrap_expr:(fun expr -> [%expr Sexplib0.Sexp.List [%e expr]])
+            ~localize
           >>| fun (patt, expr) -> Conversion.of_lambda [ patt --> expr ]
+        | Ptype_record_unboxed_product _ ->
+          Location.raise_errorf ~loc "ppx_sexp_conv: unboxed record types not supported"
         | Ptype_open ->
           Location.raise_errorf ~loc "ppx_sexp_conv: open types not supported"
         | Ptype_abstract ->
           (match td.ptype_manifest with
            | None -> sexp_of_nil loc
-           | Some ty -> sexp_of_type ~renaming ty)
+           | Some ty -> sexp_of_type ~renaming ty ~localize)
           |> Lifted.return
       in
       body
@@ -730,7 +818,14 @@ module Str_generate_sexp_of = struct
         let coercion =
           [%expr ([%e Fresh_name.expression v] : [%t ty_src] :> [%t ty_dst])]
         in
-        [%expr fun [%p Fresh_name.pattern v] -> [%e Conversion.apply ~loc body coercion]])
+        let arg = Fresh_name.pattern v in
+        let body = Conversion.apply ~loc body coercion in
+        let body =
+          match localize with
+          | false -> body
+          | true -> [%expr exclave_ [%e body]]
+        in
+        [%expr fun [%p arg] -> [%e body]])
       else
         (* Prevent violation of value restriction, problems with recursive types, and
            top-level effects by eta-expanding function definitions *)
@@ -738,16 +833,19 @@ module Str_generate_sexp_of = struct
           ~loc
           ~rec_flag:(Types_being_defined.to_rec_flag types_being_defined)
           ~values_being_defined:
-            (Types_being_defined.to_values_being_defined types_being_defined)
+            (Types_being_defined.to_values_being_defined types_being_defined ~localize)
           body
+          ~localize
     in
-    let typ = Sig_generate_sexp_of.mk_type td in
-    let func_name = "sexp_of_" ^ type_name in
+    let typ =
+      Sig_generate_sexp_of.mk_type td ~localize ~universally_quantify_if_jkind_annot:false
+    in
+    let func_name = Printf.sprintf (fmt ~localize) type_name in
     let body =
       body
       >>| fun body ->
       let patts =
-        List.map tps ~f:(fun id ->
+        List.map tps ~f:(fun (id, _) ->
           match Renaming.binding_kind renaming id.txt ~loc:id.loc with
           | Universally_bound name -> Fresh_name.pattern name
           | Existentially_bound -> assert false)
@@ -756,19 +854,27 @@ module Str_generate_sexp_of = struct
       eta_reduce_if_possible_and_nonrec ~rec_flag (eabstract ~loc patts body)
     in
     let body = Lifted.let_bind_user_expressions ~loc body in
-    constrained_function_binding loc td typ ~tps ~func_name body
+    constrained_function_binding loc td typ ~tps ~func_name ~portable body
   ;;
 
-  let sexp_of_tds ~loc ~path:_ (rec_flag, tds) =
+  let sexp_of_tds ~loc ~path:_ (rec_flag, tds) ~localize ~portable =
     let rec_flag = really_recursive_respecting_opaque rec_flag tds in
     let (types_being_defined : Types_being_defined.t) =
       match rec_flag with
       | Nonrecursive -> Nonrec
       | Recursive ->
-        Rec (Set.of_list (module String) (List.map tds ~f:(fun td -> td.ptype_name.txt)))
+        Rec (String.Set.of_list (List.map tds ~f:(fun td -> td.ptype_name.txt)))
     in
-    let bindings = List.map tds ~f:(sexp_of_td ~types_being_defined) in
-    pstr_value_list ~loc rec_flag bindings
+    let localize =
+      match localize with
+      | false -> [ false ]
+      | true -> [ false; true ]
+    in
+    List.concat_map localize ~f:(fun localize ->
+      let bindings =
+        List.map tds ~f:(sexp_of_td ~types_being_defined ~localize ~portable)
+      in
+      pstr_value_list ~loc rec_flag bindings)
   ;;
 
   let sexp_of_exn ~loc:_ ~path ec =
@@ -791,6 +897,7 @@ module Str_generate_sexp_of = struct
           constr_lid
           (estring ~loc (get_full_cnstr cnstr.txt))
           extension_constructor_kind
+          ~localize:false
         >>| fun converter ->
         let assert_false = ppat_any ~loc --> [%expr assert false] in
         [%expr
@@ -799,7 +906,8 @@ module Str_generate_sexp_of = struct
             [%e
               Conversion.to_expression
                 ~loc
-                (Conversion.of_lambda [ converter; assert_false ])]]
+                (Conversion.of_lambda [ converter; assert_false ])
+                ~localize:false]]
       | { pext_kind = Pext_decl (_, _, Some _); _ } ->
         Location.raise_errorf ~loc "sexp_of_exn/:"
       | { pext_kind = Pext_rebind _; _ } ->
@@ -809,13 +917,14 @@ module Str_generate_sexp_of = struct
     [ pstr_value ~loc Nonrecursive [ value_binding ~loc ~pat:[%pat? ()] ~expr ] ]
   ;;
 
-  let sexp_of_core_type core_type =
+  let sexp_of_core_type core_type ~localize =
     let loc = { core_type.ptyp_loc with loc_ghost = true } in
-    sexp_of_type ~renaming:(Renaming.without_type ()) core_type
+    sexp_of_type ~renaming:(Renaming.without_type ()) core_type ~localize
     |> Conversion.to_value_expression
          ~loc
          ~rec_flag:Nonrecursive
-         ~values_being_defined:(Set.empty (module String))
+         ~values_being_defined:String.Set.empty
+         ~localize
     |> Merlin_helpers.hide_expression
   ;;
 end

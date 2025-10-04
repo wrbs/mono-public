@@ -29,7 +29,7 @@ let print_and_check_stable_internal
   ?cr
   ?hide_positions
   ?max_binable_length
-  here
+  ~(here : [%call_pos])
   (module M : Stable_without_comparator with type t = a)
   (int63able : (module Int63able with type t = a) option)
   list
@@ -60,7 +60,29 @@ let print_and_check_stable_internal
       type t = M.t
       type repr = string [@@deriving sexp_of]
 
-      let to_repr = Binable.to_string (module M)
+      let to_repr =
+        match max_binable_length with
+        | None -> Binable.to_string (module M)
+        | Some max_binable_length ->
+          fun original ->
+            let bin_io = Binable.to_string (module M) original in
+            let bin_io_length = String.length bin_io in
+            require
+              ?cr
+              ?hide_positions
+              ~here
+              (bin_io_length <= max_binable_length)
+              ~if_false_then_print_s:
+                (lazy
+                  [%message
+                    "bin-io serialization exceeds max binable length"
+                      (original : M.t)
+                      (bin_io : string)
+                      (bin_io_length : int)
+                      (max_binable_length : int)]);
+            bin_io
+      ;;
+
       let of_repr = Binable.of_string (module M)
       let repr_name = "bin-io"
     end : With_round_trip
@@ -81,28 +103,10 @@ let print_and_check_stable_internal
   print_and_check_round_trip
     ?cr
     ?hide_positions
-    here
+    ~here
     (module M)
     (List.concat [ [ sexp_m; bin_io_m ]; Option.to_list int63able_m ])
-    list;
-  Option.iter max_binable_length ~f:(fun max_binable_length ->
-    require_does_not_raise ?cr ?hide_positions here (fun () ->
-      List.iter list ~f:(fun original ->
-        let bin_io = Binable.to_string (module M) original in
-        let bin_io_length = String.length bin_io in
-        require
-          ?cr
-          ?hide_positions
-          here
-          (bin_io_length <= max_binable_length)
-          ~if_false_then_print_s:
-            (lazy
-              [%message
-                "bin-io serialization exceeds max binable length"
-                  (original : M.t)
-                  (bin_io : string)
-                  (bin_io_length : int)
-                  (max_binable_length : int)]))))
+    list
 ;;
 
 let print_and_check_stable_type
@@ -110,7 +114,7 @@ let print_and_check_stable_type
   ?cr
   ?hide_positions
   ?max_binable_length
-  here
+  ~(here : [%call_pos])
   (module M : Stable_without_comparator with type t = a)
   list
   =
@@ -118,7 +122,7 @@ let print_and_check_stable_type
     ?cr
     ?hide_positions
     ?max_binable_length
-    here
+    ~here
     (module M)
     None
     list
@@ -129,36 +133,40 @@ let print_and_check_stable_int63able_type
   ?cr
   ?hide_positions
   ?max_binable_length
-  here
-  (module M : Stable_int63able with type t = a)
+  ~(here : [%call_pos])
+  (module M : Stable_int63able_without_comparator with type t = a)
   list
   =
   print_and_check_stable_internal
     ?cr
     ?hide_positions
     ?max_binable_length
-    here
+    ~here
     (module M)
     (Some (module M))
     list
 ;;
 
-let require_allocation_does_not_exceed_private
+[%%template
+[@@@kind.default k = (value, float64, bits32, bits64, word)]
+
+let require_allocation_does_not_exceed_local_private
   ?(cr = CR.CR)
   ?hide_positions
   ?(print_limit = 1_000)
   allocation_limit
-  here
+  ~(here : [%call_pos])
   f
-  =
-  let ( x
-      , { Gc.For_testing.Allocation_report.major_words_allocated; minor_words_allocated }
-      , allocs )
+  = exclave_
+  let #( x
+       , { Gc.For_testing.Allocation_report.major_words_allocated; minor_words_allocated }
+       , allocs )
     =
-    Gc.For_testing.measure_and_log_allocation f
+    (Gc.For_testing.measure_and_log_allocation_local [@kind k]) f
   in
+  let allocs = [%globalize: Gc.For_testing.Allocation_log.t list] allocs in
   require
-    here
+    ~here
     ~cr
     ?hide_positions
     (Allocation_limit.is_ok
@@ -198,30 +206,73 @@ let require_allocation_does_not_exceed_private
   x
 ;;
 
-let require_allocation_does_not_exceed
+let require_allocation_does_not_exceed_local
+  ?cr
   ?print_limit
   ?hide_positions
   allocation_limit
-  here
+  ~(here : [%call_pos])
   f
-  =
-  require_allocation_does_not_exceed_private
+  = exclave_
+  (require_allocation_does_not_exceed_local_private [@kind k])
+    ?cr
     ?print_limit
     ?hide_positions
     allocation_limit
-    here
+    ~here
     f
 ;;
 
-let require_no_allocation ?print_limit ?hide_positions here f =
-  require_allocation_does_not_exceed ?print_limit ?hide_positions (Minor_words 0) here f
+let require_no_allocation_local ?cr ?print_limit ?hide_positions ~(here : [%call_pos]) f
+  = exclave_
+  (require_allocation_does_not_exceed_local [@kind k])
+    ?cr
+    ?print_limit
+    ?hide_positions
+    (Minor_words 0)
+    ~here
+    f
 ;;
+
+type ('a : k) global = { global : 'a @@ global } [@@unboxed]
+
+let require_allocation_does_not_exceed
+  ?cr
+  ?print_limit
+  ?hide_positions
+  limit
+  ~(here : [%call_pos])
+  f
+  =
+  let { global } =
+    (require_allocation_does_not_exceed_local [@kind k])
+      ?cr
+      ?print_limit
+      ?hide_positions
+      limit
+      ~here
+      (fun () -> { global = f () })
+  in
+  global
+;;
+
+let require_no_allocation ?cr ?print_limit ?hide_positions ~(here : [%call_pos]) f =
+  let { global } =
+    (require_no_allocation_local [@kind k])
+      ?cr
+      ?print_limit
+      ?hide_positions
+      ~here
+      (fun () -> { global = f () })
+  in
+  global
+;;]
 
 let print_and_check_comparable_sexps
   (type a)
   ?cr
   ?hide_positions
-  here
+  ~(here : [%call_pos])
   (module M : With_comparable with type t = a)
   list
   =
@@ -232,7 +283,7 @@ let print_and_check_comparable_sexps
   require
     ?cr
     ?hide_positions
-    here
+    ~here
     (Sexp.equal set_sexp sorted_list_sexp)
     ~if_false_then_print_s:
       (lazy
@@ -251,7 +302,7 @@ let print_and_check_comparable_sexps
   require
     ?cr
     ?hide_positions
-    here
+    ~here
     (Sexp.equal map_sexp sorted_alist_sexp)
     ~if_false_then_print_s:
       (lazy
@@ -265,7 +316,7 @@ let print_and_check_hashable_sexps
   (type a)
   ?cr
   ?hide_positions
-  here
+  ~(here : [%call_pos])
   (module M : With_hashable with type t = a)
   list
   =
@@ -276,7 +327,7 @@ let print_and_check_hashable_sexps
   require
     ?cr
     ?hide_positions
-    here
+    ~here
     (Sexp.equal hash_set_sexp sorted_list_sexp)
     ~if_false_then_print_s:
       (lazy
@@ -295,7 +346,7 @@ let print_and_check_hashable_sexps
   require
     ?cr
     ?hide_positions
-    here
+    ~here
     (Sexp.equal table_sexp sorted_alist_sexp)
     ~if_false_then_print_s:
       (lazy
@@ -305,10 +356,17 @@ let print_and_check_hashable_sexps
             (sorted_alist_sexp : Sexp.t)])
 ;;
 
-let print_and_check_container_sexps (type a) ?cr ?hide_positions here m list =
+let print_and_check_container_sexps
+  (type a)
+  ?cr
+  ?hide_positions
+  ~(here : [%call_pos])
+  m
+  list
+  =
   let (module M : With_containers with type t = a) = m in
-  print_and_check_comparable_sexps ?cr ?hide_positions here (module M) list;
-  print_and_check_hashable_sexps ?cr ?hide_positions here (module M) list
+  print_and_check_comparable_sexps ?cr ?hide_positions ~here (module M) list;
+  print_and_check_hashable_sexps ?cr ?hide_positions ~here (module M) list
 ;;
 
 let remove_time_spans =
@@ -327,5 +385,7 @@ let remove_time_spans =
 ;;
 
 module Expect_test_helpers_core_private = struct
-  let require_allocation_does_not_exceed = require_allocation_does_not_exceed_private
+  let require_allocation_does_not_exceed_local =
+    require_allocation_does_not_exceed_local_private
+  ;;
 end

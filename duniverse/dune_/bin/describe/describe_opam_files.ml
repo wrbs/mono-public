@@ -5,9 +5,9 @@ let term =
   and+ format = Describe_format.arg
   and+ _ = Describe_lang_compat.arg in
   let common, config = Common.init builder in
-  Scheduler.go ~common ~config
+  Scheduler.go_with_rpc_server ~common ~config
   @@ fun () ->
-  Build_system.run_exn
+  build_exn
   @@ fun () ->
   let open Memo.O in
   let+ project = Source_tree.root () >>| Source_tree.Dir.project in

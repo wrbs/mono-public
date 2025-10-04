@@ -114,6 +114,8 @@ install files to arbitrary locations on the file system. In 3.11, this behaviour
 is still supported (as some projects may depend on it) but will generate a
 warning and will be removed in a future version of Dune.
 
+.. _including-files-install-stanza:
+
 Including Files in the Install Stanza
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -197,8 +199,8 @@ Continuing the example above, this would result in the source file at
 and ``content/bar/baz.html`` being installed to
 ``share/<package>/web/documents/bar/baz.html``. Note in the latter case
 ``with_prefix`` only replaced the ``content`` component of the path and not the
-``bar`` component since since it replaces the prefix of the glob - not the
-prefix of paths matching the glob.
+``bar`` component since it replaces the prefix of the glob - not the prefix
+of paths matching the glob.
 
 Installing Globs from Parent Directories
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

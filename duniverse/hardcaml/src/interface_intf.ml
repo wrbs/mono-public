@@ -35,8 +35,8 @@ module type Ast = sig
       ; type_ : Type.t (** Field type - a signal or a sub-module *)
       ; sequence : Sequence.t option (** Is the field type an array or list? *)
       ; doc : string option
-          (** OCaml documentation string, if any. Note that this must be placed in the [ml]
-          and not [mli].*)
+      (** OCaml documentation string, if any. Note that this must be placed in the [ml]
+          and not [mli]. *)
       }
     [@@deriving sexp_of]
   end
@@ -84,7 +84,13 @@ module type Comb_monomorphic = sig
   val validate : t -> unit
 
   (** Each field is set to the constant integer value provided. *)
-  val of_int : int -> t
+  val of_int_trunc : int -> t
+
+  val of_unsigned_int : int -> t
+  val of_signed_int : int -> t
+
+  (** Identical to [of_unsigned_int 0] *)
+  val zero : unit -> t
 
   (** Pack interface into a vector. *)
   val pack : ?rev:bool -> t -> comb
@@ -102,7 +108,7 @@ module type Comb_monomorphic = sig
 
   val priority_select
     : ((comb, t) Comb.with_valid2 list -> (comb, t) Comb.with_valid2)
-      Comb.optional_branching_factor
+        Comb.optional_branching_factor
 
   val priority_select_with_default
     : ((comb, t) Comb.with_valid2 list -> default:t -> t) Comb.optional_branching_factor
@@ -121,9 +127,12 @@ module type Comb = sig
   (** Actual bit widths of each field. *)
   val widths : t -> int interface
 
-  (** [consts c] sets each field to the integer value in [c] using the declared field bit
-      width. *)
-  val of_ints : int interface -> t
+  (** [of_ints_trunc c] sets each field to the integer value in [c] using the declared
+      field bit width. *)
+  val of_ints_trunc : int interface -> t
+
+  val of_unsigned_ints : int interface -> t
+  val of_signed_ints : int interface -> t
 end
 
 module type Names_and_widths = sig
@@ -139,8 +148,8 @@ end
 module type Of_signal_functions = sig
   type t
 
-  (** Create a wire for each field.  If [named] is true then wires are given the RTL field
-      name.  If [from] is provided the wire is attached to each given field in [from]. *)
+  (** Create a wire for each field. If [named] is true then wires are given the RTL field
+      name. If [from] is provided the wire is attached to each given field in [from]. *)
   val wires
     :  ?named:bool (** default is [false]. *)
     -> ?from:t (** No default *)
@@ -148,20 +157,32 @@ module type Of_signal_functions = sig
     -> t
 
   (** Defines a register over values in this interface. [enable] defaults to vdd. *)
-  val reg : ?enable:Signal.t -> Reg_spec.t -> t -> t
+  val reg
+    :  ?enable:Signal.t
+    -> ?initialize_to:t
+    -> ?reset_to:t
+    -> ?clear:Signal.t
+    -> ?clear_to:t
+    -> Signal.Reg_spec.t
+    -> t
+    -> t
 
-  (** Defines a register pipeline over values in this interface. [enable]
-      defaults to vdd and [attributes] defaults to an empty list. *)
+  (** Defines a register pipeline over values in this interface. [enable] defaults to vdd
+      and [attributes] defaults to an empty list. *)
   val pipeline
     :  ?attributes:Rtl_attribute.t list
     -> ?enable:Signal.t
+    -> ?initialize_to:t
+    -> ?reset_to:t
+    -> ?clear:Signal.t
+    -> ?clear_to:t
+    -> Signal.Reg_spec.t
     -> n:int
-    -> Reg_spec.t
     -> t
     -> t
 
   val assign : t -> t -> unit
-  val ( <== ) : t -> t -> unit
+  val ( <-- ) : t -> t -> unit
 
   (** [inputs t] is [wires () ~named:true]. *)
   val inputs : unit -> t
@@ -173,9 +194,12 @@ module type Of_signal_functions = sig
   val apply_names
     :  ?prefix:string (** Default is [""] *)
     -> ?suffix:string (** Default is [""] *)
-    -> ?naming_op:(Signal.t -> string -> Signal.t) (** Default is [Signal.(--)] *)
+    -> ?naming_op:(loc:[%call_pos] -> Signal.t -> string -> Signal.t)
+         (** Default is [Signal.(--)] *)
     -> t
     -> t
+
+  val __ppx_auto_name : t -> string -> t
 end
 
 module type S = sig
@@ -192,7 +216,7 @@ module type S = sig
   (** [const x] sets each port to [x] *)
   val const : 'a -> 'a t
 
-  type tag
+  type tag [@@deriving equal]
 
   val tags : tag t
 
@@ -246,12 +270,11 @@ module type S = sig
   val scan : 'a t -> init:'acc -> f:('acc -> 'a -> 'acc * 'b) -> 'b t
   val scan2 : 'a t -> 'b t -> init:'acc -> f:('acc -> 'a -> 'b -> 'acc * 'c) -> 'c t
 
-  (** Offset of each field within the interface.  The first field is placed at the least
+  (** Offset of each field within the interface. The first field is placed at the least
       significant bit, unless the [rev] argument is true. *)
   val offsets : ?rev:bool (** default is [false]. *) -> unit -> int t
 
-  (** Take a list of interfaces and produce a single interface where each field is a
-      list. *)
+  (** Take a list of interfaces and produce a single interface where each field is a list. *)
   val of_interface_list : 'a t list -> 'a list t
 
   (** Create a list of interfaces from a single interface where each field is a list.
@@ -259,8 +282,7 @@ module type S = sig
   val to_interface_list : 'a list t -> 'a t list
 
   (** Similar to [Monad.all] for lists -- combine and lift the monads to outside the
-      interface.
-  *)
+      interface. *)
   module All (M : Monad.S) : sig
     val all : 'a M.t t -> 'a t M.t
   end
@@ -285,20 +307,33 @@ module type S = sig
     (** Assign a interface containing variables in an always block. *)
     val assign : Always.Variable.t t -> Signal.t t -> Always.t
 
-    (** Creates a interface container with register variables. *)
-    val reg : ?enable:Signal.t -> Reg_spec.t -> Always.Variable.t t
+    (** Shorthand for [assign]. *)
+    val ( <-- ) : Always.Variable.t t -> Signal.t t -> Always.t
 
-    (** Creates a interface container with wire variables, e.g. [Foo.Of_always.wire
-        Signal.zero], which would yield wires defaulting to zero. *)
+    (** Creates a interface container with register variables. *)
+    val reg
+      :  ?enable:Signal.t
+      -> ?initialize_to:Signal.t t
+      -> ?reset_to:Signal.t t
+      -> ?clear:Signal.t
+      -> ?clear_to:Signal.t t
+      -> Signal.Reg_spec.t
+      -> Always.Variable.t t
+
+    (** Creates a interface container with wire variables, e.g.
+        [Foo.Of_always.wire Signal.zero], which would yield wires defaulting to zero. *)
     val wire : (int -> Signal.t) -> Always.Variable.t t
 
     (** Apply names to field of the interface. Add [prefix] and [suffix] if specified. *)
     val apply_names
       :  ?prefix:string (** Default is [""] *)
       -> ?suffix:string (** Default is [""] *)
-      -> ?naming_op:(Signal.t -> string -> Signal.t) (** Default is [Signal.(--)] *)
+      -> ?naming_op:(loc:[%call_pos] -> Signal.t -> string -> Signal.t)
+           (** Default is [Signal.(--)] *)
       -> Always.Variable.t t
       -> unit
+
+    val __ppx_auto_name : Always.Variable.t t -> string -> Always.Variable.t t
   end
 
   module Names_and_widths : Names_and_widths with type tag := tag
@@ -306,8 +341,7 @@ end
 
 (** Monomorphic functions on Hardcaml interfaces. Note that a functor (or a function)
     accepting a argument on this monomorphic module type will type check successfully
-    against [S] above, since [S] more general than the monomorphic type below.
-*)
+    against [S] above, since [S] more general than the monomorphic type below. *)
 module type S_monomorphic = sig
   type a
   type t
@@ -348,7 +382,7 @@ module type S_Of_signal = sig
 end
 
 module type Empty = sig
-  type 'a t = None
+  type 'a t = Empty
 
   include S with type 'a t := 'a t
 end
@@ -380,19 +414,20 @@ module type Interface = sig
 
   (** Recreate a Hardcaml Interface with the same type, but different port names / widths. *)
   module Update
-    (Pre : Pre) (M : sig
-      val port_names_and_widths : (string * int) Pre.t
-    end) : S with type 'a t = 'a Pre.t
+      (Pre : Pre)
+      (M : sig
+         val port_names_and_widths : (string * int) Pre.t
+       end) : S with type 'a t = 'a Pre.t
 
-  (** Creates a new hardcaml interface by converting between functions. This can
-      be used to implement Hardcaml.Interface.S on types that otherwise can't
-      use [@@deriving hardcaml]
-  *)
+  (** Creates a new hardcaml interface by converting between functions. This can be used
+      to implement Hardcaml.Interface.S on types that otherwise can't use
+      [@@deriving hardcaml] *)
   module Make_interface_with_conversion
-    (Repr : S) (M : sig
-      type 'a t [@@deriving sexp_of]
+      (Repr : S)
+      (M : sig
+         type 'a t [@@deriving sexp_of]
 
-      val t_of_repr : 'a Repr.t -> 'a t
-      val repr_of_t : 'a t -> 'a Repr.t
-    end) : S with type 'a t = 'a M.t
+         val t_of_repr : 'a Repr.t -> 'a t
+         val repr_of_t : 'a t -> 'a Repr.t
+       end) : S with type 'a t = 'a M.t
 end

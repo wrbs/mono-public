@@ -19,23 +19,23 @@ val to_binary_string : t -> string
 (** Same as [to_binary_string] but adds ['_']s every chars *)
 val to_binary_string_hum : t -> string
 
-(** Convert constant to an [int].  Bits above [Int.num_bits] are dropped. *)
+(** Convert constant to an [int]. Bits above [Int.num_bits] are dropped. *)
 val to_int : t -> int
 
-(** Convert constant to an [int32].  Bits above [Int32.num_bits] are dropped. *)
+(** Convert constant to an [int32]. Bits above [Int32.num_bits] are dropped. *)
 val to_int32 : t -> int32
 
-(** Convert constant to an [int64].  Bits above [Int64.num_bits] are dropped. *)
+(** Convert constant to an [int64]. Bits above [Int64.num_bits] are dropped. *)
 val to_int64 : t -> int64
 
 (** Convert to array of int64s *)
 val to_int64_array : t -> int64 array
 
 (** Convert to an arbitrary precision integer. *)
-val to_z : signedness:Signedness.t -> t -> Zarith.Z.t
+val to_bigint : signedness:Signedness.t -> t -> Bigint.t
 
 (** Convert to a hex encoded string. *)
-val to_hex_string : signedness:Signedness.t -> t -> string
+val to_hex_string : ?capitalize:bool -> signedness:Signedness.t -> t -> string
 
 (** Convert a string containing ['1'] and ['0'] characters to a constant. Width is
     inferred from the strings length. *)
@@ -57,7 +57,7 @@ val of_int64 : width:int -> int64 -> t
 val of_int64_array : width:int -> int64 array -> t
 
 (** Convert from an arbitrary precision integer. *)
-val of_z : width:int -> Zarith.Z.t -> t
+val of_bigint : width:int -> Bigint.t -> t
 
 (** Create from a hex encoded string. *)
 val of_hex_string : signedness:Signedness.t -> width:int -> string -> t
@@ -89,13 +89,12 @@ val to_bit_list : t -> int list
 val pp : Formatter.t -> t -> unit
 
 (** Convert to from constants from raw bit patterns stored in strings and bytes. Data is
-    copied and resized as appropriate.
-*)
+    copied and resized as appropriate. *)
 module Raw : sig
-  (** Convert from a byte buffer.  The copied data is padded as required. *)
+  (** Convert from a byte buffer. The copied data is padded as required. *)
   val of_bytes : Bytes.t -> width:int -> t
 
-  (** Convert from a string buffer.  The copied data is padded as required. *)
+  (** Convert from a string buffer. The copied data is padded as required. *)
   val of_string : String.t -> width:int -> t
 
   (** Convert to a string buffer. The output buffer length is rounded to a multiple of 8

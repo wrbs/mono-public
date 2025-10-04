@@ -140,35 +140,38 @@ module Uring_openfile = struct
   let openfile uring ?perm file ~unix_mode =
     let access, flags = convert_to_uring_mode unix_mode in
     let default_perm = 0o644 in
-    let perm_for_error = Option.value perm ~default:default_perm in
+    let perm_if_creat = Option.value perm ~default:default_perm in
     let perm =
-      Option.value
-        perm
-        ~default:
-          (let open Io_uring_raw.Open_flags in
-           if mem creat flags || mem tmpfile flags then default_perm else 0)
+      let open Io_uring_raw.Open_flags in
+      if mem creat flags || mem tmpfile flags then perm_if_creat else 0
     in
-    match%map
-      Io_uring_raw.syscall_result
-        (Io_uring_raw.openat2
-           uring
-           ~access
-           ~flags
-           ~perm
-           ~resolve:Io_uring_raw.Resolve.empty
-           file)
-    with
-    | Error err ->
+    let raise_unix_error error =
       raise
         (Unix.Unix_error
-           ( err
+           ( error
            , "open"
            , Core_unix.Private.sexp_to_string_hum
                [%sexp
                  { filename : string = file
                  ; mode : Unix.open_flag list = unix_mode
-                 ; perm : string = Printf.sprintf "0o%o" perm_for_error
+                 ; perm : string = Printf.sprintf "0o%o" perm_if_creat
                  }] ))
+    in
+    (* Arguably, ENOENT is rather misleading here. However, this is the historical behavior,
+       inherited all the way from Caml_unix, and nobody handles Invalid_argument, so it's
+       not clear this should change. *)
+    if String.contains file '\000' then raise_unix_error ENOENT;
+    match%map
+      Io_uring_raw.syscall_result_retry_on_ECANCELED (fun () ->
+        Io_uring_raw.openat2
+          uring
+          ~access
+          ~flags
+          ~perm
+          ~resolve:Io_uring_raw.Resolve.empty
+          file)
+    with
+    | Error err -> raise_unix_error err
     | Ok res -> File_descr.of_int res
   ;;
 end
@@ -438,20 +441,29 @@ module Stats = struct
   let of_ocaml_uring_statx (u : Io_uring_raw.Statx.t) =
     let open Io_uring_raw in
     let of_timespec sec nsec =
-      Time.of_span_since_epoch Time.Span.(of_int_sec sec + of_int_ns nsec)
+      Time.of_span_since_epoch Time.Span.(of_sec (Float.of_int64 sec) + of_int_ns nsec)
     in
-    { dev = Statx.dev u |> Int64.to_int_exn
-    ; ino = Statx.ino u |> Int64.to_int_exn
+    (* Some precision loss is happening in [ino], [dev], [rdev] fields below.
+       In fact, [ino] is not merely theoretical: the full 64-bit inode range is used
+       by some filesystems.
+
+       [nlink], [uid], [gid] are in fact coming from the kernel as 32-bit integers,
+       so no precision loss there.
+
+       Of course we lose precision for timestamps as well.
+    *)
+    { dev = Statx.dev u |> Int64.to_int_trunc
+    ; ino = Statx.ino u |> Int64.to_int_trunc
     ; kind = File_kind.of_ocaml_uring (Statx.kind u)
     ; perm = Statx.perm u
-    ; nlink = Statx.nlink u |> Int64.to_int_exn
-    ; uid = Statx.uid u |> Int64.to_int_exn
-    ; gid = Statx.gid u |> Int64.to_int_exn
-    ; rdev = Statx.rdev u |> Int64.to_int_exn
+    ; nlink = Statx.nlink u |> Int64.to_int_trunc
+    ; uid = Statx.uid u |> Int64.to_int_trunc
+    ; gid = Statx.gid u |> Int64.to_int_trunc
+    ; rdev = Statx.rdev u |> Int64.to_int_trunc
     ; size = Statx.size u
-    ; atime = of_timespec (Statx.atime_sec u |> Int64.to_int_exn) (Statx.atime_nsec u)
-    ; mtime = of_timespec (Statx.mtime_sec u |> Int64.to_int_exn) (Statx.mtime_nsec u)
-    ; ctime = of_timespec (Statx.ctime_sec u |> Int64.to_int_exn) (Statx.ctime_nsec u)
+    ; atime = of_timespec (Statx.atime_sec u) (Statx.atime_nsec u)
+    ; mtime = of_timespec (Statx.mtime_sec u) (Statx.mtime_nsec u)
+    ; ctime = of_timespec (Statx.ctime_sec u) (Statx.ctime_nsec u)
     }
   ;;
 
@@ -474,6 +486,23 @@ let stat filename =
     In_thread.syscall_exn ~name:"stat" (fun () -> Unix.stat filename) >>| Stats.of_unix
 ;;
 
+let catch_unix_error f =
+  match f () with
+  | exception Unix_error (err, _, _) -> Error err
+  | res -> Ok res
+;;
+
+let stat_or_unix_error filename =
+  match Io_uring_raw_singleton.the_one_and_only () with
+  | Some uring ->
+    Io_uring.stat_or_unix_error uring filename
+    >>| fun res -> Result.map res ~f:Stats.of_ocaml_uring_statx
+  | None ->
+    In_thread.syscall_exn ~name:"stat" (fun () ->
+      catch_unix_error (fun () -> Caml_unix.LargeFile.stat filename))
+    >>| fun res -> Result.map res ~f:Stats.of_unix
+;;
+
 let lstat filename =
   match Io_uring_raw_singleton.the_one_and_only () with
   | Some uring ->
@@ -481,6 +510,17 @@ let lstat filename =
     >>| fun res -> Result.ok_exn res |> Stats.of_ocaml_uring_statx
   | None ->
     In_thread.syscall_exn ~name:"lstat" (fun () -> Unix.lstat filename) >>| Stats.of_unix
+;;
+
+let lstat_or_unix_error filename =
+  match Io_uring_raw_singleton.the_one_and_only () with
+  | Some uring ->
+    Io_uring.lstat_or_unix_error uring filename
+    >>| fun res -> Result.map ~f:Stats.of_ocaml_uring_statx res
+  | None ->
+    In_thread.syscall_exn ~name:"lstat" (fun () ->
+      catch_unix_error (fun () -> Caml_unix.LargeFile.lstat filename))
+    >>| fun res -> Result.map ~f:Stats.of_unix res
 ;;
 
 (* We treat [isatty] as a blocking operation, because it acts on a file. *)
@@ -502,11 +542,13 @@ let rename ~src ~dst =
   In_thread.syscall_exn ~name:"rename" (fun () -> Unix.rename ~src ~dst)
 ;;
 
-let link ?force ~target ~link_name () =
+let link ?force ?follow ~target ~link_name () =
   match Io_uring_raw_singleton.the_one_and_only () with
-  | Some uring -> Io_uring.link uring ?force ~target ~link_name () >>| Result.ok_exn
+  | Some uring ->
+    Io_uring.link uring ?force ?follow ~target ~link_name () >>| Result.ok_exn
   | None ->
-    In_thread.syscall_exn ~name:"link" (fun () -> Unix.link ?force ~target ~link_name ())
+    In_thread.syscall_exn ~name:"link" (fun () ->
+      Unix.link ?force ?follow ~target ~link_name ())
 ;;
 
 (* file permission and ownership *)
@@ -961,6 +1003,7 @@ module Socket = struct
     let udp = { family = Family.inet; socket_type = SOCK_DGRAM }
     let unix = { family = Family.unix; socket_type = SOCK_STREAM }
     let unix_dgram = { family = Family.unix; socket_type = SOCK_DGRAM }
+    let unix_seqpacket = { family = Family.unix; socket_type = SOCK_SEQPACKET }
     let phys_same (t1 : _ t) (t2 : _ t) = phys_same t1 t2
   end
 

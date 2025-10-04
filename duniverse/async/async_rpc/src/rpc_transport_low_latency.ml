@@ -15,7 +15,7 @@ external writev2
   -> len2:int
   -> Unix.Syscall_result.Int.t
   = "async_extra_rpc_writev2_byte" "async_extra_rpc_writev2"
-  [@@noalloc]
+[@@noalloc]
 
 module Config = struct
   (* Same as the default value of [buffer_age_limit] for [Async_unix.Writer] *)
@@ -55,12 +55,7 @@ module Config = struct
        || t.buffering_threshold_in_bytes < 0
        || t.start_batching_after_num_messages < 0
        || Time_ns.Span.( <= ) t.write_timeout Time_ns.Span.zero
-    then
-      failwiths
-        ~here:[%here]
-        "Rpc_transport_low_latency.Config.validate: invalid config"
-        t
-        sexp_of_t;
+    then failwiths "Rpc_transport_low_latency.Config.validate: invalid config" t sexp_of_t;
     t
   ;;
 
@@ -434,7 +429,7 @@ module Reader_internal = struct
                 let peek_len =
                   (* [Fd.syscall_exn] catches EINTR and retries the function. This is better
                       than calling [recv_peek_assume_fd_is_nonblocking] directly.
-                   *)
+                  *)
                   Fd.syscall_exn t.reader.fd (fun file_descr ->
                     Bigstring_unix.recv_peek_assume_fd_is_nonblocking
                       file_descr
@@ -478,19 +473,10 @@ module Reader_internal = struct
 
   let read_or_peek_dispatcher t ~dispatcher_impl ~caller_name =
     if t.closed
-    then
-      failwiths
-        ~here:[%here]
-        "Rpc_transport_low_latency.Reader: reader closed"
-        ""
-        [%sexp_of: string];
+    then failwiths "Rpc_transport_low_latency.Reader: reader closed" "" [%sexp_of: string];
     if t.reading
     then
-      failwiths
-        ~here:[%here]
-        "Rpc_transport_low_latency.Reader: already reading"
-        ""
-        [%sexp_of: string];
+      failwiths "Rpc_transport_low_latency.Reader: already reading" "" [%sexp_of: string];
     t.reading <- true;
     Monitor.protect
       ~run:`Now
@@ -674,7 +660,7 @@ module Writer_internal = struct
     if t.pos = 0
     then Deferred.unit
     else if not (Connection_state.is_able_to_send_data t.connection_state)
-    then Deferred.never ()
+    then Deferred.unit
     else (
       let flush =
         { pos = Int63.( + ) t.bytes_written (Int63.of_int t.pos); ivar = Ivar.create () }
@@ -864,7 +850,7 @@ module Writer_internal = struct
     ~pos
     ~len
     : _ Send_result.t
-    =
+    = exclave_
     let payload_len = writer.size msg + len in
     let total_len = Header.length + payload_len in
     if Config.message_size_ok t.config ~payload_len
@@ -899,7 +885,7 @@ module Writer_internal = struct
     ~pos
     ~len
     : _ Send_result.t
-    =
+    = exclave_
     if is_closed t
     then Closed
     else (
@@ -949,7 +935,7 @@ module Writer_internal = struct
       else Sent { result = (); bytes = 0 })
   ;;
 
-  let send_bin_prot_and_bigstring_non_copying t writer msg ~buf ~pos ~len =
+  let send_bin_prot_and_bigstring_non_copying t writer msg ~buf ~pos ~len = exclave_
     match send_bin_prot_and_bigstring t writer msg ~buf ~pos ~len with
     | (Closed | Message_too_big _) as r -> r
     | Sent { result = (); bytes } -> Sent { result = Deferred.unit; bytes }
@@ -957,7 +943,7 @@ module Writer_internal = struct
 
   let dummy_buf = Bigstring.create 0
 
-  let send_bin_prot t writer msg =
+  let send_bin_prot t writer msg = exclave_
     send_bin_prot_and_bigstring t writer msg ~buf:dummy_buf ~pos:0 ~len:0
   ;;
 

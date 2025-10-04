@@ -2,20 +2,29 @@ open! Import
 open Std_internal
 include String_id_intf
 
-module Make_with_validate_without_pretty_printer_with_bin_shape (M : sig
-  val module_name : string
-  val validate : string -> unit Or_error.t
-  val include_default_validation : bool
-  val caller_identity : Bin_prot.Shape.Uuid.t option
-end)
-() =
+module%template.portable
+  [@modality p] Make_with_validate_without_pretty_printer_with_bin_shape
+    (M : sig
+       val module_name : string
+       val validate : string -> unit Or_error.t @@ p
+       val include_default_validation : bool
+       val caller_identity : Bin_prot.Shape.Uuid.t option
+     end)
+    () =
 struct
   module Stable = struct
     module V1 = struct
       module T = struct
         type t = string
         [@@deriving
-          compare, equal, globalize, hash, sexp, sexp_grammar, typerep, stable_witness]
+          compare ~localize
+          , equal ~localize
+          , globalize
+          , hash
+          , sexp
+          , sexp_grammar
+          , typerep
+          , stable_witness]
 
         let check_for_whitespace =
           let invalid s reason =
@@ -58,12 +67,12 @@ struct
         ;;
 
         include
-          Binable.Of_binable_without_uuid [@alert "-legacy"]
+          Binable.Of_binable_without_uuid [@mode local] [@modality p] [@alert "-legacy"]
             (String)
             (struct
               type nonrec t = t
 
-              let to_binable = Fn.id
+              let[@mode m = (global, local)] to_binable = Fn.id
               let of_binable = of_string
             end)
 
@@ -77,42 +86,52 @@ struct
 
       module T_with_comparator = struct
         include T
-        include Comparator.Stable.V1.Make (T)
+        include Comparator.Stable.V1.Make [@modality p] (T)
       end
 
       include T_with_comparator
-      include Comparable.Stable.V1.With_stable_witness.Make (T_with_comparator)
-      include Hashable.Stable.V1.With_stable_witness.Make (T_with_comparator)
-      include Diffable.Atomic.Make (T_with_comparator)
+
+      include
+        Comparable.Stable.V1.With_stable_witness.Make [@modality p] (T_with_comparator)
+
+      include Hashable.Stable.V1.With_stable_witness.Make [@modality p] (T_with_comparator)
+      include Diffable.Atomic.Make [@modality p] (T_with_comparator)
     end
   end
 
   module Stable_latest = Stable.V1
   include Stable_latest.T_with_comparator
-  include Comparable.Make_binable_using_comparator (Stable_latest.T_with_comparator)
-  include Hashable.Make_binable (Stable_latest.T_with_comparator)
-  include Diffable.Atomic.Make (Stable_latest)
+
+  include
+    Comparable.Make_binable_using_comparator [@mode local] [@modality p]
+      (Stable_latest.T_with_comparator)
+
+  include Hashable.Make_binable [@modality p] (Stable_latest.T_with_comparator)
+  include Diffable.Atomic.Make [@modality p] (Stable_latest)
 
   let quickcheck_shrinker = Quickcheck.Shrinker.empty ()
   let quickcheck_observer = String.quickcheck_observer
 
   let quickcheck_generator =
-    String.gen_nonempty' Char.gen_print
-    |> Quickcheck.Generator.filter ~f:(fun string -> check string |> Result.is_ok)
+    (String.gen_nonempty' [@modality p]) Char.gen_print
+    |> (Quickcheck.Generator.filter [@modality p]) ~f:(fun string ->
+      check string |> Result.is_ok)
   ;;
 
-  let arg_type = Command.Arg_type.create of_string
+  let arg_type = (Command.Arg_type.create [@modality p]) of_string
 end
 
-module Make_with_validate_without_pretty_printer (M : sig
-  val module_name : string
-  val validate : string -> unit Or_error.t
-  val include_default_validation : bool
-end)
-() =
+module%template.portable
+  [@modality p] Make_with_validate_without_pretty_printer
+    (M : sig
+       val module_name : string
+       val validate : string -> unit Or_error.t @@ p
+       val include_default_validation : bool
+     end)
+    () =
 struct
-  include
-    Make_with_validate_without_pretty_printer_with_bin_shape
+  include%template
+    Make_with_validate_without_pretty_printer_with_bin_shape [@modality p]
       (struct
         include M
 
@@ -121,75 +140,108 @@ struct
       ()
 end
 
-module Make_without_pretty_printer (M : sig
-  val module_name : string
-end)
-() =
+module Make_without_pretty_printer
+    (M : sig
+       val module_name : string
+     end)
+    () =
 struct
-  include
-    Make_with_validate_without_pretty_printer
+  include%template
+    Make_with_validate_without_pretty_printer [@modality portable]
       (struct
         let module_name = M.module_name
-        let validate = Fn.const (Ok ())
+        let validate _ = Ok ()
         let include_default_validation = true
       end)
       ()
 end
 
-module Make_with_validate (M : sig
-  val module_name : string
-  val validate : string -> unit Or_error.t
-  val include_default_validation : bool
-end)
-() =
+module%template.portable
+  [@modality p] Make_with_validate
+    (M : sig
+       val module_name : string
+       val validate : string -> unit Or_error.t @@ p
+       val include_default_validation : bool
+     end)
+    () =
 struct
-  include Make_with_validate_without_pretty_printer (M) ()
+  include Make_with_validate_without_pretty_printer [@modality p] (M) ()
 
-  include Pretty_printer.Register (struct
-    type nonrec t = t
+  include Pretty_printer.Register [@modality p] (struct
+      type nonrec t = t
 
-    let module_name = M.module_name
-    let to_string = to_string
-  end)
+      let module_name = M.module_name
+      let to_string = to_string
+    end)
 end
 
-module Make (M : sig
-  val module_name : string
-end)
-() =
+module Make
+    (M : sig
+       val module_name : string
+     end)
+    () =
 struct
   include Make_without_pretty_printer (M) ()
 
-  include Pretty_printer.Register (struct
-    type nonrec t = t
+  include%template Pretty_printer.Register [@modality portable] (struct
+      type nonrec t = t
 
-    let module_name = M.module_name
-    let to_string = to_string
-  end)
+      let module_name = M.module_name
+      let to_string = to_string
+    end)
 end
 
-module Make_with_distinct_bin_shape (M : sig
-  val module_name : string
-  val caller_identity : Bin_prot.Shape.Uuid.t
-end)
-() =
+module Make_with_distinct_bin_shape
+    (M : sig
+       val module_name : string
+       val caller_identity : Bin_prot.Shape.Uuid.t
+     end)
+    () =
 struct
-  include
-    Make_with_validate_without_pretty_printer_with_bin_shape
+  include%template
+    Make_with_validate_without_pretty_printer_with_bin_shape [@modality portable]
       (struct
         let module_name = M.module_name
-        let validate = Fn.const (Ok ())
+        let validate _ = Ok ()
         let include_default_validation = true
         let caller_identity = Some M.caller_identity
       end)
       ()
 
-  include Pretty_printer.Register (struct
-    type nonrec t = t
+  include%template Pretty_printer.Register [@modality portable] (struct
+      type nonrec t = t
 
-    let module_name = M.module_name
-    let to_string = to_string
-  end)
+      let module_name = M.module_name
+      let to_string = to_string
+    end)
+end
+
+module%template.portable
+  [@modality p] Make_with_validate_and_distinct_bin_shape
+    (M : sig
+       val module_name : string
+       val validate : string -> unit Or_error.t @@ p
+       val include_default_validation : bool
+       val caller_identity : Bin_prot.Shape.Uuid.t
+     end)
+    () =
+struct
+  include
+    Make_with_validate_without_pretty_printer_with_bin_shape [@modality p]
+      (struct
+        let module_name = M.module_name
+        let validate = M.validate
+        let include_default_validation = M.include_default_validation
+        let caller_identity = Some M.caller_identity
+      end)
+      ()
+
+  include Pretty_printer.Register [@modality p] (struct
+      type nonrec t = t
+
+      let module_name = M.module_name
+      let to_string = to_string
+    end)
 end
 
 include
@@ -202,6 +254,5 @@ include
 module String_without_validation_without_pretty_printer = struct
   include String
 
-  let globalize = globalize_string
-  let arg_type = Command.Arg_type.create Fn.id
+  let%template arg_type = (Command.Arg_type.create [@mode portable]) Fn.id
 end

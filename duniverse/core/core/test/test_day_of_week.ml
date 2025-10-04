@@ -4,8 +4,7 @@ open! Day_of_week
 
 let num_days_in_week = 7
 
-let%test_module "Day_of_week.V1" =
-  (module Stable_unit_test.Make (struct
+module%test [@name "Day_of_week.V1"] _ = Stable_unit_test.Make (struct
     include Stable.V1
 
     let equal = [%compare.equal: t]
@@ -20,8 +19,7 @@ let%test_module "Day_of_week.V1" =
       ; Sat, "SAT", "\006"
       ]
     ;;
-  end))
-;;
+  end)
 
 let%test _ = List.is_sorted all ~compare
 
@@ -40,7 +38,7 @@ let%test "num_days is inverse to shift" =
 ;;
 
 let%expect_test "validate sexp grammar" =
-  Sexp_grammar_validation.validate_grammar (module Day_of_week) |> require_ok [%here];
+  Sexp_grammar_validation.validate_grammar (module Day_of_week) |> require_ok;
   [%expect
     {|
     (Variant

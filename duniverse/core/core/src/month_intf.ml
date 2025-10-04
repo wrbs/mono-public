@@ -1,6 +1,6 @@
 open! Import
 
-module type Month = sig
+module type Month = sig @@ portable
   type t =
     | Jan
     | Feb
@@ -14,19 +14,30 @@ module type Month = sig
     | Oct
     | Nov
     | Dec
-  [@@deriving bin_io, hash, equal, quickcheck, sexp, sexp_grammar, variants]
+  [@@deriving
+    bin_io ~localize
+    , compare ~localize
+    , equal ~localize
+    , globalize
+    , hash
+    , quickcheck
+    , sexp
+    , sexp_grammar
+    , typerep
+    , variants]
 
-  include Comparable.S_binable with type t := t
+  include%template Comparable.S_binable [@mode local] with type t := t
+
   include Hashable.S_binable with type t := t
 
-  (** [of_string s] accepts three-character abbreviations with three capitalizations
-      (e.g. Jan, JAN, and jan). *)
+  (** [of_string s] accepts three-character abbreviations with three capitalizations (e.g.
+      Jan, JAN, and jan). *)
   include Stringable.S with type t := t
 
   val all : t list
 
-  (** [of_int i] returns the [i]th month if [i] is in 1, 2, ... , 12. Otherwise it
-      returns [None]. *)
+  (** [of_int i] returns the [i]th month if [i] is in 1, 2, ... , 12. Otherwise it returns
+      [None]. *)
   val of_int : int -> t option
 
   val of_int_exn : int -> t
@@ -71,12 +82,13 @@ module type Month = sig
         | Oct
         | Nov
         | Dec
-      [@@deriving sexp, sexp_grammar, bin_io, compare, hash, equal]
+      [@@deriving equal ~localize, globalize, hash, sexp_grammar]
 
-      include
+      include%template
         Stable_module_types.With_stable_witness.S0
-          with type comparator_witness = comparator_witness
-           and type t := t
+        [@mode local]
+        with type comparator_witness = comparator_witness
+         and type t := t
     end
   end
 end

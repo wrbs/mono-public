@@ -1,6 +1,7 @@
 module Dune_config = struct
   open Stdune
   open Dune_lang.Decoder
+  module Spawn = Dune_spawn.Spawn
   module Display = Display
   module Scheduler = Dune_engine.Scheduler
   module Sandbox_mode = Dune_engine.Sandbox_mode
@@ -10,11 +11,54 @@ module Dune_config = struct
   module Pform = Dune_lang.Pform
   module Log = Dune_util.Log
   module Config = Dune_config.Config
-  module Execution_env = Dune_util.Execution_env
 
   (* the configuration file use the same version numbers as dune-project files for
      simplicity *)
   let syntax = Stanza.syntax
+
+  module Project_defaults = struct
+    type t =
+      { authors : string list option
+      ; maintainers : string list option
+      ; maintenance_intent : string list option
+      ; license : string list option
+      }
+
+    let equal t { authors; maintainers; maintenance_intent; license } =
+      Option.equal (List.equal String.equal) t.authors authors
+      && Option.equal (List.equal String.equal) t.authors maintainers
+      && Option.equal (List.equal String.equal) t.authors maintenance_intent
+      && Option.equal (List.equal String.equal) t.authors license
+    ;;
+
+    let decode =
+      fields
+        (let+ authors = field_o "authors" (repeat string)
+         and+ maintainers = field_o "maintainers" (repeat string)
+         and+ maintenance_intent =
+           field_o "maintenance_intent" Dune_lang.Package_info.decode_maintenance_intent
+         and+ license = field_o "license" (repeat string) in
+         { authors; maintainers; maintenance_intent; license })
+    ;;
+
+    let to_dyn t =
+      let f = Dyn.(option (list string)) in
+      Dyn.record
+        [ "authors", f t.authors
+        ; "maintainers", f t.maintainers
+        ; "maintenance_intent", f t.maintenance_intent
+        ; "license", f t.license
+        ]
+    ;;
+  end
+
+  module Pkg_enabled = struct
+    type t = bool
+
+    let decode = enum' [ "enabled", return true; "disabled", return false ]
+    let equal = Bool.equal
+    let to_dyn = Dyn.bool
+  end
 
   module Terminal_persistence = struct
     type t =
@@ -27,6 +71,14 @@ module Dune_config = struct
       ; "clear-on-rebuild", Clear_on_rebuild
       ; "clear-on-rebuild-and-flush-history", Clear_on_rebuild_and_flush_history
       ]
+    ;;
+
+    let equal a b =
+      match a, b with
+      | Preserve, Preserve
+      | Clear_on_rebuild, Clear_on_rebuild
+      | Clear_on_rebuild_and_flush_history, Clear_on_rebuild_and_flush_history -> true
+      | _, _ -> false
     ;;
 
     let to_dyn = function
@@ -43,6 +95,13 @@ module Dune_config = struct
     type t =
       | Fixed of int
       | Auto
+
+    let equal a b =
+      match a, b with
+      | Fixed a, Fixed b -> Int.equal a b
+      | Auto, Auto -> true
+      | _, _ -> false
+    ;;
 
     let error = Error "invalid concurrency value, must be 'auto' or a positive number"
 
@@ -75,10 +134,65 @@ module Dune_config = struct
   module Sandboxing_preference = struct
     type t = Sandbox_mode.t list
 
-    let decode = repeat Sandbox_mode.decode
+    let equal = List.equal Sandbox_mode.equal
+
+    let decode : Sandbox_mode.t Dune_sexp.Decoder.t =
+      let open Dune_sexp.Decoder in
+      enum
+        [ "none", None
+        ; "symlink", Some Sandbox_mode.Symlink
+        ; "copy", Some Copy
+        ; "hardlink", Some Hardlink
+        ]
+    ;;
+
+    let decode = repeat decode
   end
 
   module Cache = struct
+    module Toggle = struct
+      type t =
+        | Disabled
+        | Enabled_except_user_rules
+        | Enabled
+
+      let equal a b =
+        match a, b with
+        | Disabled, Disabled
+        | Enabled_except_user_rules, Enabled_except_user_rules
+        | Enabled, Enabled -> true
+        | _, _ -> false
+      ;;
+
+      let to_string = function
+        | Disabled -> "disabled"
+        | Enabled_except_user_rules -> "enabled-except-user-rules"
+        | Enabled -> "enabled"
+      ;;
+
+      let all =
+        List.map
+          ~f:(fun x -> to_string x, x)
+          [ Disabled; Enabled_except_user_rules; Enabled ]
+      ;;
+
+      let decode ~check =
+        let open Dune_lang.Decoder in
+        enum'
+          [ to_string Disabled, return Disabled
+          ; to_string Enabled, return Enabled
+          ; ( to_string Enabled_except_user_rules
+            , check (3, 17) >>> return Enabled_except_user_rules )
+          ]
+      ;;
+
+      let to_dyn = function
+        | Disabled -> Dyn.variant "Disabed" []
+        | Enabled_except_user_rules -> Dyn.variant "Enabled_except_user_rules" []
+        | Enabled -> Dyn.variant "Enabled" []
+      ;;
+    end
+
     module Transport_deprecated = struct
       type t =
         | Daemon
@@ -90,6 +204,8 @@ module Dune_config = struct
 
     module Storage_mode = struct
       type t = Dune_cache_storage.Mode.t option
+
+      let equal = Option.equal Dune_cache_storage.Mode.equal
 
       let all =
         ("auto", None)
@@ -121,13 +237,67 @@ module Dune_config = struct
       ; concurrency : Concurrency.t field
       ; terminal_persistence : Terminal_persistence.t field
       ; sandboxing_preference : Sandboxing_preference.t field
-      ; cache_enabled : Config.Toggle.t field
+      ; cache_enabled : Cache.Toggle.t field
       ; cache_reproducibility_check : Dune_cache.Config.Reproducibility_check.t field
       ; cache_storage_mode : Cache.Storage_mode.t field
       ; action_stdout_on_success : Action_output_on_success.t field
       ; action_stderr_on_success : Action_output_on_success.t field
+      ; project_defaults : Project_defaults.t field
+      ; pkg_enabled : Pkg_enabled.t field
       ; experimental : (string * (Loc.t * string)) list field
       }
+  end
+
+  module Make_equal
+      (M : S)
+      (Equal : sig
+         val field : ('a -> 'a -> bool) -> 'a M.field -> 'a M.field -> bool
+       end) =
+  struct
+    let field = Equal.field
+
+    let equal
+          (t : M.t)
+          { M.display
+          ; concurrency
+          ; terminal_persistence
+          ; sandboxing_preference
+          ; cache_enabled
+          ; cache_reproducibility_check
+          ; cache_storage_mode
+          ; action_stdout_on_success
+          ; action_stderr_on_success
+          ; project_defaults
+          ; pkg_enabled
+          ; experimental
+          }
+      =
+      field Display.equal t.display display
+      && field Concurrency.equal t.concurrency concurrency
+      && field Terminal_persistence.equal t.terminal_persistence terminal_persistence
+      && field Sandboxing_preference.equal t.sandboxing_preference sandboxing_preference
+      && field Cache.Toggle.equal t.cache_enabled cache_enabled
+      && field
+           Dune_cache.Config.Reproducibility_check.equal
+           t.cache_reproducibility_check
+           cache_reproducibility_check
+      && field Cache.Storage_mode.equal t.cache_storage_mode cache_storage_mode
+      && field
+           Action_output_on_success.equal
+           t.action_stdout_on_success
+           action_stdout_on_success
+      && field
+           Action_output_on_success.equal
+           t.action_stderr_on_success
+           action_stderr_on_success
+      && field Project_defaults.equal t.project_defaults project_defaults
+      && field
+           (List.equal
+              (Tuple.T2.equal String.equal (Tuple.T2.equal Loc.equal String.equal)))
+           t.experimental
+           experimental
+      && field Pkg_enabled.equal t.pkg_enabled pkg_enabled
+    ;;
   end
 
   module Make_superpose
@@ -153,6 +323,8 @@ module Dune_config = struct
           field a.action_stdout_on_success b.action_stdout_on_success
       ; action_stderr_on_success =
           field a.action_stderr_on_success b.action_stderr_on_success
+      ; project_defaults = field a.project_defaults b.project_defaults
+      ; pkg_enabled = field a.pkg_enabled b.pkg_enabled
       ; experimental = field a.experimental b.experimental
       }
     ;;
@@ -167,17 +339,19 @@ module Dune_config = struct
     open To_dyn
 
     let to_dyn
-      { M.display
-      ; concurrency
-      ; terminal_persistence
-      ; sandboxing_preference
-      ; cache_enabled
-      ; cache_reproducibility_check
-      ; cache_storage_mode
-      ; action_stdout_on_success
-      ; action_stderr_on_success
-      ; experimental
-      }
+          { M.display
+          ; concurrency
+          ; terminal_persistence
+          ; sandboxing_preference
+          ; cache_enabled
+          ; cache_reproducibility_check
+          ; cache_storage_mode
+          ; action_stdout_on_success
+          ; action_stderr_on_success
+          ; project_defaults
+          ; pkg_enabled
+          ; experimental
+          }
       =
       Dyn.record
         [ "display", field Display.to_dyn display
@@ -185,7 +359,7 @@ module Dune_config = struct
         ; "terminal_persistence", field Terminal_persistence.to_dyn terminal_persistence
         ; ( "sandboxing_preference"
           , field (Dyn.list Sandbox_mode.to_dyn) sandboxing_preference )
-        ; "cache_enabled", field Config.Toggle.to_dyn cache_enabled
+        ; "cache_enabled", field Cache.Toggle.to_dyn cache_enabled
         ; ( "cache_reproducibility_check"
           , field
               Dune_cache.Config.Reproducibility_check.to_dyn
@@ -195,6 +369,8 @@ module Dune_config = struct
           , field Action_output_on_success.to_dyn action_stdout_on_success )
         ; ( "action_stderr_on_success"
           , field Action_output_on_success.to_dyn action_stderr_on_success )
+        ; "project_defaults", field Project_defaults.to_dyn project_defaults
+        ; "pkg_enabled", field Pkg_enabled.to_dyn pkg_enabled
         ; ( "experimental"
           , field Dyn.(list (pair string (fun (_, v) -> string v))) experimental )
         ]
@@ -218,6 +394,8 @@ module Dune_config = struct
       ; cache_storage_mode = None
       ; action_stdout_on_success = None
       ; action_stderr_on_success = None
+      ; project_defaults = None
+      ; pkg_enabled = None
       ; experimental = None
       }
     ;;
@@ -238,6 +416,13 @@ module Dune_config = struct
         (struct
           let field f = Dyn.option f
         end)
+
+    include
+      Make_equal
+        (M)
+        (struct
+          let field f = Option.equal f
+        end)
   end
 
   include
@@ -248,6 +433,13 @@ module Dune_config = struct
 
   include
     Make_to_dyn
+      (M)
+      (struct
+        let field f = f
+      end)
+
+  include
+    Make_equal
       (M)
       (struct
         let field f = f
@@ -272,26 +464,34 @@ module Dune_config = struct
   ;;
 
   let hash = Poly.hash
-  let equal a b = Poly.equal a b
 
   let default =
     { display = Simple { verbosity = Quiet; status_line = not Execution_env.inside_dune }
     ; concurrency = (if Execution_env.inside_dune then Fixed 1 else Auto)
     ; terminal_persistence = Clear_on_rebuild
     ; sandboxing_preference = []
-    ; cache_enabled = `Disabled
+    ; cache_enabled = Enabled_except_user_rules
     ; cache_reproducibility_check = Skip
-    ; cache_storage_mode = None
+    ; cache_storage_mode = Some (Dune_cache_storage.Mode.default ())
     ; action_stdout_on_success = Print
     ; action_stderr_on_success = Print
+    ; project_defaults =
+        { authors = Some [ "Author Name <author@example.com>" ]
+        ; maintainers = Some [ "Maintainer Name <maintainer@example.com>" ]
+        ; maintenance_intent = None
+        ; license = Some [ "LICENSE" ]
+        }
+    ; pkg_enabled = false
     ; experimental = []
     }
   ;;
 
   let decode_generic ~min_dune_version =
     let check min_ver =
-      let ver = Dune_lang.Syntax.Version.max min_ver min_dune_version in
-      Dune_lang.Syntax.since Stanza.syntax ver
+      let module S = Dune_lang.Syntax in
+      let ver = S.Version.max min_ver min_dune_version in
+      let* loc, what = S.desc () in
+      S.since_fmt ~fmt:(S.Error_msg.since_config ~what) Stanza.syntax ver loc
     in
     let field_o n v d = field_o n (check v >>> d) in
     let+ display = field_o "display" (1, 0) (enum Display.all)
@@ -300,7 +500,7 @@ module Dune_config = struct
       field_o "terminal-persistence" (1, 0) Terminal_persistence.decode
     and+ sandboxing_preference =
       field_o "sandboxing_preference" (1, 0) Sandboxing_preference.decode
-    and+ cache_enabled = field_o "cache" (2, 0) (enum Config.Toggle.all)
+    and+ cache_enabled = field_o "cache" (2, 0) (Cache.Toggle.decode ~check)
     and+ _cache_transport_unused_since_3_0 =
       field_o
         "cache-transport"
@@ -347,6 +547,8 @@ module Dune_config = struct
       field_o "action_stdout_on_success" (3, 0) Action_output_on_success.decode
     and+ action_stderr_on_success =
       field_o "action_stderr_on_success" (3, 0) Action_output_on_success.decode
+    and+ project_defaults = field_o "project_defaults" (3, 17) Project_defaults.decode
+    and+ pkg_enabled = field_o "pkg" (3, 20) Pkg_enabled.decode
     and+ experimental =
       field_o "experimental" (3, 8) (repeat (pair string (located string)))
     in
@@ -367,6 +569,8 @@ module Dune_config = struct
     ; cache_storage_mode
     ; action_stdout_on_success
     ; action_stderr_on_success
+    ; project_defaults
+    ; pkg_enabled
     ; experimental
     }
   ;;
@@ -393,7 +597,9 @@ module Dune_config = struct
 
   let load_config_file p =
     load_exn p ~f:(fun lang ->
-      String_with_vars.set_decoding_env (Pform.Env.initial lang.version) decode)
+      String_with_vars.set_decoding_env
+        (Pform.Env.initial ~stanza:lang.version ~extensions:[])
+        decode)
   ;;
 
   let load_user_config_file () =
@@ -428,7 +634,6 @@ module Dune_config = struct
       | Preserve -> ()
       | Clear_on_rebuild -> Console.reset ()
       | Clear_on_rebuild_and_flush_history -> Console.reset_flush_history ());
-    Stdune.Io.set_copy_impl Config.(get copy_file);
     Log.verbose
     := match t.display with
        | Simple { verbosity = Verbose; _ } -> true

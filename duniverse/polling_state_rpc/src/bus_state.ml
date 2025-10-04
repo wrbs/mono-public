@@ -17,12 +17,12 @@ let create () = { state = Init; unsubscribe = (fun () -> ()) }
 
 let push t value =
   t.state
-    <- (match t.state with
-        | Init -> Unseen_value value
-        | Waiting_for_next_value ivar ->
-          Ivar.fill_exn ivar value;
-          Init
-        | Unseen_value _ -> Unseen_value value)
+  <- (match t.state with
+      | Init -> Unseen_value value
+      | Waiting_for_next_value ivar ->
+        Ivar.fill_exn ivar value;
+        Init
+      | Unseen_value _ -> Unseen_value value)
 ;;
 
 let take t =
@@ -46,6 +46,6 @@ let unsubscribe t =
 
 let subscribe t bus =
   unsubscribe t;
-  let subscriber = Bus.subscribe_exn bus [%here] ~f:(fun response -> push t response) in
+  let subscriber = Bus.subscribe_exn bus ~f:(fun response -> push t response) in
   t.unsubscribe <- (fun () -> Bus.unsubscribe bus subscriber)
 ;;

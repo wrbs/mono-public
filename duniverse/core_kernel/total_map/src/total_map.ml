@@ -1,31 +1,263 @@
 include Total_map_intf
 
+open struct
+  open Core
+
+  let validate_map_from_serialization
+    (type t cmp)
+    (module Key : Key_with_witnesses with type t = t and type comparator_witness = cmp)
+    (map : (t, _, cmp) Map.t)
+    =
+    let all_set = Set.of_list (module Key) Key.all in
+    let keys = Map.key_set map in
+    let keys_minus_all = Set.diff keys all_set in
+    let all_minus_keys = Set.diff all_set keys in
+    Validate.maybe_raise
+      (Validate.of_list
+         [ (if Set.is_empty keys_minus_all
+            then Validate.get_pass ()
+            else
+              Validate.fails
+                "map from serialization has keys not provided in the enumeration"
+                keys_minus_all
+                [%sexp_of: Set.M(Key).t])
+         ; (if Set.is_empty all_minus_keys
+            then Validate.get_pass ()
+            else
+              Validate.fails
+                "map from serialization doesn't have keys it should have"
+                all_minus_keys
+                [%sexp_of: Set.M(Key).t])
+         ])
+  ;;
+end
+
 module Stable = struct
   open Core.Core_stable
+  module V1 = struct end
 
-  module V1 = struct
+  module V1_unsafe_deserialization = struct
     type ('key, 'a, 'cmp, 'enum) t = ('key, 'a, 'cmp) Map.V1.t
 
+    [%%template
+    [@@@modality.default p = (portable, nonportable)]
+
     module type S =
-      Stable_V1_S with type ('key, 'a, 'cmp, 'enum) total_map := ('key, 'a, 'cmp, 'enum) t
+      Stable_S
+      [@modality p]
+      with type ('key, 'a, 'cmp, 'enum) total_map := ('key, 'a, 'cmp, 'enum) t
+
+    module type S_with_stable_witness =
+      Stable_S_with_stable_witness
+      [@modality p]
+      with type ('key, 'a, 'cmp, 'enum) total_map := ('key, 'a, 'cmp, 'enum) t
 
     module type For_include_functor =
-      Stable_V1_For_include_functor
-        with type ('key, 'a, 'cmp, 'enum) Total_map.total_map := ('key, 'a, 'cmp, 'enum) t
+      Stable_For_include_functor
+      [@modality p]
+      with type ('key, 'a, 'cmp, 'enum) Total_map.total_map := ('key, 'a, 'cmp, 'enum) t
 
-    module Make_with_witnesses (Key : Key_with_witnesses) = struct
+    module type For_include_functor_with_stable_witness =
+      Stable_For_include_functor_with_stable_witness
+      [@modality p]
+      with type ('key, 'a, 'cmp, 'enum) Total_map.total_map := ('key, 'a, 'cmp, 'enum) t]
+
+    module%template.portable
+      [@modality p] Make_with_witnesses
+        (Key : Key_with_witnesses
+      [@modality p]) =
+    struct
       module Key = struct
         include Key
-        include Comparable.V1.Make (Key)
+
+        include%template Comparable.V1.Make [@modality p] (Key)
       end
 
       type comparator_witness = Key.comparator_witness
       type enumeration_witness = Key.enumeration_witness
-      type nonrec 'a t = 'a Key.Map.t [@@deriving bin_io, sexp, compare]
+      type nonrec 'a t = 'a Key.Map.t [@@deriving bin_io, sexp, compare ~localize]
     end
 
-    module Make_for_include_functor_with_witnesses (Key : Key_with_witnesses) = struct
-      module Total_map = Make_with_witnesses (Key)
+    module%template.portable
+      [@modality p] Make_for_include_functor_with_witnesses
+        (Key : Key_with_witnesses
+      [@modality p]) =
+    struct
+      module Total_map = Make_with_witnesses [@modality p] (Key)
+    end
+
+    module%template.portable
+      [@modality p] Make_with_stable_witness
+        (Key : Key_with_stable_witness
+      [@modality p]) =
+    struct
+      module Key = struct
+        include Key
+        include Comparable.V1.With_stable_witness.Make [@modality p] (Key)
+      end
+
+      type comparator_witness = Key.comparator_witness
+      type enumeration_witness = Key.enumeration_witness
+
+      type nonrec 'a t = 'a Key.Map.t
+      [@@deriving bin_io, sexp, compare ~localize, stable_witness]
+    end
+
+    module%template.portable
+      [@modality p] Make_for_include_functor_with_stable_witness
+        (Key : Key_with_stable_witness
+      [@modality p]) =
+    struct
+      module Total_map = Make_with_stable_witness [@modality p] (Key)
+    end
+  end
+
+  module V2 = struct
+    type ('key, 'a, 'cmp, 'enum) t = ('key, 'a, 'cmp) Map.V1.t
+
+    [%%template
+    [@@@modality.default p = (portable, nonportable)]
+
+    module type S =
+      Stable_S
+      [@modality p]
+      with type ('key, 'a, 'cmp, 'enum) total_map := ('key, 'a, 'cmp, 'enum) t
+
+    module type S_with_stable_witness =
+      Stable_S_with_stable_witness
+      [@modality p]
+      with type ('key, 'a, 'cmp, 'enum) total_map := ('key, 'a, 'cmp, 'enum) t
+
+    module type For_include_functor =
+      Stable_For_include_functor
+      [@modality p]
+      with type ('key, 'a, 'cmp, 'enum) Total_map.total_map := ('key, 'a, 'cmp, 'enum) t
+
+    module type For_include_functor_with_stable_witness =
+      Stable_For_include_functor_with_stable_witness
+      [@modality p]
+      with type ('key, 'a, 'cmp, 'enum) Total_map.total_map := ('key, 'a, 'cmp, 'enum) t]
+
+    module%template.portable
+      [@modality p] Make_common
+        (Key : sig
+           include Key_with_witnesses [@modality p]
+
+           include
+             Comparable.V1.S
+             with type comparable := t
+              and type comparator_witness := comparator_witness
+         end)
+        (M : sig
+           type 'a t = 'a Key.Map.t
+         end) =
+    struct
+      open M
+
+      type comparator_witness = Key.comparator_witness
+      type enumeration_witness = Key.enumeration_witness
+
+      include
+        Sexpable.Of_sexpable1.V1 [@modality p]
+          (Key.Map)
+          (struct
+            type nonrec 'a t = 'a t
+
+            let to_sexpable t = t
+
+            let module_Key @ p =
+              Base.Portability_hacks.magic_portable__first_class_module
+                (module Key : Key_with_witnesses
+                  with type t = Key.t
+                   and type comparator_witness = Key.comparator_witness)
+            ;;
+
+            let of_sexpable map =
+              validate_map_from_serialization
+                (Base.Portability_hacks.magic_uncontended__first_class_module module_Key)
+                map;
+              map
+            ;;
+          end)
+
+      include
+        Binable.Of_binable1.V2 [@modality p]
+          (Key.Map)
+          (struct
+            type nonrec 'a t = 'a t
+
+            let to_binable t = t
+
+            let module_Key =
+              Base.Portability_hacks.magic_portable__first_class_module
+                (module Key : Key_with_witnesses
+                  with type t = Key.t
+                   and type comparator_witness = Key.comparator_witness)
+            ;;
+
+            let of_binable map =
+              validate_map_from_serialization
+                (Base.Portability_hacks.magic_uncontended__first_class_module module_Key)
+                map;
+              map
+            ;;
+
+            let caller_identity =
+              Bin_shape.Uuid.of_string "9cb8901d-3d76-43b9-6f50-7b2a92d415f4"
+            ;;
+          end)
+    end
+
+    module%template.portable
+      [@modality p] Make_with_witnesses
+        (Key : Key_with_witnesses
+      [@modality p]) =
+    struct
+      module Key = struct
+        include Key
+        include Comparable.V1.Make [@modality p] (Key)
+      end
+
+      module T = struct
+        type nonrec 'a t = 'a Key.Map.t [@@deriving compare ~localize]
+      end
+
+      include T
+      include Make_common [@modality p] (Key) (T)
+    end
+
+    module%template.portable
+      [@modality p] Make_for_include_functor_with_witnesses
+        (Key : Key_with_witnesses
+      [@modality p]) =
+    struct
+      module Total_map = Make_with_witnesses [@modality p] (Key)
+    end
+
+    module%template.portable
+      [@modality p] Make_with_stable_witness
+        (Key : Key_with_stable_witness
+      [@modality p]) =
+    struct
+      module Key = struct
+        include Key
+        include Comparable.V1.With_stable_witness.Make [@modality p] (Key)
+      end
+
+      module T = struct
+        type nonrec 'a t = 'a Key.Map.t [@@deriving compare ~localize, stable_witness]
+      end
+
+      include T
+      include Make_common [@modality p] (Key) (T)
+    end
+
+    module%template.portable
+      [@modality p] Make_for_include_functor_with_stable_witness
+        (Key : Key_with_stable_witness
+      [@modality p]) =
+    struct
+      module Total_map = Make_with_stable_witness [@modality p] (Key)
     end
   end
 end
@@ -34,29 +266,36 @@ open! Core
 open! Import
 module Enumeration = Enumeration
 
-type ('key, 'a, 'cmp, 'enum) t = ('key, 'a, 'cmp, 'enum) Stable.V1.t
+type ('key, 'a, 'cmp, 'enum) t = ('key, 'a, 'cmp, 'enum) Stable.V2.t
+
+[%%template
+[@@@modality.default p = (portable, nonportable)]
 
 module type S_plain =
-  S_plain with type ('key, 'a, 'cmp, 'enum) total_map := ('key, 'a, 'cmp, 'enum) t
+  S_plain
+  [@modality p]
+  with type ('key, 'a, 'cmp, 'enum) total_map := ('key, 'a, 'cmp, 'enum) t
 
 module type For_include_functor_plain =
   For_include_functor_plain
-    with type ('key, 'a, 'cmp, 'enum) Total_map.total_map := ('key, 'a, 'cmp, 'enum) t
+  [@modality p]
+  with type ('key, 'a, 'cmp, 'enum) Total_map.total_map := ('key, 'a, 'cmp, 'enum) t
 
-module type S = S with type ('key, 'a, 'cmp, 'enum) total_map := ('key, 'a, 'cmp, 'enum) t
+module type S =
+  S [@modality p] with type ('key, 'a, 'cmp, 'enum) total_map := ('key, 'a, 'cmp, 'enum) t
 
 module type For_include_functor =
   For_include_functor
-    with type ('key, 'a, 'cmp, 'enum) Total_map.total_map := ('key, 'a, 'cmp, 'enum) t
+  [@modality p]
+  with type ('key, 'a, 'cmp, 'enum) Total_map.total_map := ('key, 'a, 'cmp, 'enum) t]
 
 let to_map t = t
 
 let key_not_in_enumeration t key =
   failwiths
-    ~here:[%here]
     "Key was not provided in the enumeration given to [Total_map.Make]"
     key
-    (Map.comparator t).sexp_of_t
+    (Comparator.sexp_of_t (Map.comparator t))
 ;;
 
 let change t k ~f =
@@ -94,6 +333,13 @@ let map2 t1 t2 ~f =
     Some (f v1 v2))
 ;;
 
+let mapi2 t1 t2 ~f =
+  Map.merge t1 t2 ~f:(fun ~key v ->
+    let v1, v2 = pair t1 t2 key v in
+    Some (f key v1 v2))
+;;
+
+let unzip t = Map.unzip t
 let set t key data = Map.set t ~key ~data
 
 module Sequence3 (A : Applicative.S3) = struct
@@ -106,8 +352,17 @@ module Sequence3 (A : Applicative.S3) = struct
   ;;
 end
 
-module Sequence2 (A : Applicative.S2) = Sequence3 (Applicative.S2_to_S3 (A))
-module Sequence (A : Applicative) = Sequence2 (Applicative.S_to_S2 (A))
+module Sequence2 (A : Applicative.S2) = Sequence3 (struct
+    include A
+
+    type ('a, 'b, _) t = ('a, 'b) A.t
+  end)
+
+module Sequence (A : Applicative) = Sequence2 (struct
+    include A
+
+    type ('a, _) t = 'a A.t
+  end)
 
 include struct
   open Map
@@ -124,20 +379,48 @@ include struct
   let fold = fold
   let fold_right = fold_right
   let to_alist = to_alist
+  let validate = validate
+  let validatei = validatei
 end
 
-module Make_plain_with_witnesses (Key : Key_plain_with_witnesses) = struct
+module%template.portable
+  [@modality p] Make_plain_with_witnesses
+    (Key : Key_plain_with_witnesses
+  [@modality p]) =
+struct
   module Key = struct
     include Key
-    include Comparable.Make_plain_using_comparator (Key)
+    include Comparable.Make_plain_using_comparator [@modality p] (Key)
   end
 
   type comparator_witness = Key.comparator_witness
   type enumeration_witness = Key.enumeration_witness
-  type 'a t = 'a Key.Map.t [@@deriving sexp_of, compare, equal]
+  type 'a t = 'a Key.Map.t [@@deriving sexp_of, compare ~localize, equal ~localize]
 
-  let create f =
-    List.fold Key.all ~init:Key.Map.empty ~f:(fun t key -> Map.set t ~key ~data:(f key))
+  include struct
+    [@@@mode.default p = (nonportable, p)]
+
+    let quickcheck_generator a_generator =
+      let data =
+        (Quickcheck.Generator.list_with_length [@mode p])
+          (List.length Key.all)
+          a_generator
+      in
+      (Quickcheck.Generator.map [@mode p]) data ~f:(fun data ->
+        List.zip_exn Key.all data |> Key.Map.of_alist_exn)
+    ;;
+
+    (* Dummy values; maybe we should make them do something someday? *)
+    let quickcheck_shrinker _a_shrinker = Quickcheck.Shrinker.empty ()
+    let quickcheck_observer _a_observer = Quickcheck.Observer.singleton ()
+  end
+
+  let create (local_ f) =
+    List.fold
+      Key.all
+      ~init:(Portability_hacks.magic_uncontended__promise_deeply_immutable Key.Map.empty)
+      ~f:(local_ fun t key -> Map.set t ~key ~data:(f key))
+    [@nontail]
   ;;
 
   let create_const x = create (fun _ -> x)
@@ -146,114 +429,133 @@ module Make_plain_with_witnesses (Key : Key_plain_with_witnesses) = struct
     { set = Key.Set.of_list Key.all; name = "[Key.all]" }
   ;;
 
-  let of_map_exn map =
-    Set.Named.equal named_key_set { set = Map.key_set map; name = "[Map.key_set map]" }
-    |> ok_exn;
+  let of_map map ~if_missing =
     create (fun key ->
       match Map.find map key with
       | Some value -> value
-      | None ->
-        raise_s
-          [%message
-            "impossible: all keys must be present in the map as verified by the key set"])
+      | None -> if_missing ())
+  ;;
+
+  let of_map_exn map =
+    Set.Named.equal named_key_set { set = Map.key_set map; name = "[Map.key_set map]" }
+    |> ok_exn;
+    of_map map ~if_missing:(fun () ->
+      raise_s
+        [%message
+          "impossible: all keys must be present in the map as verified by the key set"])
   ;;
 
   let of_alist_exn alist = of_map_exn (Key.Map.of_alist_exn alist)
+  let of_alist_multi_exn alist = of_map_exn (Key.Map.of_alist_multi alist)
 
-  include Applicative.Make (struct
-    type nonrec 'a t = 'a t
+  let of_alist_multi alist =
+    of_map (Key.Map.of_alist_multi alist) ~if_missing:(fun () -> [])
+  ;;
 
-    let return = create_const
-    let apply t1 t2 = map2 t1 t2 ~f:(fun f x -> f x)
-    let map = `Custom map
-  end)
+  include Applicative.Make [@modality p] (struct
+      type nonrec 'a t = 'a t
+
+      let return t = create_const t
+      let apply t1 t2 = map2 t1 t2 ~f:(fun f x -> f x)
+      let map = `Custom map
+    end)
 end
 
-module Make_for_include_functor_plain_with_witnesses (Key : Key_plain_with_witnesses) =
+module%template.portable
+  [@modality p] Make_for_include_functor_plain_with_witnesses
+    (Key : Key_plain_with_witnesses
+  [@modality p]) =
 struct
-  module Total_map = Make_plain_with_witnesses (Key)
+  module Total_map = Make_plain_with_witnesses [@modality p] (Key)
 end
 
-module Make_with_witnesses (Key : Key_with_witnesses) = struct
+module%template.portable
+  [@modality p] Make_with_witnesses
+    (Key : Key_with_witnesses
+  [@modality p]) =
+struct
   module Key = struct
     include Key
-    include Comparable.Make_binable_using_comparator (Key)
+    include Comparable.Make_binable_using_comparator [@modality p] (Key)
   end
 
-  type 'a t = 'a Key.Map.t [@@deriving sexp, bin_io, compare, equal]
+  type 'a t = 'a Key.Map.t [@@deriving sexp, bin_io, compare ~localize, equal ~localize]
 
   include (
-    Make_plain_with_witnesses
+    Make_plain_with_witnesses [@modality p]
       (Key) :
-        module type of Make_plain_with_witnesses (Key)
-        with module Key := Key
-        with type 'a t := 'a t)
-
-  let all_set = Key.Set.of_list Key.all
-
-  let validate_map_from_serialization map =
-    let keys = Map.key_set map in
-    let keys_minus_all = Set.diff keys all_set in
-    let all_minus_keys = Set.diff all_set keys in
-    Validate.maybe_raise
-      (Validate.of_list
-         [ (if Set.is_empty keys_minus_all
-            then Validate.pass
-            else
-              Validate.fails
-                "map from serialization has keys not provided in the enumeration"
-                keys_minus_all
-                [%sexp_of: Key.Set.t])
-         ; (if Set.is_empty all_minus_keys
-            then Validate.pass
-            else
-              Validate.fails
-                "map from serialization doesn't have keys it should have"
-                all_minus_keys
-                [%sexp_of: Key.Set.t])
-         ])
-  ;;
+      sig
+      @@ p
+        include
+          S_plain
+          [@modality p]
+          with type comparator_witness = Key.comparator_witness
+          with type enumeration_witness = Key.enumeration_witness
+          with module Key := Key
+          with type 'a t := 'a t
+      end)
 
   let t_of_sexp a_of_sexp sexp =
     let t = t_of_sexp a_of_sexp sexp in
-    validate_map_from_serialization t;
+    validate_map_from_serialization (module Key) t;
     t
   ;;
 
-  include Bin_prot.Utils.Make_binable1_without_uuid [@alert "-legacy"] (struct
-    type nonrec 'a t = 'a t
+  include
+    Bin_prot.Utils.Make_binable1_without_uuid [@modality p] [@alert "-legacy"] (struct
+      type nonrec 'a t = 'a t
 
-    module Binable = Key.Map
+      module Binable = Key.Map
 
-    let to_binable x = x
+      let to_binable x = x
 
-    let of_binable x =
-      validate_map_from_serialization x;
-      x
-    ;;
+      let module_Key =
+        Portability_hacks.magic_portable__first_class_module
+          (module Key : Key_with_witnesses
+            with type t = Key.t
+             and type comparator_witness = Key.comparator_witness)
+      ;;
+
+      let of_binable x =
+        validate_map_from_serialization
+          (Portability_hacks.magic_uncontended__first_class_module module_Key)
+          x;
+        x
+      ;;
+    end)
+end
+
+module%template.portable
+  [@modality p] Make_for_include_functor_with_witnesses
+    (Key : Key_with_witnesses
+  [@modality p]) =
+struct
+  module Total_map = Make_with_witnesses [@modality p] (Key)
+end
+
+module%template.portable [@modality p] Make_plain (Key : Key_plain [@modality p]) =
+Make_plain_with_witnesses [@modality p] (struct
+    include Key
+    include Comparable.Make_plain [@modality p] (Key)
+    include Enumeration.Make [@modality p] (Key)
   end)
-  end
 
-module Make_for_include_functor_with_witnesses (Key : Key_with_witnesses) = struct
-  module Total_map = Make_with_witnesses (Key)
+module%template.portable
+  [@modality p] Make_for_include_functor_plain
+    (Key : Key_plain
+  [@modality p]) =
+struct
+  module Total_map = Make_plain [@modality p] (Key)
 end
 
-module Make_plain (Key : Key_plain) = Make_plain_with_witnesses (struct
-  include Key
-  include Comparable.Make_plain (Key)
-  include Enumeration.Make (Key)
-end)
+module%template.portable [@modality p] Make (Key : Key [@modality p]) =
+Make_with_witnesses [@modality p] (struct
+    include Key
+    include Comparable.Make_binable [@modality p] (Key)
+    include Enumeration.Make [@modality p] (Key)
+  end)
 
-module Make_for_include_functor_plain (Key : Key_plain) = struct
-  module Total_map = Make_plain (Key)
-end
-
-module Make (Key : Key) = Make_with_witnesses (struct
-  include Key
-  include Comparable.Make_binable (Key)
-  include Enumeration.Make (Key)
-end)
-
-module Make_for_include_functor (Key : Key) = struct
-  module Total_map = Make (Key)
+module%template.portable [@modality p] Make_for_include_functor (Key : Key [@modality p]) =
+struct
+  module Total_map = Make [@modality p] (Key)
 end

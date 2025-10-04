@@ -1,5 +1,5 @@
 open! Import
-open Quickcheck_intf
+include Quickcheck_intf.Definitions
 open Base_quickcheck
 module Float = Base.Float
 module Int = Base.Int
@@ -71,8 +71,9 @@ end
 module Observer = struct
   include Observer
 
-  let of_hash (type a) (module M : Deriving_hash with type t = a) =
-    of_hash_fold M.hash_fold_t
+  let%template of_hash (type a) (module M : Deriving_hash with type t = a[@modality p]) =
+    (of_hash_fold [@mode p]) M.hash_fold_t
+  [@@modality p = (nonportable, portable)]
   ;;
 
   let variant2 = Polymorphic_types.quickcheck_observer_variant2
@@ -136,7 +137,11 @@ module Generator = struct
   let geometric = Generator.int_geometric
   let small_non_negative_int = small_positive_or_zero_int
   let small_positive_int = small_strictly_positive_int
-  let list_with_length length t = list_with_length t ~length
+
+  let%template list_with_length length t = (list_with_length [@mode p]) t ~length
+  [@@mode p = (portable, nonportable)]
+  ;;
+
   let variant2 = Polymorphic_types.quickcheck_generator_variant2
   let variant3 = Polymorphic_types.quickcheck_generator_variant3
   let variant4 = Polymorphic_types.quickcheck_generator_variant4
@@ -289,7 +294,7 @@ module Configure (Config : Quickcheck_config) = struct
       let sexp_of_t =
         match sexp_of with
         | Some sexp_of -> sexp_of
-        | None -> sexp_of_opaque
+        | None -> (sexp_of_opaque : _ -> _)
       ;;
 
       include (val Comparator.make ~compare ~sexp_of_t)
@@ -339,32 +344,20 @@ module Configure (Config : Quickcheck_config) = struct
       (match sexp_of with
        | None -> failwith "cannot generate"
        | Some sexp_of_value ->
-         Error.raise_s [%message "cannot generate" ~attempts:(!r : value list)])
+         Base.Error.raise_s [%message "cannot generate" ~attempts:(!r : value list)])
   ;;
 end
 
 include Configure (struct
-  let default_seed = `Deterministic "an arbitrary but deterministic string"
+    let default_seed = `Deterministic "an arbitrary but deterministic string"
 
-  let default_trial_count =
-    match Word_size.word_size with
-    | W64 -> 10_000
-    | W32 -> 1_000
-  ;;
+    let default_trial_count =
+      match Word_size.word_size with
+      | W64 -> 10_000
+      | W32 -> 1_000
+    ;;
 
-  let default_can_generate_trial_count = 10_000
-  let default_shrink_attempts = `Limit 1000
-  let default_sizes = Sequence.cycle_list_exn (List.range 0 30 ~stop:`inclusive)
-end)
-
-module type S = S
-module type S1 = S1
-module type S2 = S2
-module type S_int = S_int
-module type S_range = S_range
-
-type nonrec seed = seed
-type nonrec shrink_attempts = shrink_attempts
-
-module type Quickcheck_config = Quickcheck_config
-module type Quickcheck_configured = Quickcheck_configured
+    let default_can_generate_trial_count = 10_000
+    let default_shrink_attempts = `Limit 1000
+    let default_sizes = Sequence.cycle_list_exn (List.range 0 30 ~stop:`inclusive)
+  end)

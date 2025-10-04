@@ -1,15 +1,10 @@
 open! Core
-open Poly
 include Flags_intf
 
 (* To allow [create] to be eagerly inlined, move this exception with macro expansion to
    its own function and mark it [@cold] so that it isn't inlined. *)
 let[@cold] raise_invalid_bit n =
-  failwiths
-    ~here:[%here]
-    "Flags.create got invalid ~bit (must be between 0 and 62)"
-    n
-    [%sexp_of: int]
+  failwiths "Flags.create got invalid ~bit (must be between 0 and 62)" n [%sexp_of: int]
 ;;
 
 let create ~bit:n =
@@ -20,18 +15,28 @@ let create ~bit:n =
 module Make (M : Make_arg) = struct
   type t = Int63.t [@@deriving bin_io, hash, typerep]
 
-  let of_int = Int63.of_int
-  let to_int_exn = Int63.to_int_exn
+  let of_int t = Int63.of_int t
+  let to_int_exn t = Int63.to_int_exn t
   let empty = Int63.zero
-  let is_empty t = t = empty
+  let is_empty t = Int63.equal t empty
   let ( + ) a b = Int63.bit_or a b
   let ( - ) a b = Int63.bit_and a (Int63.bit_not b)
-  let intersect = Int63.bit_and
+  let[@inline] intersect a b = Int63.bit_and a b
   let all = List.fold M.known ~init:empty ~f:(fun acc (flag, _) -> acc + flag)
   let complement a = all - a
   let is_subset t ~of_ = Int63.( = ) t (intersect t of_)
   let do_intersect t1 t2 = Int63.( <> ) (Int63.bit_and t1 t2) Int63.zero
   let are_disjoint t1 t2 = Int63.( = ) (Int63.bit_and t1 t2) Int63.zero
+
+  include
+    Quickcheckable.Of_quickcheckable
+      (Int63)
+      (struct
+        type nonrec t = t
+
+        let of_quickcheckable t = intersect t all
+        let to_quickcheckable t = t
+      end)
 
   let error message a sexp_of_a =
     let e = Error.create message a sexp_of_a in
@@ -76,7 +81,7 @@ module Make (M : Make_arg) = struct
   ;;
 
   let () =
-    let bad = List.filter known ~f:(fun (flag, _) -> flag = Int63.zero) in
+    let bad = List.filter known ~f:(fun (flag, _) -> Int63.equal flag Int63.zero) in
     if not (List.is_empty bad)
     then
       error "Flag.Make got flags with no bits set" bad [%sexp_of: (Int63.t * string) list]
@@ -93,7 +98,7 @@ module Make (M : Make_arg) = struct
     let known = List.rev known in
     fun t ->
       List.fold known ~init:(t, []) ~f:(fun (t, flag_names) (flag, flag_name) ->
-        if Int63.bit_and t flag = flag
+        if Int63.equal (Int63.bit_and t flag) flag
         then t - flag, flag_name :: flag_names
         else t, flag_names)
   ;;
@@ -103,7 +108,7 @@ module Make (M : Make_arg) = struct
       Int64.(max_value land Int63.to_int64 x) |> Int64.Hex.to_string
     in
     let leftover, flag_names = to_flag_list t in
-    if leftover = empty
+    if Int63.equal leftover empty
     then [%sexp_of: sexp_format] flag_names
     else
       [%sexp_of: sexp_format_with_unrecognized_bits]
@@ -141,24 +146,30 @@ module Make (M : Make_arg) = struct
   ;;
 
   (* total order such that [subset a b] implies [a <= b] *)
-  let compare t u =
+  let%template compare t u =
     (* This is the same as {| Int63.(i bit_xor (one shift_left 62)) |} *)
     let flip_top_bit i = Int63.( + ) i Int63.min_value in
     Int63.compare (flip_top_bit t) (flip_top_bit u)
+  [@@mode local]
   ;;
 
-  include Comparable.Make (struct
-    type nonrec t = t [@@deriving sexp, compare, hash]
-  end)
+  (* we only use [compare [@mode local]] below *)
+  let compare = `unused
+  let `unused = compare
+
+  include%template Comparable.Make [@mode local] (struct
+      type nonrec t = t [@@deriving sexp, compare ~localize, hash]
+    end)
 
   (* [Comparable.Make] turns [equal] into a function call to [compare] rather than the
-     much simpler (and equally correct) [Int63.(=)]. Restore it, as well as (=) and (<>). *)
-  let equal = Int63.( = )
+     much simpler (and equally correct) [Int63.equal]. Restore it, as well as (=) and
+     (<>). *)
+  let%template equal = (Int63.equal [@mode m]) [@@mode m = (local, global)]
   let ( = ) = Int63.( = )
   let ( <> ) = Int63.( <> )
 
   module Unstable = struct
-    type nonrec t = t [@@deriving bin_io, compare, equal, sexp]
+    type nonrec t = t [@@deriving bin_io, compare ~localize, equal ~localize, sexp]
   end
 end
 

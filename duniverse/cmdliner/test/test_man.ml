@@ -96,6 +96,6 @@ let info =
     `P "Email bug reports to <hehey at example.org>.";]
   in
   let man_xrefs = [`Page ("ascii", 7); `Main; `Tool "grep";] in
-  Cmd.info "man_test" ~version:"v1.2.0+dune" ~doc ~envs ~exits ~man ~man_xrefs
+  Cmd.info "man_test" ~version:"v1.3.0+dune" ~doc ~envs ~exits ~man ~man_xrefs
 
 let () = exit (Cmd.eval (Cmd.v info man_test_t))

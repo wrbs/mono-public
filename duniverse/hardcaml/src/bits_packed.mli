@@ -1,8 +1,7 @@
 (** Functions for working with bit vectors packed into a single [Bytes.t].
 
     The size and offset of data is passed to the functions rather than embedded like with
-    [Bits.t].
-*)
+    [Bits.t]. *)
 
 open Base
 
@@ -68,4 +67,21 @@ val mux
   -> select_address:int
   -> cases:int array
   -> size_in_words:int
+  -> unit
+
+module Case : sig
+  type t =
+    { match_with_address : int
+    ; value_address : int
+    }
+end
+
+val cases
+  :  t
+  -> dst_address:int
+  -> select_address:int
+  -> select_size_in_words:int
+  -> default_address:int
+  -> cases:Case.t array
+  -> value_size_in_words:int
   -> unit

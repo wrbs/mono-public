@@ -110,7 +110,13 @@ module On_disk = struct
       ; shallow : bool option [@sexp.option]
       ; double_check : bool option [@sexp.option]
       ; mask_uniques : bool option [@sexp.option]
-      ; output : [ `ascii | `html | `ansi | `unrefined of [ `ansi | `html ] ]
+      ; output :
+          [ `ascii
+          | `html
+          | `ansi
+          | `unrefined of [ `ansi | `html ]
+          | `side_by_side of [ `wrap | `truncate ]
+          ]
            [@default `ansi] [@sexp_drop_default.equal]
       ; alt_old : string option [@sexp.option]
       ; alt_new : string option [@sexp.option]
@@ -133,6 +139,7 @@ module On_disk = struct
       ; warn_if_no_trailing_newline_in_both : bool
            [@default warn_if_no_trailing_newline_in_both_default]
            [@sexp_drop_default.equal]
+      ; width_override : int option [@sexp.option]
       }
     [@@deriving quickcheck, sexp]
   end
@@ -220,7 +227,12 @@ module On_disk = struct
       ; shallow
       ; double_check
       ; mask_uniques
-      ; output
+      ; output :> [ `ascii
+                  | `html
+                  | `ansi
+                  | `unrefined of [ `ansi | `html ]
+                  | `side_by_side of [ `wrap | `truncate ]
+                  ]
       ; alt_old
       ; alt_new
       ; header_old
@@ -239,6 +251,7 @@ module On_disk = struct
       ; word_new
       ; location_style
       ; warn_if_no_trailing_newline_in_both
+      ; width_override = None
       }
     ;;
   end
@@ -515,6 +528,171 @@ module On_disk = struct
   ;;
 end
 
+let line_same_default =
+  { On_disk.Line_rule.default with
+    prefix =
+      Some
+        { On_disk.Affix.text = Some " |"
+        ; style = Some [ Bg (Bright Black); Fg (Standard Black) ]
+        }
+  }
+;;
+
+let line_old_default =
+  { On_disk.Line_rule.default with
+    prefix =
+      Some
+        { On_disk.Affix.text = Some "-|"
+        ; style = Some [ Bg (Standard Red); Fg (Standard Black) ]
+        }
+  ; style = Some [ Fg (Standard Red) ]
+  ; word_same = Some [ Fg (Gray24 (Ansi_text.Color.Gray24.of_level_exn 12)) ]
+  }
+;;
+
+let line_new_default =
+  { On_disk.Line_rule.default with
+    prefix =
+      Some
+        { On_disk.Affix.text = Some "+|"
+        ; style = Some [ Bg (Standard Green); Fg (Standard Black) ]
+        }
+  ; style = Some [ Fg (Standard Green) ]
+  }
+;;
+
+let line_unified_default =
+  { On_disk.Line_rule.default with
+    prefix =
+      Some
+        { On_disk.Affix.text = Some "!|"
+        ; style = Some [ Bg (Standard Yellow); Fg (Standard Black) ]
+        }
+  }
+;;
+
+let header_old_default =
+  { On_disk.Line_rule.default with
+    prefix =
+      Some { On_disk.Affix.text = Some "------ "; style = Some [ Fg (Standard Red) ] }
+  ; style = Some [ Bold ]
+  }
+;;
+
+let header_new_default =
+  { On_disk.Line_rule.default with
+    prefix =
+      Some { On_disk.Affix.text = Some "++++++ "; style = Some [ Fg (Standard Green) ] }
+  ; style = Some [ Bold ]
+  }
+;;
+
+let line_from_old_default =
+  { On_disk.Line_rule.default with
+    prefix =
+      Some
+        { On_disk.Affix.text = Some "<|"
+        ; style = Some [ Bg (Standard Magenta); Fg (Standard Black) ]
+        }
+  ; style = Some [ Fg (Standard Magenta) ]
+  }
+;;
+
+let line_to_new_default =
+  { On_disk.Line_rule.default with
+    prefix =
+      Some
+        { On_disk.Affix.text = Some ">|"
+        ; style = Some [ Bg (Standard Cyan); Fg (Standard Black) ]
+        }
+  ; style = Some [ Fg (Standard Cyan) ]
+  }
+;;
+
+let line_removed_in_move_default =
+  { On_disk.Line_rule.default with
+    prefix =
+      Some
+        { On_disk.Affix.text = Some ">|"
+        ; style = Some [ Bg (Standard Red); Fg (Standard Black) ]
+        }
+  ; style = Some [ Fg (Standard Red) ]
+  }
+;;
+
+let line_added_in_move_default =
+  { On_disk.Line_rule.default with
+    prefix =
+      Some
+        { On_disk.Affix.text = Some ">|"
+        ; style = Some [ Bg (Standard Green); Fg (Standard Black) ]
+        }
+  ; style = Some [ Fg (Standard Green) ]
+  }
+;;
+
+let line_unified_in_move_default =
+  { On_disk.Line_rule.default with
+    prefix =
+      Some
+        { On_disk.Affix.text = Some ">|"
+        ; style = Some [ Bg (Standard Yellow); Fg (Standard Black) ]
+        }
+  }
+;;
+
+let default_string =
+  let line_rule_to_string line_rule =
+    On_disk.Line_rule.sexp_of_t line_rule |> Sexp.to_string
+  in
+  sprintf
+    {|;; -*- scheme -*-
+;; patdiff Configuration file
+
+(
+ (context %d)
+
+ (line_same %s)
+
+ (line_old %s)
+
+ (line_new %s)
+
+ (line_unified %s)
+
+ (header_old %s)
+
+ (header_new %s)
+
+ (hunk
+  ((prefix ((text "@|") (style ((bg (Bright Black)) (Fg (Standard Black))))))
+   (suffix ((text " ============================================================") (style ())))
+   (style (bold))))
+
+ (line_from_old %s)
+
+ (line_to_new %s)
+
+ (line_removed_in_move %s)
+
+ (line_added_in_move %s)
+
+ (line_unified_in_move %s)
+)|}
+    default_context
+    (line_rule_to_string line_same_default)
+    (line_rule_to_string line_old_default)
+    (line_rule_to_string line_new_default)
+    (line_rule_to_string line_unified_default)
+    (line_rule_to_string header_old_default)
+    (line_rule_to_string header_new_default)
+    (line_rule_to_string line_from_old_default)
+    (line_rule_to_string line_to_new_default)
+    (line_rule_to_string line_removed_in_move_default)
+    (line_rule_to_string line_added_in_move_default)
+    (line_rule_to_string line_unified_in_move_default)
+;;
+
 let parse
   ({ dont_produce_unified_lines
    ; dont_overwrite_word_old_word_new
@@ -550,22 +728,28 @@ let parse
    ; word_new
    ; location_style
    ; warn_if_no_trailing_newline_in_both
+   ; width_override
    } :
     On_disk.t)
   =
   let default_true = Option.value ~default:true in
   let default_false = Option.value ~default:false in
-  let default_rule = Option.value ~default:On_disk.Line_rule.default in
   (* Lines *)
-  let line_same = default_rule line_same in
-  let line_prev = default_rule line_old in
-  let line_next = default_rule line_new in
-  let line_unified = default_rule line_unified in
-  let line_from_prev = default_rule line_from_old in
-  let line_to_next = default_rule line_to_new in
-  let line_removed_in_move = default_rule line_removed_in_move in
-  let line_added_in_move = default_rule line_added_in_move in
-  let line_unified_in_move = default_rule line_unified_in_move in
+  let line_same = Option.value line_same ~default:line_same_default in
+  let line_prev = Option.value line_old ~default:line_old_default in
+  let line_next = Option.value line_new ~default:line_new_default in
+  let line_unified = Option.value line_unified ~default:line_unified_default in
+  let line_from_prev = Option.value line_from_old ~default:line_from_old_default in
+  let line_to_next = Option.value line_to_new ~default:line_to_new_default in
+  let line_removed_in_move =
+    Option.value line_removed_in_move ~default:line_removed_in_move_default
+  in
+  let line_added_in_move =
+    Option.value line_added_in_move ~default:line_added_in_move_default
+  in
+  let line_unified_in_move =
+    Option.value line_unified_in_move ~default:line_unified_in_move_default
+  in
   (* Padding for prefixes: They should all be the same length. *)
   let min_width =
     [ line_same
@@ -638,7 +822,7 @@ let parse
       (match output with
        | `ascii -> Output.Ascii
        | `unrefined `html | `html -> Html
-       | `unrefined `ansi | `ansi -> Ansi)
+       | `unrefined `ansi | `ansi | `side_by_side _ -> Ansi)
     ~context:(Option.value ~default:(-1) context)
     ~word_big_enough:(Option.value ~default:default_word_big_enough word_big_enough)
     ~line_big_enough:(Option.value ~default:default_line_big_enough line_big_enough)
@@ -661,6 +845,16 @@ let parse
     ~next_alt:alt_new
     ~location_style
     ~warn_if_no_trailing_newline_in_both
+    ~side_by_side:
+      (match output with
+       | `side_by_side wrap_or_truncate -> Some wrap_or_truncate
+       | _ -> None)
+    ~width_override
+;;
+
+let%test_unit "default Config.t sexp matches default Configuration.t" =
+  let default_from_disk = parse ([%of_sexp: On_disk.t] (Sexp.of_string default_string)) in
+  [%test_eq: t] default default_from_disk
 ;;
 
 let dark_bg =
@@ -672,12 +866,12 @@ let dark_bg =
 ((context 8)
  (line_same ())
  (line_changed
-  ((prefix_old ((text "-|") (style (Bold (Fg Red)))))
-   (prefix_new ((text "+|") (style (Bold (Fg Green)))))))
+  ((prefix_old ((text "-|") (style (Bold (Fg (Standard Red))))))
+   (prefix_new ((text "+|") (style (Bold (Fg (Standard Green))))))))
  (word_same ((style_old ())
              (style_new ())))
- (word_changed ((style_old (Bold Underline (Fg Red)))
-                (style_new ((Fg Green)))))
+ (word_changed ((style_old (Bold Underline (Fg (Standard Red))))
+                (style_new ((Fg (Standard Green))))))
  (chunk
   ((prefix ((text "@@@@@@@@@@ ") (style (Bold (Fg blue)))))
    (suffix ((text " @@@@@@@@@@") (style (Bold (Fg blue)))))
@@ -698,13 +892,13 @@ let light_bg =
        Sexp.of_string
          {|
 ((context 8)
- (line_same (dim))
- (line_changed ((prefix_old ((text "-|") (style (bold (fg red)))))
-                (prefix_new ((text "+|") (style (bold (fg green)))))))
+ (line_same (Faint))
+ (line_changed ((prefix_old ((text "-|") (style (bold (Fg (Standard Red))))))
+                (prefix_new ((text "+|") (style (bold (Fg (Standard Green))))))))
  (word_same ((style_old ((bg white)))
-             (style_new ((bg yellow)))))
+             (style_new ((Bg (Standard Yellow))))))
  (word_changed ((style_old ((bg white) bold))
-                (style_new ((bg yellow) bold))))
+                (style_new ((Bg (Standard Yellow)) bold))))
  )|}
      in
      parse
@@ -714,17 +908,15 @@ let light_bg =
         |> On_disk.V2.to_v3))
 ;;
 
-let%test_module _ =
-  (module struct
-    (* Ensure both sexps are parseable *)
-    let%test_unit _ =
-      let dark = Lazy.force dark_bg in
-      let light = Lazy.force light_bg in
-      ignore (dark : t);
-      ignore (light : t)
-    ;;
-  end)
-;;
+module%test _ = struct
+  (* Ensure both sexps are parseable *)
+  let%test_unit _ =
+    let dark = Lazy.force dark_bg in
+    let light = Lazy.force light_bg in
+    ignore (dark : t);
+    ignore (light : t)
+  ;;
+end
 
 let load_sexp_conv f conv = Result.try_with (fun () -> Sexp.load_sexp_conv_exn f conv)
 
@@ -772,69 +964,6 @@ let load ?(quiet_errors = false) config_file =
     if not quiet_errors
     then eprintf "Note: error loading %S: %s\n%!" config_file (Exn.to_string e);
     None
-;;
-
-let default_string =
-  sprintf
-    {|;; -*- scheme -*-
-;; patdiff Configuration file
-
-(
- (context %d)
-
- (line_same
-  ((prefix ((text " |") (style ((bg bright_black) (fg black)))))))
-
- (line_old
-  ((prefix ((text "-|") (style ((bg red)(fg black)))))
-   (style ((fg red)))
-   (word_same (dim))))
-
- (line_new
-  ((prefix ((text "+|") (style ((bg green)(fg black)))))
-   (style ((fg green)))))
-
- (line_unified
-  ((prefix ((text "!|") (style ((bg yellow)(fg black)))))))
-
- (header_old
-  ((prefix ((text "------ ") (style ((fg red)))))
-   (style (bold))))
-
- (header_new
-  ((prefix ((text "++++++ ") (style ((fg green)))))
-   (style (bold))))
-
- (hunk
-  ((prefix ((text "@|") (style ((bg bright_black) (fg black)))))
-   (suffix ((text " ============================================================") (style ())))
-   (style (bold))))
-
- (line_from_old
-  ((prefix ((text "<|") (style ((bg magenta)(fg black)))))
-   (style ((fg magenta)))))
-
- (line_to_new
-  ((prefix ((text ">|") (style ((bg cyan)(fg black)))))
-   (style ((fg cyan)))))
-
- (line_removed_in_move
-  ((prefix ((text ">|") (style ((bg red)(fg black)))))
-   (style ((fg red)))))
-
- (line_added_in_move
-  ((prefix ((text ">|") (style ((bg green)(fg black)))))
-   (style ((fg green)))))
-
- (line_unified_in_move
-  ((prefix ((text ">|") (style ((bg yellow)(fg black)))))))
-)|}
-    default_context
-;;
-
-let%test_unit "default Config.t sexp matches default Configuration.t" =
-  let default_from_disk = parse ([%of_sexp: On_disk.t] (Sexp.of_string default_string)) in
-  [%test_eq: t] default default_from_disk
 ;;
 
 let get_config ?filename () =

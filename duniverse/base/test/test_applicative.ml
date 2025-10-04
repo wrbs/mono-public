@@ -103,7 +103,7 @@ module Test_applicative_s (A : Applicative.S with type 'a t := 'a Or_error.t) :
   let map2 = A.map2
 
   let%expect_test _ =
-    let test x y = print_s [%sexp (map2 x y ~f:( ^ ) : string Or_error.t)] in
+    let test x y = print_s [%sexp (map2 x y ~f:(fun x y -> x ^ y) : string Or_error.t)] in
     test (Ok "o") (Ok "kay");
     [%expect {| (Ok okay) |}];
     test (error "not okay") (Ok "kay");
@@ -191,35 +191,29 @@ module Test_applicative_s (A : Applicative.S with type 'a t := 'a Or_error.t) :
   module Applicative_infix = A.Applicative_infix
 end
 
-let%test_module "Make" =
-  (module Test_applicative_s (Applicative.Make (struct
+module%test Make = Test_applicative_s (Applicative.Make (struct
     type 'a t = 'a Or_error.t
 
     let return = Or_error.return
     let apply = Or_error.apply
     let map = `Define_using_apply
-  end)))
-;;
+  end))
 
-let%test_module "Make" =
-  (module Test_applicative_s (Applicative.Make_using_map2 (struct
+module%test Make = Test_applicative_s (Applicative.Make_using_map2 (struct
     type 'a t = 'a Or_error.t
 
     let return = Or_error.return
     let map2 = Or_error.map2
     let map = `Define_using_map2
-  end)))
-;;
+  end))
 
-let%test_module "Make" =
-  (module Test_applicative_s (Applicative.Make_using_map2_local (struct
+module%test Make = Test_applicative_s (Applicative.Make_using_map2__local (struct
     type 'a t = 'a Or_error.t
 
     let return x = Ok x
     let map2 = Or_error.map2
     let map = `Define_using_map2
-  end)))
-;;
+  end))
 
 (* While law-abiding applicatives shouldn't be relying functions being called
    the minimal number of times, it is good for performance that things be this
@@ -239,12 +233,12 @@ let%expect_test _ =
       | Map2 : ('a -> 'b -> 'c) * 'a t * 'b t -> 'c t
 
     include Applicative.Make_using_map2 (struct
-      type nonrec 'a t = 'a t
+        type nonrec 'a t = 'a t
 
-      let return x = Return x
-      let map2 a b ~f = Map2 (f, a, b)
-      let map = `Custom (fun a ~f -> Map (f, a))
-    end)
+        let return x = Return x
+        let map2 a b ~f = Map2 (f, a, b)
+        let map = `Custom (fun a ~f -> Map (f, a))
+      end)
 
     let rec sexp_of_t : type a. a t -> Sexp.t = function
       | Other x -> Atom x

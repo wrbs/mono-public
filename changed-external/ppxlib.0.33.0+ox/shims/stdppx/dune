@@ -1,0 +1,5 @@
+(library
+ (name stdppx)
+ (wrapped false)
+ (public_name ppxlib.stdppx)
+ (libraries (re_export ppxlib_ast.stdppx)))

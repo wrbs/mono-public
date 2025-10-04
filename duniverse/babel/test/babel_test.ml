@@ -73,47 +73,47 @@ open Async_kernel
 open Async_rpc_kernel
 
 module Setup (X : sig
-  type ('q, 'r) rpc
+    type ('q, 'r) rpc
 
-  val create_rpc
-    :  (module Q with type t = 'q)
-    -> (module R with type t = 'r)
-    -> name:string
-    -> version:int
-    -> ('q, 'r) rpc
+    val create_rpc
+      :  (module Q with type t = 'q)
+      -> (module R with type t = 'r)
+      -> name:string
+      -> version:int
+      -> ('q, 'r) rpc
 
-  module Callee : sig
-    module Monad : Monad.S
+    module Callee : sig
+      module Monad : Monad.S
 
-    val singleton : ('q, 'r) rpc -> ('q -> 'r Monad.t) Babel.Callee.t
+      val singleton : ('q, 'r) rpc -> ('q -> 'r Monad.t) Babel.Callee.t
 
-    val add
-      :  ('q -> 'r Monad.t) Babel.Callee.t
-      -> rpc:('q, 'r) rpc
-      -> ('q -> 'r Monad.t) Babel.Callee.t
+      val add
+        :  ('q -> 'r Monad.t) Babel.Callee.t
+        -> rpc:('q, 'r) rpc
+        -> ('q -> 'r Monad.t) Babel.Callee.t
 
-    val map_query
-      :  ('q1 -> 'r Monad.t) Babel.Callee.t
-      -> f:('q1 -> 'q2)
-      -> ('q2 -> 'r Monad.t) Babel.Callee.t
-  end
+      val map_query
+        :  ('q1 -> 'r Monad.t) Babel.Callee.t
+        -> f:('q1 -> 'q2)
+        -> ('q2 -> 'r Monad.t) Babel.Callee.t
+    end
 
-  module Caller : sig
-    module Monad : Monad.S
+    module Caller : sig
+      module Monad : Monad.S
 
-    val singleton : ('q, 'r) rpc -> ('q -> 'r Monad.t) Babel.Caller.t
+      val singleton : ('q, 'r) rpc -> ('q -> 'r Monad.t) Babel.Caller.t
 
-    val add
-      :  ('q -> 'r Monad.t) Babel.Caller.t
-      -> rpc:('q, 'r) rpc
-      -> ('q -> 'r Monad.t) Babel.Caller.t
+      val add
+        :  ('q -> 'r Monad.t) Babel.Caller.t
+        -> rpc:('q, 'r) rpc
+        -> ('q -> 'r Monad.t) Babel.Caller.t
 
-    val map_query
-      :  ('q1 -> 'r Monad.t) Babel.Caller.t
-      -> f:('q2 -> 'q1)
-      -> ('q2 -> 'r Monad.t) Babel.Caller.t
-  end
-end) : sig
+      val map_query
+        :  ('q1 -> 'r Monad.t) Babel.Caller.t
+        -> f:('q2 -> 'q1)
+        -> ('q2 -> 'r Monad.t) Babel.Caller.t
+    end
+  end) : sig
   val print_callee_shapes : unit -> unit
   val print_caller_shapes : unit -> unit
   val test_callee_converts : unit -> unit
@@ -215,9 +215,8 @@ end = struct
   ;;
 end
 
-let%test_module "Rpc" =
-  (module struct
-    include Setup (struct
+module%test Rpc = struct
+  include Setup (struct
       type ('q, 'r) rpc = ('q, 'r) Rpc.Rpc.t
 
       let create_rpc
@@ -246,201 +245,199 @@ let%test_module "Rpc" =
       end
     end)
 
-    let%expect_test "callee shapes" =
-      print_callee_shapes ();
-      [%expect
-        {|
-        -------------------------------------------------------------
-        (Ok ())
-        -------------------------------------------------------------
-        (Ok
-         ((create-breakfast-buffet
-           ((2
-             (Rpc (query b3089c21b0f09f5502848bf675a1ac86)
-              (response 4a65f33ff4f5558e046675409de91fad)))))))
-        -------------------------------------------------------------
-        (Ok
-         ((create-breakfast-buffet
-           ((1
-             (Rpc (query 8b1cf33880547d84b741f11596b155d9)
-              (response 4a65f33ff4f5558e046675409de91fad)))))))
-        -------------------------------------------------------------
-        (Ok
-         ((create-breakfast-buffet
-           ((1
-             (Rpc (query 8b1cf33880547d84b741f11596b155d9)
-              (response 4a65f33ff4f5558e046675409de91fad)))
-            (2
-             (Rpc (query b3089c21b0f09f5502848bf675a1ac86)
-              (response 4a65f33ff4f5558e046675409de91fad)))))))
-        |}]
-    ;;
+  let%expect_test "callee shapes" =
+    print_callee_shapes ();
+    [%expect
+      {|
+      -------------------------------------------------------------
+      (Ok ())
+      -------------------------------------------------------------
+      (Ok
+       ((create-breakfast-buffet
+         ((2
+           (Rpc (query b3089c21b0f09f5502848bf675a1ac86)
+            (response 4a65f33ff4f5558e046675409de91fad)))))))
+      -------------------------------------------------------------
+      (Ok
+       ((create-breakfast-buffet
+         ((1
+           (Rpc (query 8b1cf33880547d84b741f11596b155d9)
+            (response 4a65f33ff4f5558e046675409de91fad)))))))
+      -------------------------------------------------------------
+      (Ok
+       ((create-breakfast-buffet
+         ((1
+           (Rpc (query 8b1cf33880547d84b741f11596b155d9)
+            (response 4a65f33ff4f5558e046675409de91fad)))
+          (2
+           (Rpc (query b3089c21b0f09f5502848bf675a1ac86)
+            (response 4a65f33ff4f5558e046675409de91fad)))))))
+      |}]
+  ;;
 
-    let%expect_test "callee converts" =
-      test_callee_converts ();
-      [%expect
-        {|
-        -------------------------------------------------------------
-        ((callee_rpcs (Ok ())) ("caller v1" (Error "Could not match any rpcs"))
-         ("caller v2" (Error "Could not match any rpcs"))
-         ("caller bad_v2" (Error "Could not match any rpcs")))
-        -------------------------------------------------------------
-        ((callee_rpcs (Ok (((name create-breakfast-buffet) (version 2)))))
-         ("caller v1" (Error "Could not match any rpcs"))
-         ("caller v2" (Ok ((name create-breakfast-buffet) (version 2))))
-         ("caller bad_v2"
-          (Error
-           ("Corresponding rpcs have mismatching shapes"
-            (caller_description ((name create-breakfast-buffet) (version 2)))
-            (callee_description ((name create-breakfast-buffet) (version 2)))))))
-        -------------------------------------------------------------
-        ((callee_rpcs (Ok (((name create-breakfast-buffet) (version 1)))))
-         ("caller v1" (Ok ((name create-breakfast-buffet) (version 1))))
-         ("caller v2" (Error "Could not match any rpcs"))
-         ("caller bad_v2" (Error "Could not match any rpcs")))
-        -------------------------------------------------------------
-        ((callee_rpcs
-          (Ok
-           (((name create-breakfast-buffet) (version 1))
-            ((name create-breakfast-buffet) (version 2)))))
-         ("caller v1" (Ok ((name create-breakfast-buffet) (version 1))))
-         ("caller v2" (Ok ((name create-breakfast-buffet) (version 2))))
-         ("caller bad_v2"
-          (Error
-           ("Corresponding rpcs have mismatching shapes"
-            (caller_description ((name create-breakfast-buffet) (version 2)))
-            (callee_description ((name create-breakfast-buffet) (version 2)))))))
-        |}]
-    ;;
-
-    let%expect_test "caller shapes" =
-      print_caller_shapes ();
-      [%expect
-        {|
-        -------------------------------------------------------------
-        ((((name create-breakfast-buffet) (version 2))
-          (Rpc (query b3089c21b0f09f5502848bf675a1ac86)
-           (response 4a65f33ff4f5558e046675409de91fad))))
-        -------------------------------------------------------------
-        ((((name create-breakfast-buffet) (version 1))
-          (Rpc (query 8b1cf33880547d84b741f11596b155d9)
-           (response 4a65f33ff4f5558e046675409de91fad))))
-        -------------------------------------------------------------
-        ((((name create-breakfast-buffet) (version 2))
-          (Rpc (query b3089c21b0f09f5502848bf675a1ac86)
-           (response 4a65f33ff4f5558e046675409de91fad)))
+  let%expect_test "callee converts" =
+    test_callee_converts ();
+    [%expect
+      {|
+      -------------------------------------------------------------
+      ((callee_rpcs (Ok ())) ("caller v1" (Error "Could not match any rpcs"))
+       ("caller v2" (Error "Could not match any rpcs"))
+       ("caller bad_v2" (Error "Could not match any rpcs")))
+      -------------------------------------------------------------
+      ((callee_rpcs (Ok (((name create-breakfast-buffet) (version 2)))))
+       ("caller v1" (Error "Could not match any rpcs"))
+       ("caller v2" (Ok ((name create-breakfast-buffet) (version 2))))
+       ("caller bad_v2"
+        (Error
+         ("Corresponding rpcs have mismatching shapes"
+          (caller_description ((name create-breakfast-buffet) (version 2)))
+          (callee_description ((name create-breakfast-buffet) (version 2)))))))
+      -------------------------------------------------------------
+      ((callee_rpcs (Ok (((name create-breakfast-buffet) (version 1)))))
+       ("caller v1" (Ok ((name create-breakfast-buffet) (version 1))))
+       ("caller v2" (Error "Could not match any rpcs"))
+       ("caller bad_v2" (Error "Could not match any rpcs")))
+      -------------------------------------------------------------
+      ((callee_rpcs
+        (Ok
          (((name create-breakfast-buffet) (version 1))
-          (Rpc (query 8b1cf33880547d84b741f11596b155d9)
-           (response 4a65f33ff4f5558e046675409de91fad))))
-        |}]
-    ;;
+          ((name create-breakfast-buffet) (version 2)))))
+       ("caller v1" (Ok ((name create-breakfast-buffet) (version 1))))
+       ("caller v2" (Ok ((name create-breakfast-buffet) (version 2))))
+       ("caller bad_v2"
+        (Error
+         ("Corresponding rpcs have mismatching shapes"
+          (caller_description ((name create-breakfast-buffet) (version 2)))
+          (callee_description ((name create-breakfast-buffet) (version 2)))))))
+      |}]
+  ;;
 
-    let%expect_test "caller converts" =
-      test_caller_converts ();
-      [%expect
-        {|
-        -------------------------------------------------------------
-        ((caller_rpcs (((name create-breakfast-buffet) (version 2))))
-         ("callee v1" (Error "Could not match any rpcs"))
-         ("callee v2" (Ok ((name create-breakfast-buffet) (version 2))))
-         ("callee bad_v2"
-          (Error
-           ("Corresponding rpcs have mismatching shapes"
-            (caller_description ((name create-breakfast-buffet) (version 2)))
-            (callee_description ((name create-breakfast-buffet) (version 2)))))))
-        -------------------------------------------------------------
-        ((caller_rpcs (((name create-breakfast-buffet) (version 1))))
-         ("callee v1" (Ok ((name create-breakfast-buffet) (version 1))))
-         ("callee v2" (Error "Could not match any rpcs"))
-         ("callee bad_v2" (Error "Could not match any rpcs")))
-        -------------------------------------------------------------
-        ((caller_rpcs
-          (((name create-breakfast-buffet) (version 2))
-           ((name create-breakfast-buffet) (version 1))))
-         ("callee v1" (Ok ((name create-breakfast-buffet) (version 1))))
-         ("callee v2" (Ok ((name create-breakfast-buffet) (version 2))))
-         ("callee bad_v2"
-          (Error
-           ("Corresponding rpcs have mismatching shapes"
-            (caller_description ((name create-breakfast-buffet) (version 2)))
-            (callee_description ((name create-breakfast-buffet) (version 2)))))))
-        |}]
-    ;;
+  let%expect_test "caller shapes" =
+    print_caller_shapes ();
+    [%expect
+      {|
+      -------------------------------------------------------------
+      ((((name create-breakfast-buffet) (version 2))
+        (Rpc (query b3089c21b0f09f5502848bf675a1ac86)
+         (response 4a65f33ff4f5558e046675409de91fad))))
+      -------------------------------------------------------------
+      ((((name create-breakfast-buffet) (version 1))
+        (Rpc (query 8b1cf33880547d84b741f11596b155d9)
+         (response 4a65f33ff4f5558e046675409de91fad))))
+      -------------------------------------------------------------
+      ((((name create-breakfast-buffet) (version 2))
+        (Rpc (query b3089c21b0f09f5502848bf675a1ac86)
+         (response 4a65f33ff4f5558e046675409de91fad)))
+       (((name create-breakfast-buffet) (version 1))
+        (Rpc (query 8b1cf33880547d84b741f11596b155d9)
+         (response 4a65f33ff4f5558e046675409de91fad))))
+      |}]
+  ;;
 
-    let%expect_test "both convert" =
-      test_both_convert ();
-      [%expect
-        {|
-        -------------------------------------------------------------
-        ((caller_rpcs (((name create-breakfast-buffet) (version 2))))
-         (callee_rpcs (Ok ())) (selected_rpc (Error "Could not match any rpcs")))
-        -------------------------------------------------------------
-        ((caller_rpcs (((name create-breakfast-buffet) (version 2))))
-         (callee_rpcs (Ok (((name create-breakfast-buffet) (version 2)))))
-         (selected_rpc (Ok ((name create-breakfast-buffet) (version 2)))))
-        -------------------------------------------------------------
-        ((caller_rpcs (((name create-breakfast-buffet) (version 2))))
-         (callee_rpcs (Ok (((name create-breakfast-buffet) (version 1)))))
-         (selected_rpc (Error "Could not match any rpcs")))
-        -------------------------------------------------------------
-        ((caller_rpcs (((name create-breakfast-buffet) (version 2))))
-         (callee_rpcs
-          (Ok
-           (((name create-breakfast-buffet) (version 1))
-            ((name create-breakfast-buffet) (version 2)))))
-         (selected_rpc (Ok ((name create-breakfast-buffet) (version 2)))))
-        -------------------------------------------------------------
-        ((caller_rpcs (((name create-breakfast-buffet) (version 1))))
-         (callee_rpcs (Ok ())) (selected_rpc (Error "Could not match any rpcs")))
-        -------------------------------------------------------------
-        ((caller_rpcs (((name create-breakfast-buffet) (version 1))))
-         (callee_rpcs (Ok (((name create-breakfast-buffet) (version 2)))))
-         (selected_rpc (Error "Could not match any rpcs")))
-        -------------------------------------------------------------
-        ((caller_rpcs (((name create-breakfast-buffet) (version 1))))
-         (callee_rpcs (Ok (((name create-breakfast-buffet) (version 1)))))
-         (selected_rpc (Ok ((name create-breakfast-buffet) (version 1)))))
-        -------------------------------------------------------------
-        ((caller_rpcs (((name create-breakfast-buffet) (version 1))))
-         (callee_rpcs
-          (Ok
-           (((name create-breakfast-buffet) (version 1))
-            ((name create-breakfast-buffet) (version 2)))))
-         (selected_rpc (Ok ((name create-breakfast-buffet) (version 1)))))
-        -------------------------------------------------------------
-        ((caller_rpcs
-          (((name create-breakfast-buffet) (version 2))
-           ((name create-breakfast-buffet) (version 1))))
-         (callee_rpcs (Ok ())) (selected_rpc (Error "Could not match any rpcs")))
-        -------------------------------------------------------------
-        ((caller_rpcs
-          (((name create-breakfast-buffet) (version 2))
-           ((name create-breakfast-buffet) (version 1))))
-         (callee_rpcs (Ok (((name create-breakfast-buffet) (version 2)))))
-         (selected_rpc (Ok ((name create-breakfast-buffet) (version 2)))))
-        -------------------------------------------------------------
-        ((caller_rpcs
-          (((name create-breakfast-buffet) (version 2))
-           ((name create-breakfast-buffet) (version 1))))
-         (callee_rpcs (Ok (((name create-breakfast-buffet) (version 1)))))
-         (selected_rpc (Ok ((name create-breakfast-buffet) (version 1)))))
-        -------------------------------------------------------------
-        ((caller_rpcs
-          (((name create-breakfast-buffet) (version 2))
-           ((name create-breakfast-buffet) (version 1))))
-         (callee_rpcs
-          (Ok
-           (((name create-breakfast-buffet) (version 1))
-            ((name create-breakfast-buffet) (version 2)))))
-         (selected_rpc (Ok ((name create-breakfast-buffet) (version 2)))))
-        |}]
-    ;;
-  end)
-;;
+  let%expect_test "caller converts" =
+    test_caller_converts ();
+    [%expect
+      {|
+      -------------------------------------------------------------
+      ((caller_rpcs (((name create-breakfast-buffet) (version 2))))
+       ("callee v1" (Error "Could not match any rpcs"))
+       ("callee v2" (Ok ((name create-breakfast-buffet) (version 2))))
+       ("callee bad_v2"
+        (Error
+         ("Corresponding rpcs have mismatching shapes"
+          (caller_description ((name create-breakfast-buffet) (version 2)))
+          (callee_description ((name create-breakfast-buffet) (version 2)))))))
+      -------------------------------------------------------------
+      ((caller_rpcs (((name create-breakfast-buffet) (version 1))))
+       ("callee v1" (Ok ((name create-breakfast-buffet) (version 1))))
+       ("callee v2" (Error "Could not match any rpcs"))
+       ("callee bad_v2" (Error "Could not match any rpcs")))
+      -------------------------------------------------------------
+      ((caller_rpcs
+        (((name create-breakfast-buffet) (version 2))
+         ((name create-breakfast-buffet) (version 1))))
+       ("callee v1" (Ok ((name create-breakfast-buffet) (version 1))))
+       ("callee v2" (Ok ((name create-breakfast-buffet) (version 2))))
+       ("callee bad_v2"
+        (Error
+         ("Corresponding rpcs have mismatching shapes"
+          (caller_description ((name create-breakfast-buffet) (version 2)))
+          (callee_description ((name create-breakfast-buffet) (version 2)))))))
+      |}]
+  ;;
 
-let%test_module "Streamable_plain_rpc" =
-  (module struct
-    include Setup (struct
+  let%expect_test "both convert" =
+    test_both_convert ();
+    [%expect
+      {|
+      -------------------------------------------------------------
+      ((caller_rpcs (((name create-breakfast-buffet) (version 2))))
+       (callee_rpcs (Ok ())) (selected_rpc (Error "Could not match any rpcs")))
+      -------------------------------------------------------------
+      ((caller_rpcs (((name create-breakfast-buffet) (version 2))))
+       (callee_rpcs (Ok (((name create-breakfast-buffet) (version 2)))))
+       (selected_rpc (Ok ((name create-breakfast-buffet) (version 2)))))
+      -------------------------------------------------------------
+      ((caller_rpcs (((name create-breakfast-buffet) (version 2))))
+       (callee_rpcs (Ok (((name create-breakfast-buffet) (version 1)))))
+       (selected_rpc (Error "Could not match any rpcs")))
+      -------------------------------------------------------------
+      ((caller_rpcs (((name create-breakfast-buffet) (version 2))))
+       (callee_rpcs
+        (Ok
+         (((name create-breakfast-buffet) (version 1))
+          ((name create-breakfast-buffet) (version 2)))))
+       (selected_rpc (Ok ((name create-breakfast-buffet) (version 2)))))
+      -------------------------------------------------------------
+      ((caller_rpcs (((name create-breakfast-buffet) (version 1))))
+       (callee_rpcs (Ok ())) (selected_rpc (Error "Could not match any rpcs")))
+      -------------------------------------------------------------
+      ((caller_rpcs (((name create-breakfast-buffet) (version 1))))
+       (callee_rpcs (Ok (((name create-breakfast-buffet) (version 2)))))
+       (selected_rpc (Error "Could not match any rpcs")))
+      -------------------------------------------------------------
+      ((caller_rpcs (((name create-breakfast-buffet) (version 1))))
+       (callee_rpcs (Ok (((name create-breakfast-buffet) (version 1)))))
+       (selected_rpc (Ok ((name create-breakfast-buffet) (version 1)))))
+      -------------------------------------------------------------
+      ((caller_rpcs (((name create-breakfast-buffet) (version 1))))
+       (callee_rpcs
+        (Ok
+         (((name create-breakfast-buffet) (version 1))
+          ((name create-breakfast-buffet) (version 2)))))
+       (selected_rpc (Ok ((name create-breakfast-buffet) (version 1)))))
+      -------------------------------------------------------------
+      ((caller_rpcs
+        (((name create-breakfast-buffet) (version 2))
+         ((name create-breakfast-buffet) (version 1))))
+       (callee_rpcs (Ok ())) (selected_rpc (Error "Could not match any rpcs")))
+      -------------------------------------------------------------
+      ((caller_rpcs
+        (((name create-breakfast-buffet) (version 2))
+         ((name create-breakfast-buffet) (version 1))))
+       (callee_rpcs (Ok (((name create-breakfast-buffet) (version 2)))))
+       (selected_rpc (Ok ((name create-breakfast-buffet) (version 2)))))
+      -------------------------------------------------------------
+      ((caller_rpcs
+        (((name create-breakfast-buffet) (version 2))
+         ((name create-breakfast-buffet) (version 1))))
+       (callee_rpcs (Ok (((name create-breakfast-buffet) (version 1)))))
+       (selected_rpc (Ok ((name create-breakfast-buffet) (version 1)))))
+      -------------------------------------------------------------
+      ((caller_rpcs
+        (((name create-breakfast-buffet) (version 2))
+         ((name create-breakfast-buffet) (version 1))))
+       (callee_rpcs
+        (Ok
+         (((name create-breakfast-buffet) (version 1))
+          ((name create-breakfast-buffet) (version 2)))))
+       (selected_rpc (Ok ((name create-breakfast-buffet) (version 2)))))
+      |}]
+  ;;
+end
+
+module%test Streamable_plain_rpc = struct
+  include Setup (struct
       type ('q, 'r) rpc = ('q, 'r) Streamable.Plain_rpc.t
 
       module type P = sig
@@ -463,16 +460,16 @@ let%test_module "Streamable_plain_rpc" =
             type response = R.t
 
             include Streamable.Plain_rpc.Make (struct
-              let name = name
-              let version = version
+                let name = name
+                let version = version
 
-              type query = Q.t [@@deriving bin_io]
-              type response = R.t
+                type query = Q.t [@@deriving bin_io]
+                type response = R.t
 
-              module Response = R
+                module Response = R
 
-              let client_pushes_back = false
-            end)
+                let client_pushes_back = false
+              end)
           end)
         in
         P.rpc
@@ -488,211 +485,210 @@ let%test_module "Streamable_plain_rpc" =
           type 'a t = 'a Or_error.t Or_error.t Deferred.t
 
           include Monad.Make (struct
-            type nonrec 'a t = 'a t
+              type nonrec 'a t = 'a t
 
-            let bind t ~f =
-              match%bind.Deferred.Or_error t with
-              | Error _ as error -> Deferred.Or_error.return error
-              | Ok x -> f x
-            ;;
+              let bind t ~f =
+                match%bind.Deferred.Or_error t with
+                | Error _ as error -> Deferred.Or_error.return error
+                | Ok x -> f x
+              ;;
 
-            let return x = Deferred.Or_error.return (Ok x)
-            let map = `Define_using_bind
-          end)
+              let return x = Deferred.Or_error.return (Ok x)
+              let map = `Define_using_bind
+            end)
         end
 
         include Babel.Caller.Streamable_plain_rpc
       end
     end)
 
-    let%expect_test "callee shapes" =
-      print_callee_shapes ();
-      [%expect
-        {|
-        -------------------------------------------------------------
-        (Ok ())
-        -------------------------------------------------------------
-        (Ok
-         ((create-breakfast-buffet
-           ((2
-             (Streamable_plain_rpc (query b3089c21b0f09f5502848bf675a1ac86)
-              (response 4dcf125bc50b7b1690b2f33afcd521e1)))))))
-        -------------------------------------------------------------
-        (Ok
-         ((create-breakfast-buffet
-           ((1
-             (Streamable_plain_rpc (query 8b1cf33880547d84b741f11596b155d9)
-              (response 4dcf125bc50b7b1690b2f33afcd521e1)))))))
-        -------------------------------------------------------------
-        (Ok
-         ((create-breakfast-buffet
-           ((1
-             (Streamable_plain_rpc (query 8b1cf33880547d84b741f11596b155d9)
-              (response 4dcf125bc50b7b1690b2f33afcd521e1)))
-            (2
-             (Streamable_plain_rpc (query b3089c21b0f09f5502848bf675a1ac86)
-              (response 4dcf125bc50b7b1690b2f33afcd521e1)))))))
-        |}]
-    ;;
+  let%expect_test "callee shapes" =
+    print_callee_shapes ();
+    [%expect
+      {|
+      -------------------------------------------------------------
+      (Ok ())
+      -------------------------------------------------------------
+      (Ok
+       ((create-breakfast-buffet
+         ((2
+           (Streamable_plain_rpc (query b3089c21b0f09f5502848bf675a1ac86)
+            (response 4dcf125bc50b7b1690b2f33afcd521e1)))))))
+      -------------------------------------------------------------
+      (Ok
+       ((create-breakfast-buffet
+         ((1
+           (Streamable_plain_rpc (query 8b1cf33880547d84b741f11596b155d9)
+            (response 4dcf125bc50b7b1690b2f33afcd521e1)))))))
+      -------------------------------------------------------------
+      (Ok
+       ((create-breakfast-buffet
+         ((1
+           (Streamable_plain_rpc (query 8b1cf33880547d84b741f11596b155d9)
+            (response 4dcf125bc50b7b1690b2f33afcd521e1)))
+          (2
+           (Streamable_plain_rpc (query b3089c21b0f09f5502848bf675a1ac86)
+            (response 4dcf125bc50b7b1690b2f33afcd521e1)))))))
+      |}]
+  ;;
 
-    let%expect_test "callee converts" =
-      test_callee_converts ();
-      [%expect
-        {|
-        -------------------------------------------------------------
-        ((callee_rpcs (Ok ())) ("caller v1" (Error "Could not match any rpcs"))
-         ("caller v2" (Error "Could not match any rpcs"))
-         ("caller bad_v2" (Error "Could not match any rpcs")))
-        -------------------------------------------------------------
-        ((callee_rpcs (Ok (((name create-breakfast-buffet) (version 2)))))
-         ("caller v1" (Error "Could not match any rpcs"))
-         ("caller v2" (Ok ((name create-breakfast-buffet) (version 2))))
-         ("caller bad_v2"
-          (Error
-           ("Corresponding rpcs have mismatching shapes"
-            (caller_description ((name create-breakfast-buffet) (version 2)))
-            (callee_description ((name create-breakfast-buffet) (version 2)))))))
-        -------------------------------------------------------------
-        ((callee_rpcs (Ok (((name create-breakfast-buffet) (version 1)))))
-         ("caller v1" (Ok ((name create-breakfast-buffet) (version 1))))
-         ("caller v2" (Error "Could not match any rpcs"))
-         ("caller bad_v2" (Error "Could not match any rpcs")))
-        -------------------------------------------------------------
-        ((callee_rpcs
-          (Ok
-           (((name create-breakfast-buffet) (version 1))
-            ((name create-breakfast-buffet) (version 2)))))
-         ("caller v1" (Ok ((name create-breakfast-buffet) (version 1))))
-         ("caller v2" (Ok ((name create-breakfast-buffet) (version 2))))
-         ("caller bad_v2"
-          (Error
-           ("Corresponding rpcs have mismatching shapes"
-            (caller_description ((name create-breakfast-buffet) (version 2)))
-            (callee_description ((name create-breakfast-buffet) (version 2)))))))
-        |}]
-    ;;
-
-    let%expect_test "caller shapes" =
-      print_caller_shapes ();
-      [%expect
-        {|
-        -------------------------------------------------------------
-        ((((name create-breakfast-buffet) (version 2))
-          (Streamable_plain_rpc (query b3089c21b0f09f5502848bf675a1ac86)
-           (response 4dcf125bc50b7b1690b2f33afcd521e1))))
-        -------------------------------------------------------------
-        ((((name create-breakfast-buffet) (version 1))
-          (Streamable_plain_rpc (query 8b1cf33880547d84b741f11596b155d9)
-           (response 4dcf125bc50b7b1690b2f33afcd521e1))))
-        -------------------------------------------------------------
-        ((((name create-breakfast-buffet) (version 2))
-          (Streamable_plain_rpc (query b3089c21b0f09f5502848bf675a1ac86)
-           (response 4dcf125bc50b7b1690b2f33afcd521e1)))
+  let%expect_test "callee converts" =
+    test_callee_converts ();
+    [%expect
+      {|
+      -------------------------------------------------------------
+      ((callee_rpcs (Ok ())) ("caller v1" (Error "Could not match any rpcs"))
+       ("caller v2" (Error "Could not match any rpcs"))
+       ("caller bad_v2" (Error "Could not match any rpcs")))
+      -------------------------------------------------------------
+      ((callee_rpcs (Ok (((name create-breakfast-buffet) (version 2)))))
+       ("caller v1" (Error "Could not match any rpcs"))
+       ("caller v2" (Ok ((name create-breakfast-buffet) (version 2))))
+       ("caller bad_v2"
+        (Error
+         ("Corresponding rpcs have mismatching shapes"
+          (caller_description ((name create-breakfast-buffet) (version 2)))
+          (callee_description ((name create-breakfast-buffet) (version 2)))))))
+      -------------------------------------------------------------
+      ((callee_rpcs (Ok (((name create-breakfast-buffet) (version 1)))))
+       ("caller v1" (Ok ((name create-breakfast-buffet) (version 1))))
+       ("caller v2" (Error "Could not match any rpcs"))
+       ("caller bad_v2" (Error "Could not match any rpcs")))
+      -------------------------------------------------------------
+      ((callee_rpcs
+        (Ok
          (((name create-breakfast-buffet) (version 1))
-          (Streamable_plain_rpc (query 8b1cf33880547d84b741f11596b155d9)
-           (response 4dcf125bc50b7b1690b2f33afcd521e1))))
-        |}]
-    ;;
+          ((name create-breakfast-buffet) (version 2)))))
+       ("caller v1" (Ok ((name create-breakfast-buffet) (version 1))))
+       ("caller v2" (Ok ((name create-breakfast-buffet) (version 2))))
+       ("caller bad_v2"
+        (Error
+         ("Corresponding rpcs have mismatching shapes"
+          (caller_description ((name create-breakfast-buffet) (version 2)))
+          (callee_description ((name create-breakfast-buffet) (version 2)))))))
+      |}]
+  ;;
 
-    let%expect_test "caller converts" =
-      test_caller_converts ();
-      [%expect
-        {|
-        -------------------------------------------------------------
-        ((caller_rpcs (((name create-breakfast-buffet) (version 2))))
-         ("callee v1" (Error "Could not match any rpcs"))
-         ("callee v2" (Ok ((name create-breakfast-buffet) (version 2))))
-         ("callee bad_v2"
-          (Error
-           ("Corresponding rpcs have mismatching shapes"
-            (caller_description ((name create-breakfast-buffet) (version 2)))
-            (callee_description ((name create-breakfast-buffet) (version 2)))))))
-        -------------------------------------------------------------
-        ((caller_rpcs (((name create-breakfast-buffet) (version 1))))
-         ("callee v1" (Ok ((name create-breakfast-buffet) (version 1))))
-         ("callee v2" (Error "Could not match any rpcs"))
-         ("callee bad_v2" (Error "Could not match any rpcs")))
-        -------------------------------------------------------------
-        ((caller_rpcs
-          (((name create-breakfast-buffet) (version 2))
-           ((name create-breakfast-buffet) (version 1))))
-         ("callee v1" (Ok ((name create-breakfast-buffet) (version 1))))
-         ("callee v2" (Ok ((name create-breakfast-buffet) (version 2))))
-         ("callee bad_v2"
-          (Error
-           ("Corresponding rpcs have mismatching shapes"
-            (caller_description ((name create-breakfast-buffet) (version 2)))
-            (callee_description ((name create-breakfast-buffet) (version 2)))))))
-        |}]
-    ;;
+  let%expect_test "caller shapes" =
+    print_caller_shapes ();
+    [%expect
+      {|
+      -------------------------------------------------------------
+      ((((name create-breakfast-buffet) (version 2))
+        (Streamable_plain_rpc (query b3089c21b0f09f5502848bf675a1ac86)
+         (response 4dcf125bc50b7b1690b2f33afcd521e1))))
+      -------------------------------------------------------------
+      ((((name create-breakfast-buffet) (version 1))
+        (Streamable_plain_rpc (query 8b1cf33880547d84b741f11596b155d9)
+         (response 4dcf125bc50b7b1690b2f33afcd521e1))))
+      -------------------------------------------------------------
+      ((((name create-breakfast-buffet) (version 2))
+        (Streamable_plain_rpc (query b3089c21b0f09f5502848bf675a1ac86)
+         (response 4dcf125bc50b7b1690b2f33afcd521e1)))
+       (((name create-breakfast-buffet) (version 1))
+        (Streamable_plain_rpc (query 8b1cf33880547d84b741f11596b155d9)
+         (response 4dcf125bc50b7b1690b2f33afcd521e1))))
+      |}]
+  ;;
 
-    let%expect_test "both convert" =
-      test_both_convert ();
-      [%expect
-        {|
-        -------------------------------------------------------------
-        ((caller_rpcs (((name create-breakfast-buffet) (version 2))))
-         (callee_rpcs (Ok ())) (selected_rpc (Error "Could not match any rpcs")))
-        -------------------------------------------------------------
-        ((caller_rpcs (((name create-breakfast-buffet) (version 2))))
-         (callee_rpcs (Ok (((name create-breakfast-buffet) (version 2)))))
-         (selected_rpc (Ok ((name create-breakfast-buffet) (version 2)))))
-        -------------------------------------------------------------
-        ((caller_rpcs (((name create-breakfast-buffet) (version 2))))
-         (callee_rpcs (Ok (((name create-breakfast-buffet) (version 1)))))
-         (selected_rpc (Error "Could not match any rpcs")))
-        -------------------------------------------------------------
-        ((caller_rpcs (((name create-breakfast-buffet) (version 2))))
-         (callee_rpcs
-          (Ok
-           (((name create-breakfast-buffet) (version 1))
-            ((name create-breakfast-buffet) (version 2)))))
-         (selected_rpc (Ok ((name create-breakfast-buffet) (version 2)))))
-        -------------------------------------------------------------
-        ((caller_rpcs (((name create-breakfast-buffet) (version 1))))
-         (callee_rpcs (Ok ())) (selected_rpc (Error "Could not match any rpcs")))
-        -------------------------------------------------------------
-        ((caller_rpcs (((name create-breakfast-buffet) (version 1))))
-         (callee_rpcs (Ok (((name create-breakfast-buffet) (version 2)))))
-         (selected_rpc (Error "Could not match any rpcs")))
-        -------------------------------------------------------------
-        ((caller_rpcs (((name create-breakfast-buffet) (version 1))))
-         (callee_rpcs (Ok (((name create-breakfast-buffet) (version 1)))))
-         (selected_rpc (Ok ((name create-breakfast-buffet) (version 1)))))
-        -------------------------------------------------------------
-        ((caller_rpcs (((name create-breakfast-buffet) (version 1))))
-         (callee_rpcs
-          (Ok
-           (((name create-breakfast-buffet) (version 1))
-            ((name create-breakfast-buffet) (version 2)))))
-         (selected_rpc (Ok ((name create-breakfast-buffet) (version 1)))))
-        -------------------------------------------------------------
-        ((caller_rpcs
-          (((name create-breakfast-buffet) (version 2))
-           ((name create-breakfast-buffet) (version 1))))
-         (callee_rpcs (Ok ())) (selected_rpc (Error "Could not match any rpcs")))
-        -------------------------------------------------------------
-        ((caller_rpcs
-          (((name create-breakfast-buffet) (version 2))
-           ((name create-breakfast-buffet) (version 1))))
-         (callee_rpcs (Ok (((name create-breakfast-buffet) (version 2)))))
-         (selected_rpc (Ok ((name create-breakfast-buffet) (version 2)))))
-        -------------------------------------------------------------
-        ((caller_rpcs
-          (((name create-breakfast-buffet) (version 2))
-           ((name create-breakfast-buffet) (version 1))))
-         (callee_rpcs (Ok (((name create-breakfast-buffet) (version 1)))))
-         (selected_rpc (Ok ((name create-breakfast-buffet) (version 1)))))
-        -------------------------------------------------------------
-        ((caller_rpcs
-          (((name create-breakfast-buffet) (version 2))
-           ((name create-breakfast-buffet) (version 1))))
-         (callee_rpcs
-          (Ok
-           (((name create-breakfast-buffet) (version 1))
-            ((name create-breakfast-buffet) (version 2)))))
-         (selected_rpc (Ok ((name create-breakfast-buffet) (version 2)))))
-        |}]
-    ;;
-  end)
-;;
+  let%expect_test "caller converts" =
+    test_caller_converts ();
+    [%expect
+      {|
+      -------------------------------------------------------------
+      ((caller_rpcs (((name create-breakfast-buffet) (version 2))))
+       ("callee v1" (Error "Could not match any rpcs"))
+       ("callee v2" (Ok ((name create-breakfast-buffet) (version 2))))
+       ("callee bad_v2"
+        (Error
+         ("Corresponding rpcs have mismatching shapes"
+          (caller_description ((name create-breakfast-buffet) (version 2)))
+          (callee_description ((name create-breakfast-buffet) (version 2)))))))
+      -------------------------------------------------------------
+      ((caller_rpcs (((name create-breakfast-buffet) (version 1))))
+       ("callee v1" (Ok ((name create-breakfast-buffet) (version 1))))
+       ("callee v2" (Error "Could not match any rpcs"))
+       ("callee bad_v2" (Error "Could not match any rpcs")))
+      -------------------------------------------------------------
+      ((caller_rpcs
+        (((name create-breakfast-buffet) (version 2))
+         ((name create-breakfast-buffet) (version 1))))
+       ("callee v1" (Ok ((name create-breakfast-buffet) (version 1))))
+       ("callee v2" (Ok ((name create-breakfast-buffet) (version 2))))
+       ("callee bad_v2"
+        (Error
+         ("Corresponding rpcs have mismatching shapes"
+          (caller_description ((name create-breakfast-buffet) (version 2)))
+          (callee_description ((name create-breakfast-buffet) (version 2)))))))
+      |}]
+  ;;
+
+  let%expect_test "both convert" =
+    test_both_convert ();
+    [%expect
+      {|
+      -------------------------------------------------------------
+      ((caller_rpcs (((name create-breakfast-buffet) (version 2))))
+       (callee_rpcs (Ok ())) (selected_rpc (Error "Could not match any rpcs")))
+      -------------------------------------------------------------
+      ((caller_rpcs (((name create-breakfast-buffet) (version 2))))
+       (callee_rpcs (Ok (((name create-breakfast-buffet) (version 2)))))
+       (selected_rpc (Ok ((name create-breakfast-buffet) (version 2)))))
+      -------------------------------------------------------------
+      ((caller_rpcs (((name create-breakfast-buffet) (version 2))))
+       (callee_rpcs (Ok (((name create-breakfast-buffet) (version 1)))))
+       (selected_rpc (Error "Could not match any rpcs")))
+      -------------------------------------------------------------
+      ((caller_rpcs (((name create-breakfast-buffet) (version 2))))
+       (callee_rpcs
+        (Ok
+         (((name create-breakfast-buffet) (version 1))
+          ((name create-breakfast-buffet) (version 2)))))
+       (selected_rpc (Ok ((name create-breakfast-buffet) (version 2)))))
+      -------------------------------------------------------------
+      ((caller_rpcs (((name create-breakfast-buffet) (version 1))))
+       (callee_rpcs (Ok ())) (selected_rpc (Error "Could not match any rpcs")))
+      -------------------------------------------------------------
+      ((caller_rpcs (((name create-breakfast-buffet) (version 1))))
+       (callee_rpcs (Ok (((name create-breakfast-buffet) (version 2)))))
+       (selected_rpc (Error "Could not match any rpcs")))
+      -------------------------------------------------------------
+      ((caller_rpcs (((name create-breakfast-buffet) (version 1))))
+       (callee_rpcs (Ok (((name create-breakfast-buffet) (version 1)))))
+       (selected_rpc (Ok ((name create-breakfast-buffet) (version 1)))))
+      -------------------------------------------------------------
+      ((caller_rpcs (((name create-breakfast-buffet) (version 1))))
+       (callee_rpcs
+        (Ok
+         (((name create-breakfast-buffet) (version 1))
+          ((name create-breakfast-buffet) (version 2)))))
+       (selected_rpc (Ok ((name create-breakfast-buffet) (version 1)))))
+      -------------------------------------------------------------
+      ((caller_rpcs
+        (((name create-breakfast-buffet) (version 2))
+         ((name create-breakfast-buffet) (version 1))))
+       (callee_rpcs (Ok ())) (selected_rpc (Error "Could not match any rpcs")))
+      -------------------------------------------------------------
+      ((caller_rpcs
+        (((name create-breakfast-buffet) (version 2))
+         ((name create-breakfast-buffet) (version 1))))
+       (callee_rpcs (Ok (((name create-breakfast-buffet) (version 2)))))
+       (selected_rpc (Ok ((name create-breakfast-buffet) (version 2)))))
+      -------------------------------------------------------------
+      ((caller_rpcs
+        (((name create-breakfast-buffet) (version 2))
+         ((name create-breakfast-buffet) (version 1))))
+       (callee_rpcs (Ok (((name create-breakfast-buffet) (version 1)))))
+       (selected_rpc (Ok ((name create-breakfast-buffet) (version 1)))))
+      -------------------------------------------------------------
+      ((caller_rpcs
+        (((name create-breakfast-buffet) (version 2))
+         ((name create-breakfast-buffet) (version 1))))
+       (callee_rpcs
+        (Ok
+         (((name create-breakfast-buffet) (version 1))
+          ((name create-breakfast-buffet) (version 2)))))
+       (selected_rpc (Ok ((name create-breakfast-buffet) (version 2)))))
+      |}]
+  ;;
+end

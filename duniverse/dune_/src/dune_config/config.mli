@@ -26,6 +26,8 @@ end
     parsed using [of_string], defaulting to [default]. *)
 val make : name:string -> of_string:(string -> ('a, string) result) -> default:'a -> 'a t
 
+val make_toggle : name:string -> default:Toggle.t -> Toggle.t t
+
 (** [get t] return the value of the configuration for [t] *)
 val get : 'a t -> 'a
 
@@ -35,9 +37,6 @@ val global_lock : Toggle.t t
 (** whether dune should add cutoff to various memoized functions where it
     reduces concurrency *)
 val cutoffs_that_reduce_concurrency_in_watch_mode : Toggle.t t
-
-(** whether dune should optimize file copying on Linux/MacOS *)
-val copy_file : [ `Portable | `Best ] t
 
 (** Execute some actions in background threads. See [Action_exec] for the
     concrete list of actions *)

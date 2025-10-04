@@ -3,8 +3,7 @@ open! Import
 
 (*_ see [../doc/streamable.mkd] for a high level introdution to this signature *)
 
-(** Functors for serializing and deserializing potentially large values
-    incrementally.
+(** Functors for serializing and deserializing potentially large values incrementally.
 
     Serializing large values can cause problems
 
@@ -15,8 +14,7 @@ open! Import
 
     Instead, we want to serialize large values incrementally, which necessitates breaking
     them into reasonably sized parts that can individually serialized and then
-    re-assembled after deserialization.
-*)
+    re-assembled after deserialization. *)
 
 (** see comment in [Module_type] where [S] is defined *)
 module type S = Module_type.S
@@ -32,16 +30,16 @@ module type Stable_without_of_sexp = sig
 end
 
 module type Of_atomic = functor
-  (A : sig
-     type t [@@deriving bin_io, sexp]
-   end)
-  -> S with type t = A.t
+    (A : sig
+       type t [@@deriving bin_io, sexp]
+     end)
+    -> S with type t = A.t
 
 module type Of_atomic_rpc = functor
-  (A : sig
-     type t [@@deriving bin_io]
-   end)
-  -> S_rpc with type t = A.t
+    (A : sig
+       type t [@@deriving bin_io]
+     end)
+    -> S_rpc with type t = A.t
 
 module type Of_map = functor (Key : Stable) (Data : S) ->
   S with type t = (Key.t, Data.t, Key.comparator_witness) Map.t
@@ -51,32 +49,32 @@ module type Of_map_rpc = functor (Key : Stable_without_of_sexp) (Data : S_rpc) -
 
 module type Of_total_map = functor (Key : Total_map.Key_with_witnesses) (Data : S) ->
   S
-    with type t =
-      (Key.t, Data.t, Key.comparator_witness, Key.enumeration_witness) Total_map.t
+  with type t =
+    (Key.t, Data.t, Key.comparator_witness, Key.enumeration_witness) Total_map.t
 
 module type Of_total_map_rpc = functor
-  (Key : Total_map.Key_with_witnesses)
-  (Data : S_rpc)
-  ->
+    (Key : Total_map.Key_with_witnesses)
+    (Data : S_rpc)
+    ->
   S_rpc
-    with type t =
-      (Key.t, Data.t, Key.comparator_witness, Key.enumeration_witness) Total_map.t
+  with type t =
+    (Key.t, Data.t, Key.comparator_witness, Key.enumeration_witness) Total_map.t
 
 module type Of_hashtbl = functor
-  (Key : sig
-     include Stable
-     include Hashtbl.Key with type t := t
-   end)
-  (Data : S)
-  -> S with type t = (Key.t, Data.t) Hashtbl.t
+    (Key : sig
+       include Stable
+       include Hashtbl.Key with type t := t
+     end)
+    (Data : S)
+    -> S with type t = (Key.t, Data.t) Hashtbl.t
 
 module type Of_hashtbl_rpc = functor
-  (Key : sig
-     include Stable_without_of_sexp
-     include Hashtbl.Key_plain with type t := t
-   end)
-  (Data : S_rpc)
-  -> S_rpc with type t = (Key.t, Data.t) Hashtbl.t
+    (Key : sig
+       include Stable_without_of_sexp
+       include Hashtbl.Key_plain with type t := t
+     end)
+    (Data : S_rpc)
+    -> S_rpc with type t = (Key.t, Data.t) Hashtbl.t
 
 module type Of_set = functor (Key : Stable) ->
   S with type t = (Key.t, Key.comparator_witness) Set.t
@@ -104,179 +102,179 @@ module type Of_tuple5 = functor (A : S) (B : S) (C : S) (D : S) (E : S) ->
   S with type t = A.t * B.t * C.t * D.t * E.t
 
 module type Of_tuple5_rpc = functor
-  (A : S_rpc)
-  (B : S_rpc)
-  (C : S_rpc)
-  (D : S_rpc)
-  (E : S_rpc)
-  -> S_rpc with type t = A.t * B.t * C.t * D.t * E.t
+    (A : S_rpc)
+    (B : S_rpc)
+    (C : S_rpc)
+    (D : S_rpc)
+    (E : S_rpc)
+    -> S_rpc with type t = A.t * B.t * C.t * D.t * E.t
 
 module type Of_tuple6 = functor (A : S) (B : S) (C : S) (D : S) (E : S) (F : S) ->
   S with type t = A.t * B.t * C.t * D.t * E.t * F.t
 
 module type Of_tuple6_rpc = functor
-  (A : S_rpc)
-  (B : S_rpc)
-  (C : S_rpc)
-  (D : S_rpc)
-  (E : S_rpc)
-  (F : S_rpc)
-  -> S_rpc with type t = A.t * B.t * C.t * D.t * E.t * F.t
+    (A : S_rpc)
+    (B : S_rpc)
+    (C : S_rpc)
+    (D : S_rpc)
+    (E : S_rpc)
+    (F : S_rpc)
+    -> S_rpc with type t = A.t * B.t * C.t * D.t * E.t * F.t
 
 module type Of_tuple7 = functor (A : S) (B : S) (C : S) (D : S) (E : S) (F : S) (G : S) ->
   S with type t = A.t * B.t * C.t * D.t * E.t * F.t * G.t
 
 module type Of_tuple7_rpc = functor
-  (A : S_rpc)
-  (B : S_rpc)
-  (C : S_rpc)
-  (D : S_rpc)
-  (E : S_rpc)
-  (F : S_rpc)
-  (G : S_rpc)
-  -> S_rpc with type t = A.t * B.t * C.t * D.t * E.t * F.t * G.t
+    (A : S_rpc)
+    (B : S_rpc)
+    (C : S_rpc)
+    (D : S_rpc)
+    (E : S_rpc)
+    (F : S_rpc)
+    (G : S_rpc)
+    -> S_rpc with type t = A.t * B.t * C.t * D.t * E.t * F.t * G.t
 
 module type Of_tuple8 = functor
-  (A : S)
-  (B : S)
-  (C : S)
-  (D : S)
-  (E : S)
-  (F : S)
-  (G : S)
-  (H : S)
-  -> S with type t = A.t * B.t * C.t * D.t * E.t * F.t * G.t * H.t
+    (A : S)
+    (B : S)
+    (C : S)
+    (D : S)
+    (E : S)
+    (F : S)
+    (G : S)
+    (H : S)
+    -> S with type t = A.t * B.t * C.t * D.t * E.t * F.t * G.t * H.t
 
 module type Of_tuple8_rpc = functor
-  (A : S_rpc)
-  (B : S_rpc)
-  (C : S_rpc)
-  (D : S_rpc)
-  (E : S_rpc)
-  (F : S_rpc)
-  (G : S_rpc)
-  (H : S_rpc)
-  -> S_rpc with type t = A.t * B.t * C.t * D.t * E.t * F.t * G.t * H.t
+    (A : S_rpc)
+    (B : S_rpc)
+    (C : S_rpc)
+    (D : S_rpc)
+    (E : S_rpc)
+    (F : S_rpc)
+    (G : S_rpc)
+    (H : S_rpc)
+    -> S_rpc with type t = A.t * B.t * C.t * D.t * E.t * F.t * G.t * H.t
 
 module type Of_tuple9 = functor
-  (A : S)
-  (B : S)
-  (C : S)
-  (D : S)
-  (E : S)
-  (F : S)
-  (G : S)
-  (H : S)
-  (I : S)
-  -> S with type t = A.t * B.t * C.t * D.t * E.t * F.t * G.t * H.t * I.t
+    (A : S)
+    (B : S)
+    (C : S)
+    (D : S)
+    (E : S)
+    (F : S)
+    (G : S)
+    (H : S)
+    (I : S)
+    -> S with type t = A.t * B.t * C.t * D.t * E.t * F.t * G.t * H.t * I.t
 
 module type Of_tuple9_rpc = functor
-  (A : S_rpc)
-  (B : S_rpc)
-  (C : S_rpc)
-  (D : S_rpc)
-  (E : S_rpc)
-  (F : S_rpc)
-  (G : S_rpc)
-  (H : S_rpc)
-  (I : S_rpc)
-  -> S_rpc with type t = A.t * B.t * C.t * D.t * E.t * F.t * G.t * H.t * I.t
+    (A : S_rpc)
+    (B : S_rpc)
+    (C : S_rpc)
+    (D : S_rpc)
+    (E : S_rpc)
+    (F : S_rpc)
+    (G : S_rpc)
+    (H : S_rpc)
+    (I : S_rpc)
+    -> S_rpc with type t = A.t * B.t * C.t * D.t * E.t * F.t * G.t * H.t * I.t
 
 (*$ Streamable_cinaps.of_variant_intf 2 *)
 module type Of_variant2 = functor (A : S) (B : S) ->
   S
-    with type t =
-      [ `A of A.t
-      | `B of B.t
-      ]
+  with type t =
+    [ `A of A.t
+    | `B of B.t
+    ]
 
 (*$*)
 
 (*$ Streamable_cinaps.of_variant_rpc_intf 2 *)
 module type Of_variant2_rpc = functor (A : S_rpc) (B : S_rpc) ->
   S_rpc
-    with type t =
-      [ `A of A.t
-      | `B of B.t
-      ]
+  with type t =
+    [ `A of A.t
+    | `B of B.t
+    ]
 
 (*$*)
 
 (*$ Streamable_cinaps.of_variant_intf 3 *)
 module type Of_variant3 = functor (A : S) (B : S) (C : S) ->
   S
-    with type t =
-      [ `A of A.t
-      | `B of B.t
-      | `C of C.t
-      ]
+  with type t =
+    [ `A of A.t
+    | `B of B.t
+    | `C of C.t
+    ]
 
 (*$*)
 
 (*$ Streamable_cinaps.of_variant_rpc_intf 3 *)
 module type Of_variant3_rpc = functor (A : S_rpc) (B : S_rpc) (C : S_rpc) ->
   S_rpc
-    with type t =
-      [ `A of A.t
-      | `B of B.t
-      | `C of C.t
-      ]
+  with type t =
+    [ `A of A.t
+    | `B of B.t
+    | `C of C.t
+    ]
 
 (*$*)
 
 (*$ Streamable_cinaps.of_variant_intf 4 *)
 module type Of_variant4 = functor (A : S) (B : S) (C : S) (D : S) ->
   S
-    with type t =
-      [ `A of A.t
-      | `B of B.t
-      | `C of C.t
-      | `D of D.t
-      ]
+  with type t =
+    [ `A of A.t
+    | `B of B.t
+    | `C of C.t
+    | `D of D.t
+    ]
 
 (*$*)
 
 (*$ Streamable_cinaps.of_variant_rpc_intf 4 *)
 module type Of_variant4_rpc = functor (A : S_rpc) (B : S_rpc) (C : S_rpc) (D : S_rpc) ->
   S_rpc
-    with type t =
-      [ `A of A.t
-      | `B of B.t
-      | `C of C.t
-      | `D of D.t
-      ]
+  with type t =
+    [ `A of A.t
+    | `B of B.t
+    | `C of C.t
+    | `D of D.t
+    ]
 
 (*$*)
 
 (*$ Streamable_cinaps.of_variant_intf 5 *)
 module type Of_variant5 = functor (A : S) (B : S) (C : S) (D : S) (E : S) ->
   S
-    with type t =
-      [ `A of A.t
-      | `B of B.t
-      | `C of C.t
-      | `D of D.t
-      | `E of E.t
-      ]
+  with type t =
+    [ `A of A.t
+    | `B of B.t
+    | `C of C.t
+    | `D of D.t
+    | `E of E.t
+    ]
 
 (*$*)
 
 (*$ Streamable_cinaps.of_variant_rpc_intf 5 *)
 module type Of_variant5_rpc = functor
-  (A : S_rpc)
-  (B : S_rpc)
-  (C : S_rpc)
-  (D : S_rpc)
-  (E : S_rpc)
-  ->
+    (A : S_rpc)
+    (B : S_rpc)
+    (C : S_rpc)
+    (D : S_rpc)
+    (E : S_rpc)
+    ->
   S_rpc
-    with type t =
-      [ `A of A.t
-      | `B of B.t
-      | `C of C.t
-      | `D of D.t
-      | `E of E.t
-      ]
+  with type t =
+    [ `A of A.t
+    | `B of B.t
+    | `C of C.t
+    | `D of D.t
+    | `E of E.t
+    ]
 
 (*$*)
 
@@ -300,49 +298,49 @@ module type Of_sequence = functor (A : S) -> S with type t = A.t Sequence.t
 module type Of_sequence_rpc = functor (A : S_rpc) -> S_rpc with type t = A.t Sequence.t
 
 module type Of_streamable = functor
-  (Streamable : S)
-  (X : sig
-     type t
+    (Streamable : S)
+    (X : sig
+       type t
 
-     val to_streamable : t -> Streamable.t
-     val of_streamable : Streamable.t -> t
-   end)
-  -> S with type t = X.t
+       val to_streamable : t -> Streamable.t
+       val of_streamable : Streamable.t -> t
+     end)
+    -> S with type t = X.t
 
 module type Of_streamable_rpc = functor
-  (Streamable : S_rpc)
-  (X : sig
-     type t
+    (Streamable : S_rpc)
+    (X : sig
+       type t
 
-     val to_streamable : t -> Streamable.t
-     val of_streamable : Streamable.t -> t
-   end)
-  -> S_rpc with type t = X.t
+       val to_streamable : t -> Streamable.t
+       val of_streamable : Streamable.t -> t
+     end)
+    -> S_rpc with type t = X.t
 
 module type Of_sexpable = functor (Sexpable : Sexpable) -> S with type t = Sexpable.t
 
 (** The [Fixpoint] functor can be used to make recursive types streamable *)
 module type Fixpoint = functor
-  (T : T)
-  (F : functor (X : S with type t = T.t) -> S with type t = T.t)
-  -> S with type t = T.t
+    (T : T)
+    (F : functor (X : S with type t = T.t) -> S with type t = T.t)
+    -> S with type t = T.t
 
 module type Fixpoint_rpc = functor
-  (T : T)
-  (F : functor (X : S_rpc with type t = T.t) -> S_rpc with type t = T.t)
-  -> S_rpc with type t = T.t
+    (T : T)
+    (F : functor (X : S_rpc with type t = T.t) -> S_rpc with type t = T.t)
+    -> S_rpc with type t = T.t
 
 (** [Checked] is a wrapper functor for finding places that are producing binio values that
-    are too large.  The output behaves exactly like the input, except that [to_parts] will
+    are too large. The output behaves exactly like the input, except that [to_parts] will
     raise if it ever produces an intermediate part whose binio size exceeds
     [max_intermediate_part_bin_size]. *)
 module type Checked = functor
-  (Limit : sig
-     val max_intermediate_part_bin_size : int
-     val here : Source_code_position.t
-   end)
-  (X : S)
-  -> S with type t = X.t
+    (Limit : sig
+       val max_intermediate_part_bin_size : int
+       val here : Source_code_position.t
+     end)
+    (X : S)
+    -> S with type t = X.t
 
 module type Packed = functor (X : S) -> S with type t = X.t
 module type Packed_rpc = functor (X : S_rpc) -> S_rpc with type t = X.t
@@ -399,7 +397,7 @@ module type Main = sig
   module type Packed = Packed
   module type Packed_rpc = Packed_rpc
 
-  (** The latest versions of each functor.  These functors are unstable *)
+  (** The latest versions of each functor. These functors are unstable *)
 
   module Of_atomic : Of_atomic
   module Of_atomic_rpc : Of_atomic_rpc
@@ -692,14 +690,13 @@ module type Main = sig
       module V1 : Of_sexpable
     end
 
-    (** Toplevel versions of the [Streamable] library, used by [@@deriving streamable
-        ~version].
+    (** Toplevel versions of the [Streamable] library, used by
+        [@@deriving streamable ~version].
 
         These are meant to be "add only" -- new functor types can be added but not
-        removed, and version cannot change after it's added.  If we ever want add a new
+        removed, and version cannot change after it's added. If we ever want add a new
         version of one of the functors bundled in a [Streamable.Stable.Vn] module, we'll
-        add [Streamable.Stable.V(n+1)] and add it there.
-    *)
+        add [Streamable.Stable.V(n+1)] and add it there. *)
 
     module V1 : sig
       module Fixpoint = Fixpoint.V1

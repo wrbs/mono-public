@@ -8,11 +8,23 @@ type t = Types.Scheduler.t [@@deriving sexp_of]
 
 val t : unit -> t
 
+(** [t_without_checking_access] bypasses checks like [make_async_unusable] and the invalid
+    thread access checks. This should only be used in cases where we intentionally need to
+    bypass one of those checks, like [thread_safe_enqueue_external_job]. It's a bit
+    unfortunate that these different checks are tied together, but that seems like an
+    acceptable tradeoff. *)
+val t_without_checking_access : unit -> t
+
+(** Like [t_without_checking_access], gets [t] without checking access. However, [t] is
+    encapsulated, and [encapsulated_t_without_checking_access] can be called from any
+    domain. *)
+val encapsulated_t_without_checking_access : unit -> t Capsule.Initial.Data.t @@ portable
+
 include Invariant.S with type t := t
 
 val current_execution_context : t -> Execution_context.t
-val with_execution_context : t -> Execution_context.t -> f:(unit -> 'a) -> 'a
-val with_execution_context1 : t -> Execution_context.t -> f:('a -> 'b) -> 'a -> 'b
+val with_execution_context : t -> Execution_context.t -> f:local_ (unit -> 'a) -> 'a
+val with_execution_context1 : t -> Execution_context.t -> f:local_ ('a -> 'b) -> 'a -> 'b
 val set_execution_context : t -> Execution_context.t -> unit
 val enqueue : t -> Execution_context.t -> ('a -> unit) -> 'a -> unit
 val create_job : t -> Execution_context.t -> ('a -> unit) -> 'a -> Job.t
@@ -57,10 +69,11 @@ val add_finalizer : t -> 'a Heap_block.t -> ('a Heap_block.t -> unit) -> unit
 val add_finalizer_exn : t -> 'a -> ('a -> unit) -> unit
 val add_finalizer_last : t -> 'a Heap_block.t -> (unit -> unit) -> unit
 val add_finalizer_last_exn : t -> 'a -> (unit -> unit) -> unit
-val set_thread_safe_external_job_hook : t -> (unit -> unit) -> unit
+val set_thread_safe_external_job_hook : t -> (unit -> unit) @ portable -> unit
 val set_job_queued_hook : t -> (Priority.t -> unit) -> unit
 val set_event_added_hook : t -> (Time_ns.t -> unit) -> unit
 val backtrace_of_first_job : t -> Backtrace.t option
+val has_pending_external_jobs : t -> bool
 
 val thread_safe_enqueue_external_job
   :  t
@@ -69,20 +82,27 @@ val thread_safe_enqueue_external_job
   -> 'a
   -> unit
 
+val portable_enqueue_external_job
+  :  t Capsule.Initial.Data.t
+  -> Execution_context.t Capsule.Initial.Data.t
+  -> (Capsule.Initial.k Capsule.Expert.Access.t -> unit) Capsule.Initial.Data.t
+  -> unit
+  @@ portable
+
 val force_current_cycle_to_end : t -> unit
 
 type 'a with_options := ?monitor:Monitor.t -> ?priority:Priority.t -> 'a
 
-val within' : ((unit -> 'a Deferred.t) -> 'a Deferred.t) with_options
-val within : ((unit -> unit) -> unit) with_options
-val within_v : ((unit -> 'a) -> 'a option) with_options
+val within' : (local_ (unit -> 'a Deferred.t) -> 'a Deferred.t) with_options
+val within : (local_ (unit -> unit) -> unit) with_options
+val within_v : (local_ (unit -> 'a) -> 'a option) with_options
 val schedule' : ((unit -> 'a Deferred.t) -> 'a Deferred.t) with_options
 val schedule : ((unit -> unit) -> unit) with_options
 val preserve_execution_context : ('a -> unit) -> ('a -> unit) Staged.t
 val preserve_execution_context' : ('a -> 'b Deferred.t) -> ('a -> 'b Deferred.t) Staged.t
-val within_context : Execution_context.t -> (unit -> 'a) -> ('a, unit) Result.t
+val within_context : Execution_context.t -> local_ (unit -> 'a) -> ('a, unit) Result.t
 val find_local : 'a Univ_map.Key.t -> 'a option
-val with_local : 'a Univ_map.Key.t -> 'a option -> f:(unit -> 'b) -> 'b
+val with_local : 'a Univ_map.Key.t -> 'a option -> f:local_ (unit -> 'b) -> 'b
 val make_async_unusable : unit -> unit
 val reset_in_forked_process : unit -> unit
 val yield : t -> unit Deferred.t
@@ -101,8 +121,8 @@ module Very_low_priority_work : sig
     [@@deriving sexp_of]
   end
 
-  (** Enqueue some low-priority work to be done.  The work will happen at some point, but
-      Async will choose when is the best time to do it.  [f] will be called until it
+  (** Enqueue some low-priority work to be done. The work will happen at some point, but
+      Async will choose when is the best time to do it. [f] will be called until it
       returns [Finished]. *)
   val enqueue : f:(unit -> Worker_result.t) -> unit
 end

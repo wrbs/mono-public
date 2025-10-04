@@ -1,10 +1,10 @@
 open Core
 
 module Make_plain (Key : sig
-  type t [@@deriving sexp_of]
+    type t [@@deriving sexp_of]
 
-  include Comparator.S with type t := t
-end) =
+    include Comparator.S with type t := t
+  end) =
 struct
   module Update = struct
     module Diff = struct
@@ -37,8 +37,8 @@ struct
   let diffs ~from ~to_ : Update.t =
     Set.symmetric_diff from to_
     |> Sequence.map ~f:(function
-         | First k -> Update.Diff.Remove k
-         | Second k -> Add k)
+      | First k -> Update.Diff.Remove k
+      | Second k -> Add k)
     |> Sequence.to_list
   ;;
 
@@ -59,10 +59,10 @@ struct
 end
 
 module Make (Key : sig
-  type t [@@deriving sexp, bin_io]
+    type t [@@deriving sexp, bin_io]
 
-  include Comparator.S with type t := t
-end) =
+    include Comparator.S with type t := t
+  end) =
 struct
   module Plain = Make_plain (Key)
 
@@ -86,40 +86,38 @@ struct
       with module Update := Plain.Update)
 end
 
-let%test_module "tests" =
-  (module struct
-    module T = struct
-      module U = struct
-        type t = int [@@deriving bin_io, compare, equal, sexp]
-      end
-
-      include U
-      include Comparable.Make (U)
+module%test [@name "tests"] _ = struct
+  module T = struct
+    module U = struct
+      type t = int [@@deriving bin_io, compare, equal, sexp]
     end
 
-    include T
-    include Make (T)
+    include U
+    include Comparable.Make (U)
+  end
 
-    let%test_unit "atomic round-trip works" =
-      Quickcheck.test
-        (Quickcheck.Generator.list Int.quickcheck_generator)
-        ~sexp_of:[%sexp_of: int list]
-        ~f:(fun ns ->
+  include T
+  include Make (T)
+
+  let%test_unit "atomic round-trip works" =
+    Quickcheck.test
+      (Quickcheck.Generator.list Int.quickcheck_generator)
+      ~sexp_of:[%sexp_of: int list]
+      ~f:(fun ns ->
         let t = T.Set.of_list ns in
         [%test_result: T.Set.t] ~expect:t (of_diffs (to_diffs t)))
-    ;;
+  ;;
 
-    let%test_unit "atomic diff/update works" =
-      let open Quickcheck in
-      Quickcheck.test
-        (Generator.tuple2
-           (Quickcheck.Generator.list Int.quickcheck_generator)
-           (Quickcheck.Generator.list Int.quickcheck_generator))
-        ~sexp_of:[%sexp_of: int list * int list]
-        ~f:(fun (from, to_) ->
-          let from = T.Set.of_list from in
-          let to_ = T.Set.of_list to_ in
-          [%test_result: T.Set.t] ~expect:to_ (update from (diffs ~from ~to_)))
-    ;;
-  end)
-;;
+  let%test_unit "atomic diff/update works" =
+    let open Quickcheck in
+    Quickcheck.test
+      (Generator.tuple2
+         (Quickcheck.Generator.list Int.quickcheck_generator)
+         (Quickcheck.Generator.list Int.quickcheck_generator))
+      ~sexp_of:[%sexp_of: int list * int list]
+      ~f:(fun (from, to_) ->
+        let from = T.Set.of_list from in
+        let to_ = T.Set.of_list to_ in
+        [%test_result: T.Set.t] ~expect:to_ (update from (diffs ~from ~to_)))
+  ;;
+end

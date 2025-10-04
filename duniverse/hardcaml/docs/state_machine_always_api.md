@@ -1,4 +1,4 @@
-# Designing State Machines with the Always DSL
+# 4.3 Designing State Machines
 
 <!--
 ```ocaml
@@ -24,16 +24,18 @@ A state machine is constructed with the following function:
 # Always.State_machine.create
 - : ?encoding:Always.State_machine.Encoding.t ->
     ?auto_wave_format:bool ->
+    ?attributes:Hardcaml.Rtl_attribute.t list ->
     ?enable:t ->
+    ?unreachable:'a list ->
     (module Hardcaml.Always.State_machine.State with type t = 'a) ->
-    Type.register -> 'a Always.State_machine.t
+    Reg_spec.t -> 'a Always.State_machine.t
 = <fun>
 ```
 
 The value returned can be used within an *Always block*.
 Let's look at an example.
 
-## Defining the State type
+## Defining the state type
 
 ```ocaml
 module States = struct
@@ -71,7 +73,7 @@ let outputs =
   let sm =
     Always.State_machine.create (module States) ~enable:vdd r_sync
   in
-  let done_ = Always.Variable.wire ~default:gnd in
+  let done_ = Always.Variable.wire ~default:gnd () in
   Always.(compile [
     sm.switch [
       Wait_for_start, [
@@ -128,9 +130,9 @@ Always DSL in action.
     let sim = Cyclesim.create circuit in
     let print_state_and_outputs () =
       let state =
-        List.nth_exn States.all (Bits.to_int !(Cyclesim.out_port sim "state"))
+        List.nth_exn States.all (Bits.to_unsigned_int !(Cyclesim.out_port sim "state"))
       in
-      let done_ = Bits.is_vdd !(Cyclesim.out_port sim "done") in
+      let done_ = Bits.to_bool !(Cyclesim.out_port sim "done") in
       Stdio.print_s [%message
         (state : States.t) (done_ : bool)
       ]
@@ -163,9 +165,9 @@ Always DSL in action.
 
 As mentioned above, the
 [Always DSL](https://ocaml.org/p/hardcaml/latest/doc/Hardcaml/Always/index.html)
-is simply an `Always.t list`. The gives room for several creative behaviours.
+is simply an `Always.t list`. The gives room for several creative behaviors.
 
-## Function Abstractions
+## Function abstractions
 
 Since we are really just generating `Always.t` lists from OCaml code,
 we can simply split out some parts of the DSL into different
@@ -186,7 +188,7 @@ let foo_branch (o_value : Hardcaml.Always.Variable.t) =
 
 let main : Always.t list =
   let cond = Signal.input "cond" 1 in
-  let o_value = Always.Variable.wire ~default:(Signal.zero 32) in
+  let o_value = Always.Variable.wire ~default:(Signal.zero 32) () in
   Always.[
     if_ cond [
       (* [proc] turns a [Always.t list] to an [Always.t], without
@@ -214,7 +216,7 @@ variables in functions are really more like "static variables" in C), this
 "function abstraction" is a powerful way of making repetitive /
 complicated state machines much more comprehensible.
 
-## (Advanced) "High-order" Blocks
+## (Advanced) "High-order" blocks
 
 What if we want to create functional blocks that are only executed
 under a set of non-trivial preconditions?
@@ -241,8 +243,8 @@ let handshake stream callback =
 ;;
 
 let main (stream_a : stream) (stream_b : stream) =
-  let foo = Always.Variable.wire ~default:Signal.gnd in
-  let bar = Always.Variable.wire ~default:Signal.gnd in
+  let foo = Always.Variable.wire ~default:Signal.gnd () in
+  let bar = Always.Variable.wire ~default:Signal.gnd () in
   Always.compile [
     handshake stream_a (fun data ->
       Always.[

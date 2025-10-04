@@ -13,7 +13,16 @@ let[@inline] float x = Int63.to_float x
 
 (* [Span] is basically a [Int63].  It even silently ignores overflow. *)
 module T = struct
-  type t = Int63.t (* nanoseconds *) [@@deriving hash, bin_io, quickcheck, typerep]
+  type t = Int63.t
+  (* nanoseconds *)
+  [@@deriving
+    hash
+    , bin_io ~localize
+    , compare ~localize
+    , equal ~localize
+    , globalize
+    , quickcheck
+    , typerep]
 
   module Replace_polymorphic_compare = Int63.Replace_polymorphic_compare
 
@@ -33,7 +42,7 @@ module Parts = struct
     ; us : int
     ; ns : int
     }
-  [@@deriving compare, sexp, sexp_grammar]
+  [@@deriving compare ~localize, sexp, sexp_grammar]
 end
 
 let next t = Int63.succ t
@@ -112,12 +121,12 @@ let of_parts { Parts.sign; hr; min; sec; ms; us; ns } =
 
 let of_ns f = round_nearest_ns f
 let of_int63_ns i = i
-let of_int_us i = Int63.(of_int i * microsecond)
-let of_int_ms i = Int63.(of_int i * millisecond)
-let of_int_sec i = Int63.(of_int i * second)
-let of_int_min i = Int63.(of_int i * minute)
-let of_int_hr i = Int63.(of_int i * hour)
-let of_int_day i = Int63.(of_int i * day)
+let[@zero_alloc strict] of_int_us i = Int63.(of_int i * microsecond)
+let[@zero_alloc strict] of_int_ms i = Int63.(of_int i * millisecond)
+let[@zero_alloc strict] of_int_sec i = Int63.(of_int i * second)
+let[@zero_alloc strict] of_int_min i = Int63.(of_int i * minute)
+let[@zero_alloc strict] of_int_hr i = Int63.(of_int i * hour)
+let[@zero_alloc strict] of_int_day i = Int63.(of_int i * day)
 let of_us f = round_nearest_ns (f *. float_microsecond)
 let of_ms f = round_nearest_ns (f *. float_millisecond)
 let[@inline] of_sec f = round_nearest_ns (f *. float_second)
@@ -146,28 +155,29 @@ let[@inline] to_sec_approx t = float t *. ns_per_sec
 let[@inline] to_min_approx t = float t *. ns_per_min
 let[@inline] to_hr_approx t = float t *. ns_per_hr
 let[@inline] to_day_approx t = float t *. ns_per_day
-let to_int_us t = Int63.(to_int_exn (t / microsecond))
-let to_int_ms t = Int63.(to_int_exn (t / millisecond))
-let to_int_sec t = Int63.(to_int_exn (t / second))
-let to_int63_seconds_round_down_exn t = t /% second
-let of_int_ns i = of_int63_ns (Int63.of_int i)
+let[@zero_alloc strict] to_int_us t = Int63.(to_int_exn (t / microsecond))
+let[@zero_alloc strict] to_int_ms t = Int63.(to_int_exn (t / millisecond))
+let[@zero_alloc strict] to_int_sec t = Int63.(to_int_exn (t / second))
+let[@zero_alloc] to_int63_seconds_round_down_exn t = t /% second
+let[@zero_alloc strict] of_int_ns i = of_int63_ns (Int63.of_int i)
 
 let to_int_ns =
   if arch_sixtyfour
-  then fun t -> Int63.to_int_exn (to_int63_ns t)
+  then fun [@zero_alloc] t -> Int63.to_int_exn (to_int63_ns t)
   else fun _ -> failwith "Time_ns.Span.to_int_ns: unsupported on 32bit machines"
 ;;
 
+let[@zero_alloc] to_int_ns t = to_int_ns t
 let ( + ) t u = Int63.( + ) t u
 let ( - ) t u = Int63.( - ) t u
 let abs = Int63.abs
 let neg = Int63.neg
-let scale t f = round_nearest_ns (float t *. f)
+let[@zero_alloc] scale t f = round_nearest_ns (float t *. f)
 let scale_int63 t i = Int63.( * ) t i
-let scale_int t i = scale_int63 t (Int63.of_int i)
-let div = Int63.( /% )
+let[@zero_alloc strict] scale_int t i = scale_int63 t (Int63.of_int i)
+let[@inline] div t u = Int63.( /% ) t u
+let[@inline] ( // ) t u = Int63.( // ) t u
 let ( / ) t f = round_nearest_ns (float t /. f)
-let ( // ) = Int63.( // )
 let to_proportional_float t = Int63.to_float t
 
 let of_unit_of_time u =
@@ -216,7 +226,9 @@ let round t ~dir ~to_multiple_of =
 module Stable0 = struct
   module V1 = struct
     module T = struct
-      type nonrec t = t [@@deriving bin_io, compare, hash, equal]
+      type nonrec t = t
+      [@@deriving
+        bin_io ~localize, compare ~localize, equal ~localize, globalize, hash, typerep]
 
       let stable_witness : t Stable_witness.t = Stable_witness.assert_stable
 
@@ -237,14 +249,23 @@ module Stable0 = struct
     end
 
     include T
-    include Comparator.Stable.V1.Make (T)
-    include Diffable.Atomic.Make (T)
+
+    include%template Comparator.Stable.V1.Make [@modality portable] (T)
+    include%template Diffable.Atomic.Make [@modality portable] (T)
   end
 
   module V2 = struct
     module T = struct
       module T0 = struct
-        type nonrec t = t [@@deriving bin_io, compare, hash, equal]
+        type nonrec t = t
+        [@@deriving
+          bin_io ~localize
+          , compare ~localize
+          , equal ~localize
+          , globalize
+          , hash
+          , quickcheck
+          , typerep]
 
         let stable_witness : t Stable_witness.t = Int63.Stable.V1.stable_witness
         let of_int63_exn t = of_int63_ns t
@@ -347,7 +368,7 @@ module Stable0 = struct
               | Microsecond
               | Nanosecond
               | None
-            [@@deriving compare, sexp_of]
+            [@@deriving compare ~localize, sexp_of]
 
             let create ~s ~ns =
               let open Int.O in
@@ -705,12 +726,14 @@ module Stable0 = struct
       end
 
       include T0
-      include Comparator.Stable.V1.Make (T0)
+
+      include%template Comparator.Stable.V1.Make [@modality portable] (T0)
     end
 
     include T
-    include Comparable.Stable.V1.With_stable_witness.Make (T)
-    include Diffable.Atomic.Make (T)
+
+    include%template Comparable.Stable.V1.With_stable_witness.Make [@modality portable] (T)
+    include%template Diffable.Atomic.Make [@modality portable] (T)
   end
 end
 
@@ -728,11 +751,11 @@ module Alternate_sexp = struct
   type nonrec t = t [@@deriving sexp, sexp_grammar]
 end
 
-include Comparable.With_zero (struct
-  type nonrec t = t [@@deriving compare, sexp]
+include%template Comparable.With_zero [@modality portable] (struct
+    type nonrec t = t [@@deriving compare ~localize, sexp]
 
-  let zero = zero
-end)
+    let zero = zero
+  end)
 
 (* Functions required by [Robustly_comparable]: allows for [robust_comparison_tolerance]
    granularity.
@@ -776,14 +799,16 @@ let to_string_hum
   prefix ^ suffix
 ;;
 
-let since_unix_epoch () = Time_now.nanoseconds_since_unix_epoch () |> of_int63_ns
+let[@zero_alloc] since_unix_epoch () =
+  Time_now.nanoseconds_since_unix_epoch () |> of_int63_ns
+;;
 
 let random ?state () =
   Int63.random ?state (max_value_for_1us_rounding + Int63.one)
   - Int63.random ?state (neg min_value_for_1us_rounding + Int63.one)
 ;;
 
-let randomize ?(state = Random.State.default) t ~percent =
+let randomize ?(state = Random.State.get_default ()) t ~percent =
   Span_helpers.randomize t state ~percent ~scale
 ;;
 
@@ -794,30 +819,32 @@ let to_short_string t =
 
 let gen_incl = Int63.gen_incl
 let gen_uniform_incl = Int63.gen_uniform_incl
+let gen_log_incl = Int63.gen_incl
+let gen_log_uniform_incl = Int63.gen_log_uniform_incl
 
-include Pretty_printer.Register (struct
-  type nonrec t = t
+include%template Pretty_printer.Register [@modality portable] (struct
+    type nonrec t = t
 
-  let to_string = to_string
-  let module_name = module_name
-end)
+    let to_string = to_string
+    let module_name = module_name
+  end)
 
-include Hashable.Make_binable (struct
-  type nonrec t = t [@@deriving bin_io, compare, hash, sexp]
-end)
+include%template Hashable.Make_binable [@modality portable] (struct
+    type nonrec t = t [@@deriving bin_io, compare ~localize, hash, sexp]
+  end)
 
 type comparator_witness = Stable.V2.comparator_witness
 
-include Comparable.Make_binable_using_comparator (struct
-  type nonrec t = t [@@deriving bin_io, compare, sexp]
-  type nonrec comparator_witness = comparator_witness
+include%template Comparable.Make_binable_using_comparator [@modality portable] (struct
+    type nonrec t = t [@@deriving bin_io, compare ~localize, sexp]
+    type nonrec comparator_witness = comparator_witness
 
-  let comparator = Stable.V2.comparator
-end)
+    let comparator = Stable.V2.comparator
+  end)
 
-include Diffable.Atomic.Make (struct
-  type nonrec t = t [@@deriving bin_io, sexp, equal]
-end)
+include%template Diffable.Atomic.Make [@modality portable] (struct
+    type nonrec t = t [@@deriving bin_io, sexp, equal ~localize]
+  end)
 
 (* re-include [Replace_polymorphic_compare] and its comparisons to shadow the
    un-inlineable ones from [Comparable] *)
@@ -857,12 +884,7 @@ let max_span_float_value_for_1us_rounding =
 let of_span_float_round_nearest_microsecond s =
   if Span_float.( > ) s max_span_float_value_for_1us_rounding
      || Span_float.( < ) s min_span_float_value_for_1us_rounding
-  then
-    failwiths
-      ~here:[%here]
-      "Time_ns.Span does not support this span"
-      s
-      [%sexp_of: Span_float.t];
+  then failwiths "Time_ns.Span does not support this span" s [%sexp_of: Span_float.t];
   (* Using [Time.Span.to_sec] (being the identity) so that
      we make don't apply too many conversion
      - Too many : `[Span.t] -> [a] -> [t]`
@@ -874,19 +896,19 @@ let min_value_representable = of_int63_ns Int63.min_value
 let max_value_representable = of_int63_ns Int63.max_value
 
 module O = struct
-  let ( / ) = ( / )
+  let[@zero_alloc] ( / ) = [%eta2 ( / )]
   let ( // ) = ( // )
-  let ( + ) = ( + )
-  let ( - ) = ( - )
-  let ( >= ) = ( >= )
-  let ( <= ) = ( <= )
-  let ( = ) = ( = )
-  let ( > ) = ( > )
-  let ( < ) = ( < )
-  let ( <> ) = ( <> )
-  let ( ~- ) = neg
-  let ( *. ) = scale
-  let ( * ) = scale_int
+  let[@zero_alloc strict] ( + ) = [%eta2 ( + )]
+  let[@zero_alloc strict] ( - ) = [%eta2 ( - )]
+  let[@zero_alloc strict] ( >= ) = [%eta2 ( >= )]
+  let[@zero_alloc strict] ( <= ) = [%eta2 ( <= )]
+  let[@zero_alloc strict] ( = ) = [%eta2 ( = )]
+  let[@zero_alloc strict] ( > ) = [%eta2 ( > )]
+  let[@zero_alloc strict] ( < ) = [%eta2 ( < )]
+  let[@zero_alloc strict] ( <> ) = [%eta2 ( <> )]
+  let[@zero_alloc strict] ( ~- ) = [%eta1 neg]
+  let[@zero_alloc] ( *. ) = [%eta2 scale]
+  let[@zero_alloc strict] ( * ) = [%eta2 scale_int]
 end
 
 module Private = struct
@@ -902,32 +924,38 @@ let to_span = to_span_float_round_nearest_microsecond
 
 module Option = struct
   type span = t [@@deriving sexp]
-  type t = Int63.t [@@deriving bin_io, compare, equal, hash, typerep]
+
+  type t = Int63.t
+  [@@deriving
+    bin_io ~localize, compare ~localize, equal ~localize, globalize, hash, typerep]
   (* nanoseconds or none *)
 
   let none = Int63.min_value
-  let is_none t = Int63.(t = none)
-  let is_some t = Int63.(t <> none)
-  let some_is_representable span = is_some (to_int63_ns span)
+  let[@zero_alloc strict] is_none t = Int63.(t = none)
+  let[@zero_alloc strict] is_some t = Int63.(t <> none)
+  let[@zero_alloc strict] some_is_representable span = is_some (to_int63_ns span)
 
   let[@cold] raise_some_error span =
     raise_s [%message [%here] "Span.Option.some value not representable" (span : span)]
   ;;
 
-  let some span =
+  let[@zero_alloc] some span =
     if some_is_representable span then to_int63_ns span else raise_some_error span
   ;;
 
-  let unchecked_value t = of_int63_ns t
-  let value t ~default = Bool.select (is_none t) default (unchecked_value t)
+  let[@zero_alloc strict] unchecked_value t = of_int63_ns t
 
-  let value_exn t =
+  let[@zero_alloc strict] value t ~default =
+    Bool.select (is_none t) default (unchecked_value t)
+  ;;
+
+  let[@zero_alloc] value_exn t =
     if is_some t
     then unchecked_value t
     else raise_s [%message [%here] "Span.Option.value_exn none"]
   ;;
 
-  let of_option = function
+  let[@zero_alloc] of_option = function
     | None -> none
     | Some t -> some t
   ;;
@@ -938,30 +966,38 @@ module Option = struct
     module Some = struct
       type t = span
 
-      let quickcheck_generator =
-        Quickcheck.Generator.filter quickcheck_generator ~f:some_is_representable
+      let%template quickcheck_generator =
+        (Base_quickcheck.Generator.filter [@mode portable])
+          quickcheck_generator
+          ~f:some_is_representable
       ;;
 
       let quickcheck_observer = quickcheck_observer
 
-      let quickcheck_shrinker =
-        Base_quickcheck.Shrinker.filter quickcheck_shrinker ~f:some_is_representable
+      let%template quickcheck_shrinker =
+        (Base_quickcheck.Shrinker.filter [@mode portable])
+          quickcheck_shrinker
+          ~f:some_is_representable
       ;;
     end
 
-    type t = Some.t option [@@deriving quickcheck]
+    type t = Some.t option [@@deriving quickcheck ~portable]
   end
 
-  let quickcheck_generator =
-    Quickcheck.Generator.map For_quickcheck.quickcheck_generator ~f:of_option
+  let%template quickcheck_generator =
+    (Base_quickcheck.Generator.map [@mode portable])
+      For_quickcheck.quickcheck_generator
+      ~f:of_option
   ;;
 
-  let quickcheck_observer =
-    Quickcheck.Observer.unmap For_quickcheck.quickcheck_observer ~f:to_option
+  let%template quickcheck_observer =
+    (Quickcheck.Observer.unmap [@mode portable])
+      For_quickcheck.quickcheck_observer
+      ~f:to_option
   ;;
 
-  let quickcheck_shrinker =
-    Quickcheck.Shrinker.map
+  let%template quickcheck_shrinker =
+    (Quickcheck.Shrinker.map [@mode portable])
       For_quickcheck.quickcheck_shrinker
       ~f:of_option
       ~f_inverse:to_option
@@ -969,15 +1005,17 @@ module Option = struct
 
   module Optional_syntax = struct
     module Optional_syntax = struct
-      let is_none = is_none
-      let unsafe_value = unchecked_value
+      let[@zero_alloc strict] is_none t = is_none t
+      let[@zero_alloc strict] unsafe_value t = unchecked_value t
     end
   end
 
   module Stable = struct
     module V1 = struct
       module T = struct
-        type nonrec t = t [@@deriving bin_io, compare, equal]
+        type nonrec t = t
+        [@@deriving
+          bin_io ~localize, compare ~localize, equal ~localize, globalize, typerep]
 
         let v1_some span =
           assert (some_is_representable span);
@@ -998,13 +1036,16 @@ module Option = struct
       end
 
       include T
-      include Comparator.Stable.V1.Make (T)
-      include Diffable.Atomic.Make (T)
+
+      include%template Comparator.Stable.V1.Make [@modality portable] (T)
+      include%template Diffable.Atomic.Make [@modality portable] (T)
     end
 
     module V2 = struct
       module T = struct
-        type nonrec t = t [@@deriving bin_io, compare, equal]
+        type nonrec t = t
+        [@@deriving
+          bin_io ~localize, compare ~localize, equal ~localize, globalize, typerep]
 
         let sexp_of_t t =
           Sexp.List
@@ -1041,29 +1082,48 @@ module Option = struct
       end
 
       include T
-      include Comparator.Stable.V1.Make (T)
-      include Diffable.Atomic.Make (T)
+
+      include%template Comparator.Stable.V1.Make [@modality portable] (T)
+      include%template Diffable.Atomic.Make [@modality portable] (T)
     end
   end
 
   let sexp_of_t = Stable.V2.sexp_of_t
   let t_of_sexp = Stable.V2.t_of_sexp
 
-  include Identifiable.Make (struct
-    type nonrec t = t [@@deriving sexp, compare, bin_io, hash]
+  include%template Identifiable.Make [@mode local] [@modality portable] (struct
+      type nonrec t = t [@@deriving sexp, compare ~localize, bin_io ~localize, hash]
 
-    let module_name = "Core.Time_ns.Span.Option"
+      let module_name = "Core.Time_ns.Span.Option"
 
-    include Sexpable.To_stringable (struct
-      type nonrec t = t [@@deriving sexp]
+      include%template Sexpable.To_stringable [@modality portable] (struct
+          type nonrec t = t [@@deriving sexp]
+        end)
     end)
-  end)
 
-  include Diffable.Atomic.Make (struct
-    type nonrec t = t [@@deriving bin_io, sexp, equal]
-  end)
+  include%template Diffable.Atomic.Make [@modality portable] (struct
+      type nonrec t = t [@@deriving bin_io, sexp, equal ~localize]
+    end)
 
-  include (Int63 : Comparisons.S with type t := t)
+  include (
+  struct
+    include Int63
+
+    let[@zero_alloc strict] ( >= ) = [%eta2 ( >= )]
+    let[@zero_alloc strict] ( <= ) = [%eta2 ( <= )]
+    let[@zero_alloc strict] ( = ) = [%eta2 ( = )]
+    let[@zero_alloc strict] ( > ) = [%eta2 ( > )]
+    let[@zero_alloc strict] ( < ) = [%eta2 ( < )]
+    let[@zero_alloc strict] ( <> ) = [%eta2 ( <> )]
+    let[@zero_alloc strict] equal = [%eta2 equal]
+    let[@zero_alloc strict] compare = [%eta2 compare]
+    let[@zero_alloc strict] min = [%eta2 min]
+    let[@zero_alloc strict] max = [%eta2 max]
+  end :
+  sig
+  @@ portable
+    include Comparisons.S_with_zero_alloc with type t := t
+  end)
 end
 
 module Stable = struct
@@ -1075,4 +1135,4 @@ module Stable = struct
   end
 end
 
-let arg_type = Command.Arg_type.create of_string
+let%template arg_type = (Command.Arg_type.create [@mode portable]) of_string

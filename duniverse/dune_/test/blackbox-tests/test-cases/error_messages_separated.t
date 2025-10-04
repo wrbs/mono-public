@@ -50,10 +50,12 @@ between error messages for different files, as expected.
   1 | let f x y z = ()
             ^
   Error (warning 27 [unused-var-strict]): unused variable x.
+  
   File "a.ml", line 1, characters 8-9:
   1 | let f x y z = ()
               ^
   Error (warning 27 [unused-var-strict]): unused variable y.
+  
   File "a.ml", line 1, characters 10-11:
   1 | let f x y z = ()
                 ^
@@ -61,7 +63,7 @@ between error messages for different files, as expected.
   File "b.ml", line 1, characters 9-10:
   1 | let () = 1
                ^
-  Error: This expression has type int but an expression was expected of type
+  Error: The constant 1 has type int but an expression was expected of type
            unit
   [1]
 
@@ -78,10 +80,12 @@ message either.
   1 | let f x y z = ()
             ^
   Error (warning 27 [unused-var-strict]): unused variable x.
+  
   File "a.ml", line 1, characters 8-9:
   1 | let f x y z = ()
               ^
   Error (warning 27 [unused-var-strict]): unused variable y.
+  
   File "a.ml", line 1, characters 10-11:
   1 | let f x y z = ()
                 ^
@@ -90,6 +94,6 @@ message either.
   File "b.ml", line 1, characters 9-10:
   1 | let () = 1
                ^
-  Error: This expression has type int but an expression was expected of type
+  Error: The constant 1 has type int but an expression was expected of type
            unit
   [1]

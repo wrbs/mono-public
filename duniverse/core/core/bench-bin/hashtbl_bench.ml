@@ -36,7 +36,7 @@ module type Config = sig
 end
 
 module type Impl = sig
-  include Hashtbl_intf.Hashtbl
+  include Hashtbl_intf.Hashtbl_over_values
 
   val module_name : string
 end
@@ -126,9 +126,6 @@ end = struct
     type ('k, 'v) t_ = ('k, 'v) Table.t_
     type 'k key_ = 'k Table.key_
 
-    module Provide_of_sexp = Table.Provide_of_sexp
-    module Provide_bin_io = Table.Provide_bin_io
-
     (* benchmarks begin here *)
 
     let sexp_of_t = Table.sexp_of_t
@@ -196,7 +193,7 @@ end = struct
         stage (fun () ->
           ignore
             (of_alist_report_all_dups alist
-              : [ `Ok of int t | `Duplicate_keys of key list ])))
+             : [ `Ok of int t | `Duplicate_keys of key list ])))
     ;;
 
     let of_alist_multi = Table.of_alist_multi
@@ -215,7 +212,7 @@ end = struct
         stage (fun () ->
           ignore
             (create_mapped alist ~get_key:fst ~get_data:snd
-              : [ `Ok of int t | `Duplicate_keys of key list ])))
+             : [ `Ok of int t | `Duplicate_keys of key list ])))
     ;;
 
     let create_with_key = Table.create_with_key
@@ -227,7 +224,7 @@ end = struct
         stage (fun () ->
           ignore
             (create_with_key data ~get_key:(Array.get key_array)
-              : [ `Ok of int t | `Duplicate_keys of key list ])))
+             : [ `Ok of int t | `Duplicate_keys of key list ])))
     ;;
 
     let create_with_key_exn = Table.create_with_key_exn
@@ -249,7 +246,7 @@ end = struct
         stage (fun () ->
           ignore
             (create_with_key_or_error data ~get_key:(Array.get key_array)
-              : int t Or_error.t)))
+             : int t Or_error.t)))
     ;;
 
     let group = Table.group
@@ -276,6 +273,16 @@ end = struct
       ( !! ) "choose" (fun size ->
         let t = Example.t size in
         stage (fun () -> ignore (choose t : (key * int) option)))
+    ;;
+
+    let%template choose = (Impl.choose [@mode m]) [@@mode m = local]
+
+    let%template () =
+      ( !! ) "choose" (fun size ->
+        let t = Example.t size in
+        stage (fun () ->
+          ignore
+            ((choose [@mode local]) t : (key Modes.Global.t * int Modes.Global.t) option)))
     ;;
 
     let choose_randomly = Impl.choose_randomly
@@ -319,6 +326,15 @@ end = struct
       ( !! ) "choose_exn" (fun size ->
         let t = Example.t size in
         stage (fun () -> ignore (choose_exn t : key * int)))
+    ;;
+
+    let%template choose_exn = (Impl.choose_exn [@mode m]) [@@mode m = local]
+
+    let%template () =
+      ( !! ) "choose_local_exn" (fun size ->
+        let t = Example.t size in
+        stage (fun () ->
+          ignore ((choose_exn [@mode local]) t : key Modes.Global.t * int Modes.Global.t)))
     ;;
 
     let choose_randomly_exn = Impl.choose_randomly_exn
@@ -533,6 +549,14 @@ end = struct
       ( !! ) "capacity" (fun size ->
         let t = Example.t size in
         stage (fun () -> ignore (capacity t : int)))
+    ;;
+
+    let growth_allowed = Impl.growth_allowed
+
+    let () =
+      ( !! ) "growth_allowed" (fun size ->
+        let t = Example.t size in
+        stage (fun () -> ignore (growth_allowed t : bool)))
     ;;
 
     let keys = Impl.keys
@@ -1030,6 +1054,7 @@ end = struct
     ;;
 
     let equal = Impl.equal
+    let equal__local = Table.equal__local
 
     let () =
       ( !! ) "equal [same]" (fun size ->
@@ -1177,7 +1202,7 @@ let benchmarks ~regex ~sizes =
   let module P = Bench_pooled (Config) in
   H.benchmarks @ P.benchmarks
   |> List.sort ~compare:(fun test1 test2 ->
-       String.compare (Bench.Test.name test1) (Bench.Test.name test2))
+    String.compare (Bench.Test.name test1) (Bench.Test.name test2))
 ;;
 
 module Top_level = struct

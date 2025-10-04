@@ -3,21 +3,30 @@ module Attrs = Attrs
 module Record_field_attrs = Record_field_attrs
 
 module Sexp_of : sig
-  val type_extension : core_type -> core_type
-  val core_type : core_type -> expression
+  val type_extension : core_type -> localize:bool -> core_type
+  val core_type : core_type -> localize:bool -> expression
+  val pattern : longident loc -> localize:bool -> pattern
 
   val sig_type_decl
     :  loc:Location.t
     -> path:string
     -> rec_flag * type_declaration list
-    -> signature
+    -> localize:bool
+    -> portable:bool
+    -> signature_item list
 
-  val sig_exception : loc:Location.t -> path:string -> type_exception -> signature
+  val sig_exception
+    :  loc:Location.t
+    -> path:string
+    -> type_exception
+    -> signature_item list
 
   val str_type_decl
     :  loc:Location.t
     -> path:string
     -> rec_flag * type_declaration list
+    -> localize:bool
+    -> portable:bool
     -> structure
 
   val str_exception : loc:Location.t -> path:string -> type_exception -> structure
@@ -25,6 +34,7 @@ end
 
 module Of_sexp : sig
   val type_extension : core_type -> core_type
+  val pattern : longident loc -> pattern
   val core_type : path:string -> core_type -> expression
 
   val sig_type_decl
@@ -32,13 +42,15 @@ module Of_sexp : sig
     -> loc:Location.t
     -> path:string
     -> rec_flag * type_declaration list
-    -> signature
+    -> portable:bool
+    -> signature_item list
 
   val str_type_decl
     :  loc:Location.t
     -> poly:bool (** the type is annotated with sexp_poly instead of sexp *)
     -> path:string (** the module path within the file *)
     -> rec_flag * type_declaration list
+    -> portable:bool
     -> structure
 end
 
@@ -54,7 +66,7 @@ module Sexp_grammar : sig
   val sig_type_decl
     :  ctxt:Expansion_context.Deriver.t
     -> rec_flag * type_declaration list
-    -> signature
+    -> signature_item list
 
   val str_type_decl
     :  ctxt:Expansion_context.Deriver.t
@@ -68,5 +80,7 @@ module Sig_sexp : sig
     :  loc:Location.t
     -> path:string
     -> rec_flag * type_declaration list
-    -> signature
+    -> localize:bool
+    -> portable:bool
+    -> signature_item list
 end

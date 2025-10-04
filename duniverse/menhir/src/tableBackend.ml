@@ -461,13 +461,13 @@ let marshal2 name m n (matrix : int list list) =
     Array.of_list (List.map Array.of_list matrix)
   in
   let (displacement : int array), (data : int array) =
-    MenhirLib.RowDisplacement.compress
-      (=)
-      (fun x -> x = hole)
-      hole
-      m
-      n
-      matrix
+    let insignificant x = (x = hole) in
+    if Settings.pack_classic then
+      MenhirLib.RowDisplacement.compress
+        (=) insignificant hole
+        m n matrix
+    else
+      FastDisplacement.compress insignificant hole matrix
   in
   Error.logC 1 (fun f ->
     fprintf f
@@ -678,8 +678,13 @@ let token2value =
         match Terminal.ocamltype tok with
         | None ->
             EUnit
-        | Some _ ->
-            EVar semv
+        | Some typ ->
+            (* 2025/09/12: a type annotation is required for safety when the
+               user uses an external [token] type (via --external-tokens).
+               We might have two inconsistent views of the type of the
+               semantic value: one in our .mly file, and one in the external
+               definition of the [token] type. See MR 38. *)
+            EAnnot (EVar semv, type2scheme (TypTextual typ))
       )
     )
 

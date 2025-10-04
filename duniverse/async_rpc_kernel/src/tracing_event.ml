@@ -18,12 +18,12 @@ module Received_response_kind = struct
     | One_way_so_no_response
     | Partial_response
     | Response_finished_ok
-    | Response_finished_rpc_error_or_exn of Rpc_error.t
+    | Response_finished_rpc_error_or_exn of global_ Rpc_error.t
     | Response_finished_user_defined_error
     | Response_finished_expert_uninterpreted
-  [@@deriving sexp]
+  [@@deriving sexp, globalize]
 
-  let globalize x = x
+  let globalize x = globalize x
 end
 
 module Kind = struct
@@ -51,10 +51,10 @@ end
 
 type t =
   { event : Event.t
-  ; rpc : Description.t option
-  ; id : Int63.t (* Protocol.Query_id.t is not exposed. *)
+  ; rpc : Description.t
+  ; global_ id : Int63.t (* Protocol.Query_id.t is not exposed. *)
   ; payload_bytes : int
   }
-[@@deriving sexp_of]
+[@@deriving sexp_of, globalize]
 
-let globalize x = x
+let globalize x = globalize x

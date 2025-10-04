@@ -1,4 +1,4 @@
-(** Internal to [Async_rpc_kernel].  See [Rpc.Implementations]. *)
+(** Internal to [Async_rpc_kernel]. See [Rpc.Implementations]. *)
 
 open! Core
 open! Async_kernel
@@ -20,6 +20,7 @@ type 'connection_state on_unknown_rpc =
 val create
   :  implementations:'connection_state Implementation.t list
   -> on_unknown_rpc:'connection_state on_unknown_rpc
+  -> on_exception:On_exception.t
   -> ('connection_state t, [ `Duplicate_implementations of Description.t list ]) Result.t
 
 val null : unit -> 'a t
@@ -30,7 +31,8 @@ module Direct_stream_writer : sig
 
   module Id = Implementation_types.Direct_stream_writer.Id
 
-  val close : _ t -> unit
+  val started : _ t -> unit Deferred.t
+  val close : ?result:[ `Eof ] Rpc_result.t (* Default [Ok `Eof] *) -> _ t -> unit
   val closed : _ t -> unit Deferred.t
   val is_closed : _ t -> bool
   val write : 'a t -> 'a -> [ `Flushed of unit Deferred.t | `Closed ]
@@ -58,7 +60,7 @@ module Direct_stream_writer : sig
       -> buf:Bigstring.t
       -> pos:int
       -> len:int
-      -> [ `Flushed of unit Deferred.t Gel.t | `Closed ]
+      -> local_ [ `Flushed of unit Deferred.t Modes.Global.t | `Closed ]
   end
 end
 
@@ -67,7 +69,7 @@ module Instance : sig
 
   val handle_query
     :  t
-    -> query:Nat0.t Query.t
+    -> query:Nat0.t Query.V2.t
     -> read_buffer:Bigstring.t
     -> read_buffer_pos_ref:int ref
     -> close_connection_monitor:Monitor.t
@@ -83,9 +85,9 @@ module Instance : sig
 
   val set_on_receive
     :  t
-    -> (Description.t
+    -> (local_ Description.t
         -> query_id:Query_id.t
-        -> Rpc_metadata.t option
+        -> Rpc_metadata.V1.t option
         -> Execution_context.t
         -> Execution_context.t)
     -> unit
@@ -93,11 +95,12 @@ end
 
 val instantiate
   :  'a t
+  -> menu:Menu.t option
   -> connection_description:Info.t
   -> connection_close_started:Info.t Deferred.t
   -> connection_state:'a
   -> writer:Protocol_writer.t
-  -> events:(Tracing_event.t -> unit) Bus.Read_write.t
+  -> tracing_events:(local_ Tracing_event.t -> unit) Bus.Read_write.t
   -> Instance.t
 
 val create_exn
@@ -112,6 +115,7 @@ val create_exn
          -> version:int
          -> [ `Close_connection | `Continue ]
        ]
+  -> on_exception:On_exception.t
   -> 'connection_state t
 
 val add
@@ -140,6 +144,11 @@ val descriptions_and_shapes
   :  ?exclude_name:string
   -> _ t
   -> (Description.t * Rpc_shapes.Just_digests.t) list
+
+val map_implementations
+  :  'a t
+  -> f:('a Implementation.t list -> 'a Implementation.t list)
+  -> ('a t, [ `Duplicate_implementations of Description.t list ]) Result.t
 
 module Expert : sig
   module Responder = Implementation.Expert.Responder
@@ -174,12 +183,39 @@ module Expert : sig
            'connection_state
            -> rpc_tag:string
            -> version:int
-           -> metadata:string option
+           -> metadata:Rpc_metadata.V1.t option
            -> Responder.t
            -> Bigstring.t
            -> pos:int
            -> len:int
            -> unit Deferred.t
          ]
+    -> on_exception:On_exception.t
     -> 'connection_state t
+end
+
+module Private : sig
+  val to_implementation_list
+    :  'connection_state t
+    -> 'connection_state Implementation.t list
+       * [ `Raise
+         | `Continue
+         | `Close_connection
+         | `Call of
+           'connection_state
+           -> rpc_tag:string
+           -> version:int
+           -> [ `Close_connection | `Continue ]
+         | `Expert of
+           'connection_state
+           -> rpc_tag:string
+           -> version:int
+           -> metadata:Rpc_metadata.V1.t option
+           -> Expert.Responder.t
+           -> Bigstring.t
+           -> pos:int
+           -> len:int
+           -> unit Deferred.t
+         ]
+       * On_exception.t
 end

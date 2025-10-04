@@ -43,8 +43,11 @@ module _ = struct
   let _ = [%bin_type_class: [ `A | `B of int ]]
 end
 
-open! Core
-open Expect_test_helpers_core
+open! Base
+open Expect_test_helpers_base
+open Base_quickcheck.Export
+open Bin_prot.Std
+module Bigstring = Base_bigstring
 
 module type S = sig
   type t [@@deriving equal, quickcheck, sexp_of]
@@ -61,58 +64,50 @@ let test
   bin_read
   (module M : S with type t = a)
   =
-  quickcheck_m
-    [%here]
-    (module M)
-    ~f:(fun t ->
-      let computed_size = bin_size t in
-      let computed_size_local = bin_size_local t in
-      require
-        [%here]
-        (computed_size = computed_size_local)
-        ~if_false_then_print_s:
-          [%lazy_message
-            "bin_size differs from bin_size_local"
-              (computed_size : int)
-              (computed_size_local : int)];
-      let message = Bigstring.create computed_size in
-      let written_size = bin_write message ~pos:0 t in
-      require
-        [%here]
-        (computed_size = written_size)
-        ~if_false_then_print_s:
-          [%lazy_message
-            "did not write entire message"
-              (computed_size : int)
-              (written_size : int)
-              ~written:(Bigstring.sub message ~pos:0 ~len:written_size : Bigstring.t)];
-      let pos_ref = ref 0 in
-      let round_trip = bin_read message ~pos_ref in
-      let read_size = !pos_ref in
-      require
-        [%here]
-        (computed_size = read_size)
-        ~if_false_then_print_s:
-          [%lazy_message
-            "did not read entire message"
-              (computed_size : int)
-              (read_size : int)
-              (message : Bigstring.t)];
-      require
-        [%here]
-        (M.equal t round_trip)
-        ~if_false_then_print_s:
-          [%lazy_message "value did not round-trip" (t : M.t) (round_trip : M.t)];
-      let message_local = Bigstring.create computed_size in
-      let (_ : int) = bin_write_local message_local ~pos:0 t in
-      require
-        [%here]
-        (Bigstring.equal message message_local)
-        ~if_false_then_print_s:
-          [%lazy_message
-            "bin_write differs from bin_write_local"
-              ~output:(message : Bigstring.t)
-              ~local_output:(message_local : Bigstring.t)])
+  quickcheck_m (module M) ~f:(fun t ->
+    let computed_size = bin_size t in
+    let computed_size_local = bin_size_local t in
+    require
+      (computed_size = computed_size_local)
+      ~if_false_then_print_s:
+        [%lazy_message
+          "bin_size differs from bin_size_local"
+            (computed_size : int)
+            (computed_size_local : int)];
+    let message = Bigstring.create computed_size in
+    let written_size = bin_write message ~pos:0 t in
+    require
+      (computed_size = written_size)
+      ~if_false_then_print_s:
+        [%lazy_message
+          "did not write entire message"
+            (computed_size : int)
+            (written_size : int)
+            ~written:(Bigstring.sub message ~pos:0 ~len:written_size : Bigstring.t)];
+    let pos_ref = ref 0 in
+    let round_trip = bin_read message ~pos_ref in
+    let read_size = !pos_ref in
+    require
+      (computed_size = read_size)
+      ~if_false_then_print_s:
+        [%lazy_message
+          "did not read entire message"
+            (computed_size : int)
+            (read_size : int)
+            (message : Bigstring.t)];
+    require
+      (M.equal t round_trip)
+      ~if_false_then_print_s:
+        [%lazy_message "value did not round-trip" (t : M.t) (round_trip : M.t)];
+    let message_local = Bigstring.create computed_size in
+    let (_ : int) = bin_write_local message_local ~pos:0 t in
+    require
+      (Bigstring.equal message message_local)
+      ~if_false_then_print_s:
+        [%lazy_message
+          "bin_write differs from bin_write_local"
+            ~output:(message : Bigstring.t)
+            ~local_output:(message_local : Bigstring.t)])
 ;;
 
 let%expect_test _ =
@@ -122,7 +117,9 @@ let%expect_test _ =
     [%bin_write: int]
     [%bin_write_local: int]
     [%bin_read: int]
-    (module Int);
+    (module struct
+      type t = int [@@deriving equal, quickcheck, sexp_of]
+    end);
   [%expect {| |}]
 ;;
 

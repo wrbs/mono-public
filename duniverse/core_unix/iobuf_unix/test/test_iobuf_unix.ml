@@ -14,16 +14,16 @@ let%test_unit _ =
   List.iter
     [ Iobuf.Expert.to_bigstring_shared; to_bigstring_shared_via_iovec ]
     ~f:(fun to_bstr ->
-    let iobuf = Iobuf.of_string "0123456789" in
-    let bstr0 = to_bstr iobuf in
-    [%test_result: Bigstring.t] bstr0 ~expect:(Bigstring.of_string "0123456789");
-    Iobuf.Poke.char iobuf ~pos:0 'X';
-    [%test_result: Bigstring.t] bstr0 ~expect:(Bigstring.of_string "X123456789");
-    let bstr1 = to_bstr iobuf ~pos:1 ~len:8 in
-    [%test_result: Bigstring.t] bstr1 ~expect:(Bigstring.of_string "12345678");
-    Iobuf.Poke.char iobuf ~pos:1 'X';
-    [%test_result: Bigstring.t] bstr1 ~expect:(Bigstring.of_string "X2345678");
-    [%test_result: Bigstring.t] bstr0 ~expect:(Bigstring.of_string "XX23456789"))
+      let iobuf = Iobuf.of_string "0123456789" in
+      let bstr0 = to_bstr iobuf in
+      [%test_result: Bigstring.t] bstr0 ~expect:(Bigstring.of_string "0123456789");
+      Iobuf.Poke.char iobuf ~pos:0 'X';
+      [%test_result: Bigstring.t] bstr0 ~expect:(Bigstring.of_string "X123456789");
+      let bstr1 = to_bstr iobuf ~pos:1 ~len:8 in
+      [%test_result: Bigstring.t] bstr1 ~expect:(Bigstring.of_string "12345678");
+      Iobuf.Poke.char iobuf ~pos:1 'X';
+      [%test_result: Bigstring.t] bstr1 ~expect:(Bigstring.of_string "X2345678");
+      [%test_result: Bigstring.t] bstr0 ~expect:(Bigstring.of_string "XX23456789"))
 ;;
 
 let%expect_test "fillf_float.Ok" =
@@ -50,19 +50,19 @@ type nonrec ok_or_eof = ok_or_eof =
 let iter_examples = Iobuf_test.Test_iobuf.iter_examples
 
 module Io_test (Ch : sig
-  type in_
+    type in_
 
-  val create_in : string -> in_
-  val close_in : in_ -> unit
-  val read : ([> write ], seek) Iobuf.t -> in_ -> ok_or_eof
+    val create_in : string -> in_
+    val close_in : in_ -> unit
+    val read : ([> write ], seek) Iobuf.t -> in_ -> ok_or_eof
 
-  type out_
+    type out_
 
-  val create_out : Unix.File_descr.t -> out_
-  val close_out : out_ -> unit
-  val write : ([> read ], seek) Iobuf.t -> out_ -> unit
-  val peek_write : ([> read ], _) Iobuf.t -> out_ -> int
-end) =
+    val create_out : Unix.File_descr.t -> out_
+    val close_out : out_ -> unit
+    val write : local_ ([> read ], seek) Iobuf.t -> out_ -> unit
+    val peek_write : local_ ([> read ], _) Iobuf.t -> out_ -> int
+  end) =
 struct
   let%test_unit "write + read" =
     iter_examples ~f:(fun t string ~pos ->
@@ -118,35 +118,35 @@ let output = output
 let input = input
 
 include Io_test (struct
-  type in_ = In_channel.t
+    type in_ = In_channel.t
 
-  let create_in file = In_channel.create file
-  let close_in = In_channel.close
+    let create_in file = In_channel.create file
+    let close_in = In_channel.close
 
-  type out_ = Out_channel.t
+    type out_ = Out_channel.t
 
-  let create_out = Unix.out_channel_of_descr
-  let close_out = Out_channel.close
-  let write = output
-  let peek_write = Peek.output
-  let read = input
-end)
+    let create_out = Unix.out_channel_of_descr
+    let close_out = Out_channel.close
+    let write = output
+    let peek_write = Peek.output
+    let read = input
+  end)
 
 let read = read
 let write = write
 
 include Io_test (struct
-  type in_ = Unix.File_descr.t
-  type out_ = in_
+    type in_ = Unix.File_descr.t
+    type out_ = in_
 
-  let create_in file = Unix.openfile ~mode:[ Unix.O_RDONLY ] file
-  let close_in fd = Unix.close fd
-  let create_out = Fn.id
-  let close_out = close_in
-  let read = read
-  let peek_write = Peek.write
-  let write = write
-end)
+    let create_in file = Unix.openfile ~mode:[ Unix.O_RDONLY ] file
+    let close_in fd = Unix.close fd
+    let create_out = Fn.id
+    let close_out = close_in
+    let read = read
+    let peek_write = Peek.write
+    let write = write
+  end)
 
 let read_assume_fd_is_nonblocking = read_assume_fd_is_nonblocking
 let write_assume_fd_is_nonblocking = write_assume_fd_is_nonblocking
@@ -325,8 +325,8 @@ let create_sample_file ~int_size ~be ~msgcount =
   filename
 ;;
 
-(** Loop through and check all messages in the given file match the expected
-    "MESSAGE %d" format *)
+(** Loop through and check all messages in the given file match the expected "MESSAGE %d"
+    format *)
 let check_msgs ?(int_size = 2) ?(be = false) file =
   let msg_number = ref 0 in
   let check_message r =
@@ -388,162 +388,4 @@ let%test_unit _ =
       protect
         ~f:(fun () -> assert (check_msgs ~int_size ~be filename = msgcount))
         ~finally:(fun () -> Unix.unlink filename)))
-;;
-
-let with_test_file ~prep ~f =
-  let filename, fd = Unix.mkstemp "input_lines" in
-  protect
-    ~finally:(fun () -> Unix.unlink filename)
-    ~f:(fun () ->
-      let ch = Unix.out_channel_of_descr fd in
-      prep ch;
-      Out_channel.close ch;
-      f ~filename)
-;;
-
-(* The logic for fold/iter/input is connected (and simple enough) so this is sufficient.  *)
-let%expect_test "[In_channel.input_lines]" =
-  let module SA = struct
-    type t = string array [@@deriving equal, sexp]
-  end
-  in
-  let module SO = struct
-    type t = string option [@@deriving equal, sexp]
-  end
-  in
-  let test_file ~filename =
-    List.iter Bool.all ~f:(fun fix_win_eol ->
-      let base =
-        In_channel.input_lines ~fix_win_eol (In_channel.create filename) |> Array.of_list
-      in
-      let fast =
-        In_channel_optimized.input_lines ~fix_win_eol (In_channel.create filename)
-      in
-      if SA.equal base fast
-      then ()
-      else (
-        print_s [%message "mismatch" (fix_win_eol : bool)];
-        let max_length = max (Array.length base) (Array.length fast) in
-        for i = 0 to max_length - 1 do
-          let base = Option.try_with (fun () -> Array.get base i) in
-          let fast = Option.try_with (fun () -> Array.get fast i) in
-          Expect_test_helpers_core.require_equal
-            [%here]
-            (module SO)
-            base
-            fast
-            ~if_false_then_print_s:(lazy [%message (i : int)])
-        done))
-  in
-  let t ~prep = with_test_file ~f:test_file ~prep in
-  let test ~input_lines = t ~prep:(fun ch -> Out_channel.output_lines ch input_lines) in
-  test ~input_lines:[];
-  [%expect {| |}];
-  test ~input_lines:[ "a"; "b"; "c" ];
-  [%expect {| |}];
-  test ~input_lines:(List.init 10_000 ~f:(fun i -> Int.to_string i));
-  [%expect {| |}];
-  test
-    ~input_lines:
-      [ "a"
-      ; "b"
-      ; String.init 14000 ~f:(fun i -> if i mod 2 = 0 then 'c' else 'C')
-      ; "d"
-      ; "e"
-      ];
-  [%expect {| |}];
-  test ~input_lines:[ "a"; "b"; "c\r"; "d"; "e\r" ];
-  [%expect {| |}];
-  t ~prep:(fun ch -> Out_channel.output_string ch "a single line without EOL");
-  [%expect {| |}];
-  t ~prep:(fun ch ->
-    Out_channel.output_string
-      ch
-      "a single line without EOL, ending in a partial windows line \r");
-  [%expect {| |}]
-;;
-
-let%expect_test "[In_channel.fold_lines_raw]" =
-  with_test_file
-    ~prep:(fun ch -> Out_channel.output_lines ch [ "a"; "bc"; "def" ])
-    ~f:(fun ~filename ->
-      let ch = In_channel.create filename in
-      let f i buf =
-        print_s [%message (buf : (_, _) Iobuf.Window.Hexdump.Pretty.t) (i : int)];
-        i + 1
-      in
-      assert (3 = In_channel_optimized.fold_lines_raw ch ~init:0 ~f));
-  [%expect {|
-    ((buf a) (i 0))
-    ((buf bc) (i 1))
-    ((buf def) (i 2))
-    |}]
-;;
-
-let correct_answer_for_benchmark =
-  lazy
-    (let lines = ref 0 in
-     let total_size = ref 0 in
-     let f str =
-       incr lines;
-       total_size := !total_size + String.length str
-     in
-     In_channel.iter_lines (In_channel.create "/usr/share/dict/words") ~f;
-     !lines, !total_size)
-;;
-
-let%bench_fun "[In_channel.iter_lines]" =
-  let lines = ref 0 in
-  let total_size = ref 0 in
-  let f str =
-    incr lines;
-    total_size := !total_size + String.length str
-  in
-  let ch = In_channel.create "/usr/share/dict/words" in
-  let actual_lines, actual_total = force correct_answer_for_benchmark in
-  fun () ->
-    lines := 0;
-    total_size := 0;
-    In_channel.seek ch 0L;
-    In_channel.iter_lines ch ~f;
-    assert (!lines = actual_lines);
-    assert (!total_size = actual_total)
-;;
-
-let%bench_fun "[Iobuf_unix.In_channel_optimized.iter_lines]" =
-  let lines = ref 0 in
-  let total_size = ref 0 in
-  let f str =
-    incr lines;
-    total_size := !total_size + String.length str
-  in
-  let actual_lines, actual_total = force correct_answer_for_benchmark in
-  let ch = In_channel.create "/usr/share/dict/words" in
-  let buf = Iobuf.create ~len:1024 in
-  fun () ->
-    lines := 0;
-    total_size := 0;
-    In_channel.seek ch 0L;
-    Iobuf_unix.In_channel_optimized.iter_lines ~buf ch ~f;
-    assert (!lines = actual_lines);
-    assert (!total_size = actual_total)
-;;
-
-let%bench_fun "[Iobuf_unix.In_channel_optimized.fold_lines_raw]" =
-  let lines = ref 0 in
-  let total_size = ref 0 in
-  let f () str =
-    incr lines;
-    total_size := !total_size + Iobuf.length str
-  in
-  let actual_lines, actual_total = force correct_answer_for_benchmark in
-  let ch = In_channel.create "/usr/share/dict/words" in
-  let buf = Iobuf.create ~len:1024 in
-  fun () ->
-    lines := 0;
-    total_size := 0;
-    In_channel.seek ch 0L;
-    Iobuf_unix.In_channel_optimized.fold_lines_raw ~init:() ~buf ch ~f;
-    assert (!lines = actual_lines);
-    assert (!total_size = actual_total)
 ;;

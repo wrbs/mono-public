@@ -27,8 +27,8 @@ let add_char buf c =
   buf.pos <- pos + 1
 ;;
 
-module To_bytes =
-  Test_blit.Make_distinct_and_test
+module%template To_bytes =
+  Test_blit.Make_distinct_and_test [@modality portable]
     (struct
       type t = char
 
@@ -54,6 +54,7 @@ module To_bytes =
       include Bytes
 
       let create ~len = create len
+      let get t i = get t i
 
       let unsafe_blit ~src ~src_pos ~dst ~dst_pos ~len =
         Bigstring.To_bytes.unsafe_blit ~src:src.bstr ~src_pos ~dst ~dst_pos ~len
@@ -61,7 +62,9 @@ module To_bytes =
     end)
 
 include To_bytes
-module To_string = Blit.Make_to_string (Bigbuffer_internal) (To_bytes)
+
+module%template To_string =
+  Blit.Make_to_string [@modality portable] (Bigbuffer_internal) (To_bytes)
 
 let nth buf pos =
   if pos < 0 || pos >= buf.pos then invalid_arg "Bigbuffer.nth" else buf.bstr.{pos}
@@ -131,7 +134,7 @@ let add_bin_prot t (writer : _ Bin_prot.Type_class.writer) x =
     match writer.write t.bstr ~pos:t.pos x with
     | pos -> pos
     | exception _ ->
-      (* It's likeky that the exception is due to a buffer overflow, so resize the
+      (* It's likely that the exception is due to a buffer overflow, so resize the
          internal buffer and try again. Technically we could match on
          [Bin_prot.Common.Buffer_short] only, however we can't easily enforce that custom
          bin_write_xxx functions do raise this particular exception and not
@@ -139,6 +142,30 @@ let add_bin_prot t (writer : _ Bin_prot.Type_class.writer) x =
       let size = writer.size x in
       if t.pos + size > t.len then resize t size;
       writer.write t.bstr ~pos:t.pos x
+  in
+  t.pos <- new_pos
+;;
+
+(* We take the writer and sizer as separate arguments because
+   [Bin_prot.Type_class.writer__local] doesn't exist. *)
+let add_bin_prot_local
+  t
+  ~(bin_write : _ Bin_prot.Write.writer__local)
+  ~(bin_size : _ Bin_prot.Size.sizer__local)
+  x
+  =
+  let new_pos =
+    match bin_write t.bstr ~pos:t.pos x with
+    | pos -> pos
+    | exception _ ->
+      (* It's likely that the exception is due to a buffer overflow, so resize the
+         internal buffer and try again. Technically we could match on
+         [Bin_prot.Common.Buffer_short] only, however we can't easily enforce that custom
+         bin_write_xxx functions do raise this particular exception and not
+         [Invalid_argument] or [Failure] for instance. *)
+      let size = bin_size x in
+      if t.pos + size > t.len then resize t size;
+      bin_write t.bstr ~pos:t.pos x
   in
   t.pos <- new_pos
 ;;

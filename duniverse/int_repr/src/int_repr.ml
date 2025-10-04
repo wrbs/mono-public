@@ -1,5 +1,7 @@
 module type T = sig
-  type t [@@deriving compare, equal, hash, quickcheck, sexp, typerep]
+  type t
+  [@@deriving
+    compare ~localize, equal ~localize, globalize, hash, quickcheck, sexp, typerep]
 
   val signed : bool
   val num_bits : int
@@ -9,7 +11,8 @@ module type T = sig
   val max_value : t
 
   include Ppx_hash_lib.Hashable.S with type t := t
-  include Base.Comparisons.S with type t := t
+
+  include%template Base.Comparisons.S [@mode local] with type t := t
 
   module O : sig
     include Base.Comparisons.Infix with type t := t
@@ -25,47 +28,53 @@ end
 
 let raise_cannot_repr ~mod_name ~to_string x =
   Base.raise_s [%message (mod_name ^ ": value cannot be represented") ~_:(to_string x)]
-  [@@cold]
+[@@cold]
 ;;
 
-let trunc_unsigned : type a b. conv:(a -> b) -> logand:(a -> a -> a) -> mask:a -> a -> b =
+let trunc_unsigned
+  : type a b. conv:(a -> b) -> logand:(local_ a -> local_ a -> a) -> mask:a -> a -> b
+  =
   fun ~conv ~logand ~mask x -> conv (logand x mask)
-  [@@inline always]
+[@@inline always]
 ;;
 
 let exn_unsigned
   : type a b.
     conv:(a -> b)
-    -> logand:(a -> a -> a)
+    -> logand:(local_ a -> local_ a -> a)
     -> mask:a
-    -> equal:(a -> a -> bool)
+    -> equal:(local_ a -> local_ a -> bool)
     -> mod_name:string
-    -> to_string:(a -> string)
+    -> to_string:(local_ a -> string)
     -> a
     -> b
   =
   fun ~conv ~logand ~mask ~equal ~mod_name ~to_string x ->
   let y = trunc_unsigned ~conv:Fun.id ~logand ~mask x in
   if equal x y then conv y else raise_cannot_repr ~mod_name ~to_string x
-  [@@inline always]
+[@@inline always]
 ;;
 
 let trunc_signed
   : type a.
-    shift_left:(a -> int -> a) -> shift_right:(a -> int -> a) -> shift:int -> a -> a
+    shift_left:(local_ a -> int -> a)
+    -> shift_right:(local_ a -> int -> a)
+    -> shift:int
+    -> a
+    -> a
   =
   fun ~shift_left ~shift_right ~shift x -> shift_right (shift_left x shift) shift
-  [@@inline always]
+[@@inline always]
 ;;
 
 let exn_signed
   : type a.
-    shift_left:(a -> int -> a)
-    -> shift_right:(a -> int -> a)
+    shift_left:(local_ a -> int -> a)
+    -> shift_right:(local_ a -> int -> a)
     -> shift:int
-    -> equal:(a -> a -> bool)
+    -> equal:(local_ a -> local_ a -> bool)
     -> mod_name:string
-    -> to_string:(a -> string)
+    -> to_string:(local_ a -> string)
     -> a
     -> a
   =
@@ -74,9 +83,9 @@ let exn_signed
   if equal x y then y else raise_cannot_repr ~mod_name ~to_string x
 ;;
 
-let identity_if_positive ~greater_equal ~zero ~mod_name ~to_string x =
+let%template identity_if_positive ~greater_equal ~zero ~mod_name ~to_string (x @ m) =
   if greater_equal x zero then x else raise_cannot_repr ~mod_name ~to_string x
-  [@@inline always]
+[@@mode m = (global, local)] [@@inline always]
 ;;
 
 let of_sexp_error what sexp =
@@ -113,17 +122,24 @@ type int64 = Base.Int64.t
 type uint64 = Base.Int64.t
 
 module Int8 = struct
-  type t = Base.Int.t [@@immediate] [@@deriving compare, equal, globalize, hash, sexp]
+  type t : immediate = Base.Int.t
+  [@@deriving compare ~localize, equal ~localize, globalize, hash, sexp]
 
-  include Base.Comparable.Make [@inlined] (struct
-    type nonrec t = t
+  include%template
+    Base.Comparable.Make [@mode local] [@modality portable] [@inlined] (struct
+      type nonrec t = t [@@deriving compare ~localize, sexp_of]
+    end)
 
-    let compare = compare
-    let sexp_of_t = sexp_of_t
-  end)
+  let typerep_of_t =
+    Base.Portability_hacks.magic_portable__needs_base_and_core
+      Typerep_lib.Std.typerep_of_int
+  ;;
 
-  let typerep_of_t = Typerep_lib.Std.typerep_of_int
-  let typename_of_t = Typerep_lib.Std.typename_of_int
+  let typename_of_t =
+    Base.Portability_hacks.magic_portable__needs_base_and_core
+      Typerep_lib.Std.typename_of_int
+  ;;
+
   let zero = Base.Int.zero
   let min_value = -128
   let max_value = 127
@@ -139,8 +155,9 @@ module Int8 = struct
   (* Utilities *)
   let trunc x = trunc_signed ~shift_left ~shift_right ~shift x [@@inline always]
 
-  let exn x = exn_signed ~shift_left ~shift_right ~shift ~equal ~mod_name ~to_string x
-    [@@inline always]
+  let exn x =
+    exn_signed ~shift_left ~shift_right ~shift ~equal:[%eta2 equal] ~mod_name ~to_string x
+  [@@inline always]
   ;;
 
   (* "Base" conversions. *)
@@ -153,7 +170,7 @@ module Int8 = struct
   let of_int16_exn x = exn x [@@inline always]
 
   let of_int32_trunc x = trunc (Base.Int32.to_int_trunc (Repr32.to_int32 x))
-    [@@inline always]
+  [@@inline always]
   ;;
 
   let of_int32_exn x = exn (Base.Int32.to_int_exn (Repr32.to_int32 x)) [@@inline always]
@@ -169,13 +186,16 @@ module Int8 = struct
   (* Miscellaneous *)
   let quickcheck_generator = Base_quickcheck.Generator.int_inclusive min_value max_value
 
-  let quickcheck_observer =
-    Base_quickcheck.Observer.unmap Base_quickcheck.Observer.int ~f:trunc
+  let%template quickcheck_observer =
+    (Base_quickcheck.Observer.unmap [@mode portable])
+      Base_quickcheck.Observer.int
+      ~f:trunc
   ;;
 
-  let quickcheck_shrinker =
-    Base_quickcheck.Shrinker.filter Base_quickcheck.Shrinker.int ~f:(fun x ->
-      equal x (trunc x))
+  let%template quickcheck_shrinker =
+    (Base_quickcheck.Shrinker.filter [@mode portable])
+      Base_quickcheck.Shrinker.int
+      ~f:(fun x -> equal x (trunc x))
   ;;
 
   module O = struct
@@ -196,17 +216,24 @@ module Int8 = struct
 end
 
 module Uint8 = struct
-  type t = Base.Int.t [@@immediate] [@@deriving compare, equal, globalize, hash, sexp]
+  type t : immediate = Base.Int.t
+  [@@deriving compare ~localize, equal ~localize, globalize, hash, sexp]
 
-  include Base.Comparable.Make [@inlined] (struct
-    type nonrec t = t
+  include%template
+    Base.Comparable.Make [@mode local] [@modality portable] [@inlined] (struct
+      type nonrec t = t [@@deriving compare ~localize, sexp_of]
+    end)
 
-    let compare = compare
-    let sexp_of_t = sexp_of_t
-  end)
+  let typerep_of_t =
+    Base.Portability_hacks.magic_portable__needs_base_and_core
+      Typerep_lib.Std.typerep_of_int
+  ;;
 
-  let typerep_of_t = Typerep_lib.Std.typerep_of_int
-  let typename_of_t = Typerep_lib.Std.typename_of_int
+  let typename_of_t =
+    Base.Portability_hacks.magic_portable__needs_base_and_core
+      Typerep_lib.Std.typename_of_int
+  ;;
+
   let zero = Base.Int.zero
   let min_value = Base.Int.zero
   let max_value = 255
@@ -227,8 +254,9 @@ module Uint8 = struct
   (* Utilities *)
   let trunc x = trunc_unsigned ~conv:Fun.id ~logand ~mask x [@@inline always]
 
-  let exn x = exn_unsigned ~conv:Fun.id ~logand ~mask ~equal ~mod_name ~to_string x
-    [@@inline always]
+  let exn x =
+    exn_unsigned ~conv:Fun.id ~logand ~mask ~equal:[%eta2 equal] ~mod_name ~to_string x
+  [@@inline always]
   ;;
 
   let trunc64 x = trunc_unsigned ~conv ~logand:logand64 ~mask:mask64 x [@@inline always]
@@ -242,7 +270,7 @@ module Uint8 = struct
       ~mod_name
       ~to_string:to_string64
       x
-    [@@inline always]
+  [@@inline always]
   ;;
 
   (* "Base" conversions. *)
@@ -267,13 +295,16 @@ module Uint8 = struct
   (* Miscellaneous *)
   let quickcheck_generator = Base_quickcheck.Generator.int_inclusive min_value max_value
 
-  let quickcheck_observer =
-    Base_quickcheck.Observer.unmap Base_quickcheck.Observer.int ~f:trunc
+  let%template quickcheck_observer =
+    (Base_quickcheck.Observer.unmap [@mode portable])
+      Base_quickcheck.Observer.int
+      ~f:trunc
   ;;
 
-  let quickcheck_shrinker =
-    Base_quickcheck.Shrinker.filter Base_quickcheck.Shrinker.int ~f:(fun x ->
-      equal x (trunc x))
+  let%template quickcheck_shrinker =
+    (Base_quickcheck.Shrinker.filter [@mode portable])
+      Base_quickcheck.Shrinker.int
+      ~f:(fun x -> equal x (trunc x))
   ;;
 
   module O = struct
@@ -294,17 +325,24 @@ module Uint8 = struct
 end
 
 module Int16 = struct
-  type t = Base.Int.t [@@immediate] [@@deriving compare, equal, globalize, hash, sexp]
+  type t : immediate = Base.Int.t
+  [@@deriving compare ~localize, equal ~localize, globalize, hash, sexp]
 
-  include Base.Comparable.Make [@inlined] (struct
-    type nonrec t = t
+  include%template
+    Base.Comparable.Make [@mode local] [@modality portable] [@inlined] (struct
+      type nonrec t = t [@@deriving compare ~localize, sexp_of]
+    end)
 
-    let compare = compare
-    let sexp_of_t = sexp_of_t
-  end)
+  let typerep_of_t =
+    Base.Portability_hacks.magic_portable__needs_base_and_core
+      Typerep_lib.Std.typerep_of_int
+  ;;
 
-  let typerep_of_t = Typerep_lib.Std.typerep_of_int
-  let typename_of_t = Typerep_lib.Std.typename_of_int
+  let typename_of_t =
+    Base.Portability_hacks.magic_portable__needs_base_and_core
+      Typerep_lib.Std.typename_of_int
+  ;;
+
   let zero = Base.Int.zero
   let min_value = -32768
   let max_value = 32767
@@ -320,8 +358,9 @@ module Int16 = struct
   (* Utilities *)
   let trunc x = trunc_signed ~shift_left ~shift_right ~shift x [@@inline always]
 
-  let exn x = exn_signed ~shift_left ~shift_right ~shift ~equal ~mod_name ~to_string x
-    [@@inline always]
+  let exn x =
+    exn_signed ~shift_left ~shift_right ~shift ~equal:[%eta2 equal] ~mod_name ~to_string x
+  [@@inline always]
   ;;
 
   (* "Base" conversions. *)
@@ -333,7 +372,7 @@ module Int16 = struct
   let of_int8 x = x [@@inline always]
 
   let of_int32_trunc x = trunc (Base.Int32.to_int_trunc (Repr32.to_int32 x))
-    [@@inline always]
+  [@@inline always]
   ;;
 
   let of_int32_exn x = exn (Base.Int32.to_int_exn (Repr32.to_int32 x)) [@@inline always]
@@ -349,13 +388,16 @@ module Int16 = struct
   (* Miscellaneous *)
   let quickcheck_generator = Base_quickcheck.Generator.int_inclusive min_value max_value
 
-  let quickcheck_observer =
-    Base_quickcheck.Observer.unmap Base_quickcheck.Observer.int ~f:trunc
+  let%template quickcheck_observer =
+    (Base_quickcheck.Observer.unmap [@mode portable])
+      Base_quickcheck.Observer.int
+      ~f:trunc
   ;;
 
-  let quickcheck_shrinker =
-    Base_quickcheck.Shrinker.filter Base_quickcheck.Shrinker.int ~f:(fun x ->
-      equal x (trunc x))
+  let%template quickcheck_shrinker =
+    (Base_quickcheck.Shrinker.filter [@mode portable])
+      Base_quickcheck.Shrinker.int
+      ~f:(fun x -> equal x (trunc x))
   ;;
 
   module O = struct
@@ -376,17 +418,24 @@ module Int16 = struct
 end
 
 module Uint16 = struct
-  type t = Base.Int.t [@@immediate] [@@deriving compare, equal, globalize, hash, sexp]
+  type t : immediate = Base.Int.t
+  [@@deriving compare ~localize, equal ~localize, globalize, hash, sexp]
 
-  include Base.Comparable.Make [@inlined] (struct
-    type nonrec t = t
+  include%template
+    Base.Comparable.Make [@mode local] [@modality portable] [@inlined] (struct
+      type nonrec t = t [@@deriving compare ~localize, sexp_of]
+    end)
 
-    let compare = compare
-    let sexp_of_t = sexp_of_t
-  end)
+  let typerep_of_t =
+    Base.Portability_hacks.magic_portable__needs_base_and_core
+      Typerep_lib.Std.typerep_of_int
+  ;;
 
-  let typerep_of_t = Typerep_lib.Std.typerep_of_int
-  let typename_of_t = Typerep_lib.Std.typename_of_int
+  let typename_of_t =
+    Base.Portability_hacks.magic_portable__needs_base_and_core
+      Typerep_lib.Std.typename_of_int
+  ;;
+
   let zero = Base.Int.zero
   let min_value = Base.Int.zero
   let max_value = 65535
@@ -407,8 +456,9 @@ module Uint16 = struct
   (* Utilities *)
   let trunc x = trunc_unsigned ~conv:Fun.id ~logand ~mask x [@@inline always]
 
-  let exn x = exn_unsigned ~conv:Fun.id ~logand ~mask ~equal ~mod_name ~to_string x
-    [@@inline always]
+  let exn x =
+    exn_unsigned ~conv:Fun.id ~logand ~mask ~equal:[%eta2 equal] ~mod_name ~to_string x
+  [@@inline always]
   ;;
 
   let trunc64 x = trunc_unsigned ~conv ~logand:logand64 ~mask:mask64 x [@@inline always]
@@ -422,7 +472,7 @@ module Uint16 = struct
       ~mod_name
       ~to_string:to_string64
       x
-    [@@inline always]
+  [@@inline always]
   ;;
 
   (* "Base" conversions. *)
@@ -446,13 +496,16 @@ module Uint16 = struct
   (* Miscellaneous *)
   let quickcheck_generator = Base_quickcheck.Generator.int_inclusive min_value max_value
 
-  let quickcheck_observer =
-    Base_quickcheck.Observer.unmap Base_quickcheck.Observer.int ~f:trunc
+  let%template quickcheck_observer =
+    (Base_quickcheck.Observer.unmap [@mode portable])
+      Base_quickcheck.Observer.int
+      ~f:trunc
   ;;
 
-  let quickcheck_shrinker =
-    Base_quickcheck.Shrinker.filter Base_quickcheck.Shrinker.int ~f:(fun x ->
-      equal x (trunc x))
+  let%template quickcheck_shrinker =
+    (Base_quickcheck.Shrinker.filter [@mode portable])
+      Base_quickcheck.Shrinker.int
+      ~f:(fun x -> equal x (trunc x))
   ;;
 
   module O = struct
@@ -472,9 +525,9 @@ module Uint16 = struct
   end
 end
 
-module type Backend32_S = sig
+module type Backend32_S = sig @@ portable
   module Signed : sig
-    type t = Repr32.t
+    type t = Repr32.t [@@deriving globalize]
 
     include T with type t := t
 
@@ -530,17 +583,24 @@ module Backend32 : sig
 end = struct
   module I = struct
     module Signed = struct
-      type t = Base.Int.t [@@immediate] [@@deriving compare, equal, hash, sexp]
+      type t : immediate = Base.Int.t
+      [@@deriving compare ~localize, equal ~localize, globalize, hash, sexp]
 
-      include Base.Comparable.Make [@inlined] (struct
-        type nonrec t = t
+      include%template
+        Base.Comparable.Make [@mode local] [@modality portable] [@inlined] (struct
+          type nonrec t = t [@@deriving compare ~localize, sexp_of]
+        end)
 
-        let compare = compare
-        let sexp_of_t = sexp_of_t
-      end)
+      let typerep_of_t =
+        Base.Portability_hacks.magic_portable__needs_base_and_core
+          Typerep_lib.Std.typerep_of_int
+      ;;
 
-      let typerep_of_t = Typerep_lib.Std.typerep_of_int
-      let typename_of_t = Typerep_lib.Std.typename_of_int
+      let typename_of_t =
+        Base.Portability_hacks.magic_portable__needs_base_and_core
+          Typerep_lib.Std.typename_of_int
+      ;;
+
       let zero = Base.Int.zero
       let min_value = Base.Int32.to_int_trunc Base.Int32.min_value
       let max_value = Base.Int32.to_int_trunc Base.Int32.max_value
@@ -556,8 +616,16 @@ end = struct
       (* Utilities *)
       let trunc x = trunc_signed ~shift_left ~shift_right ~shift x [@@inline always]
 
-      let exn x = exn_signed ~shift_left ~shift_right ~shift ~equal ~mod_name ~to_string x
-        [@@inline always]
+      let exn x =
+        exn_signed
+          ~shift_left
+          ~shift_right
+          ~shift
+          ~equal:[%eta2 equal]
+          ~mod_name
+          ~to_string
+          x
+      [@@inline always]
       ;;
 
       (* "Base" conversions. *)
@@ -581,13 +649,16 @@ end = struct
         Base_quickcheck.Generator.int_inclusive min_value max_value
       ;;
 
-      let quickcheck_observer =
-        Base_quickcheck.Observer.unmap Base_quickcheck.Observer.int ~f:trunc
+      let%template quickcheck_observer =
+        (Base_quickcheck.Observer.unmap [@mode portable])
+          Base_quickcheck.Observer.int
+          ~f:trunc
       ;;
 
-      let quickcheck_shrinker =
-        Base_quickcheck.Shrinker.filter Base_quickcheck.Shrinker.int ~f:(fun x ->
-          equal x (trunc x))
+      let%template quickcheck_shrinker =
+        (Base_quickcheck.Shrinker.filter [@mode portable])
+          Base_quickcheck.Shrinker.int
+          ~f:(fun x -> equal x (trunc x))
       ;;
 
       module O = struct
@@ -608,17 +679,24 @@ end = struct
     end
 
     module Unsigned = struct
-      type t = Base.Int.t [@@immediate] [@@deriving compare, equal, hash, sexp]
+      type t : immediate = Base.Int.t
+      [@@deriving compare ~localize, equal ~localize, globalize, hash, sexp]
 
-      include Base.Comparable.Make [@inlined] (struct
-        type nonrec t = t
+      include%template
+        Base.Comparable.Make [@mode local] [@modality portable] [@inlined] (struct
+          type nonrec t = t [@@deriving compare ~localize, sexp_of]
+        end)
 
-        let compare = compare
-        let sexp_of_t = sexp_of_t
-      end)
+      let typerep_of_t =
+        Base.Portability_hacks.magic_portable__needs_base_and_core
+          Typerep_lib.Std.typerep_of_int
+      ;;
 
-      let typerep_of_t = Typerep_lib.Std.typerep_of_int
-      let typename_of_t = Typerep_lib.Std.typename_of_int
+      let typename_of_t =
+        Base.Portability_hacks.magic_portable__needs_base_and_core
+          Typerep_lib.Std.typename_of_int
+      ;;
+
       let zero = Base.Int.zero
       let min_value = Base.Int.zero
       let max_value = Base.Int.of_int64_trunc 4294967295L
@@ -639,12 +717,20 @@ end = struct
       (* Utilities *)
       let trunc x = trunc_unsigned ~conv:Fun.id ~logand ~mask x [@@inline always]
 
-      let exn x = exn_unsigned ~conv:Fun.id ~logand ~mask ~equal ~mod_name ~to_string x
-        [@@inline always]
+      let exn x =
+        exn_unsigned
+          ~conv:Fun.id
+          ~logand
+          ~mask
+          ~equal:[%eta2 equal]
+          ~mod_name
+          ~to_string
+          x
+      [@@inline always]
       ;;
 
       let trunc64 x = trunc_unsigned ~conv ~logand:logand64 ~mask:mask64 x
-        [@@inline always]
+      [@@inline always]
       ;;
 
       let exn64 x =
@@ -656,13 +742,13 @@ end = struct
           ~mod_name
           ~to_string:to_string64
           x
-        [@@inline always]
+      [@@inline always]
       ;;
 
       (* "Base" conversions. *)
       let of_base_int32_trunc x =
         Base.Int64.to_int_trunc (logand64 (Base.Int64.of_int32 x) mask64)
-        [@@inline always]
+      [@@inline always]
       ;;
 
       let of_base_int32_exn x = exn (Base.Int32.to_int_trunc x) [@@inline always]
@@ -672,7 +758,7 @@ end = struct
         if Base.Int.( <= ) x (Base.Int.of_int64_trunc 2147483647L)
         then Base.Int32.of_int_trunc x
         else raise_cannot_repr ~mod_name ~to_string:Base.Int.to_string x
-        [@@inline always]
+      [@@inline always]
       ;;
 
       let of_base_int64_trunc x = trunc64 x [@@inline always]
@@ -698,13 +784,16 @@ end = struct
         Base_quickcheck.Generator.int_inclusive min_value max_value
       ;;
 
-      let quickcheck_observer =
-        Base_quickcheck.Observer.unmap Base_quickcheck.Observer.int ~f:trunc
+      let%template quickcheck_observer =
+        (Base_quickcheck.Observer.unmap [@mode portable])
+          Base_quickcheck.Observer.int
+          ~f:trunc
       ;;
 
-      let quickcheck_shrinker =
-        Base_quickcheck.Shrinker.filter Base_quickcheck.Shrinker.int ~f:(fun x ->
-          equal x (trunc x))
+      let%template quickcheck_shrinker =
+        (Base_quickcheck.Shrinker.filter [@mode portable])
+          Base_quickcheck.Shrinker.int
+          ~f:(fun x -> equal x (trunc x))
       ;;
 
       module O = struct
@@ -727,20 +816,28 @@ end = struct
 
   module N = struct
     module Signed = struct
-      type t = Base.Int32.t [@@deriving compare, equal, hash, sexp]
+      type t = Base.Int32.t
+      [@@deriving compare ~localize, equal ~localize, globalize, hash, sexp]
 
-      include Base.Comparable.Make [@inlined] (struct
-        type nonrec t = t
-
-        let compare = compare
-        let sexp_of_t = sexp_of_t
-      end)
+      include%template
+        Base.Comparable.Make [@mode local] [@modality portable] [@inlined] (struct
+          type nonrec t = t [@@deriving compare ~localize, sexp_of]
+        end)
 
       let quickcheck_generator = Base_quickcheck.quickcheck_generator_int32
       let quickcheck_observer = Base_quickcheck.quickcheck_observer_int32
       let quickcheck_shrinker = Base_quickcheck.quickcheck_shrinker_int32
-      let typerep_of_t = Typerep_lib.Std.typerep_of_int32
-      let typename_of_t = Typerep_lib.Std.typename_of_int32
+
+      let typerep_of_t =
+        Base.Portability_hacks.magic_portable__needs_base_and_core
+          Typerep_lib.Std.typerep_of_int32
+      ;;
+
+      let typename_of_t =
+        Base.Portability_hacks.magic_portable__needs_base_and_core
+          Typerep_lib.Std.typename_of_int32
+      ;;
+
       let zero = Base.Int32.zero
       let min_value = Base.Int32.min_value
       let max_value = Base.Int32.max_value
@@ -768,7 +865,7 @@ end = struct
 
       let of_uint32_exn x : t =
         identity_if_positive ~greater_equal ~zero ~mod_name ~to_string x
-        [@@inline always]
+      [@@inline always]
       ;;
 
       module O = struct
@@ -780,23 +877,33 @@ end = struct
         let ( <> ) = Base.Int32.( <> )
 
         module Wrap = struct
-          let ( + ) = Base.Int32.( + )
-          let ( - ) = Base.Int32.( - )
-          let ( * ) = Base.Int32.( * )
-          let ( / ) = Base.Int32.( / )
+          let[@inline] ( + ) x y = Base.Int32.( + ) x y
+          let[@inline] ( - ) x y = Base.Int32.( - ) x y
+          let[@inline] ( * ) x y = Base.Int32.( * ) x y
+          let[@inline] ( / ) x y = Base.Int32.( / ) x y
         end
       end
     end
 
     module Unsigned = struct
-      type t = Base.Int32.t [@@deriving equal, hash]
+      type t = Base.Int32.t [@@deriving equal ~localize, globalize, hash]
 
       let quickcheck_generator = Base_quickcheck.quickcheck_generator_int32
       let quickcheck_observer = Base_quickcheck.quickcheck_observer_int32
       let quickcheck_shrinker = Base_quickcheck.quickcheck_shrinker_int32
       let compare x y = Stdlib.Int32.unsigned_compare x y [@@inline always]
-      let typerep_of_t = Typerep_lib.Std.typerep_of_int32
-      let typename_of_t = Typerep_lib.Std.typename_of_int32
+      let%template[@mode local] compare x y = compare (globalize x) (globalize y)
+
+      let typerep_of_t =
+        Base.Portability_hacks.magic_portable__needs_base_and_core
+          Typerep_lib.Std.typerep_of_int32
+      ;;
+
+      let typename_of_t =
+        Base.Portability_hacks.magic_portable__needs_base_and_core
+          Typerep_lib.Std.typename_of_int32
+      ;;
+
       let zero = Base.Int32.zero
       let min_value = Base.Int32.zero
       let max_value = -1l
@@ -812,14 +919,14 @@ end = struct
 
       let of_base_int32_exn x =
         identity_if_positive ~greater_equal ~zero ~mod_name ~to_string x
-        [@@inline always]
+      [@@inline always]
       ;;
 
       let to_base_int32_trunc x = x [@@inline always]
 
       let to_base_int32_exn x =
         identity_if_positive ~greater_equal ~zero ~mod_name ~to_string x
-        [@@inline always]
+      [@@inline always]
       ;;
 
       let of_base_int64_trunc x = Base.Int32.of_int64_trunc x [@@inline always]
@@ -828,23 +935,23 @@ end = struct
         if Base.Int64.( >= ) x 0L && Base.Int64.( <= ) x 4294967295L
         then Base.Int64.to_int32_trunc x
         else raise_cannot_repr ~mod_name ~to_string:Base.Int64.to_string x
-        [@@inline always]
+      [@@inline always]
       ;;
 
       let to_base_int64 x = Base.Int64.( land ) (Base.Int32.to_int64 x) 0xFFFFFFFFL
-        [@@inline always]
+      [@@inline always]
       ;;
 
       let of_base_int_exn x =
         Base.Int32.of_int_exn x
         |> identity_if_positive ~greater_equal ~zero ~mod_name ~to_string
-        [@@inline always]
+      [@@inline always]
       ;;
 
       let to_base_int_exn x =
         identity_if_positive ~greater_equal ~zero ~mod_name ~to_string x
         |> Base.Int32.to_int_exn
-        [@@inline always]
+      [@@inline always]
       ;;
 
       (* Same-signedness conversions. *)
@@ -852,7 +959,7 @@ end = struct
       let of_uint16 x = Base.Int32.of_int_trunc (x : Uint16.t :> int) [@@inline always]
 
       let of_uint63_trunc x = of_base_int64_trunc (Base.Int63.to_int64 x)
-        [@@inline always]
+      [@@inline always]
       ;;
 
       let of_uint63_exn x = of_base_int64_exn (Base.Int63.to_int64 x) [@@inline always]
@@ -864,7 +971,7 @@ end = struct
 
       let of_int32_exn x =
         identity_if_positive ~greater_equal ~zero ~mod_name ~to_string x
-        [@@inline always]
+      [@@inline always]
       ;;
 
       (* Sexp conversions. *)
@@ -887,19 +994,17 @@ end = struct
         let ( <> ) x y = compare x y <> 0
 
         module Wrap = struct
-          let ( + ) = Base.Int32.( + )
-          let ( - ) = Base.Int32.( - )
-          let ( * ) = Base.Int32.( * )
+          let[@inline] ( + ) x y = Base.Int32.( + ) x y
+          let[@inline] ( - ) x y = Base.Int32.( - ) x y
+          let[@inline] ( * ) x y = Base.Int32.( * ) x y
           let ( / ) = Stdlib.Int32.unsigned_div
         end
       end
 
-      include Base.Comparable.Make [@inlined] (struct
-        type nonrec t = t
-
-        let compare = compare
-        let sexp_of_t = sexp_of_t
-      end)
+      include%template
+        Base.Comparable.Make [@mode local] [@modality portable] [@inlined] (struct
+          type nonrec t = t [@@deriving compare ~localize, sexp_of]
+        end)
     end
   end
 
@@ -921,20 +1026,34 @@ module Uint32 = struct
 end
 
 module Int63 = struct
-  type t = Base.Int63.t [@@immediate64] [@@deriving compare, equal, hash, sexp]
+  type t : immediate64 = Base.Int63.t
+  [@@deriving compare ~localize, equal ~localize, hash, sexp]
 
-  include Base.Comparable.Make [@inlined] (struct
-    type nonrec t = t
+  let globalize : local_ t -> t =
+    match Base.Int63.Private.repr with
+    | Int -> [%globalize: Base.Int.t]
+    | Int64 -> [%globalize: Base.Int64.t]
+  ;;
 
-    let compare = compare
-    let sexp_of_t = sexp_of_t
-  end)
+  include%template
+    Base.Comparable.Make [@mode local] [@modality portable] [@inlined] (struct
+      type nonrec t = t [@@deriving compare ~localize, sexp_of]
+    end)
 
   let quickcheck_generator = Base_quickcheck.Generator.int63_uniform
   let quickcheck_observer = Base_quickcheck.Observer.int63
   let quickcheck_shrinker = Base_quickcheck.Shrinker.int63
-  let typerep_of_t = Typerep_lib.Std.typerep_of_int63
-  let typename_of_t = Typerep_lib.Std.typename_of_int63
+
+  let typerep_of_t =
+    Base.Portability_hacks.magic_portable__needs_base_and_core
+      Typerep_lib.Std.typerep_of_int63
+  ;;
+
+  let typename_of_t =
+    Base.Portability_hacks.magic_portable__needs_base_and_core
+      Typerep_lib.Std.typename_of_int63
+  ;;
+
   let zero = Base.Int63.zero
   let min_value = Base.Int63.min_value
   let max_value = Base.Int63.max_value
@@ -956,7 +1075,7 @@ module Int63 = struct
   let of_uint63_wrap x = x [@@inline always]
 
   let of_uint63_exn x = identity_if_positive ~greater_equal ~zero ~mod_name ~to_string x
-    [@@inline always]
+  [@@inline always]
   ;;
 
   module O = struct
@@ -968,16 +1087,16 @@ module Int63 = struct
     let ( <> ) = Base.Int63.( <> )
 
     module Wrap = struct
-      let ( + ) = Base.Int63.( + )
-      let ( - ) = Base.Int63.( - )
-      let ( * ) = Base.Int63.( * )
-      let ( / ) = Base.Int63.( / )
+      let[@inline] ( + ) x y = Base.Int63.( + ) x y
+      let[@inline] ( - ) x y = Base.Int63.( - ) x y
+      let[@inline] ( * ) x y = Base.Int63.( * ) x y
+      let[@inline] ( / ) x y = Base.Int63.( / ) x y
     end
   end
 end
 
 module Uint63 = struct
-  type t = Base.Int63.t [@@deriving equal, hash]
+  type t = Int63.t [@@deriving equal ~localize, globalize, hash]
 
   let quickcheck_generator = Base_quickcheck.Generator.int63_uniform
   let quickcheck_observer = Base_quickcheck.Observer.int63
@@ -988,8 +1107,18 @@ module Uint63 = struct
     Stdlib.Int64.unsigned_compare (Base.Int63.to_int64 x) (Base.Int63.to_int64 y)
   ;;
 
-  let typerep_of_t = Typerep_lib.Std.typerep_of_int63
-  let typename_of_t = Typerep_lib.Std.typename_of_int63
+  let%template[@mode local] compare x y = compare (globalize x) (globalize y)
+
+  let typerep_of_t =
+    Base.Portability_hacks.magic_portable__needs_base_and_core
+      Typerep_lib.Std.typerep_of_int63
+  ;;
+
+  let typename_of_t =
+    Base.Portability_hacks.magic_portable__needs_base_and_core
+      Typerep_lib.Std.typename_of_int63
+  ;;
+
   let zero = Base.Int63.zero
   let min_value = Base.Int63.zero
   let max_value = Base.Int63.of_int64_trunc 9223372036854775807L
@@ -1002,7 +1131,7 @@ module Uint63 = struct
 
   (* Utilities *)
   let exn x = identity_if_positive ~greater_equal ~zero ~mod_name ~to_string x
-    [@@inline always]
+  [@@inline always]
   ;;
 
   (* "Base" conversions. *)
@@ -1012,11 +1141,11 @@ module Uint63 = struct
     if Base.Int64.( >= ) x 0L
     then Base.Int63.of_int64_trunc x
     else raise_cannot_repr ~mod_name ~to_string:Base.Int64.to_string x
-    [@@inline always]
+  [@@inline always]
   ;;
 
   let to_base_int64 x = Base.Int64.( land ) (Base.Int63.to_int64 x) 0x7FFFFFFFFFFFFFFFL
-    [@@inline always]
+  [@@inline always]
   ;;
 
   (* Same-signedness conversions. *)
@@ -1029,7 +1158,7 @@ module Uint63 = struct
     if Base.Int64.( >= ) x 0L
     then Base.Int63.of_int64_trunc x
     else raise_cannot_repr ~mod_name ~to_string:Base.Int64.to_string x
-    [@@inline always]
+  [@@inline always]
   ;;
 
   (* Same-width conversions. *)
@@ -1056,9 +1185,9 @@ module Uint63 = struct
     let ( <> ) x y = compare x y <> 0
 
     module Wrap = struct
-      let ( + ) = Base.Int63.( + )
-      let ( - ) = Base.Int63.( - )
-      let ( * ) = Base.Int63.( * )
+      let[@inline] ( + ) x y = Base.Int63.( + ) x y
+      let[@inline] ( - ) x y = Base.Int63.( - ) x y
+      let[@inline] ( * ) x y = Base.Int63.( * ) x y
 
       let ( / ) x y =
         of_base_int64_trunc (Base.Int64.( / ) (to_base_int64 x) (to_base_int64 y))
@@ -1066,29 +1195,35 @@ module Uint63 = struct
     end
   end
 
-  include Base.Comparable.Make [@inlined] (struct
-    type nonrec t = t
-
-    let compare = compare
-    let sexp_of_t = sexp_of_t
-  end)
+  include%template
+    Base.Comparable.Make [@mode local] [@modality portable] [@inlined] (struct
+      type nonrec t = t [@@deriving compare ~localize, sexp_of]
+    end)
 end
 
 module Int64 = struct
-  type t = Base.Int64.t [@@deriving compare, equal, globalize, hash, sexp]
+  type t = Base.Int64.t
+  [@@deriving compare ~localize, equal ~localize, globalize, hash, sexp]
 
-  include Base.Comparable.Make [@inlined] (struct
-    type nonrec t = t
-
-    let compare = compare
-    let sexp_of_t = sexp_of_t
-  end)
+  include%template
+    Base.Comparable.Make [@mode local] [@modality portable] [@inlined] (struct
+      type nonrec t = t [@@deriving compare ~localize, sexp_of]
+    end)
 
   let quickcheck_generator = Base_quickcheck.quickcheck_generator_int64
   let quickcheck_observer = Base_quickcheck.quickcheck_observer_int64
   let quickcheck_shrinker = Base_quickcheck.quickcheck_shrinker_int64
-  let typerep_of_t = Typerep_lib.Std.typerep_of_int64
-  let typename_of_t = Typerep_lib.Std.typename_of_int64
+
+  let typerep_of_t =
+    Base.Portability_hacks.magic_portable__needs_base_and_core
+      Typerep_lib.Std.typerep_of_int64
+  ;;
+
+  let typename_of_t =
+    Base.Portability_hacks.magic_portable__needs_base_and_core
+      Typerep_lib.Std.typename_of_int64
+  ;;
+
   let zero = Base.Int64.zero
   let min_value = Base.Int64.min_value
   let max_value = Base.Int64.max_value
@@ -1109,7 +1244,7 @@ module Int64 = struct
   let of_uint64_wrap x = x [@@inline always]
 
   let of_uint64_exn x = identity_if_positive ~greater_equal ~zero ~mod_name ~to_string x
-    [@@inline always]
+  [@@inline always]
   ;;
 
   module O = struct
@@ -1121,23 +1256,33 @@ module Int64 = struct
     let ( <> ) = Base.Int64.( <> )
 
     module Wrap = struct
-      let ( + ) = Base.Int64.( + )
-      let ( - ) = Base.Int64.( - )
-      let ( * ) = Base.Int64.( * )
-      let ( / ) = Base.Int64.( / )
+      let[@inline] ( + ) x y = Base.Int64.( + ) x y
+      let[@inline] ( - ) x y = Base.Int64.( - ) x y
+      let[@inline] ( * ) x y = Base.Int64.( * ) x y
+      let[@inline] ( / ) x y = Base.Int64.( / ) x y
     end
   end
 end
 
 module Uint64 = struct
-  type t = Base.Int64.t [@@deriving equal, globalize, hash]
+  type t = Base.Int64.t [@@deriving equal ~localize, globalize, hash]
 
   let quickcheck_generator = Base_quickcheck.quickcheck_generator_int64
   let quickcheck_observer = Base_quickcheck.quickcheck_observer_int64
   let quickcheck_shrinker = Base_quickcheck.quickcheck_shrinker_int64
   let compare = Stdlib.Int64.unsigned_compare
-  let typerep_of_t = Typerep_lib.Std.typerep_of_int64
-  let typename_of_t = Typerep_lib.Std.typename_of_int64
+  let%template[@mode local] compare x y = compare (globalize x) (globalize y)
+
+  let typerep_of_t =
+    Base.Portability_hacks.magic_portable__needs_base_and_core
+      Typerep_lib.Std.typerep_of_int64
+  ;;
+
+  let typename_of_t =
+    Base.Portability_hacks.magic_portable__needs_base_and_core
+      Typerep_lib.Std.typename_of_int64
+  ;;
+
   let zero = Base.Int64.zero
   let min_value = Base.Int64.zero
   let max_value = -1L
@@ -1149,15 +1294,24 @@ module Uint64 = struct
   let to_string = Base.Int64.to_string
 
   (* Utilities *)
-  let exn x = identity_if_positive ~greater_equal ~zero ~mod_name ~to_string x
-    [@@inline always]
+  let%template exn (x @ m) =
+    (identity_if_positive [@mode m])
+      ~greater_equal
+      ~zero
+      ~mod_name
+      ~to_string
+      x [@exclave_if_local m]
+  [@@mode m = (global, local)] [@@inline always]
   ;;
 
   (* "Base" conversions. *)
   let of_base_int64_trunc x = x [@@inline always]
   let of_base_int64_exn x = exn x [@@inline always]
-  let to_base_int64_trunc x = x [@@inline always]
-  let to_base_int64_exn x = exn x [@@inline always]
+  let%template to_base_int64_trunc x = x [@@inline always] [@@mode m = (global, local)]
+
+  let%template to_base_int64_exn (x @ m) = (exn [@mode m]) x [@exclave_if_local m]
+  [@@inline always] [@@mode m = (global, local)]
+  ;;
 
   (* Same-signedness conversions. *)
   let of_uint8 x = Base.Int64.of_int x [@@inline always]
@@ -1166,7 +1320,7 @@ module Uint64 = struct
 
   let of_uint63 (x : uint63) : int64 =
     Base.Int64.( land ) (Base.Int63.to_int64 x) 0x7FFFFFFFFFFFFFFFL
-    [@@inline always]
+  [@@inline always]
   ;;
 
   (* Same-width conversions. *)
@@ -1193,19 +1347,17 @@ module Uint64 = struct
     let ( <> ) x y = compare x y <> 0
 
     module Wrap = struct
-      let ( + ) = Base.Int64.( + )
-      let ( - ) = Base.Int64.( - )
-      let ( * ) = Base.Int64.( * )
+      let[@inline] ( + ) x y = Base.Int64.( + ) x y
+      let[@inline] ( - ) x y = Base.Int64.( - ) x y
+      let[@inline] ( * ) x y = Base.Int64.( * ) x y
       let ( / ) = Stdlib.Int64.unsigned_div
     end
   end
 
-  include Base.Comparable.Make [@inlined] (struct
-    type nonrec t = t
-
-    let compare = compare
-    let sexp_of_t = sexp_of_t
-  end)
+  include%template
+    Base.Comparable.Make [@mode local] [@modality portable] [@inlined] (struct
+      type nonrec t = t [@@deriving compare ~localize, sexp_of]
+    end)
 end
 
 module type Get = sig
@@ -1213,52 +1365,52 @@ module type Get = sig
 
   (* 8-bit signed values *)
 
-  val get_int8 : t -> pos:int -> int8
+  val get_int8 : local_ t -> pos:int -> int8
 
   (* 8-bit unsigned values *)
 
-  val get_uint8 : t -> pos:int -> uint8
+  val get_uint8 : local_ t -> pos:int -> uint8
 
   (* 16-bit signed values *)
 
-  val get_int16_le : t -> pos:int -> int16
-  val get_int16_be : t -> pos:int -> int16
+  val get_int16_le : local_ t -> pos:int -> int16
+  val get_int16_be : local_ t -> pos:int -> int16
 
   (* 16-bit unsigned values *)
 
-  val get_uint16_le : t -> pos:int -> uint16
-  val get_uint16_be : t -> pos:int -> uint16
+  val get_uint16_le : local_ t -> pos:int -> uint16
+  val get_uint16_be : local_ t -> pos:int -> uint16
 
   (* 32-bit signed values *)
 
-  val get_int32_le : t -> pos:int -> int32
-  val get_int32_be : t -> pos:int -> int32
+  val get_int32_le : local_ t -> pos:int -> int32
+  val get_int32_be : local_ t -> pos:int -> int32
 
   (* 32-bit unsigned values *)
 
-  val get_uint32_le : t -> pos:int -> uint32
-  val get_uint32_be : t -> pos:int -> uint32
+  val get_uint32_le : local_ t -> pos:int -> uint32
+  val get_uint32_be : local_ t -> pos:int -> uint32
 
   (* 64-bit signed values *)
 
-  val get_int64_le : t -> pos:int -> int64
-  val get_int64_be : t -> pos:int -> int64
+  val get_int64_le : local_ t -> pos:int -> int64
+  val get_int64_be : local_ t -> pos:int -> int64
 
   (* 64-bit unsigned values *)
 
-  val get_uint64_le : t -> pos:int -> uint64
-  val get_uint64_be : t -> pos:int -> uint64
+  val get_uint64_le : local_ t -> pos:int -> uint64
+  val get_uint64_be : local_ t -> pos:int -> uint64
 
   module Local : sig
     (* 64-bit signed values *)
 
-    val get_int64_le : t -> pos:int -> int64
-    val get_int64_be : t -> pos:int -> int64
+    val get_int64_le : local_ t -> pos:int -> local_ int64
+    val get_int64_be : local_ t -> pos:int -> local_ int64
 
     (* 64-bit unsigned values *)
 
-    val get_uint64_le : t -> pos:int -> uint64
-    val get_uint64_be : t -> pos:int -> uint64
+    val get_uint64_le : local_ t -> pos:int -> local_ uint64
+    val get_uint64_be : local_ t -> pos:int -> local_ uint64
   end
 end
 
@@ -1267,54 +1419,54 @@ module type Set = sig
 
   (* 8-bit signed values *)
 
-  val set_int8 : t -> pos:int -> int8 -> unit
+  val set_int8 : local_ t -> pos:int -> int8 -> unit
 
   (* 8-bit unsigned values *)
 
-  val set_uint8 : t -> pos:int -> uint8 -> unit
+  val set_uint8 : local_ t -> pos:int -> uint8 -> unit
 
   (* 16-bit signed values *)
 
-  val set_int16_le : t -> pos:int -> int16 -> unit
-  val set_int16_be : t -> pos:int -> int16 -> unit
+  val set_int16_le : local_ t -> pos:int -> int16 -> unit
+  val set_int16_be : local_ t -> pos:int -> int16 -> unit
 
   (* 16-bit unsigned values *)
 
-  val set_uint16_le : t -> pos:int -> uint16 -> unit
-  val set_uint16_be : t -> pos:int -> uint16 -> unit
+  val set_uint16_le : local_ t -> pos:int -> uint16 -> unit
+  val set_uint16_be : local_ t -> pos:int -> uint16 -> unit
 
   (* 32-bit signed values *)
 
-  val set_int32_le : t -> pos:int -> int32 -> unit
-  val set_int32_be : t -> pos:int -> int32 -> unit
+  val set_int32_le : local_ t -> pos:int -> local_ int32 -> unit
+  val set_int32_be : local_ t -> pos:int -> local_ int32 -> unit
 
   (* 32-bit unsigned values *)
 
-  val set_uint32_le : t -> pos:int -> uint32 -> unit
-  val set_uint32_be : t -> pos:int -> uint32 -> unit
+  val set_uint32_le : local_ t -> pos:int -> local_ uint32 -> unit
+  val set_uint32_be : local_ t -> pos:int -> local_ uint32 -> unit
 
   (* 64-bit signed values *)
 
-  val set_int64_le : t -> pos:int -> int64 -> unit
-  val set_int64_be : t -> pos:int -> int64 -> unit
+  val set_int64_le : local_ t -> pos:int -> local_ int64 -> unit
+  val set_int64_be : local_ t -> pos:int -> local_ int64 -> unit
 
   (* 64-bit unsigned values *)
 
-  val set_uint64_le : t -> pos:int -> uint64 -> unit
-  val set_uint64_be : t -> pos:int -> uint64 -> unit
+  val set_uint64_le : local_ t -> pos:int -> local_ uint64 -> unit
+  val set_uint64_be : local_ t -> pos:int -> local_ uint64 -> unit
 end
 
 module type Get_functions = sig
   type t
 
   (* The following functions must use native endianness (hence the `_ne` suffix). *)
-  val get_uint8 : t -> int -> Base.Int.t
-  val get_uint16_ne : t -> int -> Base.Int.t
-  val get_int32_ne : t -> int -> Base.Int32.t
-  val get_int64_ne : t -> int -> Base.Int64.t
+  val get_uint8 : local_ t -> int -> Base.Int.t
+  val get_uint16_ne : local_ t -> int -> Base.Int.t
+  val get_int32_ne : local_ t -> int -> Base.Int32.t
+  val get_int64_ne : local_ t -> int -> Base.Int64.t
 
   module Local : sig
-    val get_int64_ne : t -> int -> Base.Int64.t
+    val get_int64_ne : local_ t -> int -> local_ Base.Int64.t
   end
 end
 
@@ -1322,24 +1474,34 @@ module type Set_functions = sig
   type t
 
   (* The following functions must use native endianness (hence the `_ne` suffix). *)
-  val set_uint8 : t -> int -> Base.Int.t -> unit
-  val set_uint16_ne : t -> int -> Base.Int.t -> unit
-  val set_int32_ne : t -> int -> Base.Int32.t -> unit
-  val set_int64_ne : t -> int -> Base.Int64.t -> unit
+  val set_uint8 : local_ t -> int -> Base.Int.t -> unit
+  val set_uint16_ne : local_ t -> int -> Base.Int.t -> unit
+  val set_int32_ne : local_ t -> int -> local_ Base.Int32.t -> unit
+  val set_int64_ne : local_ t -> int -> local_ Base.Int64.t -> unit
 end
 
-external swap16 : int -> int = "%bswap16"
-external swap32 : Stdlib.Int32.t -> Stdlib.Int32.t = "%bswap_int32"
+external swap16 : int -> int @@ portable = "%bswap16"
+external swap32 : Stdlib.Int32.t -> Stdlib.Int32.t @@ portable = "%bswap_int32"
 
 external swap64
   :  (Stdlib.Int64.t[@local_opt])
   -> (Stdlib.Int64.t[@local_opt])
+  @@ portable
   = "%bswap_int64"
 
-external int64_to_uint64 : (int64[@local_opt]) -> (Uint64.t[@local_opt]) = "%identity"
-external uint64_to_int64 : (Uint64.t[@local_opt]) -> (int64[@local_opt]) = "%identity"
+external int64_to_uint64
+  :  (int64[@local_opt])
+  -> (Uint64.t[@local_opt])
+  @@ portable
+  = "%identity"
 
-module Make_get (F : Get_functions) : Get with type t := F.t = struct
+external uint64_to_int64
+  :  (Uint64.t[@local_opt])
+  -> (int64[@local_opt])
+  @@ portable
+  = "%identity"
+
+module%template.portable Make_get (F : Get_functions) : Get with type t := F.t = struct
   (* 8-bit signed values *)
 
   let get_int8 t ~pos = Int8.of_base_int_trunc (F.get_uint8 t pos)
@@ -1423,24 +1585,24 @@ module Make_get (F : Get_functions) : Get with type t := F.t = struct
   module Local = struct
     (* 64-bit signed values *)
 
-    let get_int64_le t ~pos =
+    let get_int64_le t ~pos = exclave_
       let x = F.Local.get_int64_ne t pos in
       if Sys.big_endian then swap64 x else x
     ;;
 
-    let get_int64_be t ~pos =
+    let get_int64_be t ~pos = exclave_
       let x = F.Local.get_int64_ne t pos in
       if Sys.big_endian then x else swap64 x
     ;;
 
     (* 64-bit unsigned values *)
 
-    let get_uint64_le t ~pos =
+    let get_uint64_le t ~pos = exclave_
       let x = F.Local.get_int64_ne t pos in
       int64_to_uint64 (if Sys.big_endian then swap64 x else x)
     ;;
 
-    let get_uint64_be t ~pos =
+    let get_uint64_be t ~pos = exclave_
       let x = F.Local.get_int64_ne t pos in
       int64_to_uint64 (if Sys.big_endian then x else swap64 x)
     ;;
@@ -1448,7 +1610,7 @@ module Make_get (F : Get_functions) : Get with type t := F.t = struct
 end
 [@@inline always]
 
-module Make_set (F : Set_functions) : Set with type t := F.t = struct
+module%template.portable Make_set (F : Set_functions) : Set with type t := F.t = struct
   (* 8-bit unsigned values *)
 
   let set_uint8 t ~pos x = F.set_uint8 t pos x
@@ -1515,81 +1677,210 @@ end
 module Bytes0Unsafe = struct
   type t = Bytes.t
 
-  external get_uint8 : Bytes.t -> int -> int = "%bytes_unsafe_get"
-  external get_uint16_ne : Bytes.t -> int -> int = "%caml_bytes_get16u"
-  external get_int32_ne : Bytes.t -> int -> Stdlib.Int32.t = "%caml_bytes_get32u"
-  external get_int64_ne : Bytes.t -> int -> Stdlib.Int64.t = "%caml_bytes_get64u"
-  external set_uint8 : Bytes.t -> int -> int -> unit = "%bytes_unsafe_set"
-  external set_uint16_ne : Bytes.t -> int -> int -> unit = "%caml_bytes_set16u"
-  external set_int32_ne : Bytes.t -> int -> Stdlib.Int32.t -> unit = "%caml_bytes_set32u"
+  external get_uint8 : local_ Bytes.t -> int -> int @@ portable = "%bytes_unsafe_get"
+  external get_uint16_ne : local_ Bytes.t -> int -> int @@ portable = "%caml_bytes_get16u"
+
+  external get_int32_ne
+    :  local_ Bytes.t
+    -> int
+    -> Stdlib.Int32.t
+    @@ portable
+    = "%caml_bytes_get32u"
+
+  external get_int64_ne
+    :  local_ Bytes.t
+    -> int
+    -> Stdlib.Int64.t
+    @@ portable
+    = "%caml_bytes_get64u"
+
+  external set_uint8
+    :  local_ Bytes.t
+    -> int
+    -> int
+    -> unit
+    @@ portable
+    = "%bytes_unsafe_set"
+
+  external set_uint16_ne
+    :  local_ Bytes.t
+    -> int
+    -> int
+    -> unit
+    @@ portable
+    = "%caml_bytes_set16u"
+
+  external set_int32_ne
+    :  local_ Bytes.t
+    -> int
+    -> local_ Stdlib.Int32.t
+    -> unit
+    @@ portable
+    = "%caml_bytes_set32u"
 
   external set_int64_ne
-    :  Bytes.t
+    :  local_ Bytes.t
     -> int
-    -> (Stdlib.Int64.t[@local_opt])
+    -> local_ Stdlib.Int64.t
     -> unit
+    @@ portable
     = "%caml_bytes_set64u"
 
   module Local = struct
-    external get_int64_ne : Bytes.t -> int -> Stdlib.Int64.t = "%caml_bytes_get64u"
+    external get_int64_ne
+      :  local_ Bytes.t
+      -> int
+      -> local_ Stdlib.Int64.t
+      @@ portable
+      = "%caml_bytes_get64u"
   end
 end
 
-module Bytes = struct
+module%template Bytes = struct
   module Bytes = struct
-    include Bytes
+    type t = bytes
+
+    external set_int8 : local_ bytes -> int -> int -> unit @@ portable = "%bytes_safe_set"
+
+    external set_int16_ne
+      :  local_ bytes
+      -> int
+      -> int
+      -> unit
+      @@ portable
+      = "%caml_bytes_set16"
+
+    external set_int32_ne
+      :  local_ bytes
+      -> int
+      -> local_ Stdlib.Int32.t
+      -> unit
+      @@ portable
+      = "%caml_bytes_set32"
+
+    external get_uint8 : local_ bytes -> int -> int @@ portable = "%bytes_safe_get"
+    external get_uint16_ne : local_ bytes -> int -> int @@ portable = "%caml_bytes_get16"
+
+    external get_int32_ne
+      :  local_ bytes
+      -> int
+      -> Stdlib.Int32.t
+      @@ portable
+      = "%caml_bytes_get32"
+
+    external get_int64_ne
+      :  local_ bytes
+      -> int
+      -> Stdlib.Int64.t
+      @@ portable
+      = "%caml_bytes_get64"
 
     external set_int64_ne
-      :  Bytes.t
+      :  local_ bytes
       -> int
-      -> (Stdlib.Int64.t[@local_opt])
+      -> local_ Stdlib.Int64.t
       -> unit
+      @@ portable
       = "%caml_bytes_set64"
 
+    let set_uint8 = set_int8
+    let set_uint16_ne = set_int16_ne
+
     module Local = struct
-      external get_int64_ne : Bytes.t -> int -> Stdlib.Int64.t = "%caml_bytes_get64"
+      external get_int64_ne
+        :  local_ bytes
+        -> int
+        -> local_ Stdlib.Int64.t
+        @@ portable
+        = "%caml_bytes_get64"
     end
   end
 
-  include Make_get (Bytes)
-  include Make_set (Bytes)
+  include Make_get [@modality portable] (Bytes)
+  include Make_set [@modality portable] (Bytes)
 
   module Unsafe = struct
-    include Make_get (Bytes0Unsafe)
-    include Make_set (Bytes0Unsafe)
+    include Make_get [@modality portable] (Bytes0Unsafe)
+    include Make_set [@modality portable] (Bytes0Unsafe)
   end
 end
 
 module String0 = struct
   include String
 
-  external get_uint8 : String.t -> int -> int = "%string_safe_get"
-  external get_uint16_ne : String.t -> int -> int = "%caml_string_get16"
-  external get_int32_ne : String.t -> int -> Stdlib.Int32.t = "%caml_string_get32"
-  external get_int64_ne : String.t -> int -> Stdlib.Int64.t = "%caml_string_get64"
+  external get_uint8 : local_ String.t -> int -> int @@ portable = "%string_safe_get"
+
+  external get_uint16_ne
+    :  local_ String.t
+    -> int
+    -> int
+    @@ portable
+    = "%caml_string_get16"
+
+  external get_int32_ne
+    :  local_ String.t
+    -> int
+    -> Stdlib.Int32.t
+    @@ portable
+    = "%caml_string_get32"
+
+  external get_int64_ne
+    :  local_ String.t
+    -> int
+    -> Stdlib.Int64.t
+    @@ portable
+    = "%caml_string_get64"
 
   module Local = struct
-    external get_int64_ne : String.t -> int -> Stdlib.Int64.t = "%caml_string_get64"
+    external get_int64_ne
+      :  local_ String.t
+      -> int
+      -> local_ Stdlib.Int64.t
+      @@ portable
+      = "%caml_string_get64"
   end
 end
 
 module String0Unsafe = struct
   type t = String.t
 
-  external get_uint8 : String.t -> int -> int = "%string_unsafe_get"
-  external get_uint16_ne : String.t -> int -> int = "%caml_string_get16u"
-  external get_int32_ne : String.t -> int -> Stdlib.Int32.t = "%caml_string_get32u"
-  external get_int64_ne : String.t -> int -> Stdlib.Int64.t = "%caml_string_get64u"
+  external get_uint8 : local_ String.t -> int -> int @@ portable = "%string_unsafe_get"
+
+  external get_uint16_ne
+    :  local_ String.t
+    -> int
+    -> int
+    @@ portable
+    = "%caml_string_get16u"
+
+  external get_int32_ne
+    :  local_ String.t
+    -> int
+    -> Stdlib.Int32.t
+    @@ portable
+    = "%caml_string_get32u"
+
+  external get_int64_ne
+    :  local_ String.t
+    -> int
+    -> Stdlib.Int64.t
+    @@ portable
+    = "%caml_string_get64u"
 
   module Local = struct
-    external get_int64_ne : String.t -> int -> Stdlib.Int64.t = "%caml_string_get64u"
+    external get_int64_ne
+      :  local_ String.t
+      -> int
+      -> local_ Stdlib.Int64.t
+      @@ portable
+      = "%caml_string_get64u"
   end
 end
 
-module String = struct
-  include Make_get (String0)
+module%template String = struct
+  include Make_get [@modality portable] (String0)
 
   module Unsafe = struct
-    include Make_get (String0Unsafe)
+    include Make_get [@modality portable] (String0Unsafe)
   end
 end

@@ -1,8 +1,9 @@
+@@ portable
+
 (** A thread-safe non-blocking queue of unbounded size.
 
     The implementation does not use mutexes, and so is safe to use in situations when one
-    doesn't want to block, e.g., a finalizer or an async job.
-*)
+    doesn't want to block, e.g., a finalizer or an async job. *)
 
 open! Core
 open! Import
@@ -17,33 +18,40 @@ val create : unit -> 'a t
 val length : _ t -> int
 val enqueue : 'a t -> 'a -> unit
 
-(** [dequeue_exn t] raises if [length t = 0].  The idiom for dequeueing a single element
-    is:
+module Dequeue_result : sig
+  type 'a t =
+    | Empty
+    | Not_empty of { global_ elt : 'a }
+  [@@deriving sexp, compare]
+end
 
-    {[
-      if length t > 0 then dequeue_exn t else ...
-    ]}
+(** [dequeue t] returns [Dequeue_result.Empty] if [length t = 0], and
+    [Dequeue_result.Not_empty] otherwise. To dequeue a single result, match on this
+    result. The return value is locally allocated, so this can be used safely in
+    zero_alloc code.
 
-    The idiom for dequeueing until empty is:
+    To dequeue until empty, use [dequeue_until_empty] below.
 
-    {[
-      while length t > 0 do
-        let a = dequeue_exn t in
-        ...
-      done
-    ]}
+    Note that testing the length of the queue immediately before calling [dequeue] does
+    not guarantee it will return [Not_empty]. This is because the OCaml compiler is
+    allowed to insert a polling point (also called a "safe point") at the beginning of
+    [dequeue], which may give other threads an opportunity to run. You must always handle
+    the possibility of [Not_empty] when calling this function. *)
+val dequeue : 'a t -> local_ 'a Dequeue_result.t
 
-    These idioms work in the presence of threads because OCaml will not context switch
-    between the [length t > 0] test and the call to [dequeue_exn].  Also, if one has only
-    a single thread calling [dequeue_exn], then the idiom is obviously OK even in the
-    presence of a context switch. *)
-val dequeue_exn : 'a t -> 'a
+(** [dequeue_until_empty ~f t] iteratively dequeues elements of [t] and applies [f] to
+    them until the queue is empty.
+
+    Recall that if you want [dequeue_until_empty]'s arguments to be locally allocated, it
+    can not be a tailcall. To achieve this for a call to [dequeue_until_empty] in tail
+    position, mark the call with [@nontail]. *)
+val dequeue_until_empty : f:local_ ('a -> unit) -> 'a t -> unit
 
 (** The queue maintains an internal pool of unused elements, which are used by [enqueue]
-    and returned to the pool by [dequeue_exn].  [enqueue] creates a new element if the
-    pool is empty.  Nothing shrinks the pool automatically.  One can call
-    [clear_internal_pool] to clear the pool, so that all unused elements will be reclaimed
-    by the garbage collector. *)
+    and returned to the pool by [dequeue_exn]. [enqueue] creates a new element if the pool
+    is empty. Nothing shrinks the pool automatically. One can call [clear_internal_pool]
+    to clear the pool, so that all unused elements will be reclaimed by the garbage
+    collector. *)
 val clear_internal_pool : _ t -> unit
 
 (*_ See the Jane Street Style Guide for an explanation of [Private] submodules:

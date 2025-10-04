@@ -25,11 +25,6 @@
  (modules refmt))
 
 (executable
- (name webserver_oneshot)
- (modules webserver_oneshot)
- (libraries unix http stdune))
-
-(executable
  (name sherlodoc)
  (modules sherlodoc)
  (libraries stdune))
@@ -38,3 +33,7 @@
  (modules ocaml_index)
  (name ocaml_index)
  (libraries cmdliner))
+
+(executable
+ (modules ocamlformat)
+ (name ocamlformat))

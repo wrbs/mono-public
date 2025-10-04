@@ -11,7 +11,6 @@ val to_dyn : t -> Dyn.t
     or the [name] if not. *)
 val name : t -> Lib_name.t
 
-val lib_config : t -> Lib_config.t
 val implements : t -> t Resolve.Memo.t option
 
 (** [is_local t] returns [true] whenever [t] is defined in the local workspace *)
@@ -24,6 +23,7 @@ val wrapped : t -> Wrapped.t option Resolve.Memo.t
 (** Direct library dependencies of this library *)
 val requires : t -> t list Resolve.Memo.t
 
+val re_exports : t -> t list Resolve.Memo.t
 val ppx_runtime_deps : t -> t list Resolve.Memo.t
 val pps : t -> t list Resolve.Memo.t
 
@@ -76,8 +76,6 @@ module Compile : sig
   (** Transitive closure of all used ppx rewriters *)
   val pps : t -> lib list Resolve.Memo.t
 
-  val merlin_ident : t -> Merlin_ident.t
-
   (** Sub-systems used in this compilation context *)
   val sub_systems : t -> sub_system list Memo.t
 end
@@ -90,6 +88,13 @@ module DB : sig
 
   (** A database allow to resolve library names *)
   type t = db
+
+  val with_parent : t -> parent:t option -> t
+
+  (** Create a library database from a specified list of library paths. A
+      library path is a path to a "lib" directory such as those found in the
+      OCAMLPATH variable or the "path" field of findlib.conf. *)
+  val of_paths : Context.t -> paths:Path.t list -> t Memo.t
 
   val installed : Context.t -> t Memo.t
 
@@ -117,7 +122,6 @@ module DB : sig
     -> resolve:(Lib_name.t -> Resolve_result.t list Memo.t)
     -> resolve_lib_id:(Lib_id.t -> Resolve_result.t Memo.t)
     -> all:(unit -> Lib_name.t list Memo.t)
-    -> lib_config:Lib_config.t
     -> instrument_with:Lib_name.t list
     -> unit
     -> t
@@ -146,13 +150,12 @@ module DB : sig
       This function is for executables or melange.emit stanzas. *)
   val resolve_user_written_deps
     :  t
-    -> [ `Exe of (Import.Loc.t * string) list | `Melange_emit of string ]
+    -> [ `Exe of (Loc.t * string) Nonempty_list.t | `Melange_emit of string ]
     -> allow_overlaps:bool
     -> forbidden_libraries:(Loc.t * Lib_name.t) list
     -> Lib_dep.t list
     -> pps:(Loc.t * Lib_name.t) list
     -> dune_version:Dune_lang.Syntax.Version.t
-    -> merlin_ident:Merlin_ident.t
     -> Compile.t
 
   val resolve_pps : t -> (Loc.t * Lib_name.t) list -> lib list Resolve.Memo.t

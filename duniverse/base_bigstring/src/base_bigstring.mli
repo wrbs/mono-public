@@ -1,3 +1,5 @@
+@@ portable
+
 (** String type based on [Bigarray], for use in I/O and C-bindings. *)
 
 open! Base
@@ -6,115 +8,127 @@ open Stdlib.Bigarray
 (** {2 Types and exceptions} *)
 
 (** Type of bigstrings *)
-type t = (char, int8_unsigned_elt, c_layout) Array1.t [@@deriving compare, sexp]
+type t = (char, int8_unsigned_elt, c_layout) Array1.t
+[@@deriving compare ~localize, equal ~localize, globalize, sexp, sexp_grammar]
 
 (** Type of bigstrings which support hashing. Note that mutation invalidates previous
     hashes. *)
-type t_frozen = t [@@deriving compare, hash, sexp]
-
-include Equal.S with type t := t
+type t_frozen = t [@@deriving compare ~localize, globalize, hash, sexp, sexp_grammar]
 
 (** {2 Creation and string conversion} *)
 
 (** [create length]
-    @return a new bigstring having [length].
-    Content is undefined. *)
+    @return a new bigstring having [length]. Content is undefined. *)
 val create : int -> t
+
+(** [empty] is a bigstring of length 0 *)
+val empty : t
 
 (** [init n ~f] creates a bigstring [t] of length [n], with [t.{i} = f i]. *)
 val init : int -> f:(int -> char) -> t
 
-(** [of_string ?pos ?len str] @return a new bigstring that is equivalent
-    to the substring of length [len] in [str] starting at position [pos].
+(** [of_string ?pos ?len str]
+    @return
+      a new bigstring that is equivalent to the substring of length [len] in [str]
+      starting at position [pos].
 
     @param pos default = 0
     @param len default = [String.length str - pos] *)
-val of_string : ?pos:int -> ?len:int -> string -> t
+val of_string : ?pos:int -> ?len:int -> local_ string -> t
 
-(** [of_bytes ?pos ?len str] @return a new bigstring that is equivalent
-    to the subbytes of length [len] in [str] starting at position [pos].
+(** [of_bytes ?pos ?len str]
+    @return
+      a new bigstring that is equivalent to the subbytes of length [len] in [str] starting
+      at position [pos].
 
     @param pos default = 0
     @param len default = [Bytes.length str - pos] *)
-val of_bytes : ?pos:int -> ?len:int -> bytes -> t
+val of_bytes : ?pos:int -> ?len:int -> local_ bytes -> t
 
-(** [to_string ?pos ?len bstr] @return a new string that is equivalent
-    to the substring of length [len] in [bstr] starting at position [pos].
+(** [to_string ?pos ?len bstr]
+    @return
+      a new string that is equivalent to the substring of length [len] in [bstr] starting
+      at position [pos].
 
     @param pos default = 0
     @param len default = [length bstr - pos]
 
     @raise Invalid_argument if the string would exceed runtime limits. *)
-val to_string : ?pos:int -> ?len:int -> t -> string
+val to_string : ?pos:int -> ?len:int -> local_ t -> string
 
-(** [to_bytes ?pos ?len bstr] @return a new byte sequence that is equivalent
-    to the substring of length [len] in [bstr] starting at position [pos].
+(** [to_bytes ?pos ?len bstr]
+    @return
+      a new byte sequence that is equivalent to the substring of length [len] in [bstr]
+      starting at position [pos].
 
     @param pos default = 0
     @param len default = [length bstr - pos]
 
     @raise Invalid_argument if the bytes would exceed runtime limits. *)
-val to_bytes : ?pos:int -> ?len:int -> t -> bytes
+val to_bytes : ?pos:int -> ?len:int -> local_ t -> bytes
 
 (** [concat ?sep list] returns the concatenation of [list] with [sep] in between each. *)
 val concat : ?sep:t -> t list -> t
 
 (** {2 Checking} *)
 
-(** [check_args ~loc ~pos ~len bstr] checks the position and length
-    arguments [pos] and [len] for bigstrings [bstr].  @raise
-    Invalid_argument if these arguments are illegal for the given
-    bigstring using [loc] to indicate the calling context. *)
-val check_args : loc:string -> pos:int -> len:int -> t -> unit
+(** [check_args ~loc ~pos ~len bstr] checks the position and length arguments [pos] and
+    [len] for bigstrings [bstr].
+    @raise 
+      Invalid_argument if these arguments are illegal for the given bigstring using [loc]
+      to indicate the calling context. *)
+val check_args : loc:string -> pos:int -> len:int -> local_ t -> unit
 
-(** [get_opt_len bstr ~pos opt_len] @return the length of a subbigstring
-    in [bstr] starting at position [pos] and given optional length
-    [opt_len].  This function does not check the validity of its
-    arguments.  Use {!check_args} for that purpose. *)
-val get_opt_len : t -> pos:int -> int option -> int
+(** [get_opt_len bstr ~pos opt_len]
+    @return
+      the length of a subbigstring in [bstr] starting at position [pos] and given optional
+      length [opt_len]. This function does not check the validity of its arguments. Use
+      {!check_args} for that purpose. *)
+val get_opt_len : local_ t -> pos:int -> local_ int option -> int
 
 (** {2 Accessors} *)
 
-(** [length bstr] @return the length of bigstring [bstr]. *)
-val length : t -> int
+(** [length bstr]
+    @return the length of bigstring [bstr]. *)
+val length : t @ contended local -> int
 
 (** [get t pos] returns the character at [pos] *)
-external get : t -> int -> char = "%caml_ba_ref_1"
+external get : (t[@local_opt]) @ shared -> int -> char = "%caml_ba_ref_1"
 
 (** [unsafe_get t pos] returns the character at [pos], without bounds checks. *)
-external unsafe_get : t -> int -> char = "%caml_ba_unsafe_ref_1"
+external unsafe_get : (t[@local_opt]) @ shared -> int -> char = "%caml_ba_unsafe_ref_1"
 
 (** [set t pos] sets the character at [pos] *)
-external set : t -> int -> char -> unit = "%caml_ba_set_1"
+external set : (t[@local_opt]) -> int -> char -> unit = "%caml_ba_set_1"
 
 (** [unsafe_set t pos] sets the character at [pos], without bounds checks. *)
-external unsafe_set : t -> int -> char -> unit = "%caml_ba_unsafe_set_1"
+external unsafe_set : (t[@local_opt]) -> int -> char -> unit = "%caml_ba_unsafe_set_1"
 
-(** [is_mmapped bstr] @return whether the bigstring [bstr] is
-    memory-mapped. *)
-external is_mmapped : t -> bool = "bigstring_is_mmapped_stub"
-  [@@noalloc]
+(** [is_mmapped bstr]
+    @return whether the bigstring [bstr] is memory-mapped. *)
+external is_mmapped : (t[@local_opt]) -> bool = "bigstring_is_mmapped_stub"
+[@@noalloc]
 
 (** {2 Blitting} *)
 
-(** [blit ~src ?src_pos ?src_len ~dst ?dst_pos ()] blits [src_len] characters
-    from [src] starting at position [src_pos] to [dst] at position [dst_pos].
+(** [blit ~src ?src_pos ?src_len ~dst ?dst_pos ()] blits [src_len] characters from [src]
+    starting at position [src_pos] to [dst] at position [dst_pos].
 
     @raise Invalid_argument if the designated ranges are out of bounds. *)
 
 include Blit.S with type t := t
 
-val copy : t -> t
+val copy : local_ t -> t
 
 module To_string : sig
   val blit : (t, bytes) Blit.blit
-    [@@deprecated "[since 2017-10] use [Bigstring.To_bytes.blit] instead"]
+  [@@deprecated "[since 2017-10] use [Bigstring.To_bytes.blit] instead"]
 
   val blito : (t, bytes) Blit.blito
-    [@@deprecated "[since 2017-10] use [Bigstring.To_bytes.blito] instead"]
+  [@@deprecated "[since 2017-10] use [Bigstring.To_bytes.blito] instead"]
 
   val unsafe_blit : (t, bytes) Blit.blit
-    [@@deprecated "[since 2017-10] use [Bigstring.To_bytes.unsafe_blit] instead"]
+  [@@deprecated "[since 2017-10] use [Bigstring.To_bytes.unsafe_blit] instead"]
 
   include Blit.S_to_string with type t := t
 end
@@ -124,23 +138,40 @@ module To_bytes : Blit.S_distinct with type src := t with type dst := bytes
 module From_bytes : Blit.S_distinct with type src := bytes with type dst := t
 
 (** [memset t ~pos ~len c] fills [t] with [c] within the range [\[pos, pos + len)]. *)
-val memset : t -> pos:int -> len:int -> char -> unit
+val memset : local_ t -> pos:int -> len:int -> char -> unit
 
 (** [unsafe_memset t ~pos ~len c] fills [t] with [c] within the range [\[pos, pos + len)],
     without bounds checks. *)
-val unsafe_memset : t -> pos:int -> len:int -> char -> unit
+val unsafe_memset : local_ t -> pos:int -> len:int -> char -> unit
 
 (** Memcmp *)
 
 (** [memcmp t1 ~pos1 t2 ~pos2 ~len] is like [compare t1 t2] except performs the comparison
     on the subregions of [t1] and [t2] defined by [pos1], [pos2], and [len]. *)
-val memcmp : t -> pos1:int -> t -> pos2:int -> len:int -> int
+val memcmp : local_ t -> pos1:int -> local_ t -> pos2:int -> len:int -> int
 
 (** [memcmp_bytes], for efficient [memcmp] between [Bigstring] and [Bytes] data. *)
-val memcmp_bytes : t -> pos1:int -> Bytes.t -> pos2:int -> len:int -> int
+val memcmp_bytes : local_ t -> pos1:int -> local_ Bytes.t -> pos2:int -> len:int -> int
 
 (** [memcmp_string], for efficient [memcmp] between [Bigstring] and [string] data. *)
-val memcmp_string : t -> pos1:int -> string -> pos2:int -> len:int -> int
+val memcmp_string : local_ t -> pos1:int -> local_ string -> pos2:int -> len:int -> int
+
+(** Compares up to [len] characters of two (potentially null-terminated) strings beginning
+    at [pos1] and [pos2] of their respective [Bigstring]s. This function starts comparing
+    the first character of each string. If they are equal to each other, it continues with
+    the following pairs until the characters differ, until a terminating null-character is
+    reached, or until [len] characters match in both strings, whichever happens first.
+
+    [unsafe_strncmp] does no bounds checking. *)
+external unsafe_strncmp
+  :  (t[@local_opt])
+  -> pos1:int
+  -> (t[@local_opt])
+  -> pos2:int
+  -> len:int
+  -> int
+  = "bigstring_strncmp"
+[@@noalloc]
 
 (** {2 Search} *)
 
@@ -149,17 +180,41 @@ val memcmp_string : t -> pos1:int -> string -> pos2:int -> len:int -> int
 
     @param pos default = 0
     @param len default = [length bstr - pos] *)
-val find : ?pos:int -> ?len:int -> char -> t -> int option
+val find : ?pos:int -> ?len:int -> char -> local_ t -> int option
+
+(** [rfind ?pos ?len char t] returns [Some i] for the largest [i >= pos] such that
+    [t.{i} = char], or [None] if there is no such [i].
+
+    @param pos default = 0
+    @param len default = [length bstr - pos] *)
+val rfind : ?pos:int -> ?len:int -> char -> local_ t -> int option
 
 (** Same as [find], but does no bounds checking, and returns a negative value instead of
     [None] if [char] is not found. *)
-external unsafe_find : t -> char -> pos:int -> len:int -> int = "bigstring_find"
-  [@@noalloc]
+external unsafe_find
+  :  (t[@local_opt])
+  -> char
+  -> pos:int
+  -> len:int
+  -> int
+  = "bigstring_find"
+[@@noalloc]
+
+(** Same as [rfind], but does no bounds checking, and returns a negative value instead of
+    [None] if [char] is not found. *)
+external unsafe_rfind
+  :  (t[@local_opt])
+  -> char
+  -> pos:int
+  -> len:int
+  -> int
+  = "bigstring_rfind"
+[@@noalloc]
 
 (** Search for the position of (a substring of) [needle] in (a substring of) [haystack]. *)
 val memmem
-  :  haystack:t
-  -> needle:t
+  :  haystack:local_ t
+  -> needle:local_ t
   -> ?haystack_pos:int
   -> ?haystack_len:int
   -> ?needle_pos:int
@@ -169,17 +224,18 @@ val memmem
 
 (** As [unsafe_find] for [memmem]. *)
 external unsafe_memmem
-  :  haystack:t
-  -> needle:t
+  :  haystack:(t[@local_opt])
+  -> needle:(t[@local_opt])
   -> haystack_pos:int
   -> haystack_len:int
   -> needle_pos:int
   -> needle_len:int
   -> int
   = "bigstring_memmem_bytecode" "bigstring_memmem"
-  [@@noalloc]
+[@@noalloc]
 
-(** {2 Accessors for parsing binary values, analogous to [Binary_packing]}
+(** {v
+ {2 Accessors for parsing binary values, analogous to [Binary_packing]}
 
     These are in [Bigstring] rather than a separate module because:
 
@@ -201,124 +257,125 @@ external unsafe_memmem
     <endian>    ::= _le | _be | ''
 
     The [unsafe_] prefix indicates that these functions do no bounds checking and silently
-    truncate out-of-range numeric arguments. *)
+    truncate out-of-range numeric arguments.
+    v} *)
 
-val get_int8 : t -> pos:int -> int
-val set_int8_exn : t -> pos:int -> int -> unit
-val get_uint8 : t -> pos:int -> int
-val set_uint8_exn : t -> pos:int -> int -> unit
-val unsafe_get_int8 : t -> pos:int -> int
-val unsafe_set_int8 : t -> pos:int -> int -> unit
-val unsafe_get_uint8 : t -> pos:int -> int
-val unsafe_set_uint8 : t -> pos:int -> int -> unit
+val get_int8 : t @ local shared -> pos:int -> int
+val set_int8_exn : local_ t -> pos:int -> int -> unit
+val get_uint8 : t @ local shared -> pos:int -> int
+val set_uint8_exn : local_ t -> pos:int -> int -> unit
+val unsafe_get_int8 : t @ local shared -> pos:int -> int
+val unsafe_set_int8 : local_ t -> pos:int -> int -> unit
+val unsafe_get_uint8 : t @ local shared -> pos:int -> int
+val unsafe_set_uint8 : local_ t -> pos:int -> int -> unit
 
 (** {2 16-bit methods} *)
 
-val get_int16_le : t -> pos:int -> int
-val get_int16_be : t -> pos:int -> int
-val set_int16_le_exn : t -> pos:int -> int -> unit
-val set_int16_be_exn : t -> pos:int -> int -> unit
-val unsafe_get_int16_le : t -> pos:int -> int
-val unsafe_get_int16_be : t -> pos:int -> int
-val unsafe_set_int16_le : t -> pos:int -> int -> unit
-val unsafe_set_int16_be : t -> pos:int -> int -> unit
-val get_uint16_le : t -> pos:int -> int
-val get_uint16_be : t -> pos:int -> int
-val set_uint16_le_exn : t -> pos:int -> int -> unit
-val set_uint16_be_exn : t -> pos:int -> int -> unit
-val unsafe_get_uint16_le : t -> pos:int -> int
-val unsafe_get_uint16_be : t -> pos:int -> int
-val unsafe_set_uint16_le : t -> pos:int -> int -> unit
-val unsafe_set_uint16_be : t -> pos:int -> int -> unit
+val get_int16_le : t @ local shared -> pos:int -> int
+val get_int16_be : t @ local shared -> pos:int -> int
+val set_int16_le_exn : local_ t -> pos:int -> int -> unit
+val set_int16_be_exn : local_ t -> pos:int -> int -> unit
+val unsafe_get_int16_le : t @ local shared -> pos:int -> int
+val unsafe_get_int16_be : t @ local shared -> pos:int -> int
+val unsafe_set_int16_le : local_ t -> pos:int -> int -> unit
+val unsafe_set_int16_be : local_ t -> pos:int -> int -> unit
+val get_uint16_le : t @ local shared -> pos:int -> int
+val get_uint16_be : t @ local shared -> pos:int -> int
+val set_uint16_le_exn : local_ t -> pos:int -> int -> unit
+val set_uint16_be_exn : local_ t -> pos:int -> int -> unit
+val unsafe_get_uint16_le : t @ local shared -> pos:int -> int
+val unsafe_get_uint16_be : t @ local shared -> pos:int -> int
+val unsafe_set_uint16_le : local_ t -> pos:int -> int -> unit
+val unsafe_set_uint16_be : local_ t -> pos:int -> int -> unit
 
 (** {2 32-bit methods} *)
 
-val get_int32_le : t -> pos:int -> int
-val get_int32_be : t -> pos:int -> int
-val set_int32_le_exn : t -> pos:int -> int -> unit
-val set_int32_be_exn : t -> pos:int -> int -> unit
-val unsafe_get_int32_le : t -> pos:int -> int
-val unsafe_get_int32_be : t -> pos:int -> int
-val unsafe_set_int32_le : t -> pos:int -> int -> unit
-val unsafe_set_int32_be : t -> pos:int -> int -> unit
-val get_uint32_le : t -> pos:int -> int
-val get_uint32_be : t -> pos:int -> int
-val set_uint32_le_exn : t -> pos:int -> int -> unit
-val set_uint32_be_exn : t -> pos:int -> int -> unit
-val unsafe_get_uint32_le : t -> pos:int -> int
-val unsafe_get_uint32_be : t -> pos:int -> int
-val unsafe_set_uint32_le : t -> pos:int -> int -> unit
-val unsafe_set_uint32_be : t -> pos:int -> int -> unit
+val get_int32_le : t @ local shared -> pos:int -> int
+val get_int32_be : t @ local shared -> pos:int -> int
+val set_int32_le_exn : local_ t -> pos:int -> int -> unit
+val set_int32_be_exn : local_ t -> pos:int -> int -> unit
+val unsafe_get_int32_le : t @ local shared -> pos:int -> int
+val unsafe_get_int32_be : t @ local shared -> pos:int -> int
+val unsafe_set_int32_le : local_ t -> pos:int -> int -> unit
+val unsafe_set_int32_be : local_ t -> pos:int -> int -> unit
+val get_uint32_le : t @ local shared -> pos:int -> int
+val get_uint32_be : t @ local shared -> pos:int -> int
+val set_uint32_le_exn : local_ t -> pos:int -> int -> unit
+val set_uint32_be_exn : local_ t -> pos:int -> int -> unit
+val unsafe_get_uint32_le : t @ local shared -> pos:int -> int
+val unsafe_get_uint32_be : t @ local shared -> pos:int -> int
+val unsafe_set_uint32_le : local_ t -> pos:int -> int -> unit
+val unsafe_set_uint32_be : local_ t -> pos:int -> int -> unit
 
 (** Similar to the usage in binary_packing, the below methods are treating the value being
     read (or written), as an ocaml immediate integer, as such it is actually 63 bits. If
     the user is confident that the range of values used in practice will not require
     64-bit precision (i.e. Less than Max_Long), then we can avoid allocation and use an
-    immediate.  If the user is wrong, an exception will be thrown (for get). *)
+    immediate. If the user is wrong, an exception will be thrown (for get). *)
 
 (** {2 64-bit signed values} *)
 
-val get_int64_le_exn : t -> pos:int -> int
-val get_int64_be_exn : t -> pos:int -> int
-val get_int64_le_trunc : t -> pos:int -> int
-val get_int64_be_trunc : t -> pos:int -> int
-val set_int64_le : t -> pos:int -> int -> unit
-val set_int64_be : t -> pos:int -> int -> unit
-val unsafe_get_int64_le_exn : t -> pos:int -> int
-val unsafe_get_int64_be_exn : t -> pos:int -> int
-val unsafe_get_int64_le_trunc : t -> pos:int -> int
-val unsafe_get_int64_be_trunc : t -> pos:int -> int
-val unsafe_set_int64_le : t -> pos:int -> int -> unit
-val unsafe_set_int64_be : t -> pos:int -> int -> unit
+val get_int64_le_exn : t @ local shared -> pos:int -> int
+val get_int64_be_exn : t @ local shared -> pos:int -> int
+val get_int64_le_trunc : t @ local shared -> pos:int -> int
+val get_int64_be_trunc : t @ local shared -> pos:int -> int
+val set_int64_le : local_ t -> pos:int -> int -> unit
+val set_int64_be : local_ t -> pos:int -> int -> unit
+val unsafe_get_int64_le_exn : t @ local shared -> pos:int -> int
+val unsafe_get_int64_be_exn : t @ local shared -> pos:int -> int
+val unsafe_get_int64_le_trunc : t @ local shared -> pos:int -> int
+val unsafe_get_int64_be_trunc : t @ local shared -> pos:int -> int
+val unsafe_set_int64_le : local_ t -> pos:int -> int -> unit
+val unsafe_set_int64_be : local_ t -> pos:int -> int -> unit
 
 (** {2 64-bit unsigned values} *)
 
-val get_uint64_be_exn : t -> pos:int -> int
-val get_uint64_le_exn : t -> pos:int -> int
-val set_uint64_le_exn : t -> pos:int -> int -> unit
-val set_uint64_be_exn : t -> pos:int -> int -> unit
-val unsafe_get_uint64_be_exn : t -> pos:int -> int
-val unsafe_get_uint64_le_exn : t -> pos:int -> int
-val unsafe_set_uint64_le : t -> pos:int -> int -> unit
-val unsafe_set_uint64_be : t -> pos:int -> int -> unit
+val get_uint64_be_exn : t @ local shared -> pos:int -> int
+val get_uint64_le_exn : t @ local shared -> pos:int -> int
+val set_uint64_le_exn : local_ t -> pos:int -> int -> unit
+val set_uint64_be_exn : local_ t -> pos:int -> int -> unit
+val unsafe_get_uint64_be_exn : t @ local shared -> pos:int -> int
+val unsafe_get_uint64_le_exn : t @ local shared -> pos:int -> int
+val unsafe_set_uint64_le : local_ t -> pos:int -> int -> unit
+val unsafe_set_uint64_be : local_ t -> pos:int -> int -> unit
 
 (** {2 32-bit methods with full precision} *)
 
-val get_int32_t_le : t -> pos:int -> Int32.t
-val get_int32_t_be : t -> pos:int -> Int32.t
-val set_int32_t_le : t -> pos:int -> Int32.t -> unit
-val set_int32_t_be : t -> pos:int -> Int32.t -> unit
-val unsafe_get_int32_t_le : t -> pos:int -> Int32.t
-val unsafe_get_int32_t_be : t -> pos:int -> Int32.t
-val unsafe_set_int32_t_le : t -> pos:int -> Int32.t -> unit
-val unsafe_set_int32_t_be : t -> pos:int -> Int32.t -> unit
+val get_int32_t_le : t @ local shared -> pos:int -> Int32.t
+val get_int32_t_be : t @ local shared -> pos:int -> Int32.t
+val set_int32_t_le : local_ t -> pos:int -> local_ Int32.t -> unit
+val set_int32_t_be : local_ t -> pos:int -> local_ Int32.t -> unit
+val unsafe_get_int32_t_le : t @ local shared -> pos:int -> Int32.t
+val unsafe_get_int32_t_be : t @ local shared -> pos:int -> Int32.t
+val unsafe_set_int32_t_le : local_ t -> pos:int -> local_ Int32.t -> unit
+val unsafe_set_int32_t_be : local_ t -> pos:int -> local_ Int32.t -> unit
 
 (** {2 64-bit methods with full precision} *)
 
-val get_int64_t_le : t -> pos:int -> Int64.t
-val get_int64_t_be : t -> pos:int -> Int64.t
-val set_int64_t_le : t -> pos:int -> Int64.t -> unit
-val set_int64_t_be : t -> pos:int -> Int64.t -> unit
-val unsafe_get_int64_t_le : t -> pos:int -> Int64.t
-val unsafe_get_int64_t_be : t -> pos:int -> Int64.t
-val unsafe_set_int64_t_le : t -> pos:int -> Int64.t -> unit
-val unsafe_set_int64_t_be : t -> pos:int -> Int64.t -> unit
+val get_int64_t_le : t @ local shared -> pos:int -> Int64.t
+val get_int64_t_be : t @ local shared -> pos:int -> Int64.t
+val set_int64_t_le : local_ t -> pos:int -> local_ Int64.t -> unit
+val set_int64_t_be : local_ t -> pos:int -> local_ Int64.t -> unit
+val unsafe_get_int64_t_le : t @ local shared -> pos:int -> Int64.t
+val unsafe_get_int64_t_be : t @ local shared -> pos:int -> Int64.t
+val unsafe_set_int64_t_le : local_ t -> pos:int -> local_ Int64.t -> unit
+val unsafe_set_int64_t_be : local_ t -> pos:int -> local_ Int64.t -> unit
 
 (** {2 String methods}
 
     These are alternatives to [to_string] that follow the conventions of the int
     accessors, and in particular avoid optional arguments. *)
 
-val get_string : t -> pos:int -> len:int -> string
-val unsafe_get_string : t -> pos:int -> len:int -> string
+val get_string : local_ t -> pos:int -> len:int -> string
+val unsafe_get_string : local_ t -> pos:int -> len:int -> string
 
 module Local : sig
-  val get_int64_t_le : t -> pos:int -> Int64.t
-  val get_int64_t_be : t -> pos:int -> Int64.t
-  val unsafe_get_int64_t_le : t -> pos:int -> Int64.t
-  val unsafe_get_int64_t_be : t -> pos:int -> Int64.t
-  val get_string : t -> pos:int -> len:int -> string
-  val unsafe_get_string : t -> pos:int -> len:int -> string
+  val get_int64_t_le : t @ local shared -> pos:int -> local_ Int64.t
+  val get_int64_t_be : t @ local shared -> pos:int -> local_ Int64.t
+  val unsafe_get_int64_t_le : t @ local shared -> pos:int -> local_ Int64.t
+  val unsafe_get_int64_t_be : t @ local shared -> pos:int -> local_ Int64.t
+  val get_string : local_ t -> pos:int -> len:int -> local_ string
+  val unsafe_get_string : local_ t -> pos:int -> len:int -> local_ string
 end
 
 module Int_repr : sig

@@ -1,16 +1,24 @@
 open! Core
 
 module type Option = sig
-  include Immediate_option.S
+  type t : immediate
+  [@@deriving bin_io ~localize, compare ~localize, equal ~localize, globalize]
+
+  include Immediate_option.S with type t := t
   include Identifiable.S with type t := t
-  include Equal.S with type t := t
+end
+
+module type Option_zero_alloc = sig
+  include Option
+  include Immediate_option.S_zero_alloc with type t := t
 end
 
 module type S_no_option = sig
-  type t [@@deriving typerep, hash, globalize] [@@immediate]
+  type t : immediate
+  [@@deriving
+    bin_io ~localize, compare ~localize, equal ~localize, globalize, hash, typerep]
 
   include Identifiable.S with type t := t
-  include Equal.S with type t := t
 end
 
 (** Obviously, [Char], [Bool], and [Int] are already immediate, but this module is a place
@@ -18,18 +26,24 @@ end
     and make the option sub-type identifiable, etc.
 
     Exposing [Option.t] as an immediate type is key to avoiding caml_modify calls. *)
-module type Immediate_kernel = sig
+module type Immediate_kernel = sig @@ portable
   module type Option = Option
+  module type Option_zero_alloc = Option_zero_alloc
   module type S_no_option = S_no_option
 
   module Char : sig
     include S_no_option with type t = char
 
     module Option : sig
-      include Option with type value := t
+      include Option_zero_alloc with type value := t
 
       module Stable : sig
-        module V1 : Stable_without_comparator with type t = t
+        module V1 : sig
+          type nonrec t = t [@@deriving equal ~localize, globalize]
+
+          include%template
+            Stable_without_comparator_with_witness [@mode local] with type t := t
+        end
       end
     end
   end
@@ -38,11 +52,14 @@ module type Immediate_kernel = sig
     include S_no_option with type t = bool
 
     module Option : sig
-      include Option with type value := t
+      include Option_zero_alloc with type value := t
 
       module Stable : sig
         module V1 : sig
-          include Stable_without_comparator_with_witness with type t = t
+          type nonrec t = t [@@deriving equal ~localize, globalize]
+
+          include%template
+            Stable_without_comparator_with_witness [@mode local] with type t := t
 
           val to_wire : t -> int
           val of_wire : int -> t
@@ -51,28 +68,31 @@ module type Immediate_kernel = sig
     end
   end
 
-  module Int : sig
+  module Int : sig @@ portable
     include S_no_option with type t = int
 
     val type_immediacy : t Type_immediacy.Always.t
 
-    module Option : sig
+    module Option : sig @@ portable
       type outer := t
-      type t [@@immediate] [@@deriving globalize]
+      type t : immediate [@@deriving globalize]
 
-      include Option with type value := outer and type t := t
+      include Option_zero_alloc with type value := outer and type t := t
 
-      val unchecked_some : int -> t
+      val unchecked_some : int -> t [@@zero_alloc]
       val type_immediacy : t Type_immediacy.Always.t
 
       module Stable : sig
         module V1 : sig
-          include Stable_without_comparator_with_witness with type t = t
+          type nonrec t = t [@@deriving equal ~localize, globalize]
+
+          include%template
+            Stable_without_comparator_with_witness [@mode local] with type t := t
+
           include Typerep_lib.Typerepable.S with type t := t
 
-          val equal : t -> t -> bool
-          val of_int : int -> t
-          val to_int : t -> int
+          val of_int : int -> t [@@zero_alloc]
+          val to_int : t -> int [@@zero_alloc]
         end
       end
     end
@@ -95,7 +115,7 @@ module type Immediate_kernel = sig
     end
 
     module Option : sig
-      module Make (I : S) : sig
+      module%template.portable Make (I : S) : sig
         include Option with type value := I.t
 
         module Stable : sig
@@ -113,19 +133,22 @@ module type Immediate_kernel = sig
   module Immediate_kernel_stable : sig
     module Char : sig
       module Option : sig
-        module V1 : Stable_without_comparator with type t = Char.Option.t
+        module%template V1 :
+          Stable_without_comparator [@mode local] with type t = Char.Option.t
       end
     end
 
     module Bool : sig
       module Option : sig
-        module V1 : Stable_without_comparator_with_witness with type t = Bool.Option.t
+        module%template V1 :
+          Stable_without_comparator_with_witness [@mode local] with type t = Bool.Option.t
       end
     end
 
     module Int : sig
       module Option : sig
-        module V1 : Stable_without_comparator_with_witness with type t = Int.Option.t
+        module%template V1 :
+          Stable_without_comparator_with_witness [@mode local] with type t = Int.Option.t
       end
     end
   end

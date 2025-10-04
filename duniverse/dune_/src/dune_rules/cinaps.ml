@@ -1,4 +1,5 @@
 open Import
+open Memo.O
 
 type t =
   { loc : Loc.t
@@ -9,7 +10,7 @@ type t =
   ; runtime_deps : Dep_conf.t list
   ; cinaps_version : Syntax.Version.t
   ; alias : Alias.Name.t option
-  ; link_flags : Link_flags.Spec.t
+  ; link_flags : Dune_lang.Link_flags.Spec.t
   }
 
 let name = "cinaps"
@@ -48,9 +49,10 @@ let decode =
      and+ cinaps_version = Dune_lang.Syntax.get_exn syntax
      and+ alias = field_o "alias" Dune_lang.Alias.decode
      and+ link_flags =
-       Link_flags.Spec.decode ~check:(Some (Dune_lang.Syntax.since syntax (1, 3)))
+       Dune_lang.Link_flags.Spec.decode
+         ~check:(Some (Dune_lang.Syntax.since syntax (1, 3)))
      (* TODO use this field? *)
-     and+ _flags = Ocaml_flags.Spec.decode in
+     and+ _flags = Dune_lang.Ocaml_flags.Spec.decode in
      { loc
      ; files
      ; libraries
@@ -75,17 +77,17 @@ let () =
 ;;
 
 let gen_rules sctx t ~dir ~scope =
-  let open Memo.O in
   let loc = t.loc in
   (* Files checked by cinaps *)
   let* cinapsed_files =
     Source_tree.files_of (Path.Build.drop_build_context_exn dir)
     >>| Path.Source.Set.to_list
     >>| List.filter_map ~f:(fun p ->
-      if Predicate_lang.Glob.test
-           t.files
-           (Path.Source.basename p)
-           ~standard:Predicate_lang.true_
+      if
+        Predicate_lang.Glob.test
+          t.files
+          (Path.Source.basename p)
+          ~standard:Predicate_lang.true_
       then
         Some
           (Path.Build.append_source (Super_context.context sctx |> Context.build_dir) p)
@@ -154,8 +156,7 @@ let gen_rules sctx t ~dir ~scope =
     Pp_spec.pp_module preprocess module_ >>| Modules.With_vlib.singleton_exe
   in
   let dune_version = Scope.project scope |> Dune_project.dune_version in
-  let names = [ t.loc, name ] in
-  let merlin_ident = Merlin_ident.for_exes ~names:(List.map ~f:snd names) in
+  let names = Nonempty_list.[ t.loc, name ] in
   let compile_info =
     Lib.DB.resolve_user_written_deps
       (Scope.libs scope)
@@ -163,7 +164,6 @@ let gen_rules sctx t ~dir ~scope =
       (Lib_dep.Direct (loc, Lib_name.of_string "cinaps.runtime") :: t.libraries)
       ~pps:(Preprocess.Per_module.pps t.preprocess)
       ~dune_version
-      ~merlin_ident
       ~allow_overlaps:false
       ~forbidden_libraries:[]
   in
@@ -181,7 +181,7 @@ let gen_rules sctx t ~dir ~scope =
       ~requires_compile
       ~requires_link
       ~flags:(Ocaml_flags.of_list [ "-w"; "-24" ])
-      ~js_of_ocaml:None
+      ~js_of_ocaml:(Js_of_ocaml.Mode.Pair.make None)
       ~melange_package_name:None
       ~package:None
   in
@@ -225,7 +225,7 @@ let gen_rules sctx t ~dir ~scope =
             [ A.run (Ok cinaps_exe) [ "-diff-cmd"; "-" ]
             ; A.concurrent
               @@ List.map cinapsed_files ~f:(fun fn ->
-                A.diff
+                Promote.Diff_action.diff
                   ~optional:true
                   (Path.build fn)
                   (Path.Build.extend_basename fn ~suffix:".cinaps-corrected"))

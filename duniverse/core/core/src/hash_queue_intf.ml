@@ -16,12 +16,11 @@ module type S1 = sig
 
   val invariant : ('key, 'data) t -> unit
 
-  (** [create ()] returns an empty queue.  The arguments [growth_allowed] and [size] are
+  (** [create ()] returns an empty queue. The arguments [growth_allowed] and [size] are
       referring to the underlying hashtable.
 
       @param growth_allowed defaults to true
-      @param size initial size -- default to 16
-  *)
+      @param size initial size -- default to 16 *)
   val create
     :  ?growth_allowed:bool
     -> ?size:int
@@ -39,8 +38,8 @@ module type S1 = sig
   (** [mem q k] returns true iff there is some (k, v) in the queue. *)
   val mem : ('key, 'data) t -> 'key -> bool
 
-  (** [lookup t k] returns the value of the key-value pair in the queue with
-      key k, if there is one. *)
+  (** [lookup t k] returns the value of the key-value pair in the queue with key k, if
+      there is one. *)
   val lookup : ('key, 'data) t -> 'key -> 'data option
 
   val lookup_exn : ('key, 'data) t -> 'key -> 'data
@@ -52,8 +51,7 @@ module type S1 = sig
 
   (** [enqueue t back_or_front k v] adds the key-value pair (k, v) to the front or back of
       the queue, returning [`Ok] if the pair was added, or [`Key_already_present] if there
-      is already a (k, v') in the queue.
-  *)
+      is already a (k, v') in the queue. *)
   val enqueue
     :  ('key, 'data) t
     -> [ `back | `front ]
@@ -64,24 +62,24 @@ module type S1 = sig
   (** Like {!enqueue}, but it raises in the [`Key_already_present] case *)
   val enqueue_exn : ('key, 'data) t -> [ `back | `front ] -> 'key -> 'data -> unit
 
-  (** See {!enqueue}. [enqueue_back t k v] is the same as [enqueue t `back k v]  *)
+  (** See {!enqueue}. [enqueue_back t k v] is the same as [enqueue t `back k v] *)
   val enqueue_back : ('key, 'data) t -> 'key -> 'data -> [ `Ok | `Key_already_present ]
 
-  (** See {!enqueue_exn}. [enqueue_back_exn t k v] is the same as [enqueue_exn t `back k v] *)
+  (** See {!enqueue_exn}. [enqueue_back_exn t k v] is the same as
+      [enqueue_exn t `back k v] *)
   val enqueue_back_exn : ('key, 'data) t -> 'key -> 'data -> unit
 
-  (** See {!enqueue}. [enqueue_front t k v] is the same as [enqueue t `front k v]  *)
+  (** See {!enqueue}. [enqueue_front t k v] is the same as [enqueue t `front k v] *)
   val enqueue_front : ('key, 'data) t -> 'key -> 'data -> [ `Ok | `Key_already_present ]
 
-  (** See {!enqueue_exn}. [enqueue_front_exn t k v] is the same as [enqueue_exn t `front k
-      v] *)
+  (** See {!enqueue_exn}. [enqueue_front_exn t k v] is the same as
+      [enqueue_exn t `front k v] *)
   val enqueue_front_exn : ('key, 'data) t -> 'key -> 'data -> unit
 
-  (** [lookup_and_move_to_back] finds the key-value pair (k, v) and moves it to the
-      back of the queue if it exists, otherwise returning [None].
+  (** [lookup_and_move_to_back] finds the key-value pair (k, v) and moves it to the back
+      of the queue if it exists, otherwise returning [None].
 
-      The [_exn] versions of these functions raise if key-value pair does not exist.
-  *)
+      The [_exn] versions of these functions raise if key-value pair does not exist. *)
   val lookup_and_move_to_back : ('key, 'data) t -> 'key -> 'data option
 
   (** Like {!lookup_and_move_to_back}, but raises instead of returning an option *)
@@ -152,7 +150,7 @@ module type S1 = sig
 
   (** [dequeue_all t ~f] dequeues every element of the queue and applies [f] to each one.
       The dequeue order is from front to back. *)
-  val dequeue_all : ('key, 'data) t -> f:('data -> unit) -> unit
+  val dequeue_all : ('key, 'data) t -> f:local_ ('data -> unit) -> unit
 
   (** [remove q k] removes the key-value pair with key [k] from the queue. *)
   val remove : ('key, 'data) t -> 'key -> [ `Ok | `No_such_key ]
@@ -193,12 +191,12 @@ module type S1 = sig
   (** {2 Iterating over elements} *)
 
   (** [iter t ~f] applies [f] to each key and element of the queue. *)
-  val iteri : ('key, 'data) t -> f:(key:'key -> data:'data -> unit) -> unit
+  val iteri : ('key, 'data) t -> f:local_ (key:'key -> data:'data -> unit) -> unit
 
   val foldi
     :  ('key, 'data) t
     -> init:'acc
-    -> f:('acc -> key:'key -> data:'data -> 'acc)
+    -> f:local_ ('acc -> key:'key -> data:'data -> 'acc)
     -> 'acc
 end
 
@@ -208,44 +206,44 @@ module type S0 = sig
 
   include
     S1
-      with type 'key create_key := key
-      with type 'key create_arg := unit
-      with type ('key, 'data) t := ('key, 'data) hash_queue
+    with type 'key create_key := key
+    with type 'key create_arg := unit
+    with type ('key, 'data) t := ('key, 'data) hash_queue
 
   type 'data t = (key, 'data) hash_queue [@@deriving sexp_of]
 end
 
-module type S_backend = sig
+module type S_backend = sig @@ portable
   include
     S1
-      with type 'key create_arg := 'key Hashtbl.Hashable.t
-      with type 'key create_key := 'key
+    with type 'key create_arg := 'key Hashtbl.Hashable.t
+    with type 'key create_key := 'key
 
   module type S = S0 with type ('key, 'data) hash_queue := ('key, 'data) t
 
-  module Make (Key : Key) : S with type key = Key.t
+  module%template.portable Make (Key : Key) : S with type key = Key.t
 
-  module Make_with_hashable (T : sig
-    module Key : Key
+  module%template.portable Make_with_hashable (T : sig
+      module Key : Key
 
-    val hashable : Key.t Hashtbl.Hashable.t
-  end) : S with type key = T.Key.t
+      val hashable : Key.t Hashtbl.Hashable.t
+    end) : S with type key = T.Key.t
 end
 
-(** A hash-queue is a combination of a queue and a hashtable that
-    supports constant-time lookup and removal of queue elements in addition to
-    the usual queue operations (enqueue, dequeue). The queue elements are
-    key-value pairs. The hashtable has one entry for each element of the queue.
+(** A hash-queue is a combination of a queue and a hashtable that supports constant-time
+    lookup and removal of queue elements in addition to the usual queue operations
+    (enqueue, dequeue). The queue elements are key-value pairs. The hashtable has one
+    entry for each element of the queue.
 
     Calls to functions that would modify a hash-queue (e.g. [enqueue], [dequeue],
-    [remove], [replace]) detect if a client is in the middle of iterating over the
-    queue (e.g., [iter], [fold], [for_all], [exists]) and if so, raise an exception.
-*)
-module type Hash_queue = sig
+    [remove], [replace]) detect if a client is in the middle of iterating over the queue
+    (e.g., [iter], [fold], [for_all], [exists]) and if so, raise an exception. *)
+module type Hash_queue = sig @@ portable
   module type Key = Key
   module type S_backend = S_backend
 
-  module Make_backend (Table : Hashtbl_intf.Hashtbl) : S_backend
+  module%template Make_backend (Table : Hashtbl_intf.Hashtbl [@modality portable]) :
+    S_backend
 
   (** equivalent to [Make_backend (Hashtbl)] *)
   include S_backend

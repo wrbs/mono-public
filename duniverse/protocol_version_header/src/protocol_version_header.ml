@@ -6,13 +6,25 @@ let outside_max_supported_version_range num = num > max_supported_version
 
 module Bounded_list_in_case_someone_sends_garbage_on_the_wire =
 List_with_max_len.Make (struct
-  let max_len = 100
-  let context = Info.of_string "Protocol_version_header"
-end)
+    let max_len = 100
+    let context = Info.of_string "Protocol_version_header"
+  end)
 
 include struct
+  open Stable_witness.Export
+
   type t = int Bounded_list_in_case_someone_sends_garbage_on_the_wire.t
-  [@@deriving bin_io, sexp]
+  [@@deriving bin_io ~localize, globalize, sexp, stable_witness]
+
+  let[@zero_alloc opt] bin_read_t__local buf ~pos_ref = exclave_
+    (* We can assume this will not allocate, as [bin_read_list__local] will not allocate
+       as long as its argument doesn't, and [bin_read_int] doesn't allocate *)
+    (Bounded_list_in_case_someone_sends_garbage_on_the_wire.bin_read_t__local
+    [@zero_alloc assume])
+      bin_read_int
+      buf
+      ~pos_ref
+  ;;
 end
 
 let known_protocol_magic_numbers = lazy (Map.key_set Known_protocol.by_magic_number)
@@ -64,7 +76,8 @@ let get_protocol (t : t) =
   | _ ->
     Or_error.error_s
       [%message
-        "[Protocol_version_header.negotiate]: multiple magic numbers seen."
+        "[Protocol_version_header.negotiate]: Could not determine protocol: Multiple \
+         magic numbers corresponding to known protocols observed in header"
           (protocols : Known_protocol.t list)
           (versions : int list)]
 ;;
@@ -76,7 +89,11 @@ let negotiate ~allow_legacy_peer ~(us : t) ~(peer : t) =
   let%bind us_protocol =
     match us_protocol with
     | Some x -> return x
-    | None -> error_s [%message "No magic numbers seen" (us_versions : Int.Set.t)]
+    | None ->
+      error_s
+        [%message
+          "[Protocol_version_header.negotiate]: Could not determine our own protocol"
+            (us_versions : Int.Set.t)]
   in
   let%bind peer_protocol =
     match peer_protocol with
@@ -89,7 +106,7 @@ let negotiate ~allow_legacy_peer ~(us : t) ~(peer : t) =
         let peer_protocol = `Unknown in
         Or_error.error_s
           [%message
-            "[Protocol_version_header.negotiate]: conflicting magic protocol numbers"
+            "[Protocol_version_header.negotiate]: Could not determine peer's protocol"
               (us_protocol : Known_protocol.t)
               (peer_protocol : [ `Unknown ])])
   in
@@ -97,7 +114,7 @@ let negotiate ~allow_legacy_peer ~(us : t) ~(peer : t) =
   then
     Or_error.error_s
       [%message
-        "[Protocol_version_header.negotiate]: conflicting magic protocol numbers"
+        "[Protocol_version_header.negotiate]: Peer is using a different protocol from us"
           (us_protocol : Known_protocol.t)
           (peer_protocol : Known_protocol.t)]
   else (
@@ -107,7 +124,7 @@ let negotiate ~allow_legacy_peer ~(us : t) ~(peer : t) =
     | None ->
       Or_error.error_s
         [%message
-          "[Protocol_version_header.negotiate]: no shared version numbers"
+          "[Protocol_version_header.negotiate]: Peer and us share no compatible versions"
             (us_versions : Int.Set.t)
             (peer_versions : Int.Set.t)
             (protocol : Known_protocol.t)])

@@ -1,7 +1,15 @@
 open Base
 
+type t =
+  { signal : Signal.t
+  ; outputs : Signal.t Map.M(String).t
+  }
+
 let module_name_special_chars = String.to_list "_$"
 let instance_name_special_chars = String.to_list "_$.[]"
+let instantiation_signal t = t.signal
+let outputs t = t.outputs
+let output t name = Map.find_exn t.outputs name
 
 let validate_module_or_instantiation_name ~special_chars name =
   let is_special c = List.mem special_chars c ~equal:Char.equal in
@@ -52,9 +60,12 @@ let create
   in
   let one_output = List.length outputs = 1 in
   let signal =
+    (* When there are no output ports, this is a zero width signal.
+
+       I wonder if there might be some confusion with [Signal.Empty]? We have tried to
+       discourage this for a while in the api (make_id will raise). *)
     Signal.Type.Inst
-      { signal_id = Signal.Type.make_id width
-      ; extra_uid = Signal.Type.new_id ()
+      { signal_id = Signal.Type.make_id_allow_zero_width width
       ; instantiation =
           { inst_name = name
           ; inst_instance =
@@ -71,18 +82,21 @@ let create
   in
   List.iter attributes ~f:(fun attribute ->
     ignore (Signal.add_attribute signal attribute : Signal.t));
-  List.map outputs ~f:(fun (name, (width, offset)) ->
-    ( name
-    , (* We need to create a distinct output signal - if there is only one output then
+  let outputs =
+    List.map outputs ~f:(fun (name, (width, offset)) ->
+      ( name
+      , (* We need to create a distinct output signal - if there is only one output then
            the instantiation and the output signal share a uid which confuses the logic
            for associating attrributes correctly. *)
-      if one_output
-      then Signal.wireof signal
-      else Signal.select signal (offset + width - 1) offset ))
-  |> Map.of_alist_exn (module String)
+        if one_output
+        then Signal.wireof signal
+        else Signal.select signal ~high:(offset + width - 1) ~low:offset ))
+    |> Map.of_alist_exn (module String)
+  in
+  { signal; outputs }
 ;;
 
-module With_interface (I : Interface.S_Of_signal) (O : Interface.S_Of_signal) = struct
+module With_interface (I : Interface.S) (O : Interface.S) = struct
   let create ?lib ?arch ?instance ?parameters ?attributes ~name inputs =
     (* ensure the passed inputs are of the correct widths. *)
     I.Of_signal.validate inputs;
@@ -101,18 +115,9 @@ module With_interface (I : Interface.S_Of_signal) (O : Interface.S_Of_signal) = 
         ~inputs
         ~outputs:O.Names_and_widths.port_names_and_widths
     in
-    O.Unsafe_assoc_by_port_name.of_alist (Map.to_alist t)
+    O.Unsafe_assoc_by_port_name.of_alist (Map.to_alist (outputs t))
   ;;
 end
-
-let create_with_interface
-  (type i o)
-  (module I : Interface.S_Of_signal with type Of_signal.t = i)
-  (module O : Interface.S_Of_signal with type Of_signal.t = o)
-  =
-  let module I = With_interface (I) (O) in
-  I.create
-;;
 
 module Expert = struct
   let validate_module_name n =

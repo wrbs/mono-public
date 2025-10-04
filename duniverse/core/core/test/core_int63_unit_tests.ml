@@ -78,11 +78,11 @@ module Make_tests (Int : Base.Int.S) : sig end = struct
   ;;
 
   let%test _ = Exn.does_raise (fun () -> of_string "0o1111111111111111111111")
-  let%test_unit _ = [%test_result: int] (popcount zero) ~expect:0
-  let%test_unit _ = [%test_result: int] (popcount one) ~expect:1
-  let%test_unit _ = [%test_result: int] (popcount minus_one) ~expect:63
-  let%test_unit _ = [%test_result: int] (popcount max_value) ~expect:62
-  let%test_unit _ = [%test_result: int] (popcount min_value) ~expect:1
+  let%test_unit _ = [%test_result: t] (popcount zero) ~expect:(of_int_exn 0)
+  let%test_unit _ = [%test_result: t] (popcount one) ~expect:(of_int_exn 1)
+  let%test_unit _ = [%test_result: t] (popcount minus_one) ~expect:(of_int_exn 63)
+  let%test_unit _ = [%test_result: t] (popcount max_value) ~expect:(of_int_exn 62)
+  let%test_unit _ = [%test_result: t] (popcount min_value) ~expect:(of_int_exn 1)
 
   let%test_unit _ =
     [%test_result: string] (Hex.to_string max_value) ~expect:"0x3fffffffffffffff"
@@ -130,12 +130,12 @@ module Make_tests (Int : Base.Int.S) : sig end = struct
   ;;
 end
 
-let%test_module "Int63_emul" = (module Make_tests (Base.Int63.Private.Emul))
-let%test_module "Int63_maybe_native" = (module Make_tests (Int63))
+module%test Int63_emul = Make_tests (Base.Int63.Private.Emul)
+module%test Int63_maybe_native = Make_tests (Int63)
 
 module Make_tests_bin_io (B : sig
-  type t = Int63.t [@@deriving bin_io]
-end) : sig end = struct
+    type t = Int63.t [@@deriving bin_io]
+  end) : sig end = struct
   let test int63 str =
     let open Int63 in
     let s = B.bin_size_t int63 in
@@ -165,8 +165,5 @@ end) : sig end = struct
   ;;
 end
 
-let%test_module "Int63_bin_io_maybe_native" = (module Make_tests_bin_io (Int63))
-
-let%test_module "Int63_bin_io_maybe_native_stable" =
-  (module Make_tests_bin_io (Int63.Stable.V1))
-;;
+module%test Int63_bin_io_maybe_native = Make_tests_bin_io (Int63)
+module%test Int63_bin_io_maybe_native_stable = Make_tests_bin_io (Int63.Stable.V1)

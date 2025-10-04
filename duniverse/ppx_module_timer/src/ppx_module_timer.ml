@@ -18,6 +18,15 @@ let is_ocaml_file string =
   String.is_suffix string ~suffix:".ml" || String.is_suffix string ~suffix:".mll"
 ;;
 
+let pay_over_head_to_time_individual_definitions_flag_is_set = ref false
+
+let () =
+  Driver.add_arg
+    "-ppx-module-timer-pay-overhead-to-time-individual-definitions"
+    (Unit (fun () -> pay_over_head_to_time_individual_definitions_flag_is_set := true))
+    ~doc:" If set, PPX_MODULE_TIMER will time individual definitions."
+;;
+
 let enclose_impl = function
   | Some (loc : Location.t) when is_ocaml_file loc.loc_start.pos_fname ->
     let prefix =
@@ -44,24 +53,29 @@ module Time_individual_definitions = struct
   ;;
 
   let rec module_expr_is_compound module_expr =
-    match module_expr.pmod_desc with
+    match Ppxlib_jane.Shim.Module_expr_desc.of_parsetree module_expr.pmod_desc with
     | Pmod_structure _ -> true
-    | Pmod_constraint (body, _) -> module_expr_is_compound body
+    | Pmod_constraint (body, _, _) -> module_expr_is_compound body
     | _ -> false
   ;;
 
   let structure_item_is_compound item =
     match item.pstr_desc with
     | Pstr_recmodule module_bindings ->
-      List.for_all module_bindings ~f:(fun module_binding ->
+      List.exists module_bindings ~f:(fun module_binding ->
         module_expr_is_compound module_binding.pmb_expr)
     | Pstr_module module_binding -> module_expr_is_compound module_binding.pmb_expr
+    | Pstr_include include_infos -> module_expr_is_compound include_infos.pincl_mod
+    | Pstr_open open_declaration -> module_expr_is_compound open_declaration.popen_expr
     | _ -> false
   ;;
 
   let obj =
     object (self)
       inherit Ast_traverse.map
+
+      (* We don't want to modify the payloads of attributes or extensions. *)
+      method! payload payload = payload
 
       method! structure structure =
         List.concat_map structure ~f:(fun item ->
@@ -89,7 +103,11 @@ end
 
 let structure_item_is_attribute item =
   match item.pstr_desc with
-  | Pstr_attribute _ -> true
+  | Pstr_attribute _ ->
+    (match item with
+     | [%stri [@@@ppx_module_timer.pay_overhead_to_time_individual_definitions]]
+     | [%stri [@@@pay_overhead_to_time_individual_definitions]] -> false
+     | _ -> true)
   | _ -> false
 ;;
 
@@ -101,20 +119,21 @@ let impl structure_with_initial_attributes =
     let loc =
       Option.both (List.hd structure) (List.last structure)
       |> Option.map ~f:(fun (first, last) ->
-           { first.pstr_loc with loc_end = last.pstr_loc.loc_end })
+        { first.pstr_loc with loc_end = last.pstr_loc.loc_end })
     in
     enclose_impl loc
   in
   let middle =
     match
-      List.find_map structure ~f:(fun item ->
-        match item.pstr_desc with
-        | Pstr_attribute _ ->
-          Attribute.Floating.convert [ Time_individual_definitions.attribute ] item
-        | _ -> None)
+      ( !pay_over_head_to_time_individual_definitions_flag_is_set
+      , List.find_map structure ~f:(fun item ->
+          match item.pstr_desc with
+          | Pstr_attribute _ ->
+            Attribute.Floating.convert [ Time_individual_definitions.attribute ] item
+          | _ -> None) )
     with
-    | None -> structure
-    | Some () -> Time_individual_definitions.obj#structure structure
+    | false, None -> structure
+    | true, _ | _, Some () -> Time_individual_definitions.obj#structure structure
   in
   initial_attributes @ prefix @ middle @ suffix
 ;;

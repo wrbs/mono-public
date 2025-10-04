@@ -1,5 +1,4 @@
 opam-version: "2.0"
-version: "v0.17.0"
 maintainer: "Jane Street developers"
 authors: ["Jane Street Group, LLC"]
 homepage: "https://github.com/janestreet/notty_async"
@@ -11,11 +10,12 @@ build: [
   ["dune" "build" "-p" name "-j" jobs]
 ]
 depends: [
-  "ocaml"    {>= "5.1.0"}
-  "async"    {>= "v0.17" & < "v0.18"}
-  "ppx_jane" {>= "v0.17" & < "v0.18"}
-  "dune"     {>= "3.11.0"}
-  "notty"    {>= "0.2.1"}
+  "ocaml" {>= "5.1.0"}
+  "async"
+  "core_unix"
+  "ppx_jane"
+  "dune"      {>= "3.17.0"}
+  "notty"     {>= "0.2.1"}
 ]
 available: arch != "arm32" & arch != "x86_32"
 synopsis: "An Async driver for Notty"

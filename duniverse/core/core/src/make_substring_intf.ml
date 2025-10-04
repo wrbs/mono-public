@@ -12,14 +12,14 @@ module type Base = sig
   val blit_from_bigstring : (bigstring, t) Blit.blito
 
   val blit_to_string : (t, bytes) Blit.blito
-    [@@deprecated "[since 2017-10] use [blit_to_bytes] instead"]
+  [@@deprecated "[since 2017-10] use [blit_to_bytes] instead"]
 
   val get : t -> int -> char
 end
 
 module type S = Substring_intf.S
 
-module type Make_substring = sig
+module type Make_substring = sig @@ portable
   module type Base = Base
   module type S = S
 
@@ -29,10 +29,10 @@ module type Make_substring = sig
     type ('src, 'dst) t = ('src, 'dst) Blit.blito
 
     val string_string : (string, bytes) t
-      [@@deprecated "[since 2017-10] use [string_bytes] instead"]
+    [@@deprecated "[since 2017-10] use [string_bytes] instead"]
 
     val bigstring_string : (bigstring, bytes) t
-      [@@deprecated "[since 2017-10] use [bigstring_bytes] instead"]
+    [@@deprecated "[since 2017-10] use [bigstring_bytes] instead"]
 
     val string_bytes : (string, bytes) t
     val bytes_bytes : (bytes, bytes) t
@@ -42,5 +42,5 @@ module type Make_substring = sig
     val bigstring_bigstring : (bigstring, bigstring) t
   end
 
-  module F (Base : Base) : S with type base = Base.t
+  module%template.portable F (Base : Base) : S with type base = Base.t
 end

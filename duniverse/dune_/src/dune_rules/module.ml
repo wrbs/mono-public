@@ -4,7 +4,7 @@ module File = struct
   type t =
     { path : Path.t
     ; original_path : Path.t
-        (* while path can be changed for a module (when it is being pp'ed), the
+      (* while path can be changed for a module (when it is being pp'ed), the
            original_path stays the same and points to an original source file *)
     ; dialect : Dialect.t
     }
@@ -24,7 +24,6 @@ module File = struct
 
   let dialect t = t.dialect
   let path t = t.path
-  let original_path t = t.original_path
 
   let version_installed t ~src_root ~install_dir =
     let path =
@@ -58,18 +57,6 @@ module Kind = struct
     | Wrapped_compat
     | Root
 
-  let to_dyn =
-    let open Dyn in
-    function
-    | Intf_only -> variant "Intf_only" []
-    | Virtual -> variant "Virtual" []
-    | Impl -> variant "Impl" []
-    | Alias path -> variant "Alias" [ Module_name.Path.to_dyn path ]
-    | Impl_vmodule -> variant "Impl_vmodule" []
-    | Wrapped_compat -> variant "Wrapped_compat" []
-    | Root -> variant "Root" []
-  ;;
-
   let encode =
     let open Dune_lang.Encoder in
     function
@@ -84,6 +71,8 @@ module Kind = struct
     | Wrapped_compat -> string "wrapped_compat"
     | Root -> string "root"
   ;;
+
+  let to_dyn t = Dune_sexp.to_dyn (encode t)
 
   let decode =
     let open Dune_lang.Decoder in
@@ -444,10 +433,6 @@ module Name_map = struct
 
   let encode t ~src_dir =
     Module_name.Map.to_list_map t ~f:(fun _ x -> Dune_lang.List (encode ~src_dir x))
-  ;;
-
-  let of_list_exn modules =
-    List.rev_map modules ~f:(fun m -> name m, m) |> Module_name.Map.of_list_exn
   ;;
 
   let add t module_ = Module_name.Map.set t (name module_) module_

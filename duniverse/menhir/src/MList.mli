@@ -73,4 +73,15 @@ val compare : ('a -> 'b -> int) -> 'a list -> 'b list -> int
 (**[extract p xs] searches the list [xs] for an element [x] such that [p x] is
    true. It returns a pair of this element (if it exists) and a list of the
    remaining elements. *)
-val extract: ('a -> bool) -> 'a list -> 'a option * 'a list
+val extract : ('a -> bool) -> 'a list -> 'a option * 'a list
+
+(** [merge_uniq cmp l1 l2] merges two sorted lists (without duplicate
+    elements) and produces a sorted list (without duplicate elements). *)
+val merge_uniq : ('a -> 'a -> int) -> 'a list -> 'a list -> 'a list
+
+(** [reduce e f l] reduces the list [xs] using the associative binary
+    operation [f], whose unit (neutral element) is [e].
+
+    The reduction is performed in a balanced fashion.
+    For example, [reduce f [a; b; c; d]] is [f (f a b) (f c d)]. *)
+val reduce : 'a -> ('a -> 'a -> 'a) -> 'a list -> 'a

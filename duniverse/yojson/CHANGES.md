@@ -1,3 +1,33 @@
+## 3.0.0
+
+*2025-05-39*
+
+### Changed
+
+- Floats are now always output to JSON in a standard-conformant way or not at
+  all (raising an exception). This makes the `std` variants of functions
+  identical to the non-`std` variants and the `std` arguments have no effect.
+  Users are encouraged to switch to the non-`std` affixed variants, the others
+  will be deprecated in the future.  (#184, @Leonidas-from-XIV)
+- Bumped the minimum required version of OCaml for the main package to 4.08
+  since the CI dropped the support. This however allows removing the dependency
+  on the `seq` library, so the depencency cone becomes slightly smaller. (#194,
+  @Leonidas-from-XIV)
+
+### Fixed
+
+- Fixed handling of escape sequences in JSON5. Known escapes like \b will be
+  properly unescaped and undefined escape sequences will unescape to the
+  character itself as per spec (#187, @david-maison-TrustInSoft)
+- Fixed tests failing on Windows due to disagreements with the length of an
+  input channel and the text mode conversion (#192, @Leonidas-from-XIV)
+
+### Removed
+
+- Removed support for Tuple and Variant in JSON. It was a non-standard
+  extension that was rarely used, so this simplifies the Yojson types and the
+  parser more standard-conforming (#105, #158, #185 @Leonidas-from-XIV)
+
 ## 2.2.2
 
 *2024-06-27*

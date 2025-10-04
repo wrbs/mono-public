@@ -1,14 +1,18 @@
+module Atomic_ = Atomic
 open Core
+module Atomic = Atomic_
 
-module Make_plain (Key : sig
-  type t [@@deriving sexp_of]
+module Make_plain
+    (Key : sig
+       type t [@@deriving sexp_of]
 
-  include Comparator.S with type t := t
-end) (Value : sig
-  type t [@@deriving sexp_of]
+       include Comparator.S with type t := t
+     end)
+    (Value : sig
+       type t [@@deriving sexp_of]
 
-  val equal : t -> t -> bool
-end) =
+       val equal : t -> t -> bool
+     end) =
 struct
   module Update = struct
     module Diff = struct
@@ -61,15 +65,17 @@ struct
   ;;
 end
 
-module Make (Key : sig
-  type t [@@deriving sexp, bin_io]
+module Make
+    (Key : sig
+       type t [@@deriving sexp, bin_io]
 
-  include Comparator.S with type t := t
-end) (Value : sig
-  type t [@@deriving sexp, bin_io]
+       include Comparator.S with type t := t
+     end)
+    (Value : sig
+       type t [@@deriving sexp, bin_io]
 
-  val equal : t -> t -> bool
-end) =
+       val equal : t -> t -> bool
+     end) =
 struct
   module Plain = Make_plain (Key) (Value)
 
@@ -93,71 +99,71 @@ struct
       with module Update := Plain.Update)
 end
 
-let%test_module "tests of Make and Make_plain" =
-  (module struct
-    module T = struct
-      include Make_plain (Int) (Int)
+module%test [@name "tests of Make and Make_plain"] _ = struct
+  module T = struct
+    include Make_plain (Int) (Int)
 
-      type t = int Int.Map.t [@@deriving compare, equal, sexp_of]
+    type t = int Int.Map.t [@@deriving compare, equal, sexp_of]
 
-      let quickcheck_generator =
-        Int.Map.quickcheck_generator Int.quickcheck_generator Int.quickcheck_generator
-      ;;
+    let quickcheck_generator =
+      Int.Map.quickcheck_generator Int.quickcheck_generator Int.quickcheck_generator
+    ;;
+  end
+
+  include T
+
+  let%expect_test "map round-trip works" =
+    let module Test_case = struct
+      type t =
+        { t : T.t
+        ; to_diffs : T.Update.t
+        }
+      [@@deriving sexp_of]
     end
+    in
+    Quickcheck.test
+      ~sexp_of:[%sexp_of: Test_case.t]
+      (let open Quickcheck.Let_syntax in
+       let%bind t = quickcheck_generator in
+       let%map to_diffs = List.gen_permutations (to_diffs t) in
+       ({ t; to_diffs } : Test_case.t))
+      ~f:(fun { t; to_diffs } -> [%test_result: t] ~expect:t (of_diffs to_diffs));
+    [%expect {| |}]
+  ;;
 
-    include T
+  let%expect_test "map diff/update works" =
+    let module Test_case = struct
+      type t =
+        { from : T.t
+        ; to_ : T.t
+        ; diffs : T.Update.t
+        }
+      [@@deriving sexp_of]
+    end
+    in
+    Quickcheck.test
+      ~sexp_of:[%sexp_of: Test_case.t]
+      (let open Quickcheck.Let_syntax in
+       let%bind from = quickcheck_generator
+       and to_ = quickcheck_generator in
+       let%map diffs = List.gen_permutations (diffs ~from ~to_) in
+       ({ from; to_; diffs } : Test_case.t))
+      ~f:(fun { from; to_; diffs } -> [%test_result: t] ~expect:to_ (update from diffs));
+    [%expect {| |}]
+  ;;
+end
 
-    let%expect_test "map round-trip works" =
-      let module Test_case = struct
-        type t =
-          { t : T.t
-          ; to_diffs : T.Update.t
-          }
-        [@@deriving sexp_of]
-      end
-      in
-      Quickcheck.test
-        ~sexp_of:[%sexp_of: Test_case.t]
-        (let open Quickcheck.Let_syntax in
-         let%bind t = quickcheck_generator in
-         let%map to_diffs = List.gen_permutations (to_diffs t) in
-         ({ t; to_diffs } : Test_case.t))
-        ~f:(fun { t; to_diffs } -> [%test_result: t] ~expect:t (of_diffs to_diffs));
-      [%expect {| |}]
-    ;;
+module Make_plain_with_value_diffs
+    (Key : sig
+       type t [@@deriving sexp_of]
 
-    let%expect_test "map diff/update works" =
-      let module Test_case = struct
-        type t =
-          { from : T.t
-          ; to_ : T.t
-          ; diffs : T.Update.t
-          }
-        [@@deriving sexp_of]
-      end
-      in
-      Quickcheck.test
-        ~sexp_of:[%sexp_of: Test_case.t]
-        (let open Quickcheck.Let_syntax in
-         let%bind from = quickcheck_generator
-         and to_ = quickcheck_generator in
-         let%map diffs = List.gen_permutations (diffs ~from ~to_) in
-         ({ from; to_; diffs } : Test_case.t))
-        ~f:(fun { from; to_; diffs } -> [%test_result: t] ~expect:to_ (update from diffs));
-      [%expect {| |}]
-    ;;
-  end)
-;;
+       include Comparator.S with type t := t
+     end)
+    (Value : sig
+       type t
 
-module Make_plain_with_value_diffs (Key : sig
-  type t [@@deriving sexp_of]
-
-  include Comparator.S with type t := t
-end) (Value : sig
-  type t
-
-  include Legacy_diffable_intf.S_plain with type t := t
-end) =
+       include Legacy_diffable_intf.S_plain with type t := t
+     end) =
 struct
   module Update = struct
     module Diff = struct
@@ -166,7 +172,7 @@ struct
         | Change of Key.t * Value.Update.Diff.t
         | Add of Key.t * Value.Update.Diff.t
         | Idle of unit
-            (** We add a [unit] argument so matching the more common cases is more performant
+        (** We add a [unit] argument so matching the more common cases is more performant
             (no check for immediate vs. block). *)
       [@@deriving sexp_of]
 
@@ -198,14 +204,14 @@ struct
         | In_group { key; type_; group; diffs } ->
           (match type_, diffs with
            | `Change, (Change (next_key, _) as change) :: diffs
-             when Key.comparator.compare next_key key = 0 ->
+             when (Comparator.compare Key.comparator) next_key key = 0 ->
              Sequence.Step.Skip
                { state =
                    In_group
                      { key; type_; diffs; group = Stored_reversed.snoc group change }
                }
            | `Add, (Add (next_key, _) as add) :: diffs
-             when Key.comparator.compare next_key key = 0 ->
+             when (Comparator.compare Key.comparator) next_key key = 0 ->
              Sequence.Step.Skip
                { state =
                    In_group { key; type_; diffs; group = Stored_reversed.snoc group add }
@@ -282,14 +288,14 @@ struct
       from
       to_
       ~f:(fun acc (k, d) ->
-      match d with
-      | `Left _ -> Stored_reversed.snoc acc (Update.Diff.Remove k)
-      | `Right to_ ->
-        let diffs = Value.to_diffs to_ in
-        Stored_reversed.map_append acc diffs ~f:(fun x -> Update.Diff.Add (k, x))
-      | `Unequal (from, to_) ->
-        let diffs = Value.diffs ~from ~to_ in
-        Stored_reversed.map_append acc diffs ~f:(fun x -> Update.Diff.Change (k, x)))
+        match d with
+        | `Left _ -> Stored_reversed.snoc acc (Update.Diff.Remove k)
+        | `Right to_ ->
+          let diffs = Value.to_diffs to_ in
+          Stored_reversed.map_append acc diffs ~f:(fun x -> Update.Diff.Add (k, x))
+        | `Unequal (from, to_) ->
+          let diffs = Value.diffs ~from ~to_ in
+          Stored_reversed.map_append acc diffs ~f:(fun x -> Update.Diff.Change (k, x)))
     |> Stored_reversed.to_list
   ;;
 
@@ -308,15 +314,17 @@ struct
   ;;
 end
 
-module Make_with_value_diffs (Key : sig
-  type t [@@deriving sexp, bin_io]
+module Make_with_value_diffs
+    (Key : sig
+       type t [@@deriving sexp, bin_io]
 
-  include Comparator.S with type t := t
-end) (Value : sig
-  type t
+       include Comparator.S with type t := t
+     end)
+    (Value : sig
+       type t
 
-  include Legacy_diffable_intf.S with type t := t
-end) =
+       include Legacy_diffable_intf.S with type t := t
+     end) =
 struct
   module Plain = Make_plain_with_value_diffs (Key) (Value)
 
@@ -341,64 +349,62 @@ struct
       with module Update := Plain.Update)
 end
 
-let%test_module "tests of Make_with_value_diffs" =
-  (module struct
-    module T = struct
-      include
-        Make_with_value_diffs
-          (Int)
-          (struct
-            include Int
-            include Atomic.Make (Int)
-          end)
+module%test [@name "tests of Make_with_value_diffs"] _ = struct
+  module T = struct
+    include
+      Make_with_value_diffs
+        (Int)
+        (struct
+          include Int
+          include Atomic.Make (Int)
+        end)
 
-      type t = int Int.Map.t [@@deriving compare, equal, sexp_of]
+    type t = int Int.Map.t [@@deriving compare, equal, sexp_of]
 
-      let quickcheck_generator =
-        Int.Map.quickcheck_generator Int.quickcheck_generator Int.quickcheck_generator
-      ;;
+    let quickcheck_generator =
+      Int.Map.quickcheck_generator Int.quickcheck_generator Int.quickcheck_generator
+    ;;
+  end
+
+  include T
+
+  let%expect_test "map with value diffs round-trip works" =
+    let module Test_case = struct
+      type t =
+        { t : T.t
+        ; to_diffs : T.Update.t
+        }
+      [@@deriving sexp_of]
     end
+    in
+    Quickcheck.test
+      ~sexp_of:[%sexp_of: Test_case.t]
+      (let open Quickcheck.Let_syntax in
+       let%bind t = quickcheck_generator in
+       let%map to_diffs = List.gen_permutations (to_diffs t) in
+       ({ t; to_diffs } : Test_case.t))
+      ~f:(fun { t; to_diffs } -> [%test_result: t] ~expect:t (of_diffs to_diffs));
+    [%expect {| |}]
+  ;;
 
-    include T
-
-    let%expect_test "map with value diffs round-trip works" =
-      let module Test_case = struct
-        type t =
-          { t : T.t
-          ; to_diffs : T.Update.t
-          }
-        [@@deriving sexp_of]
-      end
-      in
-      Quickcheck.test
-        ~sexp_of:[%sexp_of: Test_case.t]
-        (let open Quickcheck.Let_syntax in
-         let%bind t = quickcheck_generator in
-         let%map to_diffs = List.gen_permutations (to_diffs t) in
-         ({ t; to_diffs } : Test_case.t))
-        ~f:(fun { t; to_diffs } -> [%test_result: t] ~expect:t (of_diffs to_diffs));
-      [%expect {| |}]
-    ;;
-
-    let%expect_test "map with value diffs diff/update works" =
-      let module Test_case = struct
-        type t =
-          { from : T.t
-          ; to_ : T.t
-          ; diffs : T.Update.t
-          }
-        [@@deriving sexp_of]
-      end
-      in
-      Quickcheck.test
-        ~sexp_of:[%sexp_of: Test_case.t]
-        (let open Quickcheck.Let_syntax in
-         let%bind from = quickcheck_generator
-         and to_ = quickcheck_generator in
-         let%map diffs = List.gen_permutations (diffs ~from ~to_) in
-         ({ from; to_; diffs } : Test_case.t))
-        ~f:(fun { from; to_; diffs } -> [%test_result: t] ~expect:to_ (update from diffs));
-      [%expect {| |}]
-    ;;
-  end)
-;;
+  let%expect_test "map with value diffs diff/update works" =
+    let module Test_case = struct
+      type t =
+        { from : T.t
+        ; to_ : T.t
+        ; diffs : T.Update.t
+        }
+      [@@deriving sexp_of]
+    end
+    in
+    Quickcheck.test
+      ~sexp_of:[%sexp_of: Test_case.t]
+      (let open Quickcheck.Let_syntax in
+       let%bind from = quickcheck_generator
+       and to_ = quickcheck_generator in
+       let%map diffs = List.gen_permutations (diffs ~from ~to_) in
+       ({ from; to_; diffs } : Test_case.t))
+      ~f:(fun { from; to_; diffs } -> [%test_result: t] ~expect:to_ (update from diffs));
+    [%expect {| |}]
+  ;;
+end

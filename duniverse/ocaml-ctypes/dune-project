@@ -1,6 +1,6 @@
 (lang dune 2.9)
 (name ctypes)
-(version 0.22.0)
+(version 0.23.0)
 (formatting (enabled_for dune))
 (use_standard_c_and_cxx_flags true)
 
@@ -9,8 +9,8 @@
 (license MIT)
 (maintainers "Jeremy Yallop <yallop@gmail.com>")
 (authors "Jeremy Yallop")
-(source (github ocamllabs/ocaml-ctypes))
-(documentation "https://ocamllabs.github.io/ocaml-ctypes/")
+(source (github yallop/ocaml-ctypes))
+(documentation "https://yallop.github.io/ocaml-ctypes/")
 
 (package
  (name ctypes)

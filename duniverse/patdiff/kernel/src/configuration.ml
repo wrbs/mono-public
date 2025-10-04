@@ -44,11 +44,13 @@ type t =
   ; location_style : Format.Location_style.t
   ; warn_if_no_trailing_newline_in_both : bool
        [@default warn_if_no_trailing_newline_in_both_default] [@sexp_drop_default.equal]
+  ; side_by_side : [ `wrap | `truncate ] option
+  ; width_override : int option
   }
-[@@deriving compare, fields ~iterators:(iter, map), sexp_of]
+[@@deriving compare ~localize, fields ~iterators:(iter, map), sexp_of]
 
 let invariant t =
-  Invariant.invariant [%here] t [%sexp_of: t] (fun () ->
+  Invariant.invariant t [%sexp_of: t] (fun () ->
     let check f field = Invariant.check_field t f field in
     Fields.iter
       ~output:
@@ -84,7 +86,9 @@ let invariant t =
       ~prev_alt:ignore
       ~next_alt:ignore
       ~location_style:ignore
-      ~warn_if_no_trailing_newline_in_both:ignore)
+      ~warn_if_no_trailing_newline_in_both:ignore
+      ~side_by_side:ignore
+      ~width_override:ignore)
 ;;
 
 let create_exn
@@ -109,6 +113,8 @@ let create_exn
   ~next_alt
   ~location_style
   ~warn_if_no_trailing_newline_in_both
+  ~side_by_side
+  ~width_override
   =
   let t =
     { output
@@ -132,6 +138,8 @@ let create_exn
     ; next_alt
     ; location_style
     ; warn_if_no_trailing_newline_in_both
+    ; side_by_side
+    ; width_override
     }
   in
   invariant t;
@@ -160,6 +168,8 @@ let override
   ?next_alt
   ?location_style
   ?warn_if_no_trailing_newline_in_both
+  ?side_by_side
+  ?width_override
   t
   =
   let output = Option.value ~default:t.output output in
@@ -190,6 +200,8 @@ let override
       ~next_alt:(value next_alt)
       ~location_style:(value location_style)
       ~warn_if_no_trailing_newline_in_both:(value warn_if_no_trailing_newline_in_both)
+      ~side_by_side:(value side_by_side)
+      ~width_override:(value width_override)
   in
   invariant t;
   t
@@ -201,60 +213,91 @@ let default =
       { line_same =
           Format.Rule.create
             []
-            ~pre:(Format.Rule.Affix.create " |" ~styles:[ Bg Bright_black; Fg Black ])
+            ~pre:
+              (Format.Rule.Affix.create
+                 " |"
+                 ~styles:[ Bg (Bright Black); Fg (Standard Black) ])
       ; line_prev =
           Format.Rule.create
-            [ Fg Red ]
-            ~pre:(Format.Rule.Affix.create "-|" ~styles:[ Bg Red; Fg Black ])
+            [ Fg (Standard Red) ]
+            ~pre:
+              (Format.Rule.Affix.create
+                 "-|"
+                 ~styles:[ Bg (Standard Red); Fg (Standard Black) ])
       ; line_next =
           Format.Rule.create
-            [ Fg Green ]
-            ~pre:(Format.Rule.Affix.create "+|" ~styles:[ Bg Green; Fg Black ])
+            [ Fg (Standard Green) ]
+            ~pre:
+              (Format.Rule.Affix.create
+                 "+|"
+                 ~styles:[ Bg (Standard Green); Fg (Standard Black) ])
       ; line_unified =
           Format.Rule.create
             []
-            ~pre:(Format.Rule.Affix.create "!|" ~styles:[ Bg Yellow; Fg Black ])
-      ; word_same_prev = Format.Rule.create [ Dim ]
+            ~pre:
+              (Format.Rule.Affix.create
+                 "!|"
+                 ~styles:[ Bg (Standard Yellow); Fg (Standard Black) ])
+      ; word_same_prev =
+          Format.Rule.create [ Fg (Gray24 (Ansi_text.Color.Gray24.of_level_exn 12)) ]
       ; word_same_next = Format.Rule.blank
       ; word_same_unified = Format.Rule.blank
-      ; word_same_unified_in_move = Format.Rule.create [ Fg Cyan ]
-      ; word_prev = Format.Rule.create [ Fg Red ]
-      ; word_next = Format.Rule.create [ Fg Green ]
+      ; word_same_unified_in_move = Format.Rule.create [ Fg (Standard Cyan) ]
+      ; word_prev = Format.Rule.create [ Fg (Standard Red) ]
+      ; word_next = Format.Rule.create [ Fg (Standard Green) ]
       ; hunk =
           Format.Rule.create
             [ Bold ]
-            ~pre:(Format.Rule.Affix.create "@|" ~styles:[ Bg Bright_black; Fg Black ])
+            ~pre:
+              (Format.Rule.Affix.create
+                 "@|"
+                 ~styles:[ Bg (Bright Black); Fg (Standard Black) ])
             ~suf:
               (Format.Rule.Affix.create
                  " ============================================================")
       ; header_prev =
           Format.Rule.create
             [ Bold ]
-            ~pre:(Format.Rule.Affix.create "------ " ~styles:[ Fg Red ])
+            ~pre:(Format.Rule.Affix.create "------ " ~styles:[ Fg (Standard Red) ])
       ; header_next =
           Format.Rule.create
             [ Bold ]
-            ~pre:(Format.Rule.Affix.create "++++++ " ~styles:[ Fg Green ])
+            ~pre:(Format.Rule.Affix.create "++++++ " ~styles:[ Fg (Standard Green) ])
       ; moved_from_prev =
           Format.Rule.create
-            [ Fg Magenta ]
-            ~pre:(Format.Rule.Affix.create "<|" ~styles:[ Bg Magenta; Fg Black ])
+            [ Fg (Standard Magenta) ]
+            ~pre:
+              (Format.Rule.Affix.create
+                 "<|"
+                 ~styles:[ Bg (Standard Magenta); Fg (Standard Black) ])
       ; moved_to_next =
           Format.Rule.create
-            [ Fg Cyan ]
-            ~pre:(Format.Rule.Affix.create ">|" ~styles:[ Bg Cyan; Fg Black ])
+            [ Fg (Standard Cyan) ]
+            ~pre:
+              (Format.Rule.Affix.create
+                 ">|"
+                 ~styles:[ Bg (Standard Cyan); Fg (Standard Black) ])
       ; removed_in_move =
           Format.Rule.create
-            [ Fg Red ]
-            ~pre:(Format.Rule.Affix.create ">|" ~styles:[ Bg Red; Fg Black ])
+            [ Fg (Standard Red) ]
+            ~pre:
+              (Format.Rule.Affix.create
+                 ">|"
+                 ~styles:[ Bg (Standard Red); Fg (Standard Black) ])
       ; added_in_move =
           Format.Rule.create
-            [ Fg Green ]
-            ~pre:(Format.Rule.Affix.create ">|" ~styles:[ Bg Green; Fg Black ])
+            [ Fg (Standard Green) ]
+            ~pre:
+              (Format.Rule.Affix.create
+                 ">|"
+                 ~styles:[ Bg (Standard Green); Fg (Standard Black) ])
       ; line_unified_in_move =
           Format.Rule.create
             []
-            ~pre:(Format.Rule.Affix.create ">|" ~styles:[ Bg Yellow; Fg Black ])
+            ~pre:
+              (Format.Rule.Affix.create
+                 ">|"
+                 ~styles:[ Bg (Standard Yellow); Fg (Standard Black) ])
       }
   ; float_tolerance = None
   ; produce_unified_lines = true
@@ -275,5 +318,7 @@ let default =
   ; next_alt = None
   ; location_style = Diff
   ; warn_if_no_trailing_newline_in_both = warn_if_no_trailing_newline_in_both_default
+  ; side_by_side = None
+  ; width_override = None
   }
 ;;

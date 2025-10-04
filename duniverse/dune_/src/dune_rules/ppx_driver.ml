@@ -170,7 +170,6 @@ module Driver = struct
     let replaces t = t.replaces
 
     let instantiate ~resolve ~get lib (info : Info.t) =
-      let open Memo.O in
       let+ replaces =
         Memo.parallel_map info.replaces ~f:(fun ((loc, name) as x) ->
           Resolve.Memo.bind (resolve x) ~f:(fun lib ->
@@ -233,7 +232,6 @@ module Driver = struct
   ;;
 
   let select libs ~loc =
-    let open Memo.O in
     select_replaceable_backend libs ~replaces
     >>| Resolve.bind ~f:(function
       | Ok x -> Resolve.return x
@@ -276,14 +274,14 @@ module Driver = struct
 end
 
 let build_ppx_driver sctx ~scope ~target ~pps ~pp_names =
-  let open Memo.O in
   let* driver_and_libs =
     let ( let& ) t f = Resolve.Memo.bind t ~f in
     let& pps = Resolve.Memo.lift pps in
     let& pps = Lib.closure ~linking:true pps in
     Driver.select pps ~loc:(Dot_ppx (target, pp_names))
     >>| Resolve.map ~f:(fun driver -> driver, pps)
-    >>| (* Extend the dependency stack as we don't have locations at this
+    >>|
+    (* Extend the dependency stack as we don't have locations at this
            point *)
     Resolve.push_stack_frame ~human_readable_description:(fun () ->
       Dyn.pp (List [ String "pps"; Dyn.(list Lib_name.to_dyn) pp_names ]))
@@ -326,7 +324,7 @@ let build_ppx_driver sctx ~scope ~target ~pps ~pp_names =
       ~requires_compile:(Memo.return requires_compile)
       ~requires_link
       ~opaque
-      ~js_of_ocaml:None
+      ~js_of_ocaml:(Js_of_ocaml.Mode.Pair.make None)
       ~melange_package_name:None
       ~package:None
       ~bin_annot:false
@@ -356,7 +354,6 @@ let ppx_driver_exe (ctx : Context.t) libs =
 ;;
 
 let get_cookies ~loc ~expander ~lib_name libs =
-  let open Memo.O in
   let expander, library_name_cookie =
     match lib_name with
     | None -> expander, None
@@ -407,13 +404,13 @@ let get_cookies ~loc ~expander ~lib_name libs =
 ;;
 
 let ppx_driver_and_flags_internal
-  context
-  ~dune_version
-  ~loc
-  ~expander
-  ~lib_name
-  ~flags
-  libs
+      context
+      ~dune_version
+      ~loc
+      ~expander
+      ~lib_name
+      ~flags
+      libs
   =
   let open Action_builder.O in
   let+ flags =

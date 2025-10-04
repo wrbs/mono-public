@@ -145,7 +145,7 @@ let prepare_internal f =
            [%sexp
              (( "Io_uring_raw syscall found in unexpected state while submitting"
               , Handle.status handle )
-               : string * Status.t)]
+              : string * Status.t)]
      in
      submit_until_success 0);
   Deferred.upon (Ivar.read ivar) (fun _ ->
@@ -201,6 +201,9 @@ let cancel t handle =
       | Cancel_prepared cancel_ivar ->
         (match%map Ivar.read cancel_ivar with
          | Ok _ -> ()
+         | Error Unix.Error.EALREADY ->
+           (* This means the job has alreay started running and can't be cancelled. *)
+           ()
          | Error Unix.Error.ENOENT ->
            (* The job we are trying to cancel has already finished by the time the cancel
               was executed. *)
@@ -226,10 +229,32 @@ let cancel t handle =
   cancel_until_success ()
 ;;
 
-let syscall_result handle = Ivar.read (Handle.result handle)
+let syscall_result_noretry handle = Ivar.read (Handle.result handle)
+let has_pending_jobs t = Uring.active_ops t > 0
 
 [%%else]
 
 include Io_uring_raw_null
 
 [%%endif]
+
+let syscall_result_retry_on_ECANCELED f =
+  let rec retry_loop f count =
+    let max_tries = 1000 in
+    if count = max_tries
+    then return (Error (Unix.EUNKNOWNERR 125))
+    else (
+      match%bind syscall_result_noretry (f ()) with
+      | Error (Unix.EUNKNOWNERR 125) ->
+        (* We've seen some weird behavior where our calls return with ECANCELED
+           even though we're not asking to cancel. Work around this issue,
+           which seems like it may be a kernel bug.
+
+           This can't be a real cancellation because the job handle is made by
+           [f ()] above and we don't ever call cancel on that. *)
+        retry_loop f (count + 1)
+      | Error err -> return (Error err)
+      | Ok result -> return (Ok result))
+  in
+  retry_loop f 0
+;;

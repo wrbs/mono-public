@@ -100,7 +100,10 @@ let from_signals' ~map_attributes signals =
     ~element:(fun name attributes children ->
       let attributes =
         attributes
-        |> List.map (fun ((_, n), v) -> n, v)
+        |> List.map (fun ((ns, n), v) ->
+          match ns with
+          | "" -> (n, v)
+          | _ -> (ns ^ ":" ^ n, v))
         |> map_attributes name in
       create_element (snd name) attributes children)
     s)
@@ -142,6 +145,12 @@ let is_element node =
   match node.values with
   | `Element _ -> true
   | `Text _ -> false
+  | `Document _ -> false
+
+let is_text node =
+  match node.values with
+  | `Text _ -> true
+  | `Element _ -> false
   | `Document _ -> false
 
 let element node =
@@ -479,6 +488,7 @@ struct
     | OnlyOfType
     | Empty
     | Content of string
+    | Has of simple_selector
     | Not of simple_selector
 
   and simple_selector =
@@ -589,6 +599,12 @@ struct
     | OnlyOfType -> element_count_with_name (name node) node = 1
     | Empty -> no_children node
     | Content s -> texts node |> String.concat "" |> has_substring s
+    | Has selector ->
+      descendants node
+      |> filter (fun descendant -> not (is_text descendant))
+      |> filter (fun descendant -> matches_simple_selector descendant selector)
+      |> count
+      |> fun count -> count > 0
     | Not selector -> not (matches_simple_selector node selector)
 
   and matches_simple_selector node = function
@@ -717,7 +733,7 @@ struct
     begin match Stream.peek stream with
     | Some '\\' -> ()
     | Some c when is_identifier_char c -> ()
-    | _ -> parse_error "expected an identifier"
+    | _ -> (parse_error [@coverage off]) "expected an identifier"
     end;
     let rec loop () =
       match Stream.peek stream with
@@ -915,6 +931,9 @@ struct
       let s = parse_parenthesized_value parse_quoted_string stream in
       Content s
     | "empty" -> Empty
+    | "has" ->
+      let selector = parse_parenthesized_value parse_simple_selector stream in
+      Has selector
     | "not" ->
       let selector = parse_parenthesized_value parse_simple_selector stream in
       Not selector

@@ -5,9 +5,13 @@ module Binable = struct
 end
 
 include Binable
-include Identifiable.Extend (Base.Int32) (Binable)
+
+include%template
+  Identifiable.Extend [@mode local] [@modality portable] (Base.Int32) (Binable)
+
 include Base.Int32
-include Comparable.Validate_with_zero (Base.Int32)
+
+include%template Comparable.Validate_with_zero [@modality portable] (Base.Int32)
 
 type t = int32 [@@deriving typerep]
 

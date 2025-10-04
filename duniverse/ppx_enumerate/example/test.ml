@@ -267,6 +267,37 @@ module Check_sigs = struct
     let module _ : S1 = M in
     ()
   ;;
+
+  module type S3 = sig
+    type t =
+      | C
+      | D
+    [@@deriving_inline enumerate ~portable]
+
+    include sig
+      [@@@ocaml.warning "-32"]
+
+      include Ppx_enumerate_lib.Enumerable.S with type t := t @@ portable
+    end
+    [@@ocaml.doc "@inline"]
+
+    [@@@end]
+  end
+
+  module type S4 = sig
+    type t =
+      | C
+      | D
+
+    val all : t list @@ portable
+  end
+
+  let _ =
+    fun (module M : S3) ->
+    let module M : S4 = M in
+    let module _ : S3 = M in
+    ()
+  ;;
 end
 
 module Check_sigs_with_params_and_variance = struct
@@ -274,7 +305,16 @@ module Check_sigs_with_params_and_variance = struct
     type (+'a, 'b) t =
       | A of 'a
       | B of 'b
-    [@@deriving enumerate]
+    [@@deriving_inline enumerate]
+
+    include sig
+      [@@@ocaml.warning "-32"]
+
+      include Ppx_enumerate_lib.Enumerable.S2 with type (+'a, 'b) t := ('a, 'b) t
+    end
+    [@@ocaml.doc "@inline"]
+
+    [@@@end]
   end
 
   module type S2 = sig
@@ -289,6 +329,38 @@ module Check_sigs_with_params_and_variance = struct
     fun (module M : S1) ->
     let module M : S2 = M in
     let module _ : S1 = M in
+    ()
+  ;;
+
+  module type S3 = sig
+    type (+'c, 'd) t =
+      | C of 'c
+      | D of 'd
+    [@@deriving_inline enumerate ~portable]
+
+    include sig
+      [@@@ocaml.warning "-32"]
+
+      include
+        Ppx_enumerate_lib.Enumerable.S2 with type (+'c, 'd) t := ('c, 'd) t @@ portable
+    end
+    [@@ocaml.doc "@inline"]
+
+    [@@@end]
+  end
+
+  module type S4 = sig
+    type ('c, +'d) t =
+      | C of 'c
+      | D of 'd
+
+    val all : 'c list -> 'd list -> ('c, 'd) t list @@ portable
+  end
+
+  let _ =
+    fun (module M : S3) ->
+    let module M : S4 = M in
+    let module _ : S3 = M in
     ()
   ;;
 end
@@ -317,7 +389,7 @@ type big_record =
   ; fieldj : t
   ; fieldk : t
   ; fieldl : t
-      (* (* just keep adding fields to make things worse. *)
+  (* (* just keep adding fields to make things worse. *)
      fieldm: t;
      fieldn: t;
      fieldo: s;
@@ -366,3 +438,30 @@ end = struct
 
   let%test _ = all_of_opaque all_of_x = [ None; Some `A; Some (`B A); Some (`B B) ]
 end
+
+type custom_record =
+  { foo : (int[@enumerate.custom [ 0 ]]) * t
+  ; bar : (string[@enumerate.custom [ "bar" ]])
+  ; baz : (string * int[@enumerate.custom [ "baz", 1 ]])
+  }
+[@@deriving enumerate]
+
+let%test _ =
+  all_of_custom_record
+  = [ { foo = 0, A; bar = "bar"; baz = "baz", 1 }
+    ; { foo = 0, B; bar = "bar"; baz = "baz", 1 }
+    ]
+;;
+
+type custom_variant =
+  | Foo of (int[@enumerate.custom [ 0 ]]) * t
+  | Bar of (string[@enumerate.custom [ "bar" ]])
+  | Baz of ((string * int)[@enumerate.custom [ "baz", 1 ]])
+[@@deriving enumerate]
+
+let%test _ = all_of_custom_variant = [ Foo (0, A); Foo (0, B); Bar "bar"; Baz ("baz", 1) ]
+
+let%test _ =
+  [%all: (string[@enumerate.custom [ "foo"; "bar" ]]) option]
+  = [ None; Some "foo"; Some "bar" ]
+;;

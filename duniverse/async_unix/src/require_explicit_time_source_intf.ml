@@ -1,13 +1,15 @@
 (** Deprecates functions that use wall-clock time, so that code must be explicit about
-    what time source is used.  Idiomatic usage is:
+    what time source is used. Idiomatic usage is:
 
     {[
-      open! Require_explicit_time_source ]}
+      open! Require_explicit_time_source
+    ]}
 
     or, in an import.ml:
 
     {[
-      include Require_explicit_time_source ]} *)
+      include Require_explicit_time_source
+    ]} *)
 
 open! Core
 open! Import
@@ -80,7 +82,7 @@ module type Require_explicit_time_source = sig
       end
 
       val now : zone:Time_float.Zone.t -> t
-        [@@deprecated "[since 2019-05] Use [Time_source]"]
+      [@@deprecated "[since 2019-05] Use [Time_source]"]
     end
 
     val now : unit -> t [@@deprecated "[since 2016-02] Use [Time_source]"]

@@ -20,7 +20,11 @@ let subscribe () () =
 ;;
 
 let implementations =
-  [ Rpc.Pipe_rpc.implement Backpressure_test_shared.Protocol.Fibonacci.t subscribe ]
+  [ Rpc.Pipe_rpc.implement
+      Backpressure_test_shared.Protocol.Fibonacci.t
+      subscribe
+      ~leave_open_on_exception:true
+  ]
 ;;
 
 module Mode = struct
@@ -35,7 +39,10 @@ let create_and_serve
   =
   let module Connection_index = Unique_id.Int () in
   let implementations =
-    Rpc.Implementations.create_exn ~implementations ~on_unknown_rpc:`Raise
+    Rpc.Implementations.create_exn
+      ~implementations
+      ~on_unknown_rpc:`Raise
+      ~on_exception:Log_on_background_exn
   in
   let http_handler =
     let open Cohttp_static_handler in
@@ -111,8 +118,7 @@ let create_and_serve
       vanilla_rpc_server, web_server
   in
   let open Deferred.Or_error.Let_syntax in
-  let%map vanilla_rpc_server = vanilla_rpc_server
-  and web_server = web_server in
+  let%map vanilla_rpc_server and web_server in
   { vanilla_rpc_server; web_server }
 ;;
 

@@ -11,7 +11,7 @@ let expect_exit f =
       Lwt.return_false)
     (function
       | Exit -> Lwt.return_true
-      | e -> Lwt.fail e)
+      | e -> Lwt.reraise e)
 
 let suite = suite "lwt_stream" [
   test "from"
@@ -258,6 +258,36 @@ let suite = suite "lwt_stream" [
        Lwt_stream.last_new stream >>= fun x ->
        return (x = 3));
 
+  test_direct "junk_available"
+    (fun () ->
+      let s, push = Lwt_stream.create () in
+      let b0 = Lwt_stream.get_available s = [] in
+      let () = Lwt_stream.junk_available s in
+      let b1 = Lwt_stream.get_available s = [] in
+      let () = push (Some 1); push (Some 2); push (Some 4) in
+      let () = Lwt_stream.junk_available s in
+      let b2 = Lwt_stream.get_available s = [] in
+      let () = push (Some 66); push (Some 77); push (Some 99) in
+      let () = Lwt_stream.junk_available s in
+      let b3 = Lwt_stream.get_available s = [] in
+      b0 && b1 && b2 && b3);
+
+  test "junk_old"
+    (fun () ->
+      let open Lwt.Syntax in
+      let s, push = Lwt_stream.create () in
+      let b0 = Lwt_stream.get_available s = [] in
+      let* () = Lwt_stream.junk_old s in
+      let b1 = Lwt_stream.get_available s = [] in
+      let () = push (Some 1); push (Some 2); push (Some 4) in
+      let* () = Lwt_stream.junk_old s in
+      let b2 = Lwt_stream.get_available s = [] in
+      let () = push (Some 66); push (Some 77); push (Some 99) in
+      let* () = Lwt_stream.junk_old s in
+      let b3 = Lwt_stream.get_available s = [] in
+      Lwt.return (b0 && b1 && b2 && b3))
+      [@ocaml.alert "-deprecated"];
+
   test "cancel push stream 1"
     (fun () ->
        let stream, _ = Lwt_stream.create () in
@@ -351,7 +381,7 @@ let suite = suite "lwt_stream" [
                     return (Some x)
                 | (Result.Error e)::l ->
                     q := l;
-                    Lwt.fail e)
+                    raise e)
        in
        Lwt_stream.to_list (Lwt_stream.wrap_exn stream) >>= fun l' ->
        return (l = l'));
@@ -418,7 +448,7 @@ let suite = suite "lwt_stream" [
 
   test "exception passing: basic, from"
     (fun () ->
-      let stream = Lwt_stream.from (fun () -> Lwt.fail Exit) in
+      let stream = Lwt_stream.from (fun () -> raise Exit) in
       expect_exit (fun () -> Lwt_stream.get stream));
 
   test "exception passing: basic, from_direct"
@@ -428,12 +458,12 @@ let suite = suite "lwt_stream" [
 
   test "exception passing: to_list"
     (fun () ->
-      let stream = Lwt_stream.from (fun () -> Lwt.fail Exit) in
+      let stream = Lwt_stream.from (fun () -> raise Exit) in
       expect_exit (fun () -> Lwt_stream.to_list stream));
 
   test "exception passing: mapped"
     (fun () ->
-      let stream = Lwt_stream.from (fun () -> Lwt.fail Exit) in
+      let stream = Lwt_stream.from (fun () -> raise Exit) in
       let stream = Lwt_stream.map (fun v -> v) stream in
       expect_exit (fun () -> Lwt_stream.get stream));
 

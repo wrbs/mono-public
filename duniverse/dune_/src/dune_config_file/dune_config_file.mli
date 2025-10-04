@@ -2,14 +2,25 @@ module Dune_config : sig
   (** Dune configuration (visible to the user) *)
 
   open Stdune
-  open Dune_config
   module Display : module type of Display
+
+  module Project_defaults : sig
+    type t =
+      { authors : string list option
+      ; maintainers : string list option
+      ; maintenance_intent : string list option
+      ; license : string list option
+      }
+
+    val decode : t Dune_lang.Decoder.t
+  end
 
   module Concurrency : sig
     type t =
       | Fixed of int
       | Auto
 
+    val equal : t -> t -> bool
     val of_string : string -> (t, string) result
     val to_string : t -> string
   end
@@ -19,6 +30,21 @@ module Dune_config : sig
   end
 
   module Cache : sig
+    module Toggle : sig
+      type t =
+        | Disabled
+        | Enabled_except_user_rules
+        | Enabled
+
+      val all : (string * t) list
+
+      val decode
+        :  check:(Dune_lang.Syntax.Version.t -> unit Dune_lang.Decoder.t)
+        -> t Dune_lang.Decoder.t
+
+      val to_string : t -> string
+    end
+
     module Storage_mode : sig
       type t = Dune_cache_storage.Mode.t option
 
@@ -26,6 +52,10 @@ module Dune_config : sig
       val decode : t Dune_lang.Decoder.t
       val to_string : t -> string
     end
+  end
+
+  module Pkg_enabled : sig
+    type t = bool
   end
 
   module Terminal_persistence : sig
@@ -51,11 +81,13 @@ module Dune_config : sig
       ; concurrency : Concurrency.t field
       ; terminal_persistence : Terminal_persistence.t field
       ; sandboxing_preference : Sandboxing_preference.t field
-      ; cache_enabled : Config.Toggle.t field
+      ; cache_enabled : Cache.Toggle.t field
       ; cache_reproducibility_check : Dune_cache.Config.Reproducibility_check.t field
       ; cache_storage_mode : Cache.Storage_mode.t field
       ; action_stdout_on_success : Action_output_on_success.t field
       ; action_stderr_on_success : Action_output_on_success.t field
+      ; project_defaults : Project_defaults.t field
+      ; pkg_enabled : Pkg_enabled.t field
       ; experimental : (string * (Loc.t * string)) list field
       }
   end
@@ -68,6 +100,7 @@ module Dune_config : sig
     val empty : t
     val superpose : t -> t -> t
     val to_dyn : t -> Dyn.t
+    val equal : t -> t -> bool
   end
 
   (** A standard list of watch exclusions *)

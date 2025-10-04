@@ -25,15 +25,27 @@ let dump sctx ~dir =
   and+ menhir_dump =
     Dune_rules.Menhir_rules.menhir_env ~dir
     |> Action_builder.of_memo
-    >>= Dune_rules.Menhir_env.dump
+    >>= Dune_lang.Menhir_env.dump
   and+ coq_dump = Dune_rules.Coq.Coq_rules.coq_env ~dir >>| Dune_rules.Coq.Coq_flags.dump
-  and+ jsoo_dump =
-    let module Js_of_ocaml = Dune_rules.Js_of_ocaml in
-    let* jsoo = Action_builder.of_memo (Dune_rules.Jsoo_rules.jsoo_env ~dir) in
-    Js_of_ocaml.Flags.dump jsoo.flags
+  and+ jsoo_js_dump =
+    let module Js_of_ocaml = Dune_lang.Js_of_ocaml in
+    let* jsoo = Action_builder.of_memo (Dune_rules.Jsoo_rules.jsoo_env ~dir ~mode:JS) in
+    Js_of_ocaml.Flags.dump ~mode:JS jsoo.flags
+  and+ jsoo_wasm_dump =
+    let module Js_of_ocaml = Dune_lang.Js_of_ocaml in
+    let* jsoo = Action_builder.of_memo (Dune_rules.Jsoo_rules.jsoo_env ~dir ~mode:Wasm) in
+    Js_of_ocaml.Flags.dump ~mode:Wasm jsoo.flags
   in
   let env =
-    List.concat [ o_dump; c_dump; link_flags_dump; menhir_dump; coq_dump; jsoo_dump ]
+    List.concat
+      [ o_dump
+      ; c_dump
+      ; link_flags_dump
+      ; menhir_dump
+      ; coq_dump
+      ; jsoo_js_dump
+      ; jsoo_wasm_dump
+      ]
   in
   Super_context.context sctx |> Context.name, env
 ;;
@@ -73,7 +85,7 @@ let term =
              multiple fields.")
   in
   let common, config = Common.init builder in
-  Scheduler.go ~common ~config (fun () ->
+  Scheduler.go_with_rpc_server ~common ~config (fun () ->
     let open Fiber.O in
     let* setup = Import.Main.setup () in
     let* setup = Memo.run setup in
@@ -101,7 +113,7 @@ let term =
          | In_install_dir _ ->
            User_error.raise [ Pp.text "Environment is not defined in install dirs" ])
     in
-    Build_system.run_exn (fun () ->
+    build_exn (fun () ->
       let open Memo.O in
       let+ res, _facts = Action_builder.evaluate_and_collect_facts request in
       res)

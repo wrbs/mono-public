@@ -1,14 +1,14 @@
 (library
  (foreign_stubs
   (language c)
-  (names nss_stubs timespec core_unix_stubs core_unix_time_stubs)
+  (names nss_stubs timespec core_unix_stubs core_unix_time_stubs locale_stubs)
   (flags
    (:standard -D_LARGEFILE64_SOURCE)
    ()))
  (name core_unix)
  (public_name core_unix)
  (libraries core error_checking_mutex core_kernel.flags sexplib.unix
-   signal_unix spawn)
+   signal_unix spawn ppx_stable_witness.stable_witness unix)
  (preprocess
   (pps ppx_jane ppx_optcomp))
  (preprocessor_deps config.h))

@@ -11,63 +11,61 @@ let run ~argv ?when_parsing_succeeds ?verbose_on_parse_error command =
   | exn -> print_s [%message "raised" ~_:(exn : Exn.t)]
 ;;
 
-let%test_module "word wrap" =
-  (module struct
-    let%test _ = word_wrap "" 10 = []
-    let short_word = "abcd"
-    let%test _ = word_wrap short_word (String.length short_word) = [ short_word ]
-    let%test _ = word_wrap "abc\ndef\nghi" 100 = [ "abc"; "def"; "ghi" ]
+module%test [@name "word wrap"] _ = struct
+  let%test _ = word_wrap "" 10 = []
+  let short_word = "abcd"
+  let%test _ = word_wrap short_word (String.length short_word) = [ short_word ]
+  let%test _ = word_wrap "abc\ndef\nghi" 100 = [ "abc"; "def"; "ghi" ]
 
-    let long_text =
-      "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus fermentum \
-       condimentum eros, sit amet pulvinar dui ultrices in."
-    ;;
+  let long_text =
+    "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus fermentum \
+     condimentum eros, sit amet pulvinar dui ultrices in."
+  ;;
 
-    let%test _ =
-      word_wrap long_text 1000
-      = [ "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus fermentum \
-           condimentum eros, sit amet pulvinar dui ultrices in."
-        ]
-    ;;
-
-    let%test _ =
-      word_wrap long_text 39
-      = (*
-           .........1.........2.........3.........4
-           1234567890123456789012345678901234567890
-        *)
-      [ "Lorem ipsum dolor sit amet, consectetur"
-      ; "adipiscing elit. Vivamus fermentum"
-      ; "condimentum eros, sit amet pulvinar dui"
-      ; "ultrices in."
+  let%test _ =
+    word_wrap long_text 1000
+    = [ "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus fermentum \
+         condimentum eros, sit amet pulvinar dui ultrices in."
       ]
-    ;;
+  ;;
 
-    (* no guarantees: too-long words just overhang the soft bound *)
-    let%test _ =
-      word_wrap long_text 2
-      = [ "Lorem"
-        ; "ipsum"
-        ; "dolor"
-        ; "sit"
-        ; "amet,"
-        ; "consectetur"
-        ; "adipiscing"
-        ; "elit."
-        ; "Vivamus"
-        ; "fermentum"
-        ; "condimentum"
-        ; "eros,"
-        ; "sit"
-        ; "amet"
-        ; "pulvinar"
-        ; "dui"
-        ; "ultrices"
-        ; "in."
-        ]
-    ;;
-  end)
-;;
+  let%test _ =
+    word_wrap long_text 39
+    = (*
+         .........1.........2.........3.........4
+           1234567890123456789012345678901234567890
+      *)
+    [ "Lorem ipsum dolor sit amet, consectetur"
+    ; "adipiscing elit. Vivamus fermentum"
+    ; "condimentum eros, sit amet pulvinar dui"
+    ; "ultrices in."
+    ]
+  ;;
+
+  (* no guarantees: too-long words just overhang the soft bound *)
+  let%test _ =
+    word_wrap long_text 2
+    = [ "Lorem"
+      ; "ipsum"
+      ; "dolor"
+      ; "sit"
+      ; "amet,"
+      ; "consectetur"
+      ; "adipiscing"
+      ; "elit."
+      ; "Vivamus"
+      ; "fermentum"
+      ; "condimentum"
+      ; "eros,"
+      ; "sit"
+      ; "amet"
+      ; "pulvinar"
+      ; "dui"
+      ; "ultrices"
+      ; "in."
+      ]
+  ;;
+end
 
 let%test_unit _ =
   let path =
@@ -101,87 +99,83 @@ let%expect_test "[Path.to_string], [Path.to_string_dots]" =
   ()
 ;;
 
-let%test_module "[Anons]" =
-  (module struct
-    open Private.Anons
+module%test [@name "[Anons]"] _ = struct
+  open Private.Anons
 
-    let%test _ = String.equal (normalize "file") "FILE"
-    let%test _ = String.equal (normalize "FiLe") "FILE"
-    let%test _ = String.equal (normalize "<FiLe>") "<FiLe>"
-    let%test _ = String.equal (normalize "(FiLe)") "(FiLe)"
-    let%test _ = String.equal (normalize "[FiLe]") "[FiLe]"
-    let%test _ = String.equal (normalize "{FiLe}") "{FiLe}"
-    let%test _ = String.equal (normalize "<file") "<file"
-    let%test _ = String.equal (normalize "<fil>a") "<fil>a"
+  let%test _ = String.equal (normalize "file") "FILE"
+  let%test _ = String.equal (normalize "FiLe") "FILE"
+  let%test _ = String.equal (normalize "<FiLe>") "<FiLe>"
+  let%test _ = String.equal (normalize "(FiLe)") "(FiLe)"
+  let%test _ = String.equal (normalize "[FiLe]") "[FiLe]"
+  let%test _ = String.equal (normalize "{FiLe}") "{FiLe}"
+  let%test _ = String.equal (normalize "<file") "<file"
+  let%test _ = String.equal (normalize "<fil>a") "<fil>a"
 
-    let%test _ =
-      try
-        ignore (normalize "");
-        false
-      with
-      | _ -> true
-    ;;
+  let%test _ =
+    try
+      ignore (normalize "");
+      false
+    with
+    | _ -> true
+  ;;
 
-    let%test _ =
-      try
-        ignore (normalize " file ");
-        false
-      with
-      | _ -> true
-    ;;
+  let%test _ =
+    try
+      ignore (normalize " file ");
+      false
+    with
+    | _ -> true
+  ;;
 
-    let%test _ =
-      try
-        ignore (normalize "file ");
-        false
-      with
-      | _ -> true
-    ;;
+  let%test _ =
+    try
+      ignore (normalize "file ");
+      false
+    with
+    | _ -> true
+  ;;
 
-    let%test _ =
-      try
-        ignore (normalize " file");
-        false
-      with
-      | _ -> true
-    ;;
-  end)
-;;
+  let%test _ =
+    try
+      ignore (normalize " file");
+      false
+    with
+    | _ -> true
+  ;;
+end
 
-let%test_module "Cmdline.extend" =
-  (module struct
-    let path_of_list subcommands =
-      List.fold
-        subcommands
-        ~init:(Path.create ~path_to_exe:"exe")
-        ~f:(fun path subcommand -> Path.append path ~subcommand)
-    ;;
+module%test [@name "Cmdline.extend"] _ = struct
+  let path_of_list subcommands =
+    List.fold
+      subcommands
+      ~init:(Path.create ~path_to_exe:"exe")
+      ~f:(fun path subcommand -> Path.append path ~subcommand)
+  ;;
 
-    let extend path =
-      match path with
-      | [ "foo"; "bar" ] -> [ "-foo"; "-bar" ]
-      | [ "foo"; "baz" ] -> [ "-foobaz" ]
-      | _ -> [ "default" ]
-    ;;
+  let extend path =
+    match path with
+    | [ "foo"; "bar" ] -> [ "-foo"; "-bar" ]
+    | [ "foo"; "baz" ] -> [ "-foobaz" ]
+    | _ -> [ "default" ]
+  ;;
 
-    let test path args expected =
-      let expected = Cmdline.of_list expected in
-      let observed =
-        let path = path_of_list path in
-        let args = Cmdline.of_list args in
-        Cmdline.extend args ~extend ~path
-      in
-      [%compare.equal: Cmdline.t] expected observed
-    ;;
+  let test path args expected =
+    let expected = Cmdline.of_list expected in
+    let observed =
+      let path = path_of_list path in
+      let args = Cmdline.of_list args in
+      Cmdline.extend args ~extend ~path
+    in
+    [%compare.equal: Cmdline.t] expected observed
+  ;;
 
-    let%test _ =
-      test [ "foo"; "bar" ] [ "anon"; "-flag" ] [ "anon"; "-flag"; "-foo"; "-bar" ]
-    ;;
+  let%test _ =
+    test [ "foo"; "bar" ] [ "anon"; "-flag" ] [ "anon"; "-flag"; "-foo"; "-bar" ]
+  ;;
 
-    let%test _ = test [ "foo"; "baz" ] [] [ "-foobaz" ]
-    let%test _ = test [ "zzz" ] [ "x"; "y"; "z" ] [ "x"; "y"; "z"; "default" ]
-  end)
-;;
+  let%test _ = test [ "foo"; "baz" ] [] [ "-foobaz" ]
+  let%test _ = test [ "zzz" ] [ "x"; "y"; "z" ] [ "x"; "y"; "z"; "default" ]
+end
 
 let%expect_test "[choose_one] duplicate name" =
   show_raise ~hide_positions:true (fun () ->
@@ -214,7 +208,8 @@ let%expect_test "basic_or_error works as expected" =
        main)
   in
   run (fun () -> error_s [%message "an error"]);
-  [%expect {|
+  [%expect
+    {|
     "an error"
     (raised (command.ml.Exit_called (status 1)))
     |}];
@@ -307,7 +302,7 @@ let%expect_test "nested [choose_one]" =
     in
     run_command
       ~args
-      (let%map_open.Command arg = arg in
+      (let%map_open.Command arg in
        fun () ->
          print_s [%message (arg : [ `Foo_bar of bool * bool | `Baz_qux of bool * bool ])])
   in
@@ -398,7 +393,7 @@ let%test_unit _ =
   ; "foo", "../bar", "foo/../bar"
   ]
   |> List.iter ~f:(fun (dir, path, expected) ->
-       [%test_eq: string] (abs_path ~dir path) expected)
+    [%test_eq: string] (abs_path ~dir path) expected)
 ;;
 
 let%expect_test "choose_one strings" =
@@ -512,7 +507,8 @@ let%expect_test "[?verbose_on_parse_error]" =
     (raised (command.ml.Exit_called (status 1)))
     |}];
   test ~verbose_on_parse_error:false ();
-  [%expect {|
+  [%expect
+    {|
     Fail!
     (raised (command.ml.Exit_called (status 1)))
     |}]
@@ -651,7 +647,7 @@ let%expect_test "[and_arg_name]" =
 let truncate_long_lines output =
   String.split output ~on:'\n'
   |> List.map ~f:(fun line ->
-       if String.length line > 80 then String.prefix line 80 ^ " ..." else line)
+    if String.length line > 80 then String.prefix line 80 ^ " ..." else line)
   |> String.concat ~sep:"\n"
 ;;
 
@@ -673,7 +669,7 @@ let%expect_test "double-dash built-in flags" =
     let output1 = run_test_command (args @ [ "-" ^ flag ]) in
     let output2 = run_test_command (args @ [ "--" ^ flag ]) in
     print_string (truncate_long_lines output1);
-    require_compare_equal [%here] (module String) output1 output2
+    require_compare_equal (module String) output1 output2
   in
   run_with_both_flags [] "help";
   [%expect
@@ -695,7 +691,8 @@ let%expect_test "double-dash built-in flags" =
     (command.ml.Exit_called (status 0))
     |}];
   run_with_both_flags [] "version";
-  [%expect {|
+  [%expect
+    {|
     NO_VERSION_UTIL
     (command.ml.Exit_called (status 0))
     |}];
@@ -739,6 +736,27 @@ let%expect_test "double-dash built-in flags" =
     |}]
 ;;
 
+let%expect_test "flag does not create ambiguity with itself" =
+  let command =
+    Command.basic
+      ~summary:""
+      (let%map_open.Command message =
+         flag
+           "welcome-message"
+           ~aliases:[ "welcome-banner" ]
+           (required string)
+           ~doc:"MSG greeting message"
+       in
+       fun () -> print_endline message)
+  in
+  let run_test_command args =
+    run ~argv:("__exe_name__" :: args) command;
+    [%expect.output]
+  in
+  print_string (run_test_command [ "-welcome"; "hello world" ]);
+  [%expect {| hello world |}]
+;;
+
 let%expect_test "when_parsing_succeeds" =
   let command =
     Command.basic
@@ -753,7 +771,8 @@ let%expect_test "when_parsing_succeeds" =
       command
   in
   run [ "-input"; "test" ];
-  [%expect {|
+  [%expect
+    {|
     Parsing Succeeded
     test
     |}];
@@ -806,18 +825,18 @@ let%expect_test "global normalized path and args" =
   in
   let print_normalized_path_and_args () =
     let default = "<NO-VALUE>" in
-    let normalized_path =
-      Command.For_telemetry.normalized_path ()
-      |> Option.value_map ~f:(String.concat ~sep:" ") ~default
-    in
-    let normalized_args =
-      Command.For_telemetry.normalized_args ()
-      |> Option.value_map ~f:(String.concat ~sep:" ") ~default
+    let normalized_path, normalized_args =
+      match Command.For_telemetry.normalized_path_and_args () with
+      | `Ok (`Path path, `Args args) ->
+        let concat = String.concat ~sep:" " in
+        concat path, concat args
+      | `Not_initialized_through_command -> default, default
     in
     printf "Normalized path: %s\nNormalized args: %s\n" normalized_path normalized_args
   in
   print_normalized_path_and_args ();
-  [%expect {|
+  [%expect
+    {|
     Normalized path: __exe_name__
     Normalized args:
     |}];
@@ -854,7 +873,7 @@ let%expect_test "special cased help before group member" =
     |}];
   (* A corner case of parsing--make sure that we don't break horribly on this command
      line, though we do see it as unclear. *)
-  require_does_raise [%here] (fun () ->
+  require_does_raise (fun () ->
     Command_unix.run ~argv:[ "binary"; "-help"; "-help"; "group" ] Simple_group.command);
   [%expect
     {|
@@ -895,7 +914,8 @@ let%expect_test "lazy Arg_type" =
   [%expect {| |}];
   (* Completions should still work. *)
   Command_test_helpers.complete param ~args:[ "t" ];
-  [%expect {|
+  [%expect
+    {|
     true
     (command.ml.Exit_called (status 0))
     |}]

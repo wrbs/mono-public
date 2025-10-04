@@ -3,6 +3,36 @@ include Sexp_pretty_intf
 module Sexp = Sexplib.Sexp
 module Config = Config
 open Config
+
+module Sexp_impl = struct
+  module type S = sig
+    val must_escape : string -> bool
+    val mach_maybe_esc_str : string -> string
+    val esc_str : string -> string
+  end
+
+  let get conf : (module S) =
+    match conf.encoding with
+    | Ascii -> (module Sexplib.Pre_sexp)
+    | Utf8 -> (module Base.Sexp.Utf8)
+  ;;
+
+  let must_escape conf =
+    let (module Sexp_impl) = get conf in
+    Sexp_impl.must_escape
+  ;;
+
+  let mach_maybe_esc_str conf =
+    let (module Sexp_impl) = get conf in
+    Sexp_impl.mach_maybe_esc_str
+  ;;
+
+  let esc_str conf =
+    let (module Sexp_impl) = get conf in
+    Sexp_impl.esc_str
+  ;;
+end
+
 module W = Sexp.With_layout
 
 module Format = struct
@@ -78,8 +108,8 @@ let rainbow_open_tag conf tag =
 let rainbow_tags conf =
   { Format.mark_open_stag =
       (function
-       | Format.String_tag tag -> rainbow_open_tag conf tag
-       | _ -> "")
+        | Format.String_tag tag -> rainbow_open_tag conf tag
+        | _ -> "")
   ; Format.mark_close_stag =
       (fun _ ->
         match conf.comments with
@@ -126,9 +156,9 @@ let close_parens conf state ~depth fmt n =
     done
 ;;
 
-let must_escape = function
+let must_escape conf = function
   | "\\" -> false
-  | string -> Sexplib.Pre_sexp.must_escape string
+  | string -> Sexp_impl.must_escape conf string
 ;;
 
 let minimal_escaping at =
@@ -144,9 +174,8 @@ let minimal_escaping at =
 
 let atom_escape conf at =
   match conf.atom_printing with
-  | Escaped | Interpreted -> Sexplib.Pre_sexp.mach_maybe_esc_str at
-  | Minimal_escaping ->
-    if Sexplib.Pre_sexp.must_escape at then minimal_escaping at else at
+  | Escaped | Interpreted -> Sexp_impl.mach_maybe_esc_str conf at
+  | Minimal_escaping -> if Sexp_impl.must_escape conf at then minimal_escaping at else at
 ;;
 
 let atom_printing_len conf at =
@@ -169,10 +198,10 @@ let pp_atom conf state ~depth ~len index fmt at =
       (* we never need to escape a line comment *)
       at
     | Sexp | Comment Sexp_comment ->
-      if must_escape at
+      if must_escape conf at
       then (
         match conf.atom_printing with
-        | Escaped | Interpreted -> Sexplib.Pre_sexp.esc_str at
+        | Escaped | Interpreted -> Sexp_impl.esc_str conf at
         | Minimal_escaping -> minimal_escaping at)
       else at
   in
@@ -319,23 +348,23 @@ module Normalize = struct
              let concatenate_atoms lst =
                List.group ~break lst
                |> List.map ~f:(function
-                    | W.Sexp (W.Atom (pos, _, _)) :: _ as atoms ->
-                      let get_atom_contents = function
-                        | W.Sexp (W.Atom (_, a, _)) -> a
-                        | _ -> assert false
-                        (* List.group guarantees that we have only Atoms
+                 | W.Sexp (W.Atom (pos, _, _)) :: _ as atoms ->
+                   let get_atom_contents = function
+                     | W.Sexp (W.Atom (_, a, _)) -> a
+                     | _ -> assert false
+                     (* List.group guarantees that we have only Atoms
                         here *)
-                      in
-                      let atom_contents =
-                        List.map ~f:get_atom_contents atoms |> String.concat ~sep:" "
-                      in
-                      let escaped_atom_contents =
-                        Sexplib.Pre_sexp.mach_maybe_esc_str atom_contents
-                      in
-                      [ W.Sexp (W.Atom (pos, atom_contents, Some escaped_atom_contents)) ]
-                    | W.Sexp (W.List _) :: _ as lists -> lists
-                    | W.Comment _ :: _ as comments -> comments
-                    | [] -> [] (* cant really happen *))
+                   in
+                   let atom_contents =
+                     List.map ~f:get_atom_contents atoms |> String.concat ~sep:" "
+                   in
+                   let escaped_atom_contents =
+                     Sexp_impl.mach_maybe_esc_str conf atom_contents
+                   in
+                   [ W.Sexp (W.Atom (pos, atom_contents, Some escaped_atom_contents)) ]
+                 | W.Sexp (W.List _) :: _ as lists -> lists
+                 | W.Comment _ :: _ as comments -> comments
+                 | [] -> [] (* cant really happen *))
                |> List.concat
              in
              `List (concatenate_atoms sexps)))
@@ -348,9 +377,9 @@ module Normalize = struct
       String.strip comment
       |> Re.Str.split (force word_split)
       |> List.map ~f:(fun line ->
-           if Re.Str.string_match (force trailing) line 0
-           then Re.Str.matched_group 1 line
-           else line)
+        if Re.Str.string_match (force trailing) line 0
+        then Re.Str.matched_group 1 line
+        else line)
       |> List.filter ~f:(fun s -> String.length s > 0)
   ;;
 
@@ -787,15 +816,15 @@ module Print = struct
        | List (_, list, true) ->
          (not (Array.is_empty list))
          &&
-         (match Array.last list with
-          | Aligned (_, line_list) ->
-            (* Would not create an [Aligned] with an empty [line_list] *)
-            (match Array.last line_list with
-             | Comment_line (Line_comment _) | Atom_line (_, _ :: _) -> true
-             | Comment_line (Block_comment _ | Sexp_comment _) | Atom_line (_, []) ->
-               false)
-          | T (Comment (Line_comment _) | Sexp (_, _ :: _)) -> true
-          | T (Comment (Block_comment _ | Sexp_comment _) | Sexp (_, [])) -> false)
+           (match Array.last_exn list with
+           | Aligned (_, line_list) ->
+             (* Would not create an [Aligned] with an empty [line_list] *)
+             (match Array.last_exn line_list with
+              | Comment_line (Line_comment _) | Atom_line (_, _ :: _) -> true
+              | Comment_line (Block_comment _ | Sexp_comment _) | Atom_line (_, []) ->
+                false)
+           | T (Comment (Line_comment _) | Sexp (_, _ :: _)) -> true
+           | T (Comment (Block_comment _ | Sexp_comment _) | Sexp (_, [])) -> false)
        | List (_, _, false) | Atom _ | Singleton _ -> false)
   ;;
 
@@ -1113,23 +1142,24 @@ let run ~next conf fmt =
 
 let dummy_pos = { Sexplib.Src_pos.Relative.row = 0; col = 0 }
 
-let rec sexp_to_sexp_or_comment = function
+let rec sexp_to_sexp_or_comment conf = function
   | Sexp.Atom at ->
-    let fmt_at = Some (Sexplib.Pre_sexp.mach_maybe_esc_str at) in
+    let fmt_at = Some (Sexp_impl.mach_maybe_esc_str conf at) in
     W.Sexp (W.Atom (dummy_pos, at, fmt_at))
   | Sexp.List list ->
-    W.Sexp (W.List (dummy_pos, List.map list ~f:sexp_to_sexp_or_comment, dummy_pos))
+    W.Sexp
+      (W.List (dummy_pos, List.map list ~f:(sexp_to_sexp_or_comment conf), dummy_pos))
 ;;
 
 module Make (M : sig
-  type t
+    type t
 
-  val to_sexp_or_comment : t -> Sexp.With_layout.t_or_comment
-end) : S with type sexp := M.t = struct
+    val to_sexp_or_comment : Config.t -> t -> Sexp.With_layout.t_or_comment
+  end) : S with type sexp := M.t = struct
   type 'a writer = Config.t -> 'a -> M.t -> unit
 
   let pp_formatter conf fmt sexp =
-    let t_or_comment = M.to_sexp_or_comment sexp in
+    let t_or_comment = M.to_sexp_or_comment conf sexp in
     let next =
       let stop = ref false in
       fun () ->
@@ -1147,7 +1177,7 @@ end) : S with type sexp := M.t = struct
       ~next:(fun () ->
         match next () with
         | None -> None
-        | Some s -> Some (M.to_sexp_or_comment s))
+        | Some s -> Some (M.to_sexp_or_comment conf s))
       conf
       fmt
   ;;
@@ -1180,13 +1210,13 @@ end) : S with type sexp := M.t = struct
 end
 
 include Make (struct
-  type t = Sexp.t
+    type t = Sexp.t
 
-  let to_sexp_or_comment = sexp_to_sexp_or_comment
-end)
+    let to_sexp_or_comment = sexp_to_sexp_or_comment
+  end)
 
 module Sexp_with_layout = Make (struct
-  type t = W.t_or_comment
+    type t = W.t_or_comment
 
-  let to_sexp_or_comment = Fn.id
-end)
+    let to_sexp_or_comment (_ : Config.t) = Fn.id
+  end)

@@ -2,8 +2,7 @@
 
 (** Invariants:
     - queue.length = List.length queue.front + List.length queue.back
-    - if queue has >= 2 elements, neither front nor back are empty
-*)
+    - if queue has >= 2 elements, neither front nor back are empty *)
 
 open! Import
 open Std_internal
@@ -40,6 +39,11 @@ let make ~length ~front ~back =
 ;;
 
 let empty = { front = []; back = []; length = 0 }
+
+let[@inline] get_empty () =
+  Portability_hacks.magic_uncontended__promise_deeply_immutable empty
+;;
+
 let enqueue_front t x = make ~length:(t.length + 1) ~front:(x :: t.front) ~back:t.back
 let enqueue_back t x = make ~length:(t.length + 1) ~back:(x :: t.back) ~front:t.front
 
@@ -77,7 +81,7 @@ let drop_front_exn t =
   | [] ->
     (match t.back with
      | [] -> raise Empty
-     | [ _ ] -> empty
+     | [ _ ] -> get_empty ()
      | _ :: _ :: _ -> raise_front_invariant ())
 ;;
 
@@ -87,7 +91,7 @@ let drop_back_exn t =
   | [] ->
     (match t.front with
      | [] -> raise Empty
-     | [ _ ] -> empty
+     | [ _ ] -> get_empty ()
      | _ :: _ :: _ -> raise_back_invariant ())
 ;;
 
@@ -207,9 +211,26 @@ module Arbitrary_order = struct
   ;;
 end
 
+module%template [@alloc stack] List = struct
+  let rec rev_append xs ys = exclave_
+    match xs with
+    | [] -> ys
+    | x :: xs -> rev_append xs (x :: ys)
+  ;;
+
+  let rev xs = exclave_ rev_append xs []
+
+  let append xs ys = exclave_
+    match ys with
+    | [] -> xs
+    | _ :: _ -> rev_append (rev xs) ys
+  ;;
+end
+
 module Make_container (F : sig
-  val to_list : 'a t -> 'a list
-end) =
+  @@ portable
+    val to_list : 'a t -> 'a list
+  end) =
 struct
   let to_list = F.to_list
   let is_empty = is_empty
@@ -232,7 +253,12 @@ end
 
 module Front_to_back = struct
   let of_list list = make ~length:(List.length list) ~front:list ~back:[]
-  let to_list t = t.front @ List.rev t.back
+
+  let%template[@alloc a = (heap, stack)] to_list t =
+    (let module L = List [@alloc a] in
+    L.append t.front (L.rev t.back))
+    [@exclave_if_stack a]
+  ;;
 
   let to_sequence t =
     Sequence.append (Sequence.of_list t.front) (Sequence.of_list (List.rev t.back))
@@ -247,8 +273,8 @@ module Front_to_back = struct
   ;;
 
   include Make_container (struct
-    let to_list = to_list
-  end)
+      let to_list = to_list
+    end)
 end
 
 module Back_to_front = struct
@@ -268,72 +294,99 @@ module Back_to_front = struct
   ;;
 
   include Make_container (struct
-    let to_list = to_list
-  end)
+      let to_list = to_list
+    end)
 end
 
 include Front_to_back
 
 let singleton x = of_list [ x ]
 
-include Monad.Make (struct
-  type nonrec 'a t = 'a t
+include%template Monad.Make [@modality portable] (struct
+    type nonrec 'a t = 'a t
 
-  let bind t ~f =
-    fold t ~init:empty ~f:(fun t elt -> fold (f elt) ~init:t ~f:enqueue_back)
-  ;;
+    let bind t ~f =
+      fold t ~init:(get_empty ()) ~f:(fun t elt -> fold (f elt) ~init:t ~f:enqueue_back)
+    ;;
 
-  let return = singleton
+    let return = singleton
 
-  let map =
-    `Custom
-      (fun t ~f ->
-        { front = List.map t.front ~f; back = List.map t.back ~f; length = t.length })
-  ;;
-end)
+    let map =
+      `Custom
+        (fun t ~f ->
+          { front = List.map t.front ~f; back = List.map t.back ~f; length = t.length })
+    ;;
+  end)
 
-let compare cmp t1 t2 = List.compare cmp (to_list t1) (to_list t2)
-let equal eq t1 t2 = List.equal eq (to_list t1) (to_list t2)
+[%%template
+let[@mode local] to_list = (to_list [@alloc stack])
+
+[@@@mode.default m = (local, global)]
+
+let compare cmp t1 t2 =
+  (List.compare [@mode m])
+    cmp
+    ((to_list [@mode m]) t1)
+    ((to_list [@mode m]) t2) [@nontail]
+;;
+
+let equal eq t1 t2 =
+  (List.equal [@mode m]) eq ((to_list [@mode m]) t1) ((to_list [@mode m]) t2) [@nontail]
+;;]
 
 let hash_fold_t hash_fold_a state t =
   fold ~f:hash_fold_a ~init:([%hash_fold: int] state (length t)) t
 ;;
 
-module Stable = struct
-  module V1 = struct
-    type nonrec 'a t = 'a t
+include%template
+  Quickcheckable.Of_quickcheckable1 [@modality portable]
+    (List)
+    (struct
+      type nonrec 'a t = 'a t
 
-    let compare = compare
-    let equal = equal
+      let to_quickcheckable = to_list
+      let of_quickcheckable = of_list
+    end)
+
+module Stable = struct
+  module V1_without_t = struct
+    [%%rederive.portable
+      type nonrec 'a t = 'a t [@@deriving compare ~localize, equal ~localize]]
+
     let sexp_of_t sexp_of_elt t = [%sexp_of: elt list] (to_list t)
     let t_of_sexp elt_of_sexp sexp = of_list ([%of_sexp: elt list] sexp)
-    let t_sexp_grammar = List.t_sexp_grammar
+
+    let t_sexp_grammar : 'a Sexplib.Sexp_grammar.t -> 'a t Sexplib.Sexp_grammar.t =
+      fun a_sexp_grammar ->
+      Sexplib.Sexp_grammar.coerce (List.t_sexp_grammar a_sexp_grammar)
+    ;;
+
     let map = map
 
-    include Bin_prot.Utils.Make_iterable_binable1 (struct
-      type nonrec 'a t = 'a t
-      type 'a el = 'a [@@deriving bin_io]
+    include%template Bin_prot.Utils.Make_iterable_binable1 [@modality portable] (struct
+        type nonrec 'a t = 'a t
+        type 'a el = 'a [@@deriving bin_io]
 
-      let caller_identity =
-        Bin_prot.Shape.Uuid.of_string "83f96982-4992-11e6-919d-fbddcfdca576"
-      ;;
+        let caller_identity =
+          Bin_prot.Shape.Uuid.of_string "83f96982-4992-11e6-919d-fbddcfdca576"
+        ;;
 
-      let module_name = Some "Core.Fdeque"
-      let length = length
-      let iter t ~f = List.iter (to_list t) ~f
+        let module_name = Some "Core.Fdeque"
+        let length = length
+        let iter t ~f = List.iter (to_list t) ~f
 
-      let init ~len ~next =
-        let rec loop next acc n =
-          if len = n
-          then acc
-          else (
-            assert (n = length acc);
-            let x = next () in
-            loop next (enqueue_back acc x) (n + 1))
-        in
-        loop next empty 0
-      ;;
-    end)
+        let init ~len ~next =
+          let rec loop next acc n =
+            if len = n
+            then acc
+            else (
+              assert (n = length acc);
+              let x = next () in
+              loop next (enqueue_back acc x) (n + 1))
+          in
+          loop next (get_empty ()) 0
+        ;;
+      end)
 
     (* The binary representation produced by Bin_prot.Utils.Make_iterable_binable1 is
        assumed to be stable (if the 'a is stable). *)
@@ -341,9 +394,15 @@ module Stable = struct
       Stable_witness.assert_stable
     ;;
   end
+
+  module V1 = struct
+    type nonrec 'a t = 'a t
+
+    include V1_without_t
+  end
 end
 
-include (Stable.V1 : module type of Stable.V1 with type 'a t := 'a t)
+include Stable.V1_without_t
 
 module Private = struct
   let build ~front ~back =

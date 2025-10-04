@@ -8,13 +8,42 @@ include (
 
     let of_list l = if List.is_empty l then `Skip_test else `Ok (of_list_exn l)
   end) :
-    sig end)
+  sig end)
 
 (* Note that at least one expect test must be included for the above functor's tests to
    run.
 *)
 
 let t : _ Nonempty_list.t = [ 1; 2; 3; 4 ]
+
+let quickcheck'
+  gen
+  (test_result :
+    ?here:lexing_position list
+    -> ?message:string
+    -> ?equal:('a -> 'a -> bool)
+    -> expect:'a
+    -> 'a
+    -> unit)
+  f_list
+  f
+  =
+  Quickcheck.test gen ~f:(fun v -> test_result ~expect:(f_list v) (f v))
+;;
+
+let quickcheck
+  (test_result :
+    ?here:lexing_position list
+    -> ?message:string
+    -> ?equal:('a -> 'a -> bool)
+    -> expect:'a
+    -> 'a
+    -> unit)
+  f_list
+  f
+  =
+  quickcheck' [%quickcheck.generator: int t] test_result (fun l -> f_list (to_list l)) f
+;;
 
 let%expect_test "sexp representations" =
   print_s [%sexp (t : int Nonempty_list.t)];
@@ -26,24 +55,47 @@ let%expect_test "sexp representations" =
 ;;
 
 let%expect_test "reduce" =
-  print_s [%sexp (reduce t ~f:( + ) : int)];
-  [%expect {| 10 |}]
+  quickcheck
+    [%test_result: int]
+    (fun l -> List.reduce l ~f:( + ) |> Core.Option.value_exn)
+    (fun l -> reduce l ~f:( + ))
 ;;
 
 let%expect_test "reverse" =
-  print_s [%sexp (reverse t : int t)];
-  [%expect {| (4 3 2 1) |}]
+  quickcheck
+    [%test_result: int list]
+    (fun l -> List.rev l)
+    (fun l -> reverse l |> to_list)
 ;;
 
 let%expect_test "append" =
-  print_s [%sexp (append t [ 5; 6; 7 ] : int t)];
-  [%expect {| (1 2 3 4 5 6 7) |}]
+  quickcheck
+    [%test_result: int list]
+    (fun l -> List.append (to_list t) l)
+    (fun l -> append t (to_list l) |> to_list)
+;;
+
+let%expect_test "append'" =
+  print_s [%sexp (append' [] t : int t)];
+  [%expect {| (1 2 3 4) |}];
+  print_s [%sexp (append' [ 5; 6; 7 ] t : int t)];
+  [%expect {| (5 6 7 1 2 3 4) |}]
+;;
+
+let%expect_test "@" =
+  quickcheck'
+    [%quickcheck.generator: int t * int t]
+    [%test_result: int list]
+    (fun (t1, t2) -> to_list (t1 @ t2))
+    (fun (t1, t2) -> List.Infix.( @ ) (to_list t1) (to_list t2))
 ;;
 
 let%expect_test "unzip" =
-  let t = [ 1, 'a'; 2, 'b'; 3, 'c'; 4, 'd' ] in
-  print_s [%sexp (unzip t : int t * char t)];
-  [%expect {| ((1 2 3 4) (a b c d)) |}]
+  quickcheck'
+    [%quickcheck.generator: (int * char) t]
+    [%test_result: int list * char list]
+    (fun l -> List.unzip (to_list l))
+    (fun l -> unzip l |> Tuple2.map_both ~f1:to_list ~f2:to_list)
 ;;
 
 let%expect_test "return" =
@@ -63,7 +115,8 @@ let%expect_test "map2" =
   test [ 1; 2 ] [ 3; 4 ];
   test [ 1 ] [ 2; 3 ];
   test [ 1; 2 ] [ 3 ];
-  [%expect {|
+  [%expect
+    {|
     (Ok (2))
     (Ok (3 8))
     Unequal_lengths
@@ -128,7 +181,8 @@ let%expect_test "filter" =
   test [ 2 ] ~f:is_even;
   test [ 1; 2 ] ~f:is_even;
   test [ 2; 2; 3; 4 ] ~f:is_even;
-  [%expect {|
+  [%expect
+    {|
     ()
     (2)
     (2)
@@ -144,7 +198,8 @@ let%expect_test "filteri" =
   test [ 1; 2 ] ~f:index_plus_value_is_even;
   test [ 2; 2; 3; 4 ] ~f:index_plus_value_is_even;
   test [ 2; 2; 4; 3 ] ~f:index_plus_value_is_even;
-  [%expect {|
+  [%expect
+    {|
     ()
     (2)
     ()
@@ -160,7 +215,8 @@ let%expect_test "filter_map" =
   test [ 2 ] ~f:double_if_even;
   test [ 1; 2 ] ~f:double_if_even;
   test [ 2; 2; 3; 4 ] ~f:double_if_even;
-  [%expect {|
+  [%expect
+    {|
     ()
     (4)
     (4)
@@ -178,7 +234,8 @@ let%expect_test "filter_mapi" =
   test [ 1; 2 ] ~f:double_if_index_plus_value_is_even;
   test [ 2; 2; 3; 4 ] ~f:double_if_index_plus_value_is_even;
   test [ 2; 2; 4; 3 ] ~f:double_if_index_plus_value_is_even;
-  [%expect {|
+  [%expect
+    {|
     ()
     (4)
     ()
@@ -193,7 +250,8 @@ let%expect_test "concat" =
   test [ [ 1 ]; [ 2 ]; [ 3 ] ];
   test [ [ 1; 2; 3 ] ];
   test [ [ 1 ]; [ 2; 3 ]; [ 4; 5; 6 ] ];
-  [%expect {|
+  [%expect
+    {|
     (1)
     (1 2 3)
     (1 2 3)
@@ -207,7 +265,8 @@ let%expect_test "nth" =
   test 0 [ 1; 2; 3 ];
   test 2 [ 1; 2; 3 ];
   test 3 [ 1; 2; 3 ];
-  [%expect {|
+  [%expect
+    {|
     ()
     (1)
     (3)
@@ -235,27 +294,17 @@ let%expect_test "nth_exn" =
 ;;
 
 let%expect_test "last" =
-  let test list = print_s [%sexp (last list : int)] in
-  test [ 1 ];
-  test [ 1; 2 ];
-  test [ 1; 2; 3 ];
-  [%expect {|
-    1
-    2
-    3
-    |}]
+  quickcheck
+    [%test_result: int]
+    (fun l -> List.last l |> Core.Option.value_exn)
+    (fun l -> last l)
 ;;
 
 let%expect_test "drop_last" =
-  let test list = print_s [%sexp (drop_last list : int list)] in
-  test [ 1 ];
-  test [ 1; 2 ];
-  test [ 1; 2; 3 ];
-  [%expect {|
-    ()
-    (1)
-    (1 2)
-    |}]
+  quickcheck
+    [%test_result: int list]
+    (fun l -> List.drop_last l |> Core.Option.value_exn)
+    (fun l -> drop_last l)
 ;;
 
 let%expect_test "to_sequence" =
@@ -263,7 +312,8 @@ let%expect_test "to_sequence" =
   test [ 1 ];
   test [ 1; 2; 3 ];
   test [ 0; 2; 4; 6 ];
-  [%expect {|
+  [%expect
+    {|
     (1)
     (1 2 3)
     (0 2 4 6)
@@ -274,7 +324,8 @@ let%expect_test "sort" =
   let test t = print_s [%sexp (sort ~compare:Int.compare t : int t)] in
   test [ 1 ];
   test [ 2; 4; 1; 4 ];
-  [%expect {|
+  [%expect
+    {|
     (1)
     (1 2 4 4)
     |}]
@@ -285,7 +336,7 @@ let%expect_test "stable_sort" =
     print_s
       [%sexp
         (stable_sort ~compare:(fun a b -> Comparable.lift ~f:fst Int.compare a b) t
-          : (int * string) t)]
+         : (int * string) t)]
   in
   test [ 1, "_" ];
   test [ 2, "_"; 4, "a"; 1, "_"; 4, "b" ];
@@ -298,14 +349,60 @@ let%expect_test "stable_sort" =
     |}]
 ;;
 
+let%expect_test "stable_dedup" =
+  let test t =
+    print_s
+      [%sexp
+        (stable_dedup ~compare:(fun a b -> Comparable.lift ~f:fst Int.compare a b) t
+         : (int * string) t)]
+  in
+  test [ 1, "_" ];
+  test [ 2, "_"; 4, "a"; 1, "_"; 4, "b" ];
+  test [ 2, "_"; 4, "b"; 1, "_"; 4, "a" ];
+  [%expect
+    {|
+    ((1 _))
+    ((2 _) (4 a) (1 _))
+    ((2 _) (4 b) (1 _))
+    |}]
+;;
+
 let%expect_test "dedup_and_sort" =
   let test t = print_s [%sexp (dedup_and_sort ~compare:Int.compare t : int t)] in
   test [ 1 ];
   test [ 2; 4; 1; 4 ];
-  [%expect {|
+  [%expect
+    {|
     (1)
     (1 2 4)
     |}]
+;;
+
+let%expect_test "sort_and_group" =
+  let test t = print_s [%sexp (sort_and_group ~compare:Int.compare t : int t t)] in
+  test [ 1 ];
+  test [ 2; 4; 1; 4 ];
+  [%expect
+    {|
+    ((1))
+    ((1) (2) (4 4))
+    |}]
+;;
+
+let%expect_test "group" =
+  quickcheck'
+    [%quickcheck.generator: int t * (int -> int -> bool)]
+    [%test_result: int list list]
+    (fun (t, break) -> group t ~break |> to_list |> List.map ~f:to_list)
+    (fun (t, break) -> List.group (to_list t) ~break)
+;;
+
+let%expect_test "all_equal" =
+  let equal = [%equal: int] in
+  quickcheck
+    [%test_result: int option]
+    (fun l -> List.all_equal ~equal l)
+    (fun l -> all_equal ~equal l)
 ;;
 
 let%expect_test "min_elt' max_elt'" =
@@ -318,22 +415,75 @@ let%expect_test "min_elt' max_elt'" =
 ;;
 
 let%expect_test "map_add_multi" =
-  let map = map_of_alist_multi [ 0, 0; 0, 1; 1, 1 ] ~comparator:(module Int) in
+  let map = map_of_alist_multi_rev [ 0, 0; 0, 1; 1, 1 ] ~comparator:(module Int) in
   print_s [%sexp (map : int t Int.Map.t)];
   [%expect {| ((0 (1 0)) (1 (1))) |}];
   print_s [%sexp (map_add_multi map ~key:1 ~data:0 : int t Int.Map.t)];
   [%expect {| ((0 (1 0)) (1 (0 1))) |}]
 ;;
 
-let%expect_test "map_of_alist_multi" =
+let%expect_test "hashtbl_add_multi" =
+  let hashtbl = Hashtbl.create (module Int) in
+  let print () = print_s [%sexp (hashtbl : int Nonempty_list.t Hashtbl.M(Int).t)] in
+  print ();
+  [%expect {| () |}];
+  hashtbl_add_multi hashtbl ~key:0 ~data:0;
+  (* adding to an key that doesn't exist should create the key with a singleton nonempty
+     list *)
+  print ();
+  [%expect {| ((0 (0))) |}];
+  hashtbl_add_multi hashtbl ~key:0 ~data:1;
+  (* adding to an key that already exists should cons to the existing nonempty list *)
+  print ();
+  [%expect {| ((0 (1 0))) |}]
+;;
+
+let%expect_test "map_of_alist_multi_rev" =
   let test alist =
-    print_s [%sexp (map_of_alist_multi alist ~comparator:(module Int) : int t Int.Map.t)]
+    print_s
+      [%sexp (map_of_alist_multi_rev alist ~comparator:(module Int) : int t Int.Map.t)]
   in
   test [];
   test [ 0, 0; 0, 1; 1, 1 ];
-  [%expect {|
+  [%expect
+    {|
     ()
     ((0 (1 0)) (1 (1)))
+    |}]
+;;
+
+let%expect_test "map_of_alist_multi" =
+  let test alist =
+    print_s [%sexp (map_of_alist_multi alist ~comparator:(module Int) : int t Int.Map.t)];
+    (* Also print the result of using [Map.of_alist_multi] to demonstrate that they're the
+       same *)
+    print_s [%sexp (Map.of_alist_multi (module Int) alist : int list Int.Map.t)]
+  in
+  test [];
+  test [ 0, 0; 0, 1; 1, 1 ];
+  [%expect
+    {|
+    ()
+    ()
+    ((0 (0 1)) (1 (1)))
+    ((0 (0 1)) (1 (1)))
+    |}]
+;;
+
+let%expect_test "map_of_list_with_key_multi_rev" =
+  let get_key = Date.year in
+  let test alist =
+    print_s
+      [%sexp
+        (map_of_list_with_key_multi_rev alist ~comparator:(module Int) ~get_key
+         : Date.t t Int.Map.t)]
+  in
+  test [];
+  test ([ "2023-01-01"; "2023-03-03"; "2024-12-24" ] |> List.map ~f:Date.of_string);
+  [%expect
+    {|
+    ()
+    ((2023 (2023-03-03 2023-01-01)) (2024 (2024-12-24)))
     |}]
 ;;
 
@@ -343,26 +493,54 @@ let%expect_test "map_of_list_with_key_multi" =
     print_s
       [%sexp
         (map_of_list_with_key_multi alist ~comparator:(module Int) ~get_key
-          : Date.t t Int.Map.t)]
+         : Date.t t Int.Map.t)];
+    (* Also print the result of using [Map.of_list_with_key_multi] to demonstrate that
+       they're the same *)
+    print_s
+      [%sexp
+        (Map.of_list_with_key_multi (module Int) alist ~get_key : Date.t list Int.Map.t)]
   in
   test [];
   test ([ "2023-01-01"; "2023-03-03"; "2024-12-24" ] |> List.map ~f:Date.of_string);
-  [%expect {|
+  [%expect
+    {|
     ()
-    ((2023 (2023-03-03 2023-01-01)) (2024 (2024-12-24)))
+    ()
+    ((2023 (2023-01-01 2023-03-03)) (2024 (2024-12-24)))
+    ((2023 (2023-01-01 2023-03-03)) (2024 (2024-12-24)))
+    |}]
+;;
+
+let%expect_test "map_of_sequence_multi_rev" =
+  let test alist =
+    print_s
+      [%sexp (map_of_sequence_multi_rev alist ~comparator:(module Int) : int t Int.Map.t)]
+  in
+  test Sequence.empty;
+  test (Sequence.of_list [ 0, 0; 0, 1; 1, 1 ]);
+  [%expect
+    {|
+    ()
+    ((0 (1 0)) (1 (1)))
     |}]
 ;;
 
 let%expect_test "map_of_sequence_multi" =
   let test alist =
     print_s
-      [%sexp (map_of_sequence_multi alist ~comparator:(module Int) : int t Int.Map.t)]
+      [%sexp (map_of_sequence_multi alist ~comparator:(module Int) : int t Int.Map.t)];
+    (* Also print the result of using [Map.of_sequence_multi] to demonstrate that they're the
+       same *)
+    print_s [%sexp (Map.of_sequence_multi (module Int) alist : int list Int.Map.t)]
   in
   test Sequence.empty;
   test (Sequence.of_list [ 0, 0; 0, 1; 1, 1 ]);
-  [%expect {|
+  [%expect
+    {|
     ()
-    ((0 (1 0)) (1 (1)))
+    ()
+    ((0 (0 1)) (1 (1)))
+    ((0 (0 1)) (1 (1)))
     |}]
 ;;
 
@@ -438,6 +616,45 @@ let%expect_test "combine_or_errors_unit" =
   [%expect {| (Error (A B C D)) |}];
   test [ Ok (); e "B"; e "C"; e "D" ];
   [%expect {| (Error (B C D)) |}]
+;;
+
+let%expect_test "filter_ok_at_least_one" =
+  let e s = Or_error.error_string s in
+  let test oes = print_s [%sexp (filter_ok_at_least_one oes : int t Or_error.t)] in
+  test [ Ok 1 ];
+  [%expect {| (Ok (1)) |}];
+  test [ e "A" ];
+  [%expect {| (Error A) |}];
+  test [ Ok 1; e "B" ];
+  [%expect {| (Ok (1)) |}];
+  test [ e "A"; Ok 2 ];
+  [%expect {| (Ok (2)) |}];
+  test [ Ok 1; Ok 2; Ok 3; Ok 4 ];
+  [%expect {| (Ok (1 2 3 4)) |}];
+  test [ e "A"; e "B"; e "C"; e "D" ];
+  [%expect {| (Error (A B C D)) |}];
+  test [ Ok 1; e "B"; e "C"; e "D" ];
+  [%expect {| (Ok (1)) |}];
+  test [ e "A"; e "B"; Ok 3; e "D"; Ok 5 ];
+  [%expect {| (Ok (3 5)) |}]
+;;
+
+let%expect_test "option_all" =
+  let test os = print_s [%sexp (option_all os : int t option)] in
+  test [ Some 1 ];
+  [%expect {| ((1)) |}];
+  test [ None ];
+  [%expect {| () |}];
+  test [ Some 1; None ];
+  [%expect {| () |}];
+  test [ Some 1; Some 2 ];
+  [%expect {| ((1 2)) |}];
+  test [ None; None; Some 1 ];
+  [%expect {| () |}];
+  test [ None; None ];
+  [%expect {| () |}];
+  test [ Some 1; Some 2; Some 4 ];
+  [%expect {| ((1 2 4)) |}]
 ;;
 
 let%expect_test "basic accessor" =
@@ -620,6 +837,38 @@ let%expect_test "mapi" =
   [%expect {| ((0 a) (1 b) (2 c) (3 d)) |}]
 ;;
 
+let%expect_test "transpose" =
+  print_s [%sexp (transpose [ [ 1; 2; 3 ]; [ 4; 5; 6 ]; [ 7; 8; 9 ] ] : int t t option)];
+  [%expect {| (((1 4 7) (2 5 8) (3 6 9))) |}];
+  print_s [%sexp (transpose [ [ 1; 2 ]; [ 3; 4 ]; [ 5; 6 ] ] : int t t option)];
+  [%expect {| (((1 3 5) (2 4 6))) |}];
+  print_s [%sexp (transpose [ [ 1; 2; 3 ]; [ 4; 5; 6 ] ] : int t t option)];
+  [%expect {| (((1 4) (2 5) (3 6))) |}];
+  print_s [%sexp (transpose [ [ 1 ] ] : int t t option)];
+  [%expect {| (((1))) |}];
+  print_s [%sexp (transpose [ [ 1; 2 ]; [ 3; 4 ]; [ 5 ] ] : int t t option)];
+  [%expect {| () |}];
+  print_s [%sexp (transpose [ [ 1 ]; [ 2; 3 ] ] : int t t option)];
+  [%expect {| () |}]
+;;
+
+let%expect_test "transpose_exn" =
+  print_s [%sexp (transpose_exn [ [ 1; 2; 3 ]; [ 4; 5; 6 ]; [ 7; 8; 9 ] ] : int t t)];
+  [%expect {| ((1 4 7) (2 5 8) (3 6 9)) |}];
+  print_s [%sexp (transpose_exn [ [ 1; 2 ]; [ 3; 4 ]; [ 5; 6 ] ] : int t t)];
+  [%expect {| ((1 3 5) (2 4 6)) |}];
+  print_s [%sexp (transpose_exn [ [ 1; 2; 3 ]; [ 4; 5; 6 ] ] : int t t)];
+  [%expect {| ((1 4) (2 5) (3 6)) |}];
+  print_s [%sexp (transpose_exn [ [ 1 ] ] : int t t)];
+  [%expect {| ((1)) |}];
+  Expect_test_helpers_core.require_does_raise (fun () ->
+    transpose_exn [ [ 1; 2 ]; [ 3; 4 ]; [ 5 ] ]);
+  [%expect {| ("transpose got lists of different lengths" (lengths (2 2 1))) |}];
+  Expect_test_helpers_core.require_does_raise (fun () ->
+    transpose_exn [ [ 1 ]; [ 2; 3 ] ]);
+  [%expect {| ("transpose got lists of different lengths" (lengths (1 2))) |}]
+;;
+
 let%expect_test "rev_append" =
   let test xs ys = rev_append xs ys |> [%sexp_of: int Nonempty_list.t] |> print_s in
   test [ 1; 2; 3 ] [ 4 ];
@@ -733,9 +982,9 @@ let%expect_test "init" =
   [%expect {| (0 1) |}];
   test 1;
   [%expect {| (0) |}];
-  Expect_test_helpers_core.require_does_raise [%here] (fun () -> test 0);
+  Expect_test_helpers_core.require_does_raise (fun () -> test 0);
   [%expect {| (Invalid_argument "Nonempty_list.init 0") |}];
-  Expect_test_helpers_core.require_does_raise [%here] (fun () -> test (-1));
+  Expect_test_helpers_core.require_does_raise (fun () -> test (-1));
   [%expect {| (Invalid_argument "Nonempty_list.init -1") |}];
   ()
 ;;
@@ -770,6 +1019,27 @@ let%expect_test "findi" =
   [%expect {| ((2 4)) |}];
   test 2 5;
   [%expect {| () |}];
+  ()
+;;
+
+let%expect_test "findi_exn" =
+  let test k v =
+    Nonempty_list.init 3 ~f:(fun x -> x * x)
+    |> findi_exn ~f:(fun i x -> i = k && x = v)
+    |> printf !"%{sexp: (int * int)}"
+  in
+  test 0 0;
+  [%expect {| (0 0) |}];
+  Expect_test_helpers_core.require_does_raise (fun () -> test 0 1);
+  [%expect {| (Not_found_s "Nonempty_list.findi_exn: not found") |}];
+  test 1 1;
+  [%expect {| (1 1) |}];
+  Expect_test_helpers_core.require_does_raise (fun () -> test 1 2);
+  [%expect {| (Not_found_s "Nonempty_list.findi_exn: not found") |}];
+  test 2 4;
+  [%expect {| (2 4) |}];
+  Expect_test_helpers_core.require_does_raise (fun () -> test 2 5);
+  [%expect {| (Not_found_s "Nonempty_list.findi_exn: not found") |}];
   ()
 ;;
 
@@ -856,7 +1126,7 @@ let%expect_test "Option" =
 let%expect_test "Option does not allocate" =
   run_on_empty_and_nonempty_lists (fun l ->
     let round_tripped =
-      Expect_test_helpers_core.require_no_allocation [%here] (fun () ->
+      Expect_test_helpers_core.require_no_allocation (fun () ->
         match%optional.Nonempty_list.Option l with
         | None -> Sys.opaque_identity Nonempty_list.Option.none
         | Some nonempty ->
@@ -864,3 +1134,139 @@ let%expect_test "Option does not allocate" =
     in
     assert (phys_equal l round_tripped))
 ;;
+
+let%expect_test "remove_consecutive_duplicates" =
+  let test l ~which_to_keep =
+    mapi l ~f:(fun idx elem -> elem, idx)
+    |> remove_consecutive_duplicates ~which_to_keep ~equal:[%equal: int * _]
+    |> [%sexp_of: (int * int) t]
+    |> print_s
+  in
+  test [ 0; 1; 1; 2 ] ~which_to_keep:`First;
+  [%expect {| ((0 0) (1 1) (2 3)) |}];
+  test [ 0; 0; 2; 2 ] ~which_to_keep:`Last;
+  [%expect {| ((0 1) (2 3)) |}];
+  test [ 0; 0; 2; 2; 0 ] ~which_to_keep:`First;
+  [%expect {| ((0 0) (2 2) (0 4)) |}];
+  test [ 0 ] ~which_to_keep:`First;
+  [%expect {| ((0 0)) |}];
+  test [ 0; 0; 0; 0 ] ~which_to_keep:`Last;
+  [%expect {| ((0 3)) |}];
+  ()
+;;
+
+module%test Partition = struct
+  let%expect_test "partition_tf" =
+    let test xs =
+      let f x = x % 2 = 0 in
+      let partition = Nonempty_list.partition_tf xs ~f in
+      partition |> [%sexp_of: (int, int) Partition.t] |> print_s;
+      assert (
+        [%equal: int list * int list]
+          ( Partition.fst partition |> Option.of_option
+          , Partition.snd partition |> Option.of_option )
+          (Nonempty_list.partition_tf' xs ~f))
+    in
+    test t;
+    [%expect {| (Both ((2 4) (1 3))) |}];
+    test [ 1; 3 ];
+    [%expect {| (Snd (1 3)) |}];
+    test [ 2; 4 ];
+    [%expect {| (Fst (2 4)) |}]
+  ;;
+
+  let%expect_test "partition_map" =
+    let test xs =
+      let f x : _ Either.t =
+        if x % 2 = 0 then First x else Second [%string "odd %{x#Int}"]
+      in
+      let partition = Nonempty_list.partition_map xs ~f in
+      partition |> [%sexp_of: (int, string) Partition.t] |> print_s;
+      assert (
+        [%equal: int list * string list]
+          ( Partition.fst partition |> Option.of_option
+          , Partition.snd partition |> Option.of_option )
+          (Nonempty_list.partition_map' xs ~f))
+    in
+    test t;
+    [%expect {| (Both ((2 4) ("odd 1" "odd 3"))) |}];
+    test [ 1; 3 ];
+    [%expect {| (Snd ("odd 1" "odd 3")) |}];
+    test [ 2; 4 ];
+    [%expect {| (Fst (2 4)) |}]
+  ;;
+
+  let%expect_test "partition_result" =
+    let test xs =
+      let xs =
+        Nonempty_list.map xs ~f:(fun x ->
+          if x % 2 = 0 then Ok x else Error [%string "odd %{x#Int}"])
+      in
+      let partition = Nonempty_list.partition_result xs in
+      partition |> [%sexp_of: (int, string) Partition.t] |> print_s;
+      assert (
+        [%equal: int list * string list]
+          ( Partition.fst partition |> Option.of_option
+          , Partition.snd partition |> Option.of_option )
+          (Nonempty_list.partition_result' xs))
+    in
+    test t;
+    [%expect {| (Both ((2 4) ("odd 1" "odd 3"))) |}];
+    test [ 1; 3 ];
+    [%expect {| (Snd ("odd 1" "odd 3")) |}];
+    test [ 2; 4 ];
+    [%expect {| (Fst (2 4)) |}]
+  ;;
+end
+
+module%test Partition3 = struct
+  let f x =
+    match x % 3 with
+    | 0 -> `Fst x
+    | 1 -> `Snd (Int.to_float x)
+    | 2 -> `Trd (Int.to_string x)
+    | _ -> assert false
+  ;;
+
+  let convert (partition3 : _ Nonempty_list.Partition3.t) =
+    match partition3 with
+    | Fst t -> to_list t, [], []
+    | Snd t -> [], to_list t, []
+    | Trd t -> [], [], to_list t
+    | Fst_snd (fsts, snds) -> to_list fsts, to_list snds, []
+    | Fst_trd (fsts, trds) -> to_list fsts, [], to_list trds
+    | Snd_trd (snds, trds) -> [], to_list snds, to_list trds
+    | Fst_snd_trd (fsts, snds, trds) -> to_list fsts, to_list snds, to_list trds
+  ;;
+
+  let%expect_test "partition3_map (manual)" =
+    let test xs =
+      let partition3 = Nonempty_list.partition3_map xs ~f in
+      let from_list = List.partition3_map (to_list xs) ~f in
+      let three_lists = convert partition3 in
+      assert ([%equal: int list * float list * string list] three_lists from_list);
+      partition3 |> [%sexp_of: (int, float, string) Partition3.t] |> print_s
+    in
+    test [ 1; 2; 3; 4 ];
+    [%expect {| (Fst_snd_trd (3) (1 4) (2)) |}];
+    test [ 1; 3 ];
+    [%expect {| (Fst_snd (3) (1)) |}];
+    test [ 5; 3 ];
+    [%expect {| (Fst_trd (3) (5)) |}];
+    test [ 2; 4 ];
+    [%expect {| (Snd_trd (4) (2)) |}];
+    test [ 6; 3 ];
+    [%expect {| (Fst (6 3)) |}];
+    test [ 4; 7 ];
+    [%expect {| (Snd (4 7)) |}];
+    test [ 5; 2 ];
+    [%expect {| (Trd (5 2)) |}]
+  ;;
+
+  let%expect_test "partition3_map (quickcheck)" =
+    quickcheck
+      [%test_result: int list * float list * string list]
+      (fun l -> List.partition3_map l ~f)
+      (fun l -> Nonempty_list.partition3_map l ~f |> convert)
+  ;;
+end

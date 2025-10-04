@@ -27,8 +27,7 @@ end
     Closing the returned pipe will permanently close the subscription.
 
     It is guaranteed that every [Connection_success] message will be immediately followed
-    by a [State] message.
-*)
+    by a [State] message. *)
 val create
   :  ?time_source:Time_source.t
   -> Rpc.Connection.t Durable.t
@@ -47,10 +46,10 @@ val create_or_fail
   -> query:'query
   -> resubscribe_delay:Time_float.Span.t
   -> ( ('state, 'update, 'error, Rpc.State_rpc.Metadata.t) Update.t Pipe.Reader.t
-     , 'error )
-     Result.t
-     Or_error.t
-     Deferred.t
+       , 'error )
+       Result.t
+       Or_error.t
+       Deferred.t
 
 (** Like [create] and [create_or_fail], but allow specifying a custom dispatch function.
     This is useful for clients using babel, where the [Rpc.t] is not usually exposed. *)
@@ -61,7 +60,7 @@ val create'
   -> dispatch:
        ('connection
         -> ('state * 'update Pipe.Reader.t * 'metadata, 'error) Result.t Or_error.t
-           Deferred.t)
+             Deferred.t)
   -> resubscribe_delay:Time_float.Span.t
   -> ('state, 'update, 'error, 'metadata) Update.t Pipe.Reader.t
 
@@ -71,16 +70,15 @@ val create_or_fail'
   -> dispatch:
        ('connection
         -> ('state * 'update Pipe.Reader.t * 'metadata, 'error) Result.t Or_error.t
-           Deferred.t)
+             Deferred.t)
   -> resubscribe_delay:Time_float.Span.t
   -> (('state, 'update, 'error, 'metadata) Update.t Pipe.Reader.t, 'error) Result.t
-     Or_error.t
-     Deferred.t
+       Or_error.t
+       Deferred.t
 
 (** [create_versioned], [create_or_fail_versioned], [create_versioned'],
     [create_or_fail_versioned'] are identical to [create] and [create_or_fail] but work
-    for [Caller_converts] and [Both_converts] Versioned State RPCs.
-*)
+    for [Caller_converts] and [Both_converts] Versioned State RPCs. *)
 
 val create_versioned
   :  ?time_source:Time_source.t
@@ -117,11 +115,11 @@ val create_or_fail_versioned
   -> query:'query
   -> resubscribe_delay:Time_float.Span.t
   -> ( ('state, 'update Or_error.t, 'error, Rpc.State_rpc.Metadata.t) Update.t
-       Pipe.Reader.t
-     , 'error )
-     Result.t
-     Or_error.t
-     Deferred.t
+         Pipe.Reader.t
+       , 'error )
+       Result.t
+       Or_error.t
+       Deferred.t
 
 val create_or_fail_versioned'
   :  ?time_source:Time_source.t
@@ -134,8 +132,8 @@ val create_or_fail_versioned'
   -> query:'query
   -> resubscribe_delay:Time_float.Span.t
   -> ( ('state, 'update Or_error.t, 'error, Rpc.State_rpc.Metadata.t) Update.t
-       Pipe.Reader.t
-     , 'error )
-     Result.t
-     Or_error.t
-     Deferred.t
+         Pipe.Reader.t
+       , 'error )
+       Result.t
+       Or_error.t
+       Deferred.t

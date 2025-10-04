@@ -10,6 +10,21 @@ type 'number t =
   | `Array of 'number t list
   ]
 
+module Or_raw = struct
+  type ('number, 't) t =
+    [< `Raw_json_string of string
+    | `Null
+    | `False
+    | `True
+    | `String of string
+    | `Number of 'number
+    | `Object of (string * 't) list
+    | `Array of 't list
+    ]
+    as
+    't
+end
+
 module Parser = struct
   open Angstrom
 
@@ -52,8 +67,7 @@ module Parser = struct
     let open Angstrom in
     let advance1 = advance 1 in
     let pair x y = x, y in
-    let buf = Buffer.create 0x1000 in
-    let str = Json_string.parse buf in
+    let str = Json_string.parse in
     fix (fun json ->
       let mem = lift2 pair (quo *> str <* ns) json in
       let obj = advance1 *> sep_by vs mem <* rcb >>| fun ms -> `Object ms in
@@ -117,17 +131,18 @@ module Serializer = struct
       serialize_list ~indent ~spaces serialize_number faraday "{}" serialize_kv items
     | `Array items ->
       serialize_list ~indent ~spaces serialize_number faraday "[]" serialize_hum' items
+    | `Raw_json_string string -> Faraday.write_string faraday string
 
-  and serialize_list :
-        'a 'b.
-        indent:int
-        -> spaces:int
-        -> 'a
-        -> Faraday.t
-        -> string
-        -> (indent:int -> spaces:int -> 'a -> 'b -> Faraday.t -> unit)
-        -> 'b list
-        -> unit
+  and serialize_list
+    : 'a 'b.
+    indent:int
+    -> spaces:int
+    -> 'a
+    -> Faraday.t
+    -> string
+    -> (indent:int -> spaces:int -> 'a -> 'b -> Faraday.t -> unit)
+    -> 'b list
+    -> unit
     =
     fun ~indent ~spaces serialize_number faraday brackets serialize_item items ->
     match items with

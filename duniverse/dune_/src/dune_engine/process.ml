@@ -6,10 +6,6 @@ module Timestamp = Event.Timestamp
 module Action_output_on_success = Execution_parameters.Action_output_on_success
 module Action_output_limit = Execution_parameters.Action_output_limit
 
-let with_directory_annot =
-  User_message.Annots.Key.create ~name:"with-directory" Path.to_dyn
-;;
-
 let limit_output = Dune_output_truncation.limit_output ~message:"TRUNCATED BY DUNE"
 
 module Failure_mode = struct
@@ -17,22 +13,44 @@ module Failure_mode = struct
     | Strict : ('a, 'a) t
     | Accept : int Predicate.t -> ('a, ('a, int) result) t
     | Return : ('a, 'a * int) t
+    | Timeout :
+        { timeout_seconds : float option
+        ; failure_mode : ('a, 'b) t
+        }
+        -> ('a, ('b, [ `Timed_out ]) result) t
 
-  let accepted_codes : type a b. (a, b) t -> int -> bool = function
+  let rec accepted_codes : type a b. (a, b) t -> int -> bool = function
     | Strict -> Int.equal 0
     | Accept exit_codes -> fun i -> Predicate.test exit_codes i
     | Return -> fun _ -> true
+    | Timeout { failure_mode; _ } -> accepted_codes failure_mode
   ;;
 
-  let map_result : type a b. (a, b) t -> int -> f:(unit -> a) -> b =
-    fun mode t ~f ->
+  let exit_code_of_result = function
+    | `Finished n -> n
+    | `Timeout -> Code_error.raise "should not return `Timeout" []
+  ;;
+
+  let timeout_seconds : type a b. (a, b) t -> float option = function
+    | Timeout { timeout_seconds; _ } -> timeout_seconds
+    | Strict | Accept _ | Return -> None
+  ;;
+
+  let rec map_result
+    : type a b. (a, b) t -> [ `Timeout | `Finished of int ] -> f:(unit -> a) -> b
+    =
+    fun mode result ~f ->
     match mode with
     | Strict -> f ()
     | Accept _ ->
-      (match t with
+      (match exit_code_of_result result with
        | 0 -> Ok (f ())
        | n -> Error n)
-    | Return -> f (), t
+    | Return -> f (), exit_code_of_result result
+    | Timeout { failure_mode; _ } ->
+      (match result with
+       | `Timeout -> Error `Timed_out
+       | `Finished _ -> Ok (map_result failure_mode result ~f))
   ;;
 end
 
@@ -53,6 +71,7 @@ module Io = struct
         { output_on_success : Action_output_on_success.t
         ; output_limit : Action_output_limit.t
         }
+    | External
 
   type status =
     | Keep_open
@@ -203,12 +222,12 @@ let default_metadata =
 ;;
 
 let create_metadata
-  ?loc
-  ?(annots = default_metadata.annots)
-  ?name
-  ?(categories = default_metadata.categories)
-  ?(purpose = Internal_job)
-  ()
+      ?loc
+      ?(annots = default_metadata.annots)
+      ?name
+      ?(categories = default_metadata.categories)
+      ?(purpose = Internal_job)
+      ()
   =
   { loc; annots; name; categories; purpose }
 ;;
@@ -218,13 +237,14 @@ let io_to_redirection_path (kind : Io.kind) =
   | Terminal _ -> None
   | Null -> Some (Path.to_string Dev_null.path)
   | File fn -> Some (Path.to_string fn)
+  | External -> None
 ;;
 
 let command_line_enclosers
-  ~dir
-  ~(stdout_to : Io.output Io.t)
-  ~(stderr_to : Io.output Io.t)
-  ~(stdin_from : Io.input Io.t)
+      ~dir
+      ~(stdout_to : Io.output Io.t)
+      ~(stderr_to : Io.output Io.t)
+      ~(stdin_from : Io.input Io.t)
   =
   let quote fn = String.quote_for_shell (Path.to_string fn) in
   let prefix, suffix =
@@ -234,7 +254,7 @@ let command_line_enclosers
   in
   let suffix =
     match stdin_from.kind with
-    | Null | Terminal _ -> suffix
+    | Null | Terminal _ | External -> suffix
     | File fn -> suffix ^ " < " ^ quote fn
   in
   let suffix =
@@ -429,19 +449,19 @@ end = struct
   ;;
 
   let progname_and_purpose ~tag ~prog ~purpose =
-    let open Pp.O in
-    let progname = sprintf "%12s" (Fancy.short_prog_name_of_prog prog) in
-    Pp.tag tag (Pp.verbatim progname) ++ Pp.char ' ' ++ pp_purpose purpose
+    User_message.aligned_message
+      ~left:(tag, Fancy.short_prog_name_of_prog prog)
+      ~right:(pp_purpose purpose)
   ;;
 
   let pp_ok = progname_and_purpose ~tag:Ok
 
   let pp_error
-    ~prog
-    ~purpose
-    ~has_unexpected_stdout
-    ~has_unexpected_stderr
-    ~(error : Exit_status.error)
+        ~prog
+        ~purpose
+        ~has_unexpected_stdout
+        ~has_unexpected_stderr
+        ~(error : Exit_status.error)
     =
     let open Pp.O in
     let msg =
@@ -529,10 +549,9 @@ end = struct
       Has_output { with_color; without_color; has_embedded_location }
   ;;
 
-  let get_loc_and_annots ~dir ~metadata ~output =
+  let get_loc_annots_and_dir ~dir ~metadata ~output =
     let { loc; annots; _ } = metadata in
     let dir = Option.value dir ~default:Path.root in
-    let annots = User_message.Annots.set annots with_directory_annot dir in
     let annots =
       match output with
       | No_output -> annots
@@ -547,14 +566,15 @@ end = struct
           | errors -> User_message.Annots.set annots Compound_user_error.annot errors)
         else annots
     in
-    loc, annots
+    loc, annots, dir
   ;;
 
-  let fail ~loc ~annots paragraphs =
+  let fail ?dir ~loc ~annots paragraphs =
     (* We don't use [User_error.make] as it would add the "Error: " prefix. We
        don't need this prefix as it is already included in the output of the
        command. *)
-    raise (User_error.E (User_message.make ?loc ~annots paragraphs))
+    let dir = Option.map ~f:Path.to_string dir in
+    raise (User_error.E (User_message.make ?dir ?loc ~annots paragraphs))
   ;;
 
   let verbose t ~id ~metadata ~output ~command_line ~dir =
@@ -579,8 +599,9 @@ end = struct
         | Failed n -> sprintf "exited with code %d" n
         | Signaled signame -> sprintf "got signal %s" (Signal.name signame)
       in
-      let loc, annots = get_loc_and_annots ~dir ~metadata ~output in
+      let loc, annots, dir = get_loc_annots_and_dir ~dir ~metadata ~output in
       fail
+        ~dir
         ~loc
         ~annots
         ((Pp.tag User_message.Style.Kwd (Pp.verbatim "Command")
@@ -594,20 +615,21 @@ end = struct
   ;;
 
   let non_verbose
-    t
-    ~(verbosity : Display.t)
-    ~metadata
-    ~output
-    ~prog
-    ~command_line
-    ~dir
-    ~has_unexpected_stdout
-    ~has_unexpected_stderr
+        t
+        ~(verbosity : Display.t)
+        ~metadata
+        ~output
+        ~prog
+        ~command_line
+        ~dir
+        ~has_unexpected_stdout
+        ~has_unexpected_stderr
     =
     let output = parse_output output in
     let show_command =
       !Clflags.always_show_command_line
-      || (* We want to show command lines in the CI, but not when running inside
+      ||
+      (* We want to show command lines in the CI, but not when running inside
             dune. Otherwise tests would yield different result whether they are
             executed locally or in the CI. *)
       (Execution_env.inside_ci && not Execution_env.inside_dune)
@@ -635,7 +657,7 @@ end = struct
       then Console.print_user_message (User_message.make paragraphs);
       n
     | Error error ->
-      let loc, annots = get_loc_and_annots ~dir ~metadata ~output in
+      let loc, annots, dir = get_loc_annots_and_dir ~dir ~metadata ~output in
       let paragraphs =
         match verbosity with
         | Short ->
@@ -654,11 +676,19 @@ end = struct
                (* If the command has no output, we need to say something.
                   Otherwise it's not clear what's going on. *)
                (match error with
-                | Failed n -> [ Pp.textf "Command exited with code %d." n ]
+                | Failed exitcode ->
+                  (* When debugging segfaults, 0xc0000005 is a slightly easier
+                     random number to pattern match and 🤦 than -1073741819! *)
+                  let exitcode =
+                    if Sys.win32 && exitcode < 0
+                    then Printf.sprintf "0x%08lx" (Int32.of_int exitcode)
+                    else string_of_int exitcode
+                  in
+                  [ Pp.textf "Command exited with code %s." exitcode ]
                 | Signaled signame ->
                   [ Pp.textf "Command got signal %s." (Signal.name signame) ]))
       in
-      fail ~loc ~annots paragraphs
+      fail ~dir ~loc ~annots paragraphs
   ;;
 end
 
@@ -749,17 +779,17 @@ module Result = struct
   ;;
 
   let make
-    ({ stdout_on_success
-     ; stderr_on_success
-     ; stdout_limit
-     ; stderr_limit
-     ; stdout
-     ; stderr
-     ; _
-     } :
-      process)
-    (process_info : Proc.Process_info.t)
-    fail_mode
+        ({ stdout_on_success
+         ; stderr_on_success
+         ; stdout_limit
+         ; stderr_limit
+         ; stdout
+         ; stderr
+         ; _
+         } :
+          process)
+        (process_info : Proc.Process_info.t)
+        fail_mode
     =
     let stdout = Out.make stdout ~on_success:stdout_on_success ~limit:stdout_limit in
     let stderr = Out.make stderr ~on_success:stderr_on_success ~limit:stderr_limit in
@@ -780,17 +810,17 @@ module Result = struct
 end
 
 let report_process_finished
-  stats
-  ~metadata
-  ~dir
-  ~prog
-  ~pid
-  ~args
-  ~started_at
-  ~exit_status
-  ~stdout
-  ~stderr
-  (times : Proc.Times.t)
+      stats
+      ~metadata
+      ~dir
+      ~prog
+      ~pid
+      ~args
+      ~started_at
+      ~exit_status
+      ~stdout
+      ~stderr
+      (times : Proc.Times.t)
   =
   let common =
     let name =
@@ -849,23 +879,24 @@ let report_process_finished
 
 let set_temp_dir_when_running_actions = ref true
 
-let await { response_file; pid; _ } =
+let await ~timeout_seconds { response_file; pid; _ } =
   let+ process_info, termination_reason =
-    Scheduler.wait_for_build_process pid ~is_process_group_leader:true
+    Scheduler.wait_for_build_process ?timeout_seconds pid ~is_process_group_leader:true
   in
   Option.iter response_file ~f:Path.unlink_exn;
   process_info, termination_reason
 ;;
 
 let spawn
-  ?dir
-  ?(env = Env.initial)
-  ~(stdout : _ Io.t)
-  ~(stderr : _ Io.t)
-  ~(stdin : _ Io.t)
-  ~prog
-  ~args
-  ()
+      ?dir
+      ?(env = Env.initial)
+      ~(stdout : _ Io.t)
+      ~(stderr : _ Io.t)
+      ~(stdin : _ Io.t)
+      ~setpgid
+      ~prog
+      ~args
+      ()
   =
   let stdout_on_success = Io.output_on_success stdout
   and stderr_on_success = Io.output_on_success stderr in
@@ -873,6 +904,7 @@ let spawn
   and stderr_limit = Io.output_limit stderr in
   let (stdout_capture, stdout), (stderr_capture, stderr) =
     match stdout.kind, stderr.kind with
+    | External, _ | _, External -> (None, stdout), (None, stderr)
     | (Terminal _, _ | _, Terminal _) when !Clflags.capture_outputs ->
       let capture ~suffix =
         let fn = Temp.create File ~prefix:"dune" ~suffix in
@@ -947,7 +979,7 @@ let spawn
       ~stdout
       ~stderr
       ~stdin
-      ~setpgid:Spawn.Pgid.new_process_group
+      ?setpgid
       ~cwd:
         (match dir with
          | None -> Inherit
@@ -969,16 +1001,17 @@ let spawn
 ;;
 
 let run_internal
-  ?dir
-  ~(display : Display.t)
-  ?(stdout_to = Io.stdout)
-  ?(stderr_to = Io.stderr)
-  ?(stdin_from = Io.null In)
-  ?env
-  ?(metadata = default_metadata)
-  fail_mode
-  prog
-  args
+      ?dir
+      ~(display : Display.t)
+      ?(stdout_to = Io.stdout)
+      ?(stderr_to = Io.stderr)
+      ?(stdin_from = Io.null In)
+      ?env
+      ?(metadata = default_metadata)
+      ?(setpgid = Some Spawn.Pgid.new_process_group)
+      fail_mode
+      prog
+      args
   =
   Scheduler.with_job_slot (fun _cancel (config : Scheduler.Config.t) ->
     let dir =
@@ -1008,8 +1041,17 @@ let run_internal
         cmdline
       | _ -> Pp.nop
     in
-    let t =
-      spawn ?dir ?env ~stdout:stdout_to ~stderr:stderr_to ~stdin:stdin_from ~prog ~args ()
+    let (t : t) =
+      spawn
+        ?dir
+        ?env
+        ~stdout:stdout_to
+        ~stderr:stderr_to
+        ~stdin:stdin_from
+        ~setpgid
+        ~prog
+        ~args
+        ()
     in
     let* () =
       let description =
@@ -1025,7 +1067,9 @@ let run_internal
       in
       Running_jobs.start id t.pid ~description ~started_at:t.started_at
     in
-    let* process_info, termination_reason = await t in
+    let* process_info, termination_reason =
+      await ~timeout_seconds:(Failure_mode.timeout_seconds fail_mode) t
+    in
     let+ () = Running_jobs.stop id in
     let result = Result.make t process_info fail_mode in
     let times =
@@ -1056,6 +1100,7 @@ let run_internal
          we're about to return. *)
       Result.close result;
       raise (Memo.Non_reproducible Scheduler.Run.Build_cancelled)
+    | Timeout -> `Timeout, times
     | Normal ->
       let output = Result.Out.get result.stdout ^ Result.Out.get result.stderr in
       Log.command ~command_line ~output ~exit_status:process_info.status;
@@ -1083,12 +1128,12 @@ let run_internal
             ~has_unexpected_stderr:result.stderr.unexpected_output
       in
       Result.close result;
-      res, times)
+      `Finished res, times)
 ;;
 
 let run ?dir ~display ?stdout_to ?stderr_to ?stdin_from ?env ?metadata fail_mode prog args
   =
-  let+ run =
+  let+ run, _ =
     run_internal
       ?dir
       ~display
@@ -1100,22 +1145,21 @@ let run ?dir ~display ?stdout_to ?stderr_to ?stdin_from ?env ?metadata fail_mode
       fail_mode
       prog
       args
-    >>| fst
   in
   Failure_mode.map_result fail_mode run ~f:ignore
 ;;
 
 let run_with_times
-  ?dir
-  ~display
-  ?stdout_to
-  ?stderr_to
-  ?stdin_from
-  ?env
-  ?metadata
-  fail_mode
-  prog
-  args
+      ?dir
+      ~display
+      ?stdout_to
+      ?stderr_to
+      ?stdin_from
+      ?env
+      ?metadata
+      fail_mode
+      prog
+      args
   =
   let+ code, times =
     run_internal
@@ -1134,19 +1178,19 @@ let run_with_times
 ;;
 
 let run_capture_gen
-  ?dir
-  ~display
-  ?stderr_to
-  ?stdin_from
-  ?env
-  ?metadata
-  fail_mode
-  prog
-  args
-  ~f
+      ?dir
+      ~display
+      ?stderr_to
+      ?stdin_from
+      ?env
+      ?metadata
+      fail_mode
+      prog
+      args
+      ~f
   =
   let fn = Temp.create File ~prefix:"dune" ~suffix:"output" in
-  let+ run =
+  let+ run, _ =
     run_internal
       ?dir
       ~display
@@ -1158,7 +1202,6 @@ let run_capture_gen
       fail_mode
       prog
       args
-    >>| fst
   in
   Failure_mode.map_result fail_mode run ~f:(fun () ->
     let x = f fn in
@@ -1171,15 +1214,15 @@ let run_capture_lines = run_capture_gen ~f:Stdune.Io.lines_of_file
 let run_capture_zero_separated = run_capture_gen ~f:Stdune.Io.zero_strings_of_file
 
 let run_capture_line
-  ?dir
-  ~display
-  ?stderr_to
-  ?stdin_from
-  ?env
-  ?metadata
-  fail_mode
-  prog
-  args
+      ?dir
+      ~display
+      ?stderr_to
+      ?stdin_from
+      ?env
+      ?metadata
+      fail_mode
+      prog
+      args
   =
   run_capture_gen
     ?dir
@@ -1218,4 +1261,25 @@ let run_capture_line
                  (Pp.concat_map l ~sep:Pp.cut ~f:(fun line ->
                     Pp.seq (Pp.verbatim "> ") (Pp.verbatim line)))
              ]))
+;;
+
+let run_inherit_std_in_out =
+  let external_ ch =
+    let fd = Io.descr_of_channel ch in
+    { Io.kind = External; fd = lazy fd; channel = lazy ch; status = Keep_open }
+  in
+  fun ?dir ?env prog args ->
+    run_internal
+      ?dir
+      ?env
+      ~display:Display.Quiet
+      ~stdout_to:(external_ (Out_chan stdout))
+      ~stderr_to:(external_ (Out_chan stderr))
+      ~stdin_from:(external_ (In_chan stdin))
+      ~setpgid:None
+      Return
+      prog
+      args
+    >>| fst
+    >>| Failure_mode.exit_code_of_result
 ;;

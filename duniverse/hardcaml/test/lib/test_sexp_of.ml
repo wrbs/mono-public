@@ -2,27 +2,27 @@ open! Import
 module Bits_list = Bits_list.Int_comb
 
 let%expect_test "Bits_list" =
-  print_s Bits_list.(of_int ~width:8 127 |> sexp_of_t);
+  print_s Bits_list.(of_int_trunc ~width:8 127 |> sexp_of_t);
   [%expect {| 01111111 |}]
 ;;
 
 let%expect_test "Bits" =
-  print_s Bits.(of_int ~width:3 3 |> sexp_of_t);
+  print_s Bits.(of_int_trunc ~width:3 3 |> sexp_of_t);
   [%expect {| 011 |}]
 ;;
 
 let%expect_test "Bits" =
-  print_s Bits.(of_int ~width:67 (-2) |> sexp_of_t);
+  print_s Bits.(of_int_trunc ~width:67 (-2) |> sexp_of_t);
   [%expect {| 1111111111111111111111111111111111111111111111111111111111111111110 |}]
 ;;
 
 let%expect_test "Mutable.ArraybitsInt" =
-  print_s Bits.Mutable.Comb.(of_int ~width:13 294 |> sexp_of_t);
+  print_s Bits.Mutable.Comb.(of_int_trunc ~width:13 294 |> sexp_of_t);
   [%expect {| 0000100100110 |}]
 ;;
 
 let%expect_test "Mutable.ArraybitsInt" =
-  print_s Bits.Mutable.Comb.(of_int ~width:19 (-30) |> sexp_of_t);
+  print_s Bits.Mutable.Comb.(of_int_trunc ~width:19 (-30) |> sexp_of_t);
   [%expect {| 1111111111111100010 |}]
 ;;
 
@@ -37,8 +37,9 @@ let%expect_test "empty" =
 ;;
 
 let%expect_test "simple constant" =
-  print_signal (of_int ~width:2 2);
-  [%expect {|
+  print_signal (of_int_trunc ~width:2 2);
+  [%expect
+    {|
     (const
       (width 2)
       (value 0b10))
@@ -47,7 +48,8 @@ let%expect_test "simple constant" =
 
 let%expect_test "named constant" =
   print_signal vdd;
-  [%expect {|
+  [%expect
+    {|
     (const
       (names (vdd))
       (width 1)
@@ -56,8 +58,9 @@ let%expect_test "named constant" =
 ;;
 
 let%expect_test "large constant" =
-  print_signal (of_int ~width:9 0x123);
-  [%expect {|
+  print_signal (of_int_trunc ~width:9 0x123);
+  [%expect
+    {|
     (const
       (width 9)
       (value 0x123))
@@ -66,18 +69,15 @@ let%expect_test "large constant" =
 
 let%expect_test "unassigned wire" =
   print_signal (wire 1);
-  [%expect {|
-    (wire
-      (width   1)
-      (data_in empty))
-    |}]
+  [%expect {| (wire (width 1)) |}]
 ;;
 
 let%expect_test "assigned wire" =
   let w = wire 1 in
-  w <== vdd;
+  w <-- vdd;
   print_signal w;
-  [%expect {|
+  [%expect
+    {|
     (wire
       (width   1)
       (data_in 0b1))
@@ -86,18 +86,12 @@ let%expect_test "assigned wire" =
 
 let%expect_test "multiple names" =
   print_signal (wire 1 -- "foo" -- "bar");
-  [%expect
-    {|
-    (wire
-      (names (bar foo))
-      (width   1)
-      (data_in empty))
-    |}]
+  [%expect {| (wire (names (bar foo)) (width 1)) |}]
 ;;
 
 let%expect_test "multiple names in arg" =
   let w = wire 1 in
-  w <== wire 1 -- "foo" -- "bar";
+  w <-- wire 1 -- "foo" -- "bar";
   print_signal w;
   [%expect {| (wire (width 1) (data_in (bar foo))) |}]
 ;;
@@ -143,16 +137,16 @@ let%expect_test "printing at leaves" =
     ; wireof (a <: b)
     ; wireof ~:a
     ; wireof (mux2 vdd a b)
-    ; wireof (bit a 1)
+    ; wireof a.:(1)
     ; wireof (concat_msb [ a; b ])
-    ; wireof (reg (Reg_spec.create () ~clock) ~enable:empty a)
+    ; wireof (reg (Reg_spec.create () ~clock) a)
     ; wireof
         (memory
            4
            ~write_port:
              { write_clock = clock
              ; write_address = a
-             ; write_enable = bit b 1
+             ; write_enable = b.:(1)
              ; write_data = b
              }
            ~read_address:a)
@@ -197,7 +191,7 @@ let%expect_test "printing at leaves - different types" =
 ;;
 
 let%expect_test "mux" =
-  print_signal (mux (input "sel" 2) (List.init 4 ~f:(of_int ~width:16)));
+  print_signal (mux (input "sel" 2) (List.init 4 ~f:(of_int_trunc ~width:16)));
   [%expect
     {|
     (mux
@@ -208,7 +202,7 @@ let%expect_test "mux" =
 ;;
 
 let%expect_test "big mux" =
-  print_signal (mux (input "sel" 4) (List.init 16 ~f:(of_int ~width:8)));
+  print_signal (mux (input "sel" 4) (List.init 16 ~f:(of_int_trunc ~width:8)));
   [%expect
     {|
     (mux
@@ -235,25 +229,56 @@ let%expect_test "big mux" =
 ;;
 
 let%expect_test "select" =
-  print_signal (select (of_int ~width:4 2) 3 2);
+  print_signal (of_int_trunc ~width:4 2).:[3, 2];
   [%expect {| (select (width 2) (range (3 2)) (data_in 0b0010)) |}]
 ;;
 
 let%expect_test "reg r_none" =
-  print_signal (reg (Reg_spec.create () ~clock) ~enable:empty (input "a" 1));
+  print_signal (reg (Reg_spec.create () ~clock) (input "a" 1));
+  [%expect
+    {|
+    (register
+      (width 1)
+      ((clock      clock)
+       (clock_edge Rising))
+      (data_in a))
+    |}]
+;;
+
+let%expect_test "reg r_async" =
+  print_signal (reg (Reg_spec.create () ~clock ~reset) (input "a" 1));
   [%expect
     {|
     (register
       (width 1)
       ((clock      clock)
        (clock_edge Rising)
-       (enable     0b1))
+       (reset      reset)
+       (reset_edge Rising)
+       (reset_to   0b0))
       (data_in a))
     |}]
 ;;
 
-let%expect_test "reg r_async" =
-  print_signal (reg (Reg_spec.create () ~clock ~reset) ~enable:empty (input "a" 1));
+let%expect_test "reg r_sync" =
+  print_signal
+    (reg
+       (Reg_spec.override (Reg_spec.create () ~clock ~clear) ~clock_edge:Falling)
+       (input "a" 1));
+  [%expect
+    {|
+    (register
+      (width 1)
+      ((clock      clock)
+       (clock_edge Falling)
+       (clear      clear)
+       (clear_to   0b0))
+      (data_in a))
+    |}]
+;;
+
+let%expect_test "reg r_full" =
+  print_signal (reg (Reg_spec.create () ~clock ~clear ~reset) (input "a" 1));
   [%expect
     {|
     (register
@@ -263,46 +288,8 @@ let%expect_test "reg r_async" =
        (reset      reset)
        (reset_edge Rising)
        (reset_to   0b0)
-       (enable     0b1))
-      (data_in a))
-    |}]
-;;
-
-let%expect_test "reg r_sync" =
-  print_signal
-    (reg
-       (Reg_spec.override (Reg_spec.create () ~clock ~clear) ~clock_edge:Falling)
-       ~enable:empty
-       (input "a" 1));
-  [%expect
-    {|
-    (register
-      (width 1)
-      ((clock       clock)
-       (clock_edge  Falling)
-       (clear       clear)
-       (clear_level High)
-       (clear_to    0b0)
-       (enable      0b1))
-      (data_in a))
-    |}]
-;;
-
-let%expect_test "reg r_full" =
-  print_signal (reg (Reg_spec.create () ~clock ~clear ~reset) ~enable:empty (input "a" 1));
-  [%expect
-    {|
-    (register
-      (width 1)
-      ((clock       clock)
-       (clock_edge  Rising)
-       (reset       reset)
-       (reset_edge  Rising)
-       (reset_to    0b0)
-       (clear       clear)
-       (clear_level High)
-       (clear_to    0b0)
-       (enable      0b1))
+       (clear      clear)
+       (clear_to   0b0))
       (data_in a))
     |}]
 ;;
@@ -337,21 +324,15 @@ let%expect_test "test depth" =
         lt
         (width 1)
         (arguments (
-          (wire
-            (names (b))
-            (width   1)
-            (data_in empty))
-          (wire
-            (names (a))
-            (width   1)
-            (data_in empty))))))))
+          (wire (names (b)) (width 1))
+          (wire (names (a)) (width 1))))))))
     |}]
 ;;
 
 let%expect_test "test instantiation" =
   Signal.Type.sexp_of_signal_recursive
     ~depth:2
-    (Map.find_exn
+    (Instantiation.output
        (Instantiation.create
           ()
           ~name:"module_name"

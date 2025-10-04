@@ -1,4 +1,6 @@
 open Import
+open Memo.O
+module Parallel_map = Memo.Make_parallel_map (Module_name.Map)
 
 module Common = struct
   module Encode = struct
@@ -72,8 +74,7 @@ module Stdlib = struct
   let map t ~f = { t with modules = Module_name.Map.map t.modules ~f }
 
   let traverse t ~f =
-    let open Memo.O in
-    let+ modules = Module_name.Parallel_map.parallel_map t.modules ~f:(fun _ -> f) in
+    let+ modules = Parallel_map.parallel_map t.modules ~f:(fun _ -> f) in
     { t with modules }
   ;;
 
@@ -421,15 +422,13 @@ module Group = struct
 
   module Memo_traversals = struct
     let rec parallel_map ({ alias; modules; name = _ } as t) ~f =
-      let open Memo.O in
       let+ alias, modules =
         Memo.fork_and_join (fun () -> f alias) (fun () -> parallel_map_modules modules ~f)
       in
       { t with alias; modules }
 
     and parallel_map_modules modules ~f =
-      let open Memo.O in
-      Module_name.Parallel_map.parallel_map modules ~f:(fun _ n ->
+      Parallel_map.parallel_map modules ~f:(fun _ n ->
         match n with
         | Module m ->
           let+ m = f m in
@@ -439,8 +438,6 @@ module Group = struct
           Group g)
     ;;
   end
-
-  let group_interfaces (t : t) m = parents t m |> List.map ~f:lib_interface
 
   let make_alias_for t m ~parents =
     match Module.kind m with
@@ -660,26 +657,7 @@ module Wrapped = struct
       ]
   ;;
 
-  (* TODO remove this eventually *)
-  let old_decode ~src_dir =
-    let open Dune_lang.Decoder in
-    let open Common.Decode in
-    fields
-      (let+ main_module_name = main_module_name
-       and+ modules = modules ~src_dir ()
-       and+ wrapped_compat = modules ~name:"wrapped_compat" ~src_dir ()
-       and+ alias = field "alias_module" (Module.decode ~src_dir)
-       and+ wrapped = field "wrapped" Dune_lang.Wrapped.decode in
-       let group =
-         { Group.alias
-         ; name = main_module_name
-         ; modules = modules |> Module_name.Map.map ~f:(fun m -> Group.Module m)
-         }
-       in
-       { group; wrapped_compat; wrapped; toplevel_module = `Exported })
-  ;;
-
-  let new_decode ~src_dir =
+  let decode ~src_dir =
     let open Dune_lang.Decoder in
     let open Common.Decode in
     fields
@@ -687,11 +665,6 @@ module Wrapped = struct
        and+ wrapped_compat = modules ~name:"wrapped_compat" ~src_dir ()
        and+ wrapped = field "wrapped" Dune_lang.Wrapped.decode in
        { group; wrapped_compat; wrapped; toplevel_module = `Exported })
-  ;;
-
-  let decode ~src_dir =
-    let open Dune_lang.Decoder in
-    new_decode ~src_dir <|> old_decode ~src_dir
   ;;
 
   let map ({ group; wrapped_compat; toplevel_module = _; wrapped = _ } as t) ~f =
@@ -745,7 +718,6 @@ module Wrapped = struct
 
   let find t name = Group.find t.group name
   let find_dep t ~of_ name = Group.find_dep t.group ~of_ name
-  let group_interfaces (t : t) m = Group.group_interfaces t.group m
   let alias_for t m = Group.alias_for t.group m
 end
 
@@ -909,7 +881,6 @@ let fold_user_available t ~f ~init =
 
 let map_user_written t ~f =
   let f m = if is_user_written m then f m else Memo.return m in
-  let open Memo.O in
   let+ modules =
     match t.modules with
     | Singleton m ->
@@ -948,6 +919,28 @@ let source_dirs =
   fold_user_written ~init:Path.Set.empty ~f:(fun m acc ->
     Module.sources m
     |> List.fold_left ~init:acc ~f:(fun acc f -> Path.Set.add acc (Path.parent_exn f)))
+;;
+
+let compat_for_exn t m =
+  match t.modules with
+  | Singleton _ | Stdlib _ | Unwrapped _ -> assert false
+  | Wrapped { group; _ } ->
+    (match Module_name.Map.find group.modules (Module.name m) with
+     | None -> assert false
+     | Some (Module m) -> m
+     | Some (Group g) -> Group.lib_interface g)
+;;
+
+let entry_modules t =
+  List.filter
+    ~f:(fun m -> Module.visibility m = Public)
+    (match t.modules with
+     | Stdlib w -> Stdlib.lib_interface w |> Option.to_list
+     | Singleton m -> [ m ]
+     | Unwrapped m -> Unwrapped.entry_modules m
+     | Wrapped m ->
+       (* we assume this is never called for implementations *)
+       [ Wrapped.lib_interface m ])
 ;;
 
 module With_vlib = struct
@@ -1228,19 +1221,6 @@ module With_vlib = struct
     | Modules t -> { impl = fold t ~init ~f; vlib = [] }
   ;;
 
-  let compat_for_exn t m =
-    match t with
-    | Impl _ -> Code_error.raise "wrapped compat not supported for vlib" []
-    | Modules t ->
-      (match t.modules with
-       | Singleton _ | Stdlib _ | Unwrapped _ -> assert false
-       | Wrapped { group; _ } ->
-         (match Module_name.Map.find group.modules (Module.name m) with
-          | None -> assert false
-          | Some (Module m) -> m
-          | Some (Group g) -> Group.lib_interface g))
-  ;;
-
   let wrapped_compat t =
     match t with
     | Impl _ | Modules { modules = Stdlib _ | Singleton _ | Unwrapped _; _ } ->
@@ -1265,23 +1245,6 @@ module With_vlib = struct
     | Impl w -> Impl { w with impl = map w.impl }
   ;;
 
-  let entry_modules = function
-    | Impl i ->
-      Code_error.raise
-        "entry_modules: not defined for implementations"
-        [ "impl", dyn_of_impl i ]
-    | Modules t ->
-      List.filter
-        ~f:(fun m -> Module.visibility m = Public)
-        (match t.modules with
-         | Stdlib w -> Stdlib.lib_interface w |> Option.to_list
-         | Singleton m -> [ m ]
-         | Unwrapped m -> Unwrapped.entry_modules m
-         | Wrapped m ->
-           (* we assume this is never called for implementations *)
-           [ Wrapped.lib_interface m ])
-  ;;
-
   let wrapped = function
     | Modules t -> wrapped t
     | Impl { vlib = _; impl; _ } -> wrapped impl
@@ -1302,19 +1265,6 @@ module With_vlib = struct
         (match t with
          | Modules t -> alias_for t m
          | Impl { impl; vlib = _; _ } -> alias_for impl m)
-  ;;
-
-  let group_interfaces =
-    let group_interfaces t m =
-      match t.modules with
-      | Wrapped w -> Wrapped.group_interfaces w m
-      | Singleton w -> [ w ]
-      | _ -> []
-    in
-    fun t m ->
-      match t with
-      | Modules t -> group_interfaces t m
-      | Impl { impl; vlib; _ } -> group_interfaces impl m @ group_interfaces vlib m
   ;;
 
   let local_open t m =

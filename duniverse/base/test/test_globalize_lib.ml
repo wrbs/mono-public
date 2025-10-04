@@ -1,4 +1,4 @@
-open! Core
+open! Base
 open! Import
 
 let%expect_test "bool_true" =
@@ -12,14 +12,14 @@ let%expect_test "bool_false" =
 ;;
 
 let%expect_test "char" =
-  let c = 'A' in
+  let local_ c = 'A' in
   let c' = globalize_char c in
   printf "%s" (Char.to_string c');
   [%expect {| A |}]
 ;;
 
 let%expect_test "float" =
-  let f = 5.5 in
+  let local_ f = 5.5 in
   let f' = globalize_float f in
   printf "%f" f';
   [%expect {| 5.500000 |}]
@@ -31,38 +31,39 @@ let%expect_test "int" =
 ;;
 
 let%expect_test "int32" =
-  let i = 42l in
+  let local_ i = 42l in
   let i' = globalize_int32 i in
   printf "%ld" i';
   [%expect {| 42 |}]
 ;;
 
 let%expect_test "int64" =
-  let i = 42L in
+  let local_ i = 42L in
   let i' = globalize_int64 i in
   printf "%Ld" i';
   [%expect {| 42 |}]
 ;;
 
 let%expect_test "nativeint" =
-  let i = 42n in
+  let local_ i = 42n in
   let i' = globalize_nativeint i in
   printf "%nd" i';
   [%expect {| 42 |}]
 ;;
 
 let%expect_test "string" =
-  let s = "hello" in
+  let local_ s = "hello" in
   let s' = globalize_string s in
   printf "%s" s';
   [%expect {| hello |}]
 ;;
 
 let%expect_test "array" =
-  let a = [| "one"; "two"; "three" |] in
+  let local_ a = [| "one"; "two"; "three" |] in
   let a' = globalize_array globalize_string a in
   Array.iter ~f:print_endline a';
-  [%expect {|
+  [%expect
+    {|
     one
     two
     three
@@ -70,32 +71,42 @@ let%expect_test "array" =
 ;;
 
 let%expect_test "list" =
-  let l = [ "one"; "two"; "three" ] in
+  let local_ l = [ "one"; "two"; "three" ] in
   let l' = globalize_list globalize_string l in
   List.iter ~f:print_endline l';
-  [%expect {|
+  [%expect
+    {|
     one
     two
     three
     |}]
 ;;
 
+let%expect_test "list does not stack overflow" =
+  let l = List.init 5_000_000 ~f:(fun i -> i) in
+  (* Test for timeout / stack overflow on a long list. *)
+  (match globalize_list globalize_int l with
+   | (_ : int list) -> ()
+   | exception Stack_overflow -> print_cr [%message "stack overflow"]);
+  [%expect {| |}]
+;;
+
 let%expect_test "option" =
-  let o = Some "hello" in
+  let local_ o = Some "hello" in
   let o' = globalize_option globalize_string o in
   Option.iter ~f:print_endline o';
   [%expect {| hello |}]
 ;;
 
 let%expect_test "ref" =
-  let r = ref "hello" in
+  let local_ r = ref "hello" in
   let r' = globalize_ref globalize_string r in
   print_endline !r';
   [%expect {| hello |}]
 ;;
 
 let%expect_test "no sharing between globalized refs" =
-  let r = ref "initial" in
+  let local_ r = ref "initial" in
   let r' = globalize_ref (fun _ -> assert false) r in
   print_endline !r;
   [%expect {| initial |}];
@@ -109,11 +120,11 @@ let%expect_test "no sharing between globalized refs" =
   [%expect {| global |}]
 ;;
 
-external get : 'a array -> int -> 'a = "%array_safe_get"
-external set : 'a array -> int -> 'a -> unit = "%array_safe_set"
+external get : local_ 'a array -> int -> 'a = "%array_safe_get"
+external set : local_ 'a array -> int -> 'a -> unit = "%array_safe_set"
 
 let%expect_test "no sharing between globalized arrays" =
-  let a = [| "initial" |] in
+  let local_ a = [| "initial" |] in
   let a' = globalize_array (fun _ -> assert false) a in
   print_endline (get a 0);
   [%expect {| initial |}];

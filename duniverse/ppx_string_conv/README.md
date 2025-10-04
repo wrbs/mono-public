@@ -23,6 +23,10 @@ end = struct
 end
 ```
 
+It is not possible to change the capitalization of an aliased type, unless you also give
+its variants (`type t = Sign.t = Neg | Pos | Zero`), in which case the capitalization
+described in [Variants](#variants) applies.
+
 # Choosing what to generate
 
 Using `[@@deriving string]` generates both `of_string` and `to_string`.
@@ -171,6 +175,26 @@ end
 Apple
 # let () = Case_insensitive_demo.show "oRAngE"
 Orange
+```
+
+## List all options on error with `~list_options_on_error`
+
+You can make `of_string` return the list of valid string input options by using the
+`~list_options_on_error` deriving argument.
+
+```ocaml
+module List_options_on_error = struct
+  type t =
+    | Blue
+    | Red
+  [@@deriving string ~list_options_on_error]
+end
+```
+
+```ocaml
+# let () = try ignore (List_options_on_error.of_string "Green" : List_options_on_error.t) with | exn -> print_s (Exn.sexp_of_t exn)
+("Toplevel.List_options_on_error.of_string: invalid string" (value Green)
+ (valid_options (Blue Red)))
 ```
 
 ## Nesting with `[@nested "prefix"]`

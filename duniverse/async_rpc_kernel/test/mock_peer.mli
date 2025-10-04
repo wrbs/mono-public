@@ -55,7 +55,14 @@ val create_and_connect'
 (** Create a mock peer ready to connect *)
 val create : ?time_source:Synchronous_time_source.t -> Config.t -> t
 
-type handshake := [ `v3 ]
+type handshake :=
+  [ `v3
+  | `v4
+  | `v5
+  | `v6
+  | `v7
+  | `latest
+  ]
 
 (** Attempt to connect to the mock peer *)
 val connect
@@ -75,7 +82,7 @@ val close_reader : t -> unit
 
 val write_bigstring : ?don't_read_yet:unit -> t -> Bigstring.t -> unit
 val write : ?don't_read_yet:unit -> t -> 'a Bin_prot.Writer.t -> 'a -> unit
-val write_handshake : t -> handshake -> unit
+val write_handshake : ?don't_read_yet:unit -> t -> handshake -> unit
 
 val write_message
   :  ?don't_read_yet:unit
@@ -92,8 +99,7 @@ val continue_reader : t -> unit
     connection outputs and when that queue is empty, all enqueued parsers with [~later:()]
     will be moved to the first queue. This allows you to have rpc implementations [expect]
     messages for their responses and seperately [expect] other messages to follow those,
-    calling [expect] before the rpc implementation.
-*)
+    calling [expect] before the rpc implementation. *)
 
 val expect : ?later:unit -> t -> 'a Bin_prot.Reader.t -> ('a -> Sexp.t) -> unit
 val expect_message : ?later:unit -> t -> 'a Bin_prot.Reader.t -> ('a -> Sexp.t) -> unit

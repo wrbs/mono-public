@@ -1,4 +1,5 @@
 open Import
+module Dialect = Dune_lang.Dialect
 
 let dialect_and_ml_kind file =
   let open Memo.O in
@@ -8,7 +9,7 @@ let dialect_and_ml_kind file =
   in
   let+ project = Source_tree.root () >>| Source_tree.Dir.project in
   let dialects = Dune_project.dialects project in
-  match Dune_rules.Dialect.DB.find_by_extension dialects ext with
+  match Dialect.DB.find_by_extension dialects ext with
   | None -> User_error.raise [ Pp.textf "unsupported extension: %s" ext ]
   | Some x -> x
 ;;
@@ -30,13 +31,12 @@ let execute_pp_action ~sctx file pp_file dump_file =
     let* action, _observing_facts =
       let* loc, action =
         let+ dialect, ml_kind = dialect_and_ml_kind file in
-        match Dune_rules.Dialect.print_ast dialect ml_kind with
+        match Dialect.print_ast dialect ml_kind with
         | Some print_ast -> print_ast
         | None ->
           (* fall back to the OCaml print_ast function, known to exist, if one
              doesn't exist for this dialect. *)
-          Dune_rules.Dialect.print_ast Dune_rules.Dialect.ocaml ml_kind
-          |> Option.value_exn
+          Dialect.print_ast Dialect.ocaml ml_kind |> Option.value_exn
       in
       let build =
         let open Action_builder.O in
@@ -114,7 +114,7 @@ let find_module ~sctx file =
   | Some (m, _, _, origin) ->
     (match
        Dune_rules.Ml_sources.Origin.preprocess origin
-       |> Dune_rules.Preprocess.Per_module.find (Dune_rules.Module.name m)
+       |> Dune_lang.Preprocess.Per_module.find (Dune_rules.Module.name m)
      with
      | Pps { staged = true; loc; _ } -> Some (`Staged_pps loc)
      | _ -> Some (`Module m))
@@ -161,13 +161,13 @@ let term =
   and+ _ = Describe_lang_compat.arg
   and+ file = Arg.(required & pos 0 (some string) None (Arg.info [] ~docv:"FILE")) in
   let common, config = Common.init builder in
-  Scheduler.go ~common ~config
+  Scheduler.go_with_rpc_server ~common ~config
   @@ fun () ->
   let open Fiber.O in
   let* setup = Import.Main.setup () in
   let* setup = Memo.run setup in
   let sctx = Import.Main.find_scontext_exn setup ~name:context_name in
-  Build_system.run_exn
+  build_exn
   @@ fun () ->
   let open Memo.O in
   let* result = get_pped_file sctx file in

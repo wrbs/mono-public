@@ -1,4 +1,5 @@
 open Import
+open Memo.O
 
 let ocaml_index sctx ~dir =
   Super_context.resolve_program ~loc:None ~dir sctx "ocaml-index"
@@ -11,8 +12,6 @@ let index_path_in_obj_dir obj_dir =
   Path.Build.relative dir index_file_name
 ;;
 
-let project_index ~build_dir = Path.Build.relative build_dir "project.ocaml-index"
-
 let cctx_rules cctx =
   (* Indexing is performed by the external binary [ocaml-index] which performs
      full shape reduction to compute the actual definition of all the elements in
@@ -22,35 +21,40 @@ let cctx_rules cctx =
   let dir = Compilation_context.dir cctx in
   let aggregate =
     let obj_dir = Compilation_context.obj_dir cctx in
-    let fn = index_path_in_obj_dir obj_dir in
+    let target = index_path_in_obj_dir obj_dir in
     let additional_libs =
-      let open Resolve.Memo.O in
-      let+ non_compile_libs =
-        (* The indexer relies on the load_path of cmt files. When
-           [implicit_transitive_deps] is set to [false] some necessary paths will
-           be missing.These are passed to the indexer with the `-I` flag.
-
-           The implicit transitive libs correspond to the set:
-           (requires_link \ req_compile) *)
-        let* req_link = Compilation_context.requires_link cctx in
-        let+ req_compile = Compilation_context.requires_compile cctx in
-        List.filter req_link ~f:(fun l -> not (List.exists req_compile ~f:(Lib.equal l)))
-      in
-      Lib_flags.L.include_flags non_compile_libs (Lib_mode.Ocaml Byte)
+      let scope = Compilation_context.scope cctx in
+      if Dune_project.dune_version (Scope.project scope) >= (3, 17)
+      then
+        (* Dune language >= 3.17 correctly passes the `-H` flag to the compiler. *)
+        Resolve.Memo.return Command.Args.empty
+      else
+        let open Resolve.Memo.O in
+        let+ non_compile_libs =
+          let* req_compile = Compilation_context.requires_compile cctx in
+          Compilation_context.requires_link cctx
+          >>| List.filter ~f:(fun l -> not (List.exists req_compile ~f:(Lib.equal l)))
+        in
+        Lib_flags.L.include_flags
+          ~direct_libs:non_compile_libs
+          ~hidden_libs:[]
+          (Lib_mode.Ocaml Byte)
+          (Compilation_context.ocaml cctx).lib_config
     in
     (* Indexing depends (recursively) on [required_compile] libs:
        - These libs's cmt files should be built before indexing starts
        - If these libs are rebuilt a re-indexation is needed *)
     let other_indexes_deps =
       let open Resolve.Memo.O in
-      let+ requires_compile = Compilation_context.requires_compile cctx in
-      let deps =
-        List.filter_map requires_compile ~f:(fun l ->
-          match Lib.info l |> Lib_info.obj_dir |> Obj_dir.obj_dir with
-          | In_build_dir dir -> Some (Path.relative (Path.build dir) index_file_name)
-          | _ -> None)
+      let+ deps =
+        Compilation_context.requires_compile cctx
+        >>| List.filter_map ~f:(fun lib ->
+          Lib.Local.of_lib lib
+          |> Option.map ~f:(fun lib ->
+            Lib.Local.obj_dir lib |> index_path_in_obj_dir |> Path.build))
+        >>| Dep.Set.of_files
       in
-      Command.Args.Hidden_deps (Dep.Set.of_files deps)
+      Command.Args.Hidden_deps deps
     in
     let context_dir =
       Compilation_context.context cctx
@@ -78,7 +82,7 @@ let cctx_rules cctx =
       (ocaml_index sctx ~dir)
       [ A "aggregate"
       ; A "-o"
-      ; Target fn
+      ; Target target
       ; Deps modules_deps
       ; Dyn (Resolve.Memo.read additional_libs)
       ; Dyn (Resolve.Memo.read other_indexes_deps)
@@ -88,7 +92,6 @@ let cctx_rules cctx =
 ;;
 
 let context_indexes sctx =
-  let open Memo.O in
   let ctx = Super_context.context sctx in
   Context.name ctx
   |> Dune_load.dune_files
@@ -109,7 +112,6 @@ let context_indexes sctx =
 ;;
 
 let project_rule sctx project =
-  let open Memo.O in
   let ocaml_index_alias =
     let dir =
       let build_dir =

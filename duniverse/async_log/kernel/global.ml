@@ -17,18 +17,62 @@ module Make () = struct
   ;;
 
   let level () = Log.level (Lazy.force log)
+
+  let copy ?level ?on_error ?output ?extra_tags () =
+    Log.copy ?level ?on_error ?output ?extra_tags (Lazy.force log)
+  ;;
+
   let set_level level = Log.set_level (Lazy.force log) level
   let set_output output = Log.set_output (Lazy.force log) output
   let get_output () = Log.get_output (Lazy.force log)
   let set_on_error handler = Log.set_on_error (Lazy.force log) handler
   let get_time_source () = Log.get_time_source (Lazy.force log)
-  let set_time_source time_source = Log.set_time_source (Lazy.force log) time_source
-  let get_transform () = Log.get_transform (Lazy.force log)
-  let set_transform transform = Log.set_transform (Lazy.force log) transform
+
+  let set_time_source time_source =
+    Log.set_time_source (Lazy.force log) (Synchronous_time_source.read_only time_source)
+  ;;
+
+  module Transform = struct
+    type t = Log.Transform.t
+
+    let append' transform = Log.Transform.append' (Lazy.force log) transform
+    let append transform = Log.Transform.append (Lazy.force log) transform
+    let prepend' transform = Log.Transform.prepend' (Lazy.force log) transform
+    let prepend transform = Log.Transform.prepend (Lazy.force log) transform
+    let remove_exn t = Log.Transform.remove_exn (Lazy.force log) t
+  end
+
+  let add_tags ~tags = Log.add_tags (Lazy.force log) ~tags
+  let has_transform () = Log.has_transform (Lazy.force log)
+  let clear_transforms () = Log.clear_transforms (Lazy.force log)
+  let get_transform () = Log.get_transform (Lazy.force log) [@alert "-deprecated"]
+  let set_transform f = Log.set_transform (Lazy.force log) f [@alert "-deprecated"]
   let would_log level = Log.would_log (Lazy.force log) level
   let raw ?time ?tags k = Log.raw ?time ?tags (Lazy.force log) k
   let info ?time ?tags k = Log.info ?time ?tags (Lazy.force log) k
   let error ?time ?tags k = Log.error ?time ?tags (Lazy.force log) k
+  let async_command_error_output_names = ref []
+
+  let register_async_command_error_output_name output_name =
+    async_command_error_output_names := output_name :: !async_command_error_output_names
+  ;;
+
+  let error_from_async_command ?time ?tags fmt =
+    ksprintf
+      (fun msg ->
+        let log = Lazy.force log in
+        let original_outputs = Log.get_output log in
+        let outputs =
+          List.filter_map
+            !async_command_error_output_names
+            ~f:(Log.Private.get_named_output log)
+        in
+        Log.set_output log outputs;
+        Log.string log ~level:`Error ?time ?tags msg;
+        Log.set_output log original_outputs)
+      fmt
+  ;;
+
   let debug ?time ?tags k = Log.debug ?time ?tags (Lazy.force log) k
   let raw_s ?time ?tags the_sexp = Log.sexp ?time ?tags (Lazy.force log) the_sexp
 
@@ -63,7 +107,7 @@ module Make () = struct
     Log.surroundf ~on_subsequent_errors ?level ?time ?tags (Lazy.force log) fmt
   ;;
 
-  let set_level_via_param () = Log.Private.set_level_via_param_lazy log
+  let set_level_via_param ?default () = Log.Private.set_level_via_param_lazy ~default log
 
   module For_testing = struct
     let use_test_output ?(map_output = Fn.id) () =

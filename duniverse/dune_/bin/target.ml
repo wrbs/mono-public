@@ -34,7 +34,6 @@ module All_targets = struct
     end)
 end
 
-module Source_tree = Dune_rules.Source_tree
 module Source_tree_map_reduce = Source_tree.Dir.Make_map_reduce (Memo) (All_targets)
 
 let all_direct_targets dir =
@@ -53,6 +52,7 @@ let all_direct_targets dir =
     Source_tree_map_reduce.map_reduce
       root
       ~traverse:Source_dir_status.Set.all
+      ~trace_event_name:"All direct targets"
       ~f:(fun dir ->
         Dune_engine.Load_rules.load_dir
           ~dir:
@@ -221,10 +221,10 @@ let resolve_target root ~setup target =
 ;;
 
 let resolve_targets
-  root
-  (config : Dune_config.t)
-  (setup : Dune_rules.Main.build_system)
-  user_targets
+      root
+      (config : Dune_config.t)
+      (setup : Dune_rules.Main.build_system)
+      user_targets
   =
   match user_targets with
   | [] -> Action_builder.return []
@@ -236,8 +236,8 @@ let resolve_targets
          [ Pp.text "Actual targets:"
          ; Pp.enumerate
              (List.concat_map targets ~f:(function
-               | Ok targets -> targets
-               | Error _ -> []))
+                | Ok targets -> targets
+                | Error _ -> []))
              ~f:(function
                | File p -> Pp.verbatim (Path.to_string_maybe_quoted p)
                | Alias a -> Alias.pp a)

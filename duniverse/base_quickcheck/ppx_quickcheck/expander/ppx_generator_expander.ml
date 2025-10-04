@@ -7,6 +7,7 @@ let arrow
   ~arg_label
   ~input_type
   ~output_type
+  ~portable_value
   =
   let input_observer =
     match arg_label with
@@ -27,28 +28,31 @@ let arrow
   | Nolabel -> unlabelled
   | Labelled _ | Optional _ ->
     [%expr
-      Ppx_quickcheck_runtime.Base_quickcheck.Generator.map
+      (Ppx_quickcheck_runtime.Base_quickcheck.Generator.map
+      [@mode [%e portability_mode ~loc ~portable_value]])
         ~f:[%e fn_map_label ~loc ~from:Nolabel ~to_:arg_label]
         [%e unlabelled]]
 ;;
 
-let compound_generator ~loc ~make_compound_expr generator_list =
+let compound_generator ~loc ~make_compound_expr ~portable_value generator_list =
   let loc = { loc with loc_ghost = true } in
   let size_pat, size_expr = gensym "size" loc in
   let random_pat, random_expr = gensym "random" loc in
   [%expr
-    Ppx_quickcheck_runtime.Base_quickcheck.Generator.create
-      (fun ~size:[%p size_pat] ~random:[%p random_pat] ->
-      [%e
-        make_compound_expr
-          ~loc
-          (List.map generator_list ~f:(fun generator ->
-             let loc = { generator.pexp_loc with loc_ghost = true } in
-             [%expr
-               Ppx_quickcheck_runtime.Base_quickcheck.Generator.generate
-                 [%e generator]
-                 ~size:[%e size_expr]
-                 ~random:[%e random_expr]]))])]
+    (Ppx_quickcheck_runtime.Base_quickcheck.Generator.Via_thunk.create
+    [@mode [%e portability_mode ~loc ~portable_value]])
+      (fun ~size:[%p size_pat] ~random:[%p random_pat] () ->
+         [%e
+           make_compound_expr
+             ~loc
+             (List.map generator_list ~f:(fun generator ->
+                let loc = { generator.pexp_loc with loc_ghost = true } in
+                [%expr
+                  Ppx_quickcheck_runtime.Base_quickcheck.Generator.Via_thunk.generate
+                    [%e generator]
+                    ~size:[%e size_expr]
+                    ~random:[%e random_expr]
+                    ()]))])]
 ;;
 
 let compound
@@ -56,12 +60,14 @@ let compound
   ~generator_of_core_type
   ~loc
   ~fields
+  ~portable_value
   (module Field : Field_syntax.S with type ast = field)
   =
   let fields = List.map fields ~f:Field.create in
   compound_generator
     ~loc
     ~make_compound_expr:(Field.expression fields)
+    ~portable_value
     (List.map fields ~f:(fun field -> generator_of_core_type (Field.core_type field)))
 ;;
 
@@ -96,6 +102,7 @@ let variant
   ~variant_type
   ~clauses
   ~rec_names
+  ~portable_value
   (module Clause : Clause_syntax.S with type ast = clause)
   =
   let clauses = Clause.create_list clauses in
@@ -103,6 +110,7 @@ let variant
     compound_generator
       ~loc:(Clause.location clause)
       ~make_compound_expr:(Clause.expression clause variant_type)
+      ~portable_value
       (List.map (Clause.core_type_list clause) ~f:generator_of_core_type)
   in
   let make_pair clause =
@@ -124,7 +132,8 @@ let variant
   | [], clauses | clauses, [] ->
     let pairs = List.filter_map clauses ~f:make_pair in
     [%expr
-      Ppx_quickcheck_runtime.Base_quickcheck.Generator.weighted_union
+      (Ppx_quickcheck_runtime.Base_quickcheck.Generator.weighted_union
+      [@mode [%e portability_mode ~loc ~portable_value]])
         [%e elist ~loc pairs]]
   | recursive_clauses, nonrecursive_clauses ->
     let size_pat, size_expr = gensym "size" loc in
@@ -142,30 +151,35 @@ let variant
            let loc = { (Clause.location clause) with loc_ghost = true } in
            Option.map (make_pair clause) ~f:(fun expr -> value_binding ~loc ~pat ~expr))
          @ List.map2_exn rec_pats recursive_clauses ~f:(fun pat clause ->
-             Option.map (Clause.weight clause) ~f:(fun weight_expr ->
-               let loc = { (Clause.location clause) with loc_ghost = true } in
-               let gen_expr =
-                 [%expr
-                   Ppx_quickcheck_runtime.Base_quickcheck.Generator.bind
-                     Ppx_quickcheck_runtime.Base_quickcheck.Generator.size
-                     ~f:(fun [%p size_pat] ->
-                     Ppx_quickcheck_runtime.Base_quickcheck.Generator.with_size
+           Option.map (Clause.weight clause) ~f:(fun weight_expr ->
+             let loc = { (Clause.location clause) with loc_ghost = true } in
+             let gen_expr =
+               [%expr
+                 (Ppx_quickcheck_runtime.Base_quickcheck.Generator.bind
+                 [@mode [%e portability_mode ~loc ~portable_value]])
+                   Ppx_quickcheck_runtime.Base_quickcheck.Generator.size
+                   ~f:(fun [%p size_pat] ->
+                     (Ppx_quickcheck_runtime.Base_quickcheck.Generator.with_size
+                     [@mode [%e portability_mode ~loc ~portable_value]])
                        ~size:(Ppx_quickcheck_runtime.Base.Int.pred [%e size_expr])
                        [%e make_generator clause])]
-               in
-               let expr = pexp_tuple ~loc [ weight_expr; gen_expr ] in
-               value_binding ~loc ~pat ~expr)))
+             in
+             let expr = pexp_tuple ~loc [ weight_expr; gen_expr ] in
+             value_binding ~loc ~pat ~expr)))
     in
     let body =
       [%expr
         let [%p nonrec_pat] =
-          Ppx_quickcheck_runtime.Base_quickcheck.Generator.weighted_union
+          (Ppx_quickcheck_runtime.Base_quickcheck.Generator.weighted_union
+          [@mode [%e portability_mode ~loc ~portable_value]])
             [%e elist ~loc nonrec_exprs]
         and [%p rec_pat] =
-          Ppx_quickcheck_runtime.Base_quickcheck.Generator.weighted_union
+          (Ppx_quickcheck_runtime.Base_quickcheck.Generator.weighted_union
+          [@mode [%e portability_mode ~loc ~portable_value]])
             [%e elist ~loc (nonrec_exprs @ rec_exprs)]
         in
-        Ppx_quickcheck_runtime.Base_quickcheck.Generator.bind
+        (Ppx_quickcheck_runtime.Base_quickcheck.Generator.bind
+        [@mode [%e portability_mode ~loc ~portable_value]])
           Ppx_quickcheck_runtime.Base_quickcheck.Generator.size
           ~f:(function
           | 0 -> [%e nonrec_expr]

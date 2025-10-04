@@ -87,6 +87,7 @@ type tsc = t [@@deriving bin_io, compare, sexp]
 
 include (Int63 : Comparisons.S with type t := t)
 
+let[@zero_alloc] ( = ) t1 t2 = Int63.( = ) t1 t2
 let diff t1 t2 = Int63.( - ) t1 t2
 let add t s = Int63.( + ) t s
 let of_int63 t = t
@@ -95,8 +96,8 @@ let zero = Int63.zero
 
 [%%ifdef JSC_ARCH_SIXTYFOUR]
 
-external rdtsc : unit -> (int64[@unboxed]) = "caml_rdtsc" "caml_rdtsc_unboxed"
-  [@@noalloc] [@@builtin]
+external rdtsc : unit -> (int64[@unboxed]) = "caml_rdtsc" "caml_rdtsc_unboxed" [@@noalloc]
+(* [@@builtin] *)
 
 (* noalloc on x86_64 only *)
 let[@inline] now () =
@@ -226,9 +227,9 @@ module Calibrator = struct
     t.tsc <- tsc;
     (* update ewma and regression. *)
     t.floats.ewma_time_tsc
-      <- ewma ~alpha ~old:t.floats.ewma_time_tsc ~add:(tsc_diff *. time_diff);
+    <- ewma ~alpha ~old:t.floats.ewma_time_tsc ~add:(tsc_diff *. time_diff);
     t.floats.ewma_tsc_square
-      <- ewma ~alpha ~old:t.floats.ewma_tsc_square ~add:(tsc_diff *. tsc_diff);
+    <- ewma ~alpha ~old:t.floats.ewma_tsc_square ~add:(tsc_diff *. tsc_diff);
     t.floats.ewma_tsc <- ewma ~alpha ~old:t.floats.ewma_tsc ~add:tsc_diff;
     t.floats.ewma_time <- ewma ~alpha ~old:t.floats.ewma_time ~add:time_diff;
     (* linear regression *)
@@ -251,19 +252,19 @@ module Calibrator = struct
         t.floats.sec_per_cycle +. (time_diff_est /. catchup_cycles)
       in
       t.floats.monotonic_sec_per_cycle
-        <- (if Float.is_positive time_diff_est
-            then
-              0.
-              +. (* performance hack: stops float boxing *)
-              Float.min
-                catchup_sec_per_cycle
-                (t.floats.sec_per_cycle *. (1. +. max_percent_change_from_real_slope))
-            else
-              0.
-              +. (* performance hack: stops float boxing *)
-              Float.max
-                catchup_sec_per_cycle
-                (t.floats.sec_per_cycle *. (1. -. max_percent_change_from_real_slope)));
+      <- (if Float.is_positive time_diff_est
+          then
+            0.
+            +. (* performance hack: stops float boxing *)
+            Float.min
+              catchup_sec_per_cycle
+              (t.floats.sec_per_cycle *. (1. +. max_percent_change_from_real_slope))
+          else
+            0.
+            +. (* performance hack: stops float boxing *)
+            Float.max
+              catchup_sec_per_cycle
+              (t.floats.sec_per_cycle *. (1. -. max_percent_change_from_real_slope)));
       (* Compute the number of cycles in the future at which monotonic estimated time
          equals estimated time, i.e. solve for [cycles] in:
 
@@ -275,13 +276,13 @@ module Calibrator = struct
          This value might get very small when the two slopes are about the same.  In such
          cases we just use the estimated slope always. *)
       t.monotonic_until_tsc
-        <- time_diff_est /. (t.floats.monotonic_sec_per_cycle -. t.floats.sec_per_cycle)
-           |> iround_up_and_add tsc ~if_iround_up_fails:Int63.zero);
+      <- time_diff_est /. (t.floats.monotonic_sec_per_cycle -. t.floats.sec_per_cycle)
+         |> iround_up_and_add tsc ~if_iround_up_fails:Int63.zero);
     (* Precompute values required for [tsc_to_nanos_since_epoch]. *)
     t.time_nanos <- Float.int63_round_nearest_exn (t.floats.time *. 1E9);
     t.floats.nanos_per_cycle <- t.floats.sec_per_cycle *. 1E9;
     t.monotonic_time_nanos
-      <- Float.int63_round_nearest_exn (t.floats.monotonic_time *. 1E9);
+    <- Float.int63_round_nearest_exn (t.floats.monotonic_time *. 1E9);
     t.floats.monotonic_nanos_per_cycle <- t.floats.monotonic_sec_per_cycle *. 1E9
   ;;
 
@@ -424,6 +425,9 @@ end
 
 module Span = struct
   include Int63
+
+  let[@inline] ( + ) x y = x + y
+  let[@inline] ( - ) x y = x - y
 
   module Private = struct
     let of_int63 t = t

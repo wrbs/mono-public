@@ -18,7 +18,7 @@
 
 (** A library for manipulation of IP address representations.
 
-    {e v5.6.0 - {{:https://github.com/mirage/ocaml-ipaddr} homepage}} *)
+    {e v5.6.1 - {{:https://github.com/mirage/ocaml-ipaddr} homepage}} *)
 
 exception Parse_error of string * string
 (** [Parse_error (err,packet)] is raised when parsing of the IP address syntax
@@ -783,6 +783,9 @@ module Prefix : sig
 
   val address : t -> addr
   (** [address cidr] is the address for [cidr]. *)
+
+  val bits : t -> int
+  (** [bits cidr] is the bit size of the [cidr] prefix. *)
 
   val first : t -> addr
   (** [first subnet] is first valid unicast address in this [subnet]. *)

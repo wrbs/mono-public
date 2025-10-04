@@ -63,7 +63,12 @@ let create
 
 let to_screen t ~prefer_split_on_spaces =
   assert (List.length t.data = List.length t.heights);
-  let mid_row = if [%compare.equal: Display.t] t.display Tall_box then 1 else 0 in
+  let mid_row =
+    if [%compare.equal: Display.t] t.display Tall_box
+       || [%compare.equal: Display.t] t.display Medium_box
+    then 1
+    else 0
+  in
   (* The total width of the table includes the '|'s to the left of elements, so we add 1
      and the spacing on either side when summing. *)
   let cols = list_sum t.widths ~f:(( + ) (1 + (t.spacing * 2))) + 1 in
@@ -82,7 +87,7 @@ let to_screen t ~prefer_split_on_spaces =
          let col = col + 1 + width + (t.spacing * 2) in
          Screen.vline screen texel ~col;
          col)
-        : int));
+       : int));
   ignore
     (List.fold2_exn t.data t.heights ~init:1 ~f:(fun row row_elements height ->
        let header_row = row = 1 in
@@ -92,32 +97,45 @@ let to_screen t ~prefer_split_on_spaces =
             (List.zip_exn t.widths t.aligns)
             ~init:(1 + t.spacing)
             ~f:(fun col element (width, align) ->
-            let lines = Cell.wrap_lines element ~width ~prefer_split_on_spaces in
-            if [%compare.equal: Display.t] t.display Line
-            then (
-              match lines with
-              | [] -> ()
-              | [ (attr, line) ] -> Screen.string screen align attr line ~row ~col ~width
-              | (attr, line) :: _ ->
-                Screen.string screen align attr line ~row ~col ~width;
-                for col = col + max 0 (width - 3) to col + width - 1 do
-                  Screen.char screen [] (Uchar.of_char '.') ~row ~col
-                done)
-            else
-              ignore
-                (List.fold lines ~init:row ~f:(fun row (attr, line) ->
-                   Screen.string screen align attr line ~row ~col ~width;
-                   row + 1)
-                  : int);
-            col + 1 + (t.spacing * 2) + width)
-           : int);
+              let lines = Cell.wrap_lines element ~width ~prefer_split_on_spaces in
+              if [%compare.equal: Display.t] t.display Line
+              then (
+                match lines with
+                | [] -> ()
+                | [ (attr, line) ] ->
+                  Screen.string screen align attr line ~row ~col ~width
+                | (attr, line) :: _ ->
+                  Screen.string screen align attr line ~row ~col ~width;
+                  for col = col + max 0 (width - 3) to col + width - 1 do
+                    Screen.char screen [] (Uchar.of_char '.') ~row ~col
+                  done)
+              else
+                ignore
+                  (List.fold lines ~init:row ~f:(fun row (attr, line) ->
+                     Screen.string screen align attr line ~row ~col ~width;
+                     row + 1)
+                   : int);
+              col + 1 + (t.spacing * 2) + width)
+          : int);
        let row = row + height in
        if [%compare.equal: Display.t] t.display Tall_box || header_row
        then (
          if not ([%compare.equal: Display.t] t.display Blank)
          then Screen.hline screen Line ~row;
          row + 1)
+       else if [%compare.equal: Display.t] t.display Medium_box
+       then (
+         ignore
+           (List.fold t.widths ~init:0 ~f:(fun col width ->
+              let width = width + (t.spacing * 2) in
+              let write col = Screen.set_screen_point screen texel ~row ~col in
+              write col;
+              write (col + 1);
+              write (col + width);
+              col + width + 1)
+            : int);
+         row + 1)
        else row)
-      : int);
+     : int);
   screen
 ;;

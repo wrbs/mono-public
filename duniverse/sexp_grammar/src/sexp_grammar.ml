@@ -40,7 +40,7 @@ module Field = struct
   ;;
 end
 
-type grammar = Sexp_grammar.grammar =
+type grammar : value mod contended portable = Sexp_grammar.grammar =
   | Any of string
   | Bool
   | Char
@@ -55,7 +55,8 @@ type grammar = Sexp_grammar.grammar =
   | Tyvar of string
   | Tycon of string * grammar list * defn list
   | Recursive of string * grammar list
-  | Lazy of grammar Lazy.t
+  | Lazy of grammar Portable_lazy.t
+[@@unsafe_allow_any_mode_crossing]
 
 and list_grammar = Sexp_grammar.list_grammar =
   | Empty
@@ -79,10 +80,11 @@ and case_sensitivity = Sexp_grammar.case_sensitivity =
   | Case_sensitive
   | Case_sensitive_except_first_character
 
-and variant = Sexp_grammar.variant =
+and variant : value mod contended portable = Sexp_grammar.variant =
   { case_sensitivity : case_sensitivity
   ; clauses : clause with_tag_list list
   }
+[@@unsafe_allow_any_mode_crossing]
 
 and clause = Sexp_grammar.clause =
   { name : string
@@ -108,10 +110,10 @@ and defn = Sexp_grammar.defn =
   ; tyvars : string list
   ; grammar : grammar
   }
-[@@deriving bin_io, compare, equal, hash, sexp]
+[@@deriving bin_io, compare ~localize, equal ~localize, hash, sexp]
 
 type 'a t = 'a Sexp_grammar.t = { untyped : grammar }
-[@@unboxed] [@@deriving bin_io, compare, equal, hash, sexp]
+[@@unboxed] [@@deriving bin_io, compare ~localize, equal ~localize, hash, sexp]
 
 let coerce = Sexp_grammar.coerce
 
@@ -291,7 +293,8 @@ module Fold_nonrecursive (Callbacks : Callbacks_for_fold_nonrecursive) :
       Callbacks.tycon tycon ~params ~defns
     | Recursive (tycon_name, params) ->
       Callbacks.recursive tycon_name ~params:(List.map ~f:of_grammar params)
-    | Lazy lazy_grammar -> Callbacks.lazy_ (Lazy.map ~f:of_grammar lazy_grammar)
+    | Lazy lazy_grammar ->
+      Callbacks.lazy_ (lazy (of_grammar (Portable_lazy.force lazy_grammar)))
     | Tagged { key; value; grammar } -> Callbacks.tag (of_grammar grammar) key value
 
   and of_clause_with_tag_list = function
@@ -338,7 +341,7 @@ module Fold_recursive (Callbacks : Callbacks_for_fold_recursive) :
   let of_typed_grammar_exn t = of_grammar_exn t.untyped
 end
 
-module Copy_callbacks = struct
+module Eager_copy_callbacks = struct
   type t = grammar
   type list_t = list_grammar
 
@@ -396,19 +399,6 @@ module Copy_callbacks = struct
     in
     Tycon (tycon_name, params, defns)
   ;;
-end
-
-module Recursive_copy_callbacks = struct
-  include Copy_callbacks
-
-  let lazy_ lazy_t = Lazy lazy_t
-  let of_lazy_recursive lazy_t = Lazy lazy_t
-end
-
-module Unroll_recursion = Fold_recursive (Recursive_copy_callbacks)
-
-module Eager_copy_callbacks = struct
-  include Copy_callbacks
 
   let lazy_ = Lazy.force
 end
@@ -417,6 +407,13 @@ module Eager_copy = Fold_nonrecursive (Eager_copy_callbacks)
 
 (* Leave [Lazy] constructors out of sexp. *)
 let sexp_of_t _ t = sexp_of_grammar (Eager_copy.of_grammar t.untyped)
+
+(* For backwards-compatibility, we support the derived [t_of_sexp].
+   For roundtripping, we support [grammar_of_sexp] without the extra wrapper. *)
+let t_of_sexp a_of_sexp sexp =
+  try t_of_sexp a_of_sexp sexp with
+  | _ -> { untyped = grammar_of_sexp sexp }
+;;
 
 let first_tag_value tags name of_sexp =
   match List.Assoc.find tags name ~equal:String.equal with
@@ -475,7 +472,7 @@ let subst_tycon_body ~name ~params ~defns ~tag_prefix =
       let key = String.concat ~sep:"." [ prefix; suffix ] in
       Tagged { key; value = Atom name; grammar }
   in
-  let rec on_grammar grammar =
+  let rec on_grammar (grammar : grammar) : grammar =
     match grammar with
     | Any _ | Bool | Char | Integer | Float | String -> grammar
     | Option grammar -> Option (on_grammar grammar)
@@ -490,7 +487,11 @@ let subst_tycon_body ~name ~params ~defns ~tag_prefix =
     | Recursive (tycon_name, params) ->
       let grammar = Tycon (tycon_name, List.map params ~f:on_grammar, defns) in
       tag grammar ~suffix:"tycon" ~name:tycon_name
-    | Lazy lazy_grammar -> Lazy (Lazy.map lazy_grammar ~f:on_grammar)
+    | Lazy lazy_grammar ->
+      Lazy
+        (Portable_lazy.map
+           lazy_grammar
+           ~f:(Portability_hacks.magic_portable__needs_base_and_core on_grammar))
     | Tycon (name, params, defns) -> Tycon (name, List.map params ~f:on_grammar, defns)
   and on_list_grammar list_grammar =
     match list_grammar with
@@ -589,7 +590,7 @@ module Validation = struct
         ; tycon_defns : defn list
         ; sexp : Sexp.t
         }
-      [@@deriving compare, hash, sexp_of]
+      [@@deriving compare ~localize, hash, sexp_of]
     end
 
     let memo_table = Hashtbl.create (module Memo_key)
@@ -605,7 +606,9 @@ module Validation = struct
       | Tagged { key = _; value = _; grammar } -> on_grammar grammar
       | Option grammar ->
         let f = on_grammar grammar in
-        let read_old_option_format = !Sexplib0.Sexp_conv.read_old_option_format in
+        let read_old_option_format =
+          Dynamic.get Sexplib0.Sexp_conv.read_old_option_format
+        in
         Staged.stage (fun sexp ->
           match (sexp : Sexp.t) with
           | Atom ("none" | "None") -> Ok ()
@@ -622,7 +625,7 @@ module Validation = struct
             let s = "expected union of several grammars, but none were satisfied." in
             Or_error.error_s [%message s ~_:(error : Error.t)])
       | Lazy grammar ->
-        let lazy_f = Lazy.map grammar ~f:on_grammar in
+        let lazy_f = lazy (on_grammar (Portable_lazy.force grammar)) in
         Staged.stage (fun sexp -> Staged.unstage (Lazy.force lazy_f) sexp)
       | List list_grammar ->
         let list_t = on_list_grammar list_grammar in
@@ -737,27 +740,27 @@ module Validation = struct
     and on_field ~fields ~allow_extra_fields =
       let stop_error sexp = Continue_or_stop.Stop (Or_error.error_s sexp) in
       Staged.stage (fun sexp : (_, _) Continue_or_stop.t ->
-        (match require_list_with_leading_atom "record field" sexp with
-         | Error _ as stop -> Stop stop
-         | Ok (field_name, sexps) ->
-           (match (Map.find fields field_name : _ Seen_or_unseen.t option) with
-            | None ->
-              if allow_extra_fields
-              then Continue fields
-              else
-                stop_error
-                  [%message
-                    "unrecognized record field"
-                      (field_name : string)
-                      ~recognized:(Map.keys fields : string list)
-                      (sexp : Sexp.t)]
-            | Some Seen ->
-              stop_error [%message "duplicate record field" (field_name : string)]
-            | Some (Unseen (Required list_grammar | Optional list_grammar : _ Field.t)) ->
-              let t_list = on_list_grammar list_grammar in
-              (match Staged.unstage t_list sexps with
-               | Ok () -> Continue (Map.set fields ~key:field_name ~data:Seen)
-               | Error _ as reject -> Stop reject))))
+        match require_list_with_leading_atom "record field" sexp with
+        | Error _ as stop -> Stop stop
+        | Ok (field_name, sexps) ->
+          (match (Map.find fields field_name : _ Seen_or_unseen.t option) with
+           | None ->
+             if allow_extra_fields
+             then Continue fields
+             else
+               stop_error
+                 [%message
+                   "unrecognized record field"
+                     (field_name : string)
+                     ~recognized:(Map.keys fields : string list)
+                     (sexp : Sexp.t)]
+           | Some Seen ->
+             stop_error [%message "duplicate record field" (field_name : string)]
+           | Some (Unseen (Required list_grammar | Optional list_grammar : _ Field.t)) ->
+             let t_list = on_list_grammar list_grammar in
+             (match Staged.unstage t_list sexps with
+              | Ok () -> Continue (Map.set fields ~key:field_name ~data:Seen)
+              | Error _ as reject -> Stop reject)))
 
     and on_fields ~fields ~allow_extra_fields =
       let fields = List.map fields ~f:without_tag_list in
@@ -782,11 +785,12 @@ module Validation = struct
           ~f:(fun fields sexp ->
             Staged.unstage (on_field ~fields ~allow_extra_fields) sexp)
           ~finish:(fun fields ->
-            Or_error.find_map_ok (Map.to_alist fields) ~f:(fun (field_name, status) ->
+            List.map (Map.to_alist fields) ~f:(fun (field_name, status) ->
               match status with
               | Seen | Unseen (Optional _) -> Ok ()
               | Unseen (Required _) ->
-                Or_error.error_s [%message "missing record field" (field_name : string)])))
+                Or_error.error_s [%message "missing record field" (field_name : string)])
+            |> Or_error.combine_errors_unit))
     ;;
   end
 end
@@ -802,3 +806,21 @@ let validate_sexp_list list_grammar =
 ;;
 
 let validate_sexp { untyped } = validate_sexp_untyped untyped
+
+let rec known_to_accept_all_sexps_untyped grammar =
+  match unroll_tycon_untyped grammar with
+  | Any _ -> true
+  | Bool | Char | Integer | Float | String | Option _ | List _ | Variant _ -> false
+  | Union grammars -> List.exists grammars ~f:known_to_accept_all_sexps_untyped
+  | Lazy lazy_grammar ->
+    known_to_accept_all_sexps_untyped (Portable_lazy.force lazy_grammar)
+  | Tagged { grammar; _ } -> known_to_accept_all_sexps_untyped grammar
+  | (Tycon _ | Tyvar _ | Recursive _) as unrolled ->
+    raise_s
+      [%message
+        "BUG: [unroll_tycon_untyped] removes [Tycon], [Tyvar], and [Recursive]"
+          (unrolled : grammar)
+          (grammar : grammar)]
+;;
+
+let known_to_accept_all_sexps { untyped } = known_to_accept_all_sexps_untyped untyped

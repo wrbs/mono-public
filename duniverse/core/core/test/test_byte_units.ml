@@ -11,23 +11,21 @@ let%expect_test ("Byte_units.to_string_hum" [@tags "64-bits-only"]) =
   [%expect {| 1.46K |}]
 ;;
 
-let%test_module "{of,to}_string" =
-  (module struct
-    let f input expected_output =
-      let observed_output = to_string (of_string input) in
-      let result = String.equal expected_output observed_output in
-      if not result
-      then eprintf "\n%s -> %s != %s\n%!" input expected_output observed_output;
-      result
-    ;;
+module%test [@name "{of,to}_string"] _ = struct
+  let f input expected_output =
+    let observed_output = to_string (of_string input) in
+    let result = String.equal expected_output observed_output in
+    if not result
+    then eprintf "\n%s -> %s != %s\n%!" input expected_output observed_output;
+    result
+  ;;
 
-    let%test _ = f "3B" "3B"
-    let%test _ = f "3w" (sprintf "%gB" (3.0 *. bytes_per_word))
-    let%test _ = f "3K" "3K"
-    let%test _ = f "3M" "3M"
-    let%test _ = f "3G" "3G"
-  end)
-;;
+  let%test _ = f "3B" "3B"
+  let%test _ = f "3w" (sprintf "%gB" (3.0 *. bytes_per_word))
+  let%test _ = f "3K" "3K"
+  let%test _ = f "3M" "3M"
+  let%test _ = f "3G" "3G"
+end
 
 let examples =
   [ Byte_units.zero
@@ -401,7 +399,7 @@ let%expect_test "Byte_units.Stable.V2.t_of_sexp" =
 ;;
 
 let%expect_test "Byte_units.Stable.V1" =
-  print_and_check_stable_type [%here] (module Byte_units.Stable.V1) examples;
+  print_and_check_stable_type (module Byte_units.Stable.V1) examples;
   [%expect
     {|
     (bin_shape_digest 1fd923acb2dd9c5d401ad5b08b1d40cd)
@@ -441,7 +439,7 @@ let%expect_test "Byte_units.Stable.V1" =
 ;;
 
 let%expect_test "Byte_units.Stable.V2" =
-  print_and_check_stable_type [%here] (module Byte_units.Stable.V2) examples;
+  print_and_check_stable_type (module Byte_units.Stable.V2) examples;
   [%expect
     {|
     (bin_shape_digest 2b528f4b22f08e28876ffe0239315ac2)
@@ -514,7 +512,7 @@ let ensure_round_trippable
   Int63.gen_log_uniform_incl Int63.zero (Int63.of_int64_exn max)
   |> Quickcheck.Generator.map ~f:Byte_units.of_bytes_int63
   |> Quickcheck.test ~f:(fun t ->
-       [%test_eq: Byte_units.Stable.V2.t] ~equal t (from (to_ t)))
+    [%test_eq: Byte_units.Stable.V2.t] ~equal t (from (to_ t)))
 ;;
 
 (** Quick check to excercise various round-trip relations *)
@@ -610,4 +608,45 @@ let%test_unit "Byte_units.Stable.V2.sexp_of_t / Byte_units.Stable.V2.t_of_sexp" 
     Byte_units.Stable.V2.sexp_of_t
     Byte_units.Stable.V2.t_of_sexp
     ~tolerance:`Zero
+;;
+
+let%expect_test "Byte_units.Stable.V2.t_sexp_grammar" =
+  Sexp_grammar_validation.validate_grammar
+    (module struct
+      include struct
+        type t = Byte_units.t [@@deriving quickcheck]
+      end
+
+      type t = Byte_units.Stable.V2.t [@@deriving sexp, sexp_grammar]
+    end)
+  |> ok_exn;
+  [%expect
+    {|
+    (Union
+     (String
+      (Variant
+       ((case_sensitivity Case_sensitive)
+        (clauses
+         ((No_tag
+           ((name Bytes) (clause_kind (List_clause (args (Cons Float Empty))))))
+          (No_tag
+           ((name Exabytes) (clause_kind (List_clause (args (Cons Float Empty))))))
+          (No_tag
+           ((name Gigabytes)
+            (clause_kind (List_clause (args (Cons Float Empty))))))
+          (No_tag
+           ((name Kilobytes)
+            (clause_kind (List_clause (args (Cons Float Empty))))))
+          (No_tag
+           ((name Megabytes)
+            (clause_kind (List_clause (args (Cons Float Empty))))))
+          (No_tag
+           ((name Petabytes)
+            (clause_kind (List_clause (args (Cons Float Empty))))))
+          (No_tag
+           ((name Terabytes)
+            (clause_kind (List_clause (args (Cons Float Empty))))))
+          (No_tag
+           ((name Words) (clause_kind (List_clause (args (Cons Float Empty))))))))))))
+    |}]
 ;;

@@ -4,24 +4,23 @@ open! Import
 
     There are several things that are unsafe about it:
 
-    - [float t array] (or any array-backed container) is not memory-safe
-      because float array optimization is incompatible with unboxed option
-      optimization. You have to use [Uniform_array.t] instead of [array].
+    - [float t array] (or any array-backed container) is not memory-safe because float
+      array optimization is incompatible with unboxed option optimization. You have to use
+      [Uniform_array.t] instead of [array].
 
-    - Nested options (['a t t]) don't work. They are believed to be
-      memory-safe, but not parametric.
+    - Nested options (['a t t]) don't work. They are believed to be memory-safe, but not
+      parametric.
 
-    - A record with [float t]s in it should be safe, but it's only [t] being
-      abstract that gives you safety. If the compiler was smart enough to peek
-      through the module signature then it could decide to construct a float
-      array instead. *)
+    - A record with [float t]s in it should be safe, but it's only [t] being abstract that
+      gives you safety. If the compiler was smart enough to peek through the module
+      signature then it could decide to construct a float array instead. *)
 module Cheap_option = struct
   (* This is taken from core. Rather than expose it in the public interface of base, just
      keep a copy around here. *)
   let phys_same (type a b) (a : a) (b : b) = phys_equal a (Stdlib.Obj.magic b : a)
 
-  module T0 : sig
-    type 'a t
+  module T0 : sig @@ portable
+    type 'a t : immutable_data with 'a
 
     val none : _ t
     val some : 'a -> 'a t
@@ -29,9 +28,15 @@ module Cheap_option = struct
     val is_some : _ t -> bool
     val value_exn : 'a t -> 'a
     val value_unsafe : 'a t -> 'a
-    val iter_some : 'a t -> f:('a -> unit) -> unit
+    val iter_some : 'a t -> f:local_ ('a -> unit) -> unit
+    val get_none : unit -> _ t
   end = struct
-    type +'a t
+    (* It is safe to claim that ['a t] is immutable data as long as ['a] is immutable
+       data:
+         - the [None] values are immutable blocks or immediates.
+         - the [Some x] values are the value [x] (of type ['a]) itself.
+    *)
+    type +'a t : immutable_data with 'a
 
     (* Being a pointer, no one outside this module can construct a value that is
        [phys_same] as this one.
@@ -43,7 +48,8 @@ module Cheap_option = struct
        this code is duplicated in Moption, and if we find yet another place where we want
        it we should reconsider making it shared. *)
     let none_substitute : _ t =
-      Stdlib.Obj.obj (Stdlib.Obj.new_block Stdlib.Obj.abstract_tag 1)
+      Stdlib.Obj.magic_portable
+        (Stdlib.Obj.obj (Stdlib.Obj.new_block Stdlib.Obj.abstract_tag 1))
     ;;
 
     let none : _ t =
@@ -58,18 +64,28 @@ module Cheap_option = struct
          y] is not a pointer if [c] is an integer compile-time constant.  This is being
          fixed in https://github.com/ocaml/ocaml/pull/555.  The "memory corruption" test
          below demonstrates the issue.  *)
-      Stdlib.Obj.magic `x6e8ee3478e1d7449
+      Stdlib.Obj.magic_portable (Stdlib.Obj.magic `x6e8ee3478e1d7449)
     ;;
 
-    let is_none x = phys_equal x none
-    let is_some x = not (phys_equal x none)
+    let[@inline] get_none () =
+      Portability_hacks.magic_uncontended__promise_deeply_immutable none
+    ;;
+
+    let[@inline] get_none_substitute () =
+      Portability_hacks.magic_uncontended__promise_deeply_immutable none_substitute
+    ;;
+
+    let is_none x = phys_equal x (get_none ())
+    let is_some x = not (phys_equal x (get_none ()))
 
     let some (type a) (x : a) : a t =
-      if phys_same x none then none_substitute else Stdlib.Obj.magic x
+      if phys_same x (get_none ()) then get_none_substitute () else Stdlib.Obj.magic x
     ;;
 
     let value_unsafe (type a) (x : a t) : a =
-      if phys_equal x none_substitute then Stdlib.Obj.magic none else Stdlib.Obj.magic x
+      if phys_equal x (get_none_substitute ())
+      then Stdlib.Obj.magic (get_none ())
+      else Stdlib.Obj.magic x
     ;;
 
     let value_exn x =
@@ -85,12 +101,16 @@ module Cheap_option = struct
     include T0
 
     let of_option = function
-      | None -> none
+      | None -> get_none ()
       | Some x -> some x
     ;;
 
     let[@inline] to_option x = if is_some x then Some (value_unsafe x) else None
-    let[@inline] to_option_local x = if is_some x then Some (value_unsafe x) else None
+
+    let[@inline] to_option_local x = exclave_
+      if is_some x then Some (value_unsafe x) else None
+    ;;
+
     let to_sexpable = to_option
     let of_sexpable = of_option
 
@@ -102,41 +122,26 @@ module Cheap_option = struct
   end
 
   include T1
-  include Sexpable.Of_sexpable1 (Option) (T1)
+
+  include%template Sexpable.Of_sexpable1 [@modality portable] (Option) (T1)
 end
 
-type 'a t = 'a Cheap_option.t Uniform_array.t [@@deriving_inline sexp, sexp_grammar]
-
-let t_of_sexp : 'a. (Sexplib0.Sexp.t -> 'a) -> Sexplib0.Sexp.t -> 'a t =
-  fun _of_a__001_ x__003_ ->
-  Uniform_array.t_of_sexp (Cheap_option.t_of_sexp _of_a__001_) x__003_
-;;
-
-let sexp_of_t : 'a. ('a -> Sexplib0.Sexp.t) -> 'a t -> Sexplib0.Sexp.t =
-  fun _of_a__004_ x__005_ ->
-  Uniform_array.sexp_of_t (Cheap_option.sexp_of_t _of_a__004_) x__005_
-;;
-
-let t_sexp_grammar : 'a. 'a Sexplib0.Sexp_grammar.t -> 'a t Sexplib0.Sexp_grammar.t =
-  fun _'a_sexp_grammar ->
-  Uniform_array.t_sexp_grammar (Cheap_option.t_sexp_grammar _'a_sexp_grammar)
-;;
-
-[@@@end]
+type 'a t = 'a Cheap_option.t Uniform_array.t [@@deriving sexp, sexp_grammar]
 
 let empty = Uniform_array.empty
-let create ~len = Uniform_array.create ~len Cheap_option.none
+let get_empty = Uniform_array.get_empty
+let create ~len = Uniform_array.create ~len (Cheap_option.get_none ())
 let init n ~f = Uniform_array.init n ~f:(fun i -> Cheap_option.of_option (f i)) [@nontail]
 let init_some n ~f = Uniform_array.init n ~f:(fun i -> Cheap_option.some (f i)) [@nontail]
 let length = Uniform_array.length
 let[@inline] get t i = Cheap_option.to_option (Uniform_array.get t i)
-let[@inline] get_local t i = Cheap_option.to_option_local (Uniform_array.get t i)
+let[@inline] get_local t i = exclave_ Cheap_option.to_option_local (Uniform_array.get t i)
 let get_some_exn t i = Cheap_option.value_exn (Uniform_array.get t i)
 let is_none t i = Cheap_option.is_none (Uniform_array.get t i)
 let is_some t i = Cheap_option.is_some (Uniform_array.get t i)
 let set t i x = Uniform_array.set t i (Cheap_option.of_option x)
 let set_some t i x = Uniform_array.set t i (Cheap_option.some x)
-let set_none t i = Uniform_array.set t i Cheap_option.none
+let set_none t i = Uniform_array.set t i (Cheap_option.get_none ())
 let swap t i j = Uniform_array.swap t i j
 let unsafe_get t i = Cheap_option.to_option (Uniform_array.unsafe_get t i)
 let unsafe_get_some_exn t i = Cheap_option.value_exn (Uniform_array.unsafe_get t i)
@@ -148,7 +153,7 @@ let unsafe_get_some_assuming_some t i =
 let unsafe_is_some t i = Cheap_option.is_some (Uniform_array.unsafe_get t i)
 let unsafe_set t i x = Uniform_array.unsafe_set t i (Cheap_option.of_option x)
 let unsafe_set_some t i x = Uniform_array.unsafe_set t i (Cheap_option.some x)
-let unsafe_set_none t i = Uniform_array.unsafe_set t i Cheap_option.none
+let unsafe_set_none t i = Uniform_array.unsafe_set t i (Cheap_option.get_none ())
 
 let clear t =
   for i = 0 to length t - 1 do
@@ -172,16 +177,16 @@ let foldi input ~init ~f =
 
 let fold input ~init ~f = foldi input ~init ~f:(fun (_ : int) acc x -> f acc x) [@nontail]
 
-include Indexed_container.Make_gen (struct
-  type nonrec ('a, _, _) t = 'a t
-  type 'a elt = 'a option
+include%template Indexed_container.Make_gen [@modality portable] (struct
+    type nonrec ('a, _, _) t = 'a t
+    type 'a elt = 'a option
 
-  let fold = fold
-  let foldi = `Custom foldi
-  let iter = `Custom iter
-  let iteri = `Custom iteri
-  let length = `Custom length
-end)
+    let fold = fold
+    let foldi = `Custom foldi
+    let iter = `Custom iter
+    let iteri = `Custom iteri
+    let length = `Custom length
+  end)
 
 let length = Uniform_array.length
 
@@ -213,13 +218,13 @@ let of_array_some array =
 
 let to_array t = Array.init (length t) ~f:(fun i -> unsafe_get t i)
 
-include Blit.Make1_generic (struct
-  type nonrec 'a t = 'a t
+include%template Blit.Make1 [@modality portable] (struct
+    type nonrec 'a t = 'a t
 
-  let length = length
-  let create_like ~len _ = create ~len
-  let unsafe_blit = Uniform_array.unsafe_blit
-end)
+    let length = length
+    let create_like ~len _ = create ~len
+    let unsafe_blit = Uniform_array.unsafe_blit
+  end)
 
 let copy = Uniform_array.copy
 

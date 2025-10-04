@@ -22,15 +22,41 @@ let with_local key value ~f =
 
 let main_execution_context = (t ()).main_execution_context
 
+module Project : sig @@ portable
+  val external_jobs
+    :  (t, 'k) Capsule.Data.t
+    -> (External_job.t Mpsc_queue.t, 'k) Capsule.Data.t
+
+  val thread_safe_external_job_hook
+    :  (t, 'k) Capsule.Data.t
+    -> ((unit -> unit) Atomic.t, 'k) Capsule.Data.t
+end = struct
+  (* It it always sound to project out an immutable field of a record within a
+     [Capsule.Data.t] into a [Capsule.Data.t] within the same capsule. Soon this will be
+     supported by the language directly, but in the meantime we have to use magic. *)
+
+  external magic_unwrap_capsule : ('a, 'k) Capsule.Data.t -> 'a @@ portable = "%identity"
+
+  let external_jobs t = Capsule.Expert.Data.inject (magic_unwrap_capsule t).external_jobs
+
+  let thread_safe_external_job_hook t =
+    Capsule.Expert.Data.inject (magic_unwrap_capsule t).thread_safe_external_job_hook
+  ;;
+end
+
 let can_run_a_job t =
   num_pending_jobs t > 0
   || Bvar.has_any_waiters t.yield
   || Bvar.has_any_waiters t.yield_until_no_jobs_remain
 ;;
 
-let has_upcoming_event t = not (Timing_wheel.is_empty (events t))
-let next_upcoming_event t = Timing_wheel.next_alarm_fires_at (events t)
-let next_upcoming_event_exn t = Timing_wheel.next_alarm_fires_at_exn (events t)
+let has_upcoming_event t = Synchronous_time_source.has_next_alarm t.time_source
+let next_upcoming_event t = Synchronous_time_source.next_alarm_runs_at t.time_source
+
+let next_upcoming_event_exn t =
+  Synchronous_time_source.next_alarm_runs_at_exn t.time_source
+;;
+
 let event_precision t = Timing_wheel.alarm_precision (events t)
 let cycle_start t = t.cycle_start
 
@@ -120,18 +146,38 @@ let cycle_count t = t.cycle_count
 
 let set_max_num_jobs_per_priority_per_cycle t int =
   t.max_num_jobs_per_priority_per_cycle
-    <- Max_num_jobs_per_priority_per_cycle.create_exn int
+  <- Max_num_jobs_per_priority_per_cycle.create_exn int
 ;;
 
 let max_num_jobs_per_priority_per_cycle t =
   Max_num_jobs_per_priority_per_cycle.raw t.max_num_jobs_per_priority_per_cycle
 ;;
 
-let set_thread_safe_external_job_hook t f = t.thread_safe_external_job_hook <- f
+let set_thread_safe_external_job_hook t f = Atomic.set t.thread_safe_external_job_hook f
+let has_pending_external_jobs t = not (Mpsc_queue.is_empty t.external_jobs)
 
 let thread_safe_enqueue_external_job t execution_context f a =
-  Thread_safe_queue.enqueue t.external_jobs (External_job.T (execution_context, f, a));
-  t.thread_safe_external_job_hook ()
+  let job =
+    Capsule.Initial.Data.wrap
+      (External_job.T { execution_context; f; a } : External_job.t')
+  in
+  Mpsc_queue.enqueue t.external_jobs job;
+  (Atomic.get t.thread_safe_external_job_hook) ()
+;;
+
+let initial_access = Capsule.Initial.Data.wrap Capsule.Expert.initial
+
+let portable_enqueue_external_job t execution_context f =
+  let external_jobs = t |> Project.external_jobs |> Capsule.Expert.Data.project in
+  let job = External_job.Encapsulated.create ~execution_context ~f ~a:initial_access in
+  Mpsc_queue.enqueue external_jobs job;
+  let thread_safe_external_job_hook =
+    t
+    |> Project.thread_safe_external_job_hook
+    |> Capsule.Expert.Data.project
+    |> Atomic.get
+  in
+  thread_safe_external_job_hook ()
 ;;
 
 let set_event_added_hook t f = t.event_added_hook <- Some f
@@ -140,7 +186,8 @@ let set_job_queued_hook t f = t.job_queued_hook <- Some f
 let create_alarm t f =
   let execution_context = current_execution_context t in
   Gc.Expert.Alarm.create (fun () ->
-    thread_safe_enqueue_external_job t execution_context f ())
+    if not t.reset_in_forked_process
+    then thread_safe_enqueue_external_job t execution_context f ())
 ;;
 
 let add_finalizer t heap_block f =
@@ -159,10 +206,15 @@ let add_finalizer t heap_block f =
        finalizer to run again.  Also, OCaml does not impose any requirement on finalizer
        functions that they need to dispose of the block, so it's fine that we keep
        [heap_block] around until later. *)
-    if Debug.finalizers then Debug.log_string "enqueueing finalizer";
-    thread_safe_enqueue_external_job t execution_context f heap_block
+    if not t.reset_in_forked_process
+    then (
+      if Debug.finalizers then Debug.log_string "enqueueing finalizer";
+      thread_safe_enqueue_external_job t execution_context f heap_block)
   in
   if Debug.finalizers then Debug.log_string "adding finalizer";
+  let finalizer =
+    Core.Gc.Expert.With_leak_protection.protect_finalizer heap_block finalizer
+  in
   (* We use [Caml.Gc.finalise] instead of [Core.Gc.add_finalizer] because the latter
      has its own wrapper around [Caml.Gc.finalise] to run finalizers synchronously. *)
   try Stdlib.Gc.finalise finalizer heap_block with
@@ -182,9 +234,11 @@ let add_finalizer_last t heap_block f =
   let finalizer () =
     (* Here we can be in any thread, and may not be holding the async lock.  So, we can
        only do thread-safe things. *)
-    if Debug.finalizers
-    then Debug.log_string "enqueueing finalizer (using 'last' semantic)";
-    thread_safe_enqueue_external_job t execution_context f ()
+    if not t.reset_in_forked_process
+    then (
+      if Debug.finalizers
+      then Debug.log_string "enqueueing finalizer (using 'last' semantic)";
+      thread_safe_enqueue_external_job t execution_context f ())
   in
   if Debug.finalizers then Debug.log_string "adding finalizer (using 'last' semantic)";
   (* We use [Caml.Gc.finalise_last] instead of [Core.Gc.add_finalizer_last] because
@@ -200,7 +254,7 @@ let add_finalizer_last t heap_block f =
 let add_finalizer_last_exn t x f = add_finalizer_last t (Heap_block.create_exn x) f
 
 (** [force_current_cycle_to_end] sets the number of normal jobs allowed to run in this
-    cycle to zero.  Thus, after the currently running job completes, the scheduler will
+    cycle to zero. Thus, after the currently running job completes, the scheduler will
     switch to low priority jobs and then end the current cycle. *)
 let force_current_cycle_to_end t =
   Job_queue.set_jobs_left_this_cycle t.normal_priority_jobs 0
@@ -219,6 +273,8 @@ let run_cycle t =
   t.cycle_count <- t.cycle_count + 1;
   t.cycle_start <- now;
   t.in_cycle <- true;
+  Job_infos_for_cycle.Private.on_cycle_start t.job_infos_for_cycle;
+  let old_context = current_execution_context t in
   Bvar.broadcast t.yield ();
   let num_jobs_run_at_start_of_cycle = num_jobs_run t in
   Array.iter t.run_every_cycle_start ~f:(fun f -> f ());
@@ -241,6 +297,7 @@ let run_cycle t =
   if Bvar.has_any_waiters t.yield_until_no_jobs_remain && num_pending_jobs t = 0
   then Bvar.broadcast t.yield_until_no_jobs_remain ();
   Array.iter t.run_every_cycle_end ~f:(fun f -> f ());
+  set_execution_context t old_context;
   t.in_cycle <- false;
   if debug
   then
@@ -265,25 +322,24 @@ let run_cycles_until_no_jobs_remain () =
     if can_run_a_job t then loop ()
   in
   loop ();
-  (* Reset the current execution context to maintain the invariant that when we're not in
-     a job, [current_execution_context = main_execution_context]. *)
-  set_execution_context t t.main_execution_context;
   if debug then Debug.log_string "run_cycles_until_no_jobs_remain finished";
   Option.iter (uncaught_exn t) ~f:Error.raise
 ;;
 
 let make_async_unusable () =
-  let t = !t_ref in
+  let t = t_without_checking_access () in
   t.check_access
-    <- Some
-         (fun () ->
-           raise_s [%sexp "Async scheduler is unusable due to [make_async_unusable]"])
+  <- Some
+       (fun () ->
+         raise_s [%sexp "Async scheduler is unusable due to [make_async_unusable]"])
 ;;
 
 let reset_in_forked_process () =
+  (Capsule.Initial.Data.unwrap (Atomic.get t_ref)).reset_in_forked_process <- true;
   if debug then Debug.log_string "reset_in_forked_process";
   (* There is no need to empty [main_monitor_hole]. *)
-  Scheduler.(t_ref := create ())
+  let t = create () in
+  Atomic.set t_ref (Capsule.Initial.Data.wrap t)
 ;;
 
 let check_invariants t = t.check_invariants

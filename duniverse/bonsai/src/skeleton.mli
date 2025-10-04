@@ -1,9 +1,10 @@
 open! Core
 open! Import
 module Bonsai_value = Value
+module Bonsai_computation = Computation
 
-(** This module provides skeleton versions of [Value.t] and [Component.t]
-    that are easier to traverse, and two-way serializable. *)
+(** This module provides skeleton versions of [Value.t] and [Component.t] that are easier
+    to traverse, and two-way serializable. *)
 
 module Id : sig
   type t [@@deriving compare, hash, sexp_of]
@@ -14,15 +15,14 @@ module Value : sig
   type t =
     { node_path : Node_path.t Lazy.t
     ; kind : kind
-    ; here : Source_code_position.t option
-    ; id : Id.t
+    ; here : Source_code_position.t
     }
 
   and kind =
     | Constant
     | Exception
     | Incr
-    | Named
+    | Named of Id.t
     | Cutoff of
         { t : t
         ; added_by_let_syntax : bool
@@ -32,15 +32,16 @@ module Value : sig
 
   val of_value : 'a Value.t -> t
 
-  (** Computes a sexp that shows the structure of the value, it leaves any node_path's and positions
-      that add an extra level of indentation making it hard to read in test output. *)
+  (** Computes a sexp that shows the structure of the value, it leaves any node_path's and
+      positions that add an extra level of indentation making it hard to read in test
+      output. *)
   val minimal_sexp_of_t : t -> Sexp.t
 
   (** Returns the input to the given node. *)
   val inputs : t -> t list
 
-  (** Turns a value into a string that looks like the OCaml source code that
-      would produce a value of the same structure as the provided value. *)
+  (** Turns a value into a string that looks like the OCaml source code that would produce
+      a value of the same structure as the provided value. *)
   val to_string_hum : t -> string
 end
 
@@ -49,7 +50,7 @@ module Computation : sig
   type t =
     { node_path : Node_path.t Lazy.t
     ; kind : kind
-    ; here : Source_code_position.t option
+    ; here : Source_code_position.t
     }
 
   and kind =
@@ -63,6 +64,7 @@ module Computation : sig
         { from : t
         ; via : Id.t
         ; into : t
+        ; invert_lifecycles : bool
         }
     | Store of
         { id : Id.t
@@ -91,6 +93,17 @@ module Computation : sig
         ; arms : t list
         }
     | Lazy of { t : t option }
+    | Fix_define of
+        { result : t
+        ; initial_input : Value.t
+        ; fix_id : Id.t
+        ; input_id : Id.t
+        }
+    | Fix_recurse of
+        { input : Value.t
+        ; input_id : Id.t
+        ; fix_id : Id.t
+        }
     | Wrap of
         { model_id : Id.t
         ; inject_id : Id.t
@@ -103,18 +116,23 @@ module Computation : sig
     | Path
     | Lifecycle of { value : Value.t }
     | Identity of { t : t }
+    | Computation_watcher of
+        { inner : t
+        ; free_vars : Id.t list
+        }
   [@@deriving sexp_of]
 
   val of_computation : 'result Computation.t -> t
 
   (** Uid.t's is different between ocaml and javascript build targets, which makes
-      printing uids on expect tests tricky. You can use [sanitize_uids_for_testing]
-      to make sure that all uids for a given computation are the same for a compilation
+      printing uids on expect tests tricky. You can use [sanitize_uids_for_testing] to
+      make sure that all uids for a given computation are the same for a compilation
       target. *)
   val sanitize_for_testing : t -> t
 
-  (** Computes a sexp that shows the structure of the value, it leaves any node_path's and positions
-      that add an extra level of indentation making it hard to read in tests out. *)
+  (** Computes a sexp that shows the structure of the value, it leaves any node_path's and
+      positions that add an extra level of indentation making it hard to read in tests
+      out. *)
   val minimal_sexp_of_t : t -> Sexp.t
 
   (** Returns the input values for the computation. *)
@@ -125,22 +143,20 @@ module Computation : sig
 end
 
 module Traverse : sig
-  (**
-     Provides a nice way of folding through a [Computation.t], e.g.
+  (** Provides a nice way of folding through a [Computation.t], e.g.
 
-     {[
-       let count_uids =
-         object
-           inherit [int] fold as super
+      {[
+        let count_uids =
+          object
+            inherit [int] fold as super
 
-           method! id id acc =
-             let acc = acc + 1 in
-             super#id id acc
-         end
-       in
-       count_uids#computation t 0
-     ]}
-  *)
+            method! id id acc =
+              let acc = acc + 1 in
+              super#id id acc
+          end
+        in
+        count_uids#computation t 0
+      ]} *)
   class ['acc] fold : object
     method bool : bool -> 'acc -> 'acc
     method computation : Computation.t -> 'acc -> 'acc
@@ -155,9 +171,8 @@ module Traverse : sig
     method value_kind : Value.kind -> 'acc -> 'acc
   end
 
-  (**
-     Provides a nice way of mapping over computations and its elements similarly to [fold].
-  *)
+  (** Provides a nice way of mapping over computations and its elements similarly to
+      [fold]. *)
   class map : object
     method bool : bool -> bool
     method computation : Computation.t -> Computation.t
@@ -171,4 +186,20 @@ module Traverse : sig
     method value : Value.t -> Value.t
     method value_kind : Value.kind -> Value.kind
   end
+end
+
+module Counts : sig
+  module Computation : sig
+    type t [@@deriving sexp_of]
+  end
+
+  module Value : sig
+    type t [@@deriving sexp_of]
+  end
+
+  type t [@@deriving sexp_of]
+
+  val computation : t -> Computation.t
+  val value : t -> Value.t
+  val get : ?pre_process:bool -> 'a Bonsai_computation.t -> t
 end

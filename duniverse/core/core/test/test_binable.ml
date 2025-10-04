@@ -2,12 +2,15 @@ open! Core
 open! Import
 open! Binable
 
+[%%template
+[@@@mode m = (global, local)]
+
 let%test_unit _ =
   let module M = struct
-    type t = int [@@deriving bin_io]
+    type t = int [@@deriving bin_io ~localize]
   end
   in
-  let m = (module M : S with type t = int) in
+  let m : (int m[@mode m]) = (module M) in
   List.iter
     [ Int.min_value; Int.min_value / 2; -1; 0; 1; Int.max_value / 2; Int.max_value ]
     ~f:(fun i ->
@@ -16,22 +19,21 @@ let%test_unit _ =
         if i <> i'
         then
           Error.failwiths
-            ~here:[%here]
             (Printf.sprintf "Binable.{of,to}_%s failure" name)
             (i, `Round_tripped_to i')
             [%sexp_of: int * [ `Round_tripped_to of int ]]
       in
-      check "string" of_string to_string;
-      check "bigstring" of_bigstring to_bigstring)
-;;
+      check "string" (of_string [@mode m]) (to_string [@mode m]);
+      check "bigstring" (of_bigstring [@mode m]) (to_bigstring [@mode m]))
+;;]
 
 let%test_unit "Of_sexpable" =
   let module M = struct
     type t = int
 
     include Of_sexpable_without_uuid [@alert "-legacy"] (struct
-      type t = int [@@deriving sexp]
-    end)
+        type t = int [@@deriving sexp]
+      end)
   end
   in
   let m = (module M : S with type t = M.t) in
@@ -48,7 +50,7 @@ let%expect_test "of_bigstring fails if the buffer is too long or too short" =
   [%expect {| test value |}];
   (* if the bigstring is too short, the [bin_read_t] function will raise: *)
   let shorter_bigstring = Bigstring.sub_shared ~len:10 good_bigstring in
-  require_does_raise [%here] (fun () -> of_bigstring (module String) shorter_bigstring);
+  require_does_raise (fun () -> of_bigstring (module String) shorter_bigstring);
   [%expect {| (Bin_prot__Common.Buffer_short) |}];
   (* if the bigstring is too long, the [bin_read_t] function will not consume all of it,
      and [of_bigstring] will raise. *)
@@ -60,7 +62,7 @@ let%expect_test "of_bigstring fails if the buffer is too long or too short" =
     ~dst:longer_bigstring
     ~dst_pos:0
     ~len:(Bigstring.length good_bigstring);
-  require_does_raise [%here] (fun () -> of_bigstring (module String) longer_bigstring);
+  require_does_raise (fun () -> of_bigstring (module String) longer_bigstring);
   [%expect
     {|
     ("bin_read_t did not consume the entire buffer"

@@ -120,7 +120,7 @@ module Source_code_position = struct
     ; pos_bol : int
     ; pos_cnum : int
     }
-  [@@deriving sexp, bin_io]
+  [@@deriving sexp, bin_io, equal]
 end
 
 module Node_info = struct
@@ -128,9 +128,9 @@ module Node_info = struct
     { node_type : string
     ; here : Source_code_position.t option
     }
-  [@@deriving sexp, bin_io]
+  [@@deriving sexp, bin_io, equal]
 
-  let of_value (type a) ({ value; here; id = _ } : a Value.t) =
+  let of_value (type a) ({ value; here } : a Value.t) =
     let node_type =
       match value with
       | Constant _ -> "constant"
@@ -147,16 +147,11 @@ module Node_info = struct
       | Map6 _ -> "map6"
       | Map7 _ -> "map7"
     in
-    { node_type; here }
+    { node_type; here = Some here }
   ;;
 
   let of_computation (type result) (computation : result Computation.t) =
-    let here =
-      match computation with
-      | Sub { here; _ } -> here
-      | Switch { here; _ } -> Some here
-      | _ -> None
-    in
+    let here = Computation.source_code_position computation in
     let node_type =
       match computation with
       | Return _ -> "return"
@@ -171,12 +166,15 @@ module Node_info = struct
       | Assoc_simpl _ -> "assoc_simpl"
       | Switch _ -> "switch"
       | Lazy _ -> "lazy"
+      | Fix_define _ -> "fix_define"
+      | Fix_recurse _ -> "fix_recurse"
       | Wrap _ -> "wrap"
       | With_model_resetter _ -> "with_model_resetter"
-      | Path -> "path"
+      | Path _ -> "path"
       | Lifecycle _ -> "lifecycle"
+      | Computation_watcher _ -> "computation_watcher"
     in
-    { node_type; here }
+    { node_type; here = Some here }
   ;;
 end
 
@@ -185,11 +183,13 @@ type t = V3.t =
   ; dag : Node_path.t list Node_path.Map.t
   ; info : Node_info.t Node_path.Map.t
   }
-[@@deriving bin_io, sexp]
+[@@deriving bin_io, sexp, equal]
 
 let empty =
   { tree = Node_path.Map.empty; dag = Node_path.Map.empty; info = Node_path.Map.empty }
 ;;
+
+let already_printed_bug_message = ref false
 
 let value_map
   (type a)
@@ -211,10 +211,13 @@ let value_map
   add_dag_relationship ~from:current_path ~to_:parent_path;
   let () =
     match value.value with
-    | Named _ ->
-      (match Hashtbl.find environment (Type_equal.Id.uid value.id) with
+    | Named (_, id) ->
+      (match Hashtbl.find environment (Type_equal.Id.uid id) with
        | Some named_id -> add_dag_relationship ~from:named_id ~to_:current_path
-       | None -> print_s [%message "BUG" [%here]])
+       | None when !already_printed_bug_message -> ()
+       | None ->
+         already_printed_bug_message := true;
+         print_s [%message "BUG" [%here]])
     | _ -> ()
   in
   recurse state value
@@ -226,7 +229,7 @@ let computation_map
     _ Transform.For_computation.context)
   state
   (computation : result Computation.t)
-  : result Computation.t
+  : result Computation.t Trampoline.t
   =
   let environment, add_tree_relationship, add_dag_relationship = state in
   let node_info = Node_info.of_computation computation in
@@ -239,15 +242,16 @@ let computation_map
      Hashtbl.set environment ~key:fst ~data:current_path;
      Hashtbl.set environment ~key:snd ~data:current_path
    | None -> ());
-  let recursed = recurse state computation in
+  let open Trampoline.Let_syntax in
+  let%bind recursed = recurse state computation in
   match recursed with
   | Fetch { id = v_id; _ } ->
     let uid = Type_equal.Id.uid v_id in
     (match Hashtbl.find environment uid with
      | None -> ()
      | Some named_id -> add_dag_relationship ~from:named_id ~to_:current_path);
-    computation
-  | _ -> recursed
+    return computation
+  | _ -> return recursed
 ;;
 
 let iter_graph_updates (t : _ Computation.t) ~on_update =
@@ -261,11 +265,24 @@ let iter_graph_updates (t : _ Computation.t) ~on_update =
   let add_tree_relationship ~from ~to_ ~from_info =
     let (lazy from), (lazy to_) = from, to_ in
     let gm = !graph_info in
-    graph_info
-      := { gm with
-           info = Map.add_exn gm.info ~key:from ~data:from_info
-         ; tree = Map.add_exn gm.tree ~key:from ~data:to_
-         };
+    let info =
+      match Map.add gm.info ~key:from ~data:from_info with
+      | `Ok info -> info
+      | `Duplicate ->
+        print_s
+          [%message
+            "BUG: [ duplicate info ]" (from : Node_path.t) (from_info : Node_info.t)];
+        gm.info
+    in
+    let tree =
+      match Map.add gm.tree ~key:from ~data:to_ with
+      | `Ok tree -> tree
+      | `Duplicate ->
+        print_s
+          [%message "BUG: [ duplicate tree ]" (from : Node_path.t) (to_ : Node_path.t)];
+        gm.tree
+    in
+    graph_info := { gm with info; tree };
     on_update !graph_info
   in
   let environment = Type_equal.Id.Uid.Table.create () in

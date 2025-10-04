@@ -1,15 +1,16 @@
+@@ portable
+
 open! Import
 
 include module type of struct
   include Base.Sys
-end
+end @@ nonportable
 
 (** [quote s] quotes the string in a format suitable for the shell of the current system
-    (e.g. suitable for [command]).  On Unix, this function only quotes as necessary, which
+    (e.g. suitable for [command]). On Unix, this function only quotes as necessary, which
     makes its output more legible than [Filename.quote].
 
-    WARNING: This may not work with some shells, but should work with sh, bash, and zsh.
-*)
+    WARNING: This may not work with some shells, but should work with sh, bash, and zsh. *)
 val quote : string -> string
 
 (** Converts a list of tokens to a command line fragment that can be passed to the shell

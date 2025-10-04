@@ -1,4 +1,4 @@
-open! Base
+open! Stdppx
 open! Ppxlib
 
 (** [default], [drop_default], and [drop_if] attributes are annotated with expressions
@@ -9,7 +9,7 @@ module To_lift : sig
 end
 
 val default : (label_declaration, expression To_lift.t) Attribute.t
-val drop_default : (label_declaration, expression To_lift.t option) Attribute.t
+val drop_default : (label_declaration, expression To_lift.t) Attribute.t
 val drop_if : (label_declaration, expression To_lift.t) Attribute.t
 val drop_default_equal : (label_declaration, unit) Attribute.t
 val drop_default_compare : (label_declaration, unit) Attribute.t
@@ -38,3 +38,4 @@ val tags_type : (core_type, expression) Attribute.t
 val tags_ld : (label_declaration, expression) Attribute.t
 val tags_cd : (constructor_declaration, expression) Attribute.t
 val tags_poly : (row_field, expression) Attribute.t
+val non_value : (label_declaration, unit) Attribute.t

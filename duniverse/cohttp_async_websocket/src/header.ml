@@ -10,15 +10,15 @@ include Cohttp.Header
       Host = uri-host [ ":" port ] ; Section 2.7.1
     ]}
 
-    Following what "uri-host" is defined as:
-    which can be expanded as follows (https://tools.ietf.org/html/rfc7230#appendix-B ):
+    Following what "uri-host" is defined as: which can be expanded as follows
+    (https://tools.ietf.org/html/rfc7230#appendix-B ):
     {[
       uri-host = <host, see [RFC3986], Section 3.2.2>
     ]}
     which is explained by (https://tools.ietf.org/html/rfc3986#section-3.2.2 ) as
 
     {[
-      host        = IP-literal / IPv4address / reg-name
+      host = IP - (literal / IPv4address / reg) - name
     ]}
 
     so "uri-host" is an IP address or what is colloquially referred to as a hostname.
@@ -27,13 +27,10 @@ include Cohttp.Header
 
     Example:
 
-    For example, a GET request to the origin server for
-    <http://www.example.org/pub/WWW/> would begin with:
+    For example, a GET request to the origin server for <http://www.example.org/pub/WWW/>
+    would begin with:
 
-    GET /pub/WWW/ HTTP/1.1
-    Host: www.example.org
-
-*)
+    GET /pub/WWW/ HTTP/1.1 Host: www.example.org *)
 let host_header_name = "host"
 
 (** From https://tools.ietf.org/html/rfc6454 "The Web Origin Concept"
@@ -61,8 +58,7 @@ let host_header_name = "host"
 
               In each case, at least one of the scheme, host, and port component
               will differ from the others in the list.
-
-         v}
+    v}
     {v
            5.  Comparing Origins
 
@@ -82,7 +78,7 @@ let host_header_name = "host"
                  example, a data URI [RFC2397] is not same-origin with itself
                  because data URIs do not use a server-based naming authority and
                  therefore have globally unique identifiers as origins.
-         v}
+    v}
     {v
          6.1.  Unicode Serialization of an Origin
 
@@ -118,8 +114,7 @@ let host_header_name = "host"
                     base ten, to result.
 
             6.  Return result.
-
-         v}
+    v}
     {v
            7.1.  Syntax
 
@@ -130,8 +125,7 @@ let host_header_name = "host"
               origin-list         = serialized-origin *( SP serialized-origin )
               serialized-origin   = scheme "://" host [ ":" port ]
                                   ; <scheme>, <host>, <port> from RFC 3986
-         v}
-*)
+    v} *)
 let origin_header_name = "origin"
 
 module Web_host_and_port : sig
@@ -245,60 +239,58 @@ let origin_and_allowlist_entry_match ~origin ~allowlist_entry ~ignore_port =
 
 module Expect_test_config = Core.Expect_test_config
 
-let%test_module _ =
-  (module struct
-    let check ~host ~origin =
-      print_s
-        [%sexp
-          (origin_and_host_headers_match ~origin ~host ~ignore_port:false
-            : unit Or_error.t)]
-    ;;
+module%test _ = struct
+  let check ~host ~origin =
+    print_s
+      [%sexp
+        (origin_and_host_headers_match ~origin ~host ~ignore_port:false : unit Or_error.t)]
+  ;;
 
-    let%expect_test "Host matching" =
-      check ~host:"example" ~origin:"https://example";
-      [%expect {| (Ok ()) |}];
-      check ~host:"example:8443" ~origin:"https://example:8443";
-      [%expect {| (Ok ()) |}];
-      check ~host:"site-without-port" ~origin:"https://site-without-port:1337";
-      [%expect
-        {|
-        (Error
-         ((((header origin) (host site-without-port) (port (1337)))
-           ((header host) (host site-without-port) (port ())))
-          ("parts do not match" (part port))))
-        |}]
-    ;;
+  let%expect_test "Host matching" =
+    check ~host:"example" ~origin:"https://example";
+    [%expect {| (Ok ()) |}];
+    check ~host:"example:8443" ~origin:"https://example:8443";
+    [%expect {| (Ok ()) |}];
+    check ~host:"site-without-port" ~origin:"https://site-without-port:1337";
+    [%expect
+      {|
+      (Error
+       ((((header origin) (host site-without-port) (port (1337)))
+         ((header host) (host site-without-port) (port ())))
+        ("parts do not match" (part port))))
+      |}]
+  ;;
 
-    (* If we are running a service at [hostname], and a website at [hostnameä] which has
+  (* If we are running a service at [hostname], and a website at [hostnameä] which has
        malicious javascript, we ought to reject it. *)
-    let%expect_test "Host matching fails on unicode URIs, no work has been put into \
-                     supporting them"
-      =
-      check
-        ~host:"internal-siteä.attacker.co.uk"
-        ~origin:"https://internal-siteä.attacker.co.uk";
-      [%expect
-        {|
-        (Error
-         ((((header origin) (host internal-site) (port ()))
-           ((header host) (host "internal-site\195\164.attacker.co.uk") (port ())))
-          ("parts do not match" (part host))))
-        |}];
-      (* This test ought to fail, and doesn't
+  let%expect_test "Host matching fails on unicode URIs, no work has been put into \
+                   supporting them"
+    =
+    check
+      ~host:"internal-siteä.attacker.co.uk"
+      ~origin:"https://internal-siteä.attacker.co.uk";
+    [%expect
+      {|
+      (Error
+       ((((header origin) (host internal-site) (port ()))
+         ((header host) (host "internal-site\195\164.attacker.co.uk") (port ())))
+        ("parts do not match" (part host))))
+      |}];
+    (* This test ought to fail, and doesn't
 
          It demonstrates a bug in [Uri.of_string] which incorrectly succeeds on
          this invalid URI.
 
          This hinges on the attacker's ability to persuade an uncompromised web browser to
          send an unparseable origin header.
-      *)
-      check
-        ~host:(* our service's address *) "internal-site"
-        ~origin:(* the attacker's web address *) "https://internal-siteä.attacker.co.uk";
-      [%expect {| (Ok ()) |}]
-    ;;
+    *)
+    check
+      ~host:(* our service's address *) "internal-site"
+      ~origin:(* the attacker's web address *) "https://internal-siteä.attacker.co.uk";
+    [%expect {| (Ok ()) |}]
+  ;;
 
-    (* https://tools.ietf.org/html/rfc6454#section-3.2.1 explains that all of the
+  (* https://tools.ietf.org/html/rfc6454#section-3.2.1 explains that all of the
        following have the same origin:
 
        {v http://example.com/
@@ -309,25 +301,24 @@ let%test_module _ =
        since the origin only compares the scheme, host, and port; and the default port for
        protocol http is 80. *)
 
-    let%expect_test "Implicit port" =
-      check ~host:"example.com" ~origin:"http://example.com:80";
-      check ~host:"example.com:80" ~origin:"http://example.com:80";
-      check ~host:"example.com" ~origin:"https://example.com:443";
-      check ~host:"example.com:443" ~origin:"https://example.com:443";
-      check ~host:"example.com" ~origin:"ws://example.com:80";
-      check ~host:"example.com" ~origin:"wss://example.com:443";
-      [%expect
-        {|
-        (Ok ())
-        (Ok ())
-        (Ok ())
-        (Ok ())
-        (Ok ())
-        (Ok ())
-        |}]
-    ;;
-  end)
-;;
+  let%expect_test "Implicit port" =
+    check ~host:"example.com" ~origin:"http://example.com:80";
+    check ~host:"example.com:80" ~origin:"http://example.com:80";
+    check ~host:"example.com" ~origin:"https://example.com:443";
+    check ~host:"example.com:443" ~origin:"https://example.com:443";
+    check ~host:"example.com" ~origin:"ws://example.com:80";
+    check ~host:"example.com" ~origin:"wss://example.com:443";
+    [%expect
+      {|
+      (Ok ())
+      (Ok ())
+      (Ok ())
+      (Ok ())
+      (Ok ())
+      (Ok ())
+      |}]
+  ;;
+end
 
 let origin_and_host_match ?(ignore_port = false) t =
   let host = get t host_header_name in
@@ -368,153 +359,148 @@ let origin_matches_host_or_is_one_of ?(ignore_port = false) t ~origins =
              ]))
 ;;
 
-let%test_module _ =
-  (module struct
-    let maybe_add value ~name headers =
-      match value with
-      | None -> headers
-      | Some value -> add headers name value
-    ;;
+module%test _ = struct
+  let maybe_add value ~name headers =
+    match value with
+    | None -> headers
+    | Some value -> add headers name value
+  ;;
 
-    let init_header ~origin ~host =
-      init ()
-      |> maybe_add host ~name:host_header_name
-      |> maybe_add origin ~name:origin_header_name
-    ;;
+  let init_header ~origin ~host =
+    init ()
+    |> maybe_add host ~name:host_header_name
+    |> maybe_add origin ~name:origin_header_name
+  ;;
 
-    let check ~host ~origin ~f =
-      let result = f (init_header ~origin ~host) in
-      print_s [%sexp (result : unit Or_error.t)]
-    ;;
+  let check ~host ~origin ~f =
+    let result = f (init_header ~origin ~host) in
+    print_s [%sexp (result : unit Or_error.t)]
+  ;;
 
-    let%expect_test "Full parse of header" =
-      let check = check ~f:origin_and_host_match in
-      check ~host:None ~origin:(Some "http://somehost");
-      [%expect
-        {|
-        (Error
-         ("Missing one of origin or host header" (origin (http://somehost))
-          (host ())))
-        |}];
-      check ~host:(Some "asdf") ~origin:None;
-      [%expect
-        {| (Error ("Missing one of origin or host header" (origin ()) (host (asdf)))) |}];
-      check ~host:(Some "asdf") ~origin:(Some "https://somehost");
-      [%expect
-        {|
-        (Error
-         ((((header origin) (host somehost) (port ()))
-           ((header host) (host asdf) (port ())))
-          ("parts do not match" (part host))))
-        |}];
-      check ~host:(Some "somehost") ~origin:(Some "https://somehost:994");
-      [%expect
-        {|
-        (Error
-         ((((header origin) (host somehost) (port (994)))
-           ((header host) (host somehost) (port ())))
-          ("parts do not match" (part port))))
-        |}];
-      check ~host:(Some "wrong") ~origin:(Some "https://somehost:994");
-      [%expect
-        {|
-        (Error
-         ((((header origin) (host somehost) (port (994)))
-           ((header host) (host wrong) (port ())))
-          ("parts do not match" (part port)) ("parts do not match" (part host))))
-        |}];
-      check ~host:(Some "somehost:994") ~origin:(Some "https://somehost:994");
-      [%expect {| (Ok ()) |}]
-    ;;
+  let%expect_test "Full parse of header" =
+    let check = check ~f:origin_and_host_match in
+    check ~host:None ~origin:(Some "http://somehost");
+    [%expect
+      {|
+      (Error
+       ("Missing one of origin or host header" (origin (http://somehost))
+        (host ())))
+      |}];
+    check ~host:(Some "asdf") ~origin:None;
+    [%expect
+      {| (Error ("Missing one of origin or host header" (origin ()) (host (asdf)))) |}];
+    check ~host:(Some "asdf") ~origin:(Some "https://somehost");
+    [%expect
+      {|
+      (Error
+       ((((header origin) (host somehost) (port ()))
+         ((header host) (host asdf) (port ())))
+        ("parts do not match" (part host))))
+      |}];
+    check ~host:(Some "somehost") ~origin:(Some "https://somehost:994");
+    [%expect
+      {|
+      (Error
+       ((((header origin) (host somehost) (port (994)))
+         ((header host) (host somehost) (port ())))
+        ("parts do not match" (part port))))
+      |}];
+    check ~host:(Some "wrong") ~origin:(Some "https://somehost:994");
+    [%expect
+      {|
+      (Error
+       ((((header origin) (host somehost) (port (994)))
+         ((header host) (host wrong) (port ())))
+        ("parts do not match" (part port)) ("parts do not match" (part host))))
+      |}];
+    check ~host:(Some "somehost:994") ~origin:(Some "https://somehost:994");
+    [%expect {| (Ok ()) |}]
+  ;;
 
-    let%expect_test "origin_matches_host_or_is_one_of" =
-      let check ~origins = check ~f:(origin_matches_host_or_is_one_of ~origins) in
-      check ~host:None ~origin:(Some "http://somehost") ~origins:[];
-      [%expect
-        {|
-        (Error
-         ("Missing one of origin or host header" (origin (http://somehost))
-          (host ())))
-        |}];
-      let host = Some "somehost" in
-      check ~host ~origin:(Some "http://somehost") ~origins:[];
-      [%expect {| (Ok ()) |}];
-      check ~host ~origin:(Some "http://somehost") ~origins:[ "http://host" ];
-      [%expect {| (Ok ()) |}];
+  let%expect_test "origin_matches_host_or_is_one_of" =
+    let check ~origins = check ~f:(origin_matches_host_or_is_one_of ~origins) in
+    check ~host:None ~origin:(Some "http://somehost") ~origins:[];
+    [%expect
+      {|
+      (Error
+       ("Missing one of origin or host header" (origin (http://somehost))
+        (host ())))
+      |}];
+    let host = Some "somehost" in
+    check ~host ~origin:(Some "http://somehost") ~origins:[];
+    [%expect {| (Ok ()) |}];
+    check ~host ~origin:(Some "http://somehost") ~origins:[ "http://host" ];
+    [%expect {| (Ok ()) |}];
+    check ~host:(Some "somehost") ~origin:(Some "http://host") ~origins:[ "http://host" ];
+    [%expect {| (Ok ()) |}];
+    check
+      ~host:(Some "somehost")
+      ~origin:(Some "http://host")
+      ~origins:[ "http://otherhost" ];
+    [%expect
+      {|
+      (Error
+       (((((header origin) (host host) (port ()))
+          ((header host) (host somehost) (port ())))
+         ("parts do not match" (part host)))
+        ("The origin is not in the allowlist" (origin http://host)
+         (allowed (http://otherhost)))))
+      |}]
+  ;;
+
+  let%expect_test "port ignoring in allowed origins" =
+    let check ~ignore_port =
       check
-        ~host:(Some "somehost")
-        ~origin:(Some "http://host")
-        ~origins:[ "http://host" ];
-      [%expect {| (Ok ()) |}];
-      check
-        ~host:(Some "somehost")
-        ~origin:(Some "http://host")
-        ~origins:[ "http://otherhost" ];
-      [%expect
-        {|
-        (Error
-         (((((header origin) (host host) (port ()))
-            ((header host) (host somehost) (port ())))
-           ("parts do not match" (part host)))
-          ("The origin is not in the allowlist" (origin http://host)
-           (allowed (http://otherhost)))))
-        |}]
-    ;;
-
-    let%expect_test "port ignoring in allowed origins" =
-      let check ~ignore_port =
-        check
-          ~f:(origin_matches_host_or_is_one_of ~ignore_port ~origins:[ "https://host" ])
-          ~host:(Some "somehost:80")
-          ~origin:(Some "https://host:8443")
-      in
-      check ~ignore_port:false;
-      [%expect
-        {|
-        (Error
-         (((((header origin) (host host) (port (8443)))
-            ((header host) (host somehost) (port (80))))
-           ("parts do not match" (part port)) ("parts do not match" (part host)))
-          ("The origin is not in the allowlist" (origin https://host:8443)
-           (allowed (https://host)))))
-        |}];
-      check ~ignore_port:true;
-      [%expect {| (Ok ()) |}]
-    ;;
-
-    let%expect_test "scheme checked in allowed origins" =
-      let check ~origins = check ~f:(origin_matches_host_or_is_one_of ~origins) in
-      check
+        ~f:(origin_matches_host_or_is_one_of ~ignore_port ~origins:[ "https://host" ])
         ~host:(Some "somehost:80")
-        ~origin:(Some "https://host")
-        ~origins:[ "https://host" ];
-      [%expect {| (Ok ()) |}];
-      check
-        ~host:(Some "somehost:80")
-        ~origin:(Some "https://host")
-        ~origins:[ "http://host" ];
-      [%expect
-        {|
-        (Error
-         (((((header origin) (host host) (port ()))
-            ((header host) (host somehost) (port (80))))
-           ("parts do not match" (part port)) ("parts do not match" (part host)))
-          ("The origin is not in the allowlist" (origin https://host)
-           (allowed (http://host)))))
-        |}];
-      check ~host:(Some "somehost:80") ~origin:(Some "https://host") ~origins:[ "host" ];
-      [%expect
-        {|
-        (Error
-         (((((header origin) (host host) (port ()))
-            ((header host) (host somehost) (port (80))))
-           ("parts do not match" (part port)) ("parts do not match" (part host)))
-          ("The origin is not in the allowlist" (origin https://host)
-           (allowed (host)))))
-        |}]
-    ;;
-  end)
-;;
+        ~origin:(Some "https://host:8443")
+    in
+    check ~ignore_port:false;
+    [%expect
+      {|
+      (Error
+       (((((header origin) (host host) (port (8443)))
+          ((header host) (host somehost) (port (80))))
+         ("parts do not match" (part port)) ("parts do not match" (part host)))
+        ("The origin is not in the allowlist" (origin https://host:8443)
+         (allowed (https://host)))))
+      |}];
+    check ~ignore_port:true;
+    [%expect {| (Ok ()) |}]
+  ;;
+
+  let%expect_test "scheme checked in allowed origins" =
+    let check ~origins = check ~f:(origin_matches_host_or_is_one_of ~origins) in
+    check
+      ~host:(Some "somehost:80")
+      ~origin:(Some "https://host")
+      ~origins:[ "https://host" ];
+    [%expect {| (Ok ()) |}];
+    check
+      ~host:(Some "somehost:80")
+      ~origin:(Some "https://host")
+      ~origins:[ "http://host" ];
+    [%expect
+      {|
+      (Error
+       (((((header origin) (host host) (port ()))
+          ((header host) (host somehost) (port (80))))
+         ("parts do not match" (part port)) ("parts do not match" (part host)))
+        ("The origin is not in the allowlist" (origin https://host)
+         (allowed (http://host)))))
+      |}];
+    check ~host:(Some "somehost:80") ~origin:(Some "https://host") ~origins:[ "host" ];
+    [%expect
+      {|
+      (Error
+       (((((header origin) (host host) (port ()))
+          ((header host) (host somehost) (port (80))))
+         ("parts do not match" (part port)) ("parts do not match" (part host)))
+        ("The origin is not in the allowlist" (origin https://host)
+         (allowed (host)))))
+      |}]
+  ;;
+end
 
 let websocket_subprotocol_header = "sec-websocket-protocol"
 

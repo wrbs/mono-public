@@ -10,6 +10,8 @@ module Universe = struct
       open Core.Core_stable
 
       module Stable = struct
+        open Typerep_lib.Std (* for [typerep_of_int] *)
+
         module V1 = struct
           let initial_size = 512
           let placeholder_string = ""
@@ -57,7 +59,9 @@ module Universe = struct
           module T_stringable = struct
             (* We mustn't use [int [@@deriving bin_io]] (or [sexp]). The values (intern
                table keys) are not portable between heap images. *)
-            type t = int [@@deriving compare, hash, globalize, stable_witness]
+            type t = int
+            [@@deriving
+              compare ~localize, equal ~localize, hash, globalize, stable_witness, typerep]
 
             let after_grow_handler = ref (fun ~before:_ ~len_before:_ ~len:_ -> ())
 
@@ -89,12 +93,14 @@ module Universe = struct
             let after_grow f =
               let g = !after_grow_handler in
               after_grow_handler
-                := fun ~before ~len_before ~len ->
-                     g ~before ~len_before ~len;
-                     f ~before ~len_before ~len
+              := fun ~before ~len_before ~len ->
+                   g ~before ~len_before ~len;
+                   f ~before ~len_before ~len
             ;;
 
-            let[@inline] to_string t = Core.Array.unsafe_get !interned_strings t
+            let[@inline] [@zero_alloc] to_string t =
+              Core.Array.unsafe_get !interned_strings t
+            ;;
 
             let[@inline] of_string_maybe_interned str ~if_not_interned =
               Pooled_hashtbl.find_and_call
@@ -159,33 +165,18 @@ module Universe = struct
                 [blit], and/or [sub] to have side effects such as advancing an iobuf
                 cursor. *)
             val unsafe_extract
-              :  get_char:('buf -> 'pos -> char)
+              :  get_char:(local_ 'buf -> 'pos -> char)
               -> blit:
-                   (src:'buf
+                   (src:local_ 'buf
                     -> src_pos:'pos
-                    -> dst:bytes
+                    -> dst:local_ bytes
                     -> dst_pos:int
                     -> len:int
                     -> unit)
-              -> sub:('buf -> pos:'pos -> len:int -> string)
+              -> sub:(local_ 'buf -> pos:'pos -> len:int -> string)
               -> len:int
               -> pos:'pos
-              -> 'buf
-              -> t
-
-            val unsafe_extract_local
-              :  get_char:('buf -> 'pos -> char)
-              -> blit:
-                   (src:'buf
-                    -> src_pos:'pos
-                    -> dst:bytes
-                    -> dst_pos:int
-                    -> len:int
-                    -> unit)
-              -> sub:('buf -> pos:'pos -> len:int -> string)
-              -> len:int
-              -> pos:'pos
-              -> 'buf
+              -> local_ 'buf
               -> t
           end = struct
             open Core
@@ -242,17 +233,6 @@ module Universe = struct
                 of_string_maybe_copy_buffer dst
               | _ -> of_string (sub buf ~pos ~len)
             ;;
-
-            let[@inline always] unsafe_extract_local ~get_char ~blit ~sub ~len ~pos buf =
-              match len with
-              | 0 -> empty
-              | 1 -> of_char (get_char buf pos)
-              | _ when Int.( <= ) len max_buffer_string_length ->
-                let dst = find_or_create_buffer len in
-                blit ~src:buf ~src_pos:pos ~dst ~dst_pos:0 ~len;
-                of_string_maybe_copy_buffer dst
-              | _ -> of_string (sub buf ~pos ~len)
-            ;;
           end
 
           let unsafe_of_bigstring ~pos ~len buf =
@@ -269,7 +249,9 @@ module Universe = struct
           include struct
             let bin_shape_t = Bin_prot.Shape.bin_shape_string
             let bin_size_t t = bin_size_string (to_string t)
+            let%template[@mode local] bin_size_t = bin_size_t
             let bin_write_t buf ~pos t = bin_write_string buf ~pos (to_string t)
+            let%template[@mode local] bin_write_t = bin_write_t
 
             let bin_writer_t =
               { Bin_prot.Type_class.size = bin_size_t; write = bin_write_t }
@@ -306,7 +288,8 @@ module Universe = struct
 
       module Option_stable = struct
         module V1 = struct
-          type t = int [@@deriving compare, hash, stable_witness]
+          type t = int
+          [@@deriving compare ~localize, equal ~localize, globalize, hash, stable_witness]
 
           let none = -1
           let is_none t = t < 0
@@ -342,6 +325,8 @@ module Universe = struct
               else bin_size_bool true + Stable.V1.bin_size_t (unchecked_value t)
             ;;
 
+            let%template[@mode local] bin_size_t = bin_size_t
+
             let bin_write_t buf ~pos t =
               if is_none t
               then bin_write_bool buf ~pos false
@@ -350,6 +335,8 @@ module Universe = struct
                 let value = unchecked_value t in
                 Stable.V1.bin_write_t buf ~pos:new_pos value)
             ;;
+
+            let%template[@mode local] bin_write_t = bin_write_t
 
             let bin_writer_t =
               { Bin_prot.Type_class.size = bin_size_t; write = bin_write_t }
@@ -390,46 +377,40 @@ module Universe = struct
 
       open Core
       include Immediate_interned_string_intf
-      include Stable.V1
-      include (Int : Typerep_lib.Typerepable.S with type t := t)
 
       include Identifiable.Make (struct
-        include Stable.V1
+          include Stable.V1
 
-        let module_name = "Immediate.Interned_string"
-      end)
+          let module_name = "Immediate.Interned_string"
+        end)
 
+      include Stable.V1
+      include (Int : Typerep_lib.Typerepable.S with type t := t)
       include Int.Replace_polymorphic_compare
 
-      let%bench_module "comparisons" =
-        (module struct
-          let t = of_string "abc"
+      module%bench [@name "comparisons"] _ = struct
+        let t = of_string "abc"
 
-          let%bench_module "built-in" =
-            (module struct
-              open Poly
+        module%bench [@name "built-in"] _ = struct
+          open Poly
 
-              let%bench "=" = t = t
-              let%bench "<" = t < t
-              let%bench ">" = t > t
-              let%bench "<=" = t <= t
-              let%bench ">=" = t >= t
-              let%bench "<>" = t <> t
-            end)
-          ;;
+          let%bench "=" = t = t
+          let%bench "<" = t < t
+          let%bench ">" = t > t
+          let%bench "<=" = t <= t
+          let%bench ">=" = t >= t
+          let%bench "<>" = t <> t
+        end
 
-          let%bench_module "exported" =
-            (module struct
-              let%bench "=" = t = t
-              let%bench "<" = t < t
-              let%bench ">" = t > t
-              let%bench "<=" = t <= t
-              let%bench ">=" = t >= t
-              let%bench "<>" = t <> t
-            end)
-          ;;
-        end)
-      ;;
+        module%bench [@name "exported"] _ = struct
+          let%bench "=" = t = t
+          let%bench "<" = t < t
+          let%bench ">" = t > t
+          let%bench "<=" = t <= t
+          let%bench ">=" = t >= t
+          let%bench "<>" = t <> t
+        end
+      end
 
       let quickcheck_generator =
         Quickcheck.Generator.map String.quickcheck_generator ~f:of_string
@@ -445,11 +426,11 @@ module Universe = struct
         type nonrec t = t
 
         include Identifiable.Make (struct
-          include Stable.V1
+            include Stable.V1
 
-          let compare x y = String.compare (to_string x) (to_string y)
-          let module_name = "Immediate.Interned_string.Lexicographic"
-        end)
+            let compare x y = String.compare (to_string x) (to_string y)
+            let module_name = "Immediate.Interned_string.Lexicographic"
+          end)
       end
 
       module Option = struct
@@ -475,28 +456,28 @@ module Universe = struct
 
         module Optional_syntax = struct
           module Optional_syntax = struct
-            let is_none = is_none
-            let unsafe_value = unchecked_value
+            let[@zero_alloc] is_none t = is_none t
+            let[@zero_alloc] unsafe_value t = unchecked_value t
           end
         end
 
         include Identifiable.Make (struct
-          include Option_stable.V1
+            include Option_stable.V1
 
-          let compare = Int.compare
+            let compare = Int.compare
 
-          include Sexpable.To_stringable (Option_stable.V1)
+            include Sexpable.To_stringable (Option_stable.V1)
 
-          let module_name = "Immediate.Interned_string.Option"
-        end)
+            let module_name = "Immediate.Interned_string.Option"
+          end)
 
         module Stable = Option_stable
       end
 
       let const_none = Fn.const Option.none
-      let i_promise_not_to_persist_this str : string = Obj.magic Obj.magic str
+      let i_promise_not_to_persist_this (local_ str) : string = Obj.magic Obj.magic str
 
-      let of_string_no_intern str =
+      let of_string_no_intern (local_ str) =
         Pooled_hashtbl.find_and_call
           interned_index_table
           (i_promise_not_to_persist_this str)
@@ -504,7 +485,7 @@ module Universe = struct
           ~if_not_found:const_none
       ;;
 
-      let[@inline] of_local_string str =
+      let[@inline] of_local_string (local_ str) =
         match%optional.Option of_string_no_intern str with
         | Some _ as s -> s
         | None -> of_string (String.globalize str)
@@ -514,7 +495,7 @@ module Universe = struct
         let[@inline] get_char buf pos = Iobuf.Unsafe.Peek.char buf ~pos in
         let[@inline] sub buf ~pos ~len = Iobuf.Unsafe.Peek.stringo buf ~pos ~len in
         fun [@inline] ~pos ~len buf ->
-          Buffered_create.unsafe_extract_local
+          Buffered_create.unsafe_extract
             ~get_char
             ~blit:Iobuf.Unsafe.Peek.To_bytes.blit
             ~sub
@@ -530,7 +511,7 @@ module Universe = struct
         in
         let sub buf ~pos:() ~len = Iobuf.Unsafe.Consume.stringo buf ~len in
         fun ~len buf ->
-          Buffered_create.unsafe_extract_local
+          Buffered_create.unsafe_extract
             ~get_char
             ~blit
             ~sub

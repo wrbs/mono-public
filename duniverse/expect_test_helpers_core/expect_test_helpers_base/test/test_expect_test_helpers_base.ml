@@ -5,15 +5,88 @@ open! Expect_test_helpers_base
 (* A dummy location for testing purposes *)
 let nowhere = { Lexing.pos_fname = "test"; pos_lnum = 0; pos_bol = 0; pos_cnum = 0 }
 
+let%expect_test "[Expectation.reset]" =
+  let check () =
+    [%expectation {| 012345 |}];
+    if Expectation.is_successful () then Expectation.commit () else Expectation.reset ()
+  in
+  List.init 10 ~f:Fn.id
+  |> List.iter ~f:(fun i ->
+    printf "%d" i;
+    check ());
+  [%expect {| 6789 |}]
+;;
+
+let%expect_test "[Expectation.reset] with output between resets" =
+  (* This test builds up the string of an [%expectation] by printing it one line at a
+     time. If the string doesn't match, we use [Expectation.actual] to print it back out
+     so that we can keep on building on it. *)
+  let check =
+    let num_runs = ref 0 in
+    fun () ->
+      Int.incr num_runs;
+      print_endline " testing";
+      [%expectation
+        {|
+        0 testing
+        1 testing
+        2 testing
+        3 testing
+        4 testing
+        |}];
+      if Expectation.is_successful () || !num_runs = 5
+      then Expectation.commit ()
+      else Expectation.reset ()
+  in
+  List.init 10 ~f:Fn.id
+  |> List.iter ~f:(fun i ->
+    printf "%d" i;
+    check ());
+  [%expect
+    {|
+    5 testing
+    6 testing
+    7 testing
+    8 testing
+    9 testing
+    |}]
+;;
+
+(* $MDX part-begin=expectation_example *)
+let animate state ~target ~step = Int.min (state + step) target
+
+let progress_bar state ~target =
+  state := animate !state ~target ~step:1;
+  for i = 0 to 9 do
+    printf (if i < !state then "#" else ".")
+  done
+;;
+
+let%expect_test "progress_bar_state_change" =
+  let progress = ref 0 in
+  let timeout = ref 100 in
+  let target = 6 in
+  while !timeout > 0 do
+    timeout := !timeout - 1;
+    progress_bar progress ~target;
+    [%expectation {| ######.... |}];
+    if Expectation.is_successful () || !timeout = 0
+    then Expectation.commit ()
+    else Expectation.skip ()
+  done
+;;
+
+(* $MDX part-end *)
+
 let%expect_test "[am_running_expect_test] and [assert_am_running_expect_test] when true" =
-  require [%here] (am_running_expect_test ());
-  assert_am_running_expect_test [%here];
+  require (am_running_expect_test ());
+  assert_am_running_expect_test ();
   [%expect {| |}]
 ;;
 
 let%test_unit "[am_running_expect_test] and [assert_am_running_expect_test] when false" =
   assert (not (am_running_expect_test ()));
-  match assert_am_running_expect_test [%here] with
+  match assert_am_running_expect_test () with
   | () -> assert false
   | exception exn ->
     [%test_result: string]
@@ -24,10 +97,58 @@ let%test_unit "[am_running_expect_test] and [assert_am_running_expect_test] when
         \  lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL)"
 ;;
 
+let%expect_test "Test description properly emitted when in an expect-test" =
+  print_s [%sexp (current_expect_test_name_exn () : string option)];
+  [%expect {| ("Test description properly emitted when in an expect-test") |}]
+;;
+
+let%expect_test "Very long test description that spans multiple lines after apply-style, \
+                 ensure that it doesn't have extra spaces added when it is queried from \
+                 code in the test"
+  =
+  print_s [%sexp (current_expect_test_name_exn () : string option)];
+  [%expect
+    {| ("Very long test description that spans multiple lines after apply-style, ensure that it doesn't have extra spaces added when it is queried from code in the test") |}]
+;;
+
+module%test [@name "empty-named expect-tests are handled correctly"] _ = struct
+  let%expect_test "description still works inside a test module" =
+    print_s [%sexp (current_expect_test_name_exn () : string option)];
+    [%expect {| ("description still works inside a test module") |}]
+  ;;
+
+  let%expect_test "" =
+    print_s [%sexp (current_expect_test_name_exn () : string option)];
+    [%expect {| ("") |}]
+  ;;
+
+  let%expect_test _ =
+    print_s [%sexp (current_expect_test_name_exn () : string option)];
+    [%expect {| () |}]
+  ;;
+end
+
+module%test [@name "test description raises when not in an expect-test"] _ = struct
+  (* Don't do this inside the expect test *)
+  let name_res = Or_error.try_with current_expect_test_name_exn
+
+  let%expect_test "check error" =
+    print_s [%sexp (name_res : string option Or_error.t)];
+    hide_positions_in_expect_test_output ();
+    [%expect
+      {|
+      (Error (
+        "Ppx_expect_runtime.For_external.current_expect_test_name_exn called while there are no tests running"
+        lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL))
+      |}]
+  ;;
+end
+
 let%expect_test "multiple calls to [print_s] create multiple lines" =
   print_s [%message "hello"];
   print_s [%message "there"];
-  [%expect {|
+  [%expect
+    {|
     hello
     there
     |}]
@@ -80,7 +201,6 @@ let%expect_test "[sexp_style]" =
     Ref.set_temporarily sexp_style style ~f:(fun () ->
       print_s sexp;
       require
-        [%here]
         (String.is_suffix (sexp_to_string sexp) ~suffix:"\n")
         ~if_false_then_print_s:(lazy [%message "no endline"]))
   in
@@ -166,12 +286,12 @@ let%expect_test "[show_raise] ignores return value" =
 ;;
 
 let%expect_test "[require] true prints nothing" =
-  require [%here] true;
+  require true;
   [%expect {| |}]
 ;;
 
 let%expect_test "[print_cr]" =
-  print_cr [%here] [%message "some message"] ~cr:Comment;
+  print_cr [%message "some message"] ~cr:Comment;
   [%expect
     {|
     (* require-failed: lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL. *)
@@ -180,12 +300,12 @@ let%expect_test "[print_cr]" =
 ;;
 
 let print_cr_outside_expect_test =
-  Or_error.try_with (fun () -> print_cr ~cr:Comment [%here] [%message "oops"])
+  Or_error.try_with (fun () -> print_cr ~cr:Comment [%message "oops"])
 ;;
 
 let%expect_test "[print_cr] called outside an expect test" =
   (match print_cr_outside_expect_test with
-   | Ok () -> print_cr [%here] [%message "expected [print_cr] to raise"]
+   | Ok () -> print_cr [%message "expected [print_cr] to raise"]
    | Error error -> print_s ~hide_positions:true (Error.sexp_of_t error));
   [%expect
     {|
@@ -195,7 +315,7 @@ let%expect_test "[print_cr] called outside an expect test" =
 ;;
 
 let%expect_test "[require] false respects [~cr] and default [~hide_positions]" =
-  require [%here] false ~cr:Comment ~if_false_then_print_s:(lazy [%message [%here]]);
+  require false ~cr:Comment ~if_false_then_print_s:(lazy [%message [%here]]);
   [%expect
     {|
     (* require-failed: lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL. *)
@@ -204,20 +324,34 @@ let%expect_test "[require] false respects [~cr] and default [~hide_positions]" =
 ;;
 
 let%expect_test "[require false] on non-comment [~cr] values includes instructions" =
-  require [%here] false ~cr:CR_someday ~if_false_then_print_s:(lazy [%message [%here]]);
+  require false ~cr:CR_someday ~if_false_then_print_s:(lazy [%message [%here]]);
   [%expect
     {|
     lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL
     |}]
 ;;
 
+let%expect_test "[require false ~cr:(CR_soon_for _)] prints addressee" =
+  require false ~cr:(CR_soon_for "nobody");
+  [%expect.output]
+  |> String.substr_replace_first ~pattern:"CR" ~with_:"$CR"
+  |> print_string;
+  [%expect
+    {|
+    (* $CR-soon require-failed for nobody: lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL.
+       Do not 'X' this CR; instead make the required property true,
+       which will make the CR disappear.  For more information, see
+       [Expect_test_helpers_base.require]. *)
+    |}]
+;;
+
 let%expect_test "[require_equal] success" =
-  require_equal [%here] (module Int) ~cr:Comment 1 1;
+  require_equal (module Int) ~cr:Comment 1 1;
   [%expect {| |}]
 ;;
 
 let%expect_test "[require_equal] failure" =
-  require_equal [%here] (module Int) ~cr:Comment 1 2;
+  require_equal (module Int) ~cr:Comment 1 2;
   [%expect
     {|
     (* require-failed: lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL. *)
@@ -226,7 +360,7 @@ let%expect_test "[require_equal] failure" =
 ;;
 
 let%expect_test "[require_equal] failure with [~message]" =
-  require_equal [%here] (module Int) ~cr:Comment 1 2 ~message:"The sky is falling!";
+  require_equal (module Int) ~cr:Comment 1 2 ~message:"The sky is falling!";
   [%expect
     {|
     (* require-failed: lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL. *)
@@ -236,7 +370,6 @@ let%expect_test "[require_equal] failure with [~message]" =
 
 let%expect_test "[require_equal] failure with [~if_false_then_print_s]" =
   require_equal
-    [%here]
     (module Int)
     ~cr:Comment
     1
@@ -250,12 +383,12 @@ let%expect_test "[require_equal] failure with [~if_false_then_print_s]" =
 ;;
 
 let%expect_test "[require_compare_equal] success" =
-  require_compare_equal [%here] (module Int) ~cr:Comment 1 1;
+  require_compare_equal (module Int) ~cr:Comment 1 1;
   [%expect {| |}]
 ;;
 
 let%expect_test "[require_compare_equal] failure" =
-  require_compare_equal [%here] (module Int) ~cr:Comment 1 2;
+  require_compare_equal (module Int) ~cr:Comment 1 2;
   [%expect
     {|
     (* require-failed: lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL. *)
@@ -264,13 +397,7 @@ let%expect_test "[require_compare_equal] failure" =
 ;;
 
 let%expect_test "[require_compare_equal] failure with [~message]" =
-  require_compare_equal
-    [%here]
-    (module Int)
-    ~cr:Comment
-    1
-    2
-    ~message:"The sky is falling!";
+  require_compare_equal (module Int) ~cr:Comment 1 2 ~message:"The sky is falling!";
   [%expect
     {|
     (* require-failed: lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL. *)
@@ -279,12 +406,12 @@ let%expect_test "[require_compare_equal] failure with [~message]" =
 ;;
 
 let%expect_test "[require_not_equal] success" =
-  require_not_equal [%here] (module Int) ~cr:Comment 1 2;
+  require_not_equal (module Int) ~cr:Comment 1 2;
   [%expect {| |}]
 ;;
 
 let%expect_test "[require_not_equal] failure" =
-  require_not_equal [%here] (module Int) ~cr:Comment 1 1;
+  require_not_equal (module Int) ~cr:Comment 1 1;
   [%expect
     {|
     (* require-failed: lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL. *)
@@ -293,7 +420,7 @@ let%expect_test "[require_not_equal] failure" =
 ;;
 
 let%expect_test "[require_not_equal] failure with [~message]" =
-  require_not_equal [%here] (module Int) ~cr:Comment 1 1 ~message:"The sky is falling!";
+  require_not_equal (module Int) ~cr:Comment 1 1 ~message:"The sky is falling!";
   [%expect
     {|
     (* require-failed: lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL. *)
@@ -303,7 +430,6 @@ let%expect_test "[require_not_equal] failure with [~message]" =
 
 let%expect_test "[require_not_equal] failure with [~if_false_then_print_s]" =
   require_not_equal
-    [%here]
     (module Int)
     ~cr:Comment
     1
@@ -317,12 +443,12 @@ let%expect_test "[require_not_equal] failure with [~if_false_then_print_s]" =
 ;;
 
 let%expect_test "[require_compare_not_equal] success" =
-  require_compare_not_equal [%here] (module Int) ~cr:Comment 1 2;
+  require_compare_not_equal (module Int) ~cr:Comment 1 2;
   [%expect {| |}]
 ;;
 
 let%expect_test "[require_compare_not_equal] failure" =
-  require_compare_not_equal [%here] (module Int) ~cr:Comment 1 1;
+  require_compare_not_equal (module Int) ~cr:Comment 1 1;
   [%expect
     {|
     (* require-failed: lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL. *)
@@ -331,13 +457,7 @@ let%expect_test "[require_compare_not_equal] failure" =
 ;;
 
 let%expect_test "[require_compare_not_equal] failure with [~message]" =
-  require_compare_not_equal
-    [%here]
-    (module Int)
-    ~cr:Comment
-    1
-    1
-    ~message:"The sky is falling!";
+  require_compare_not_equal (module Int) ~cr:Comment 1 1 ~message:"The sky is falling!";
   [%expect
     {|
     (* require-failed: lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL. *)
@@ -346,12 +466,12 @@ let%expect_test "[require_compare_not_equal] failure with [~message]" =
 ;;
 
 let%expect_test "[require_does_not_raise], no exception" =
-  require_does_not_raise [%here] ~hide_positions:true (fun () -> ());
+  require_does_not_raise ~hide_positions:true (fun () -> ());
   [%expect {| |}]
 ;;
 
 let%expect_test "[require_does_not_raise], raises hiding positions" =
-  require_does_not_raise [%here] ~cr:Comment (fun () -> raise_s [%message [%here]]);
+  require_does_not_raise ~cr:Comment (fun () -> raise_s [%message [%here]]);
   [%expect
     {|
     (* require-failed: lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL. *)
@@ -362,7 +482,7 @@ let%expect_test "[require_does_not_raise], raises hiding positions" =
 
 let%expect_test "[require_does_not_raise] with a deep stack" =
   let rec loop n = if n = 0 then failwith "raising" else 1 + loop (n - 1) in
-  require_does_not_raise [%here] ~cr:Comment (fun () -> ignore (loop 13 : int));
+  require_does_not_raise ~cr:Comment (fun () -> ignore (loop 13 : int));
   [%expect
     {|
     (* require-failed: lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL. *)
@@ -371,26 +491,27 @@ let%expect_test "[require_does_not_raise] with a deep stack" =
 ;;
 
 let%expect_test "[require_does_raise] failure" =
-  require_does_raise nowhere ~cr:Comment (fun () -> ());
-  [%expect {|
+  require_does_raise ~here:nowhere ~cr:Comment (fun () -> ());
+  [%expect
+    {|
     (* require-failed: test:0:0. *)
     "did not raise"
     |}]
 ;;
 
 let%expect_test "[require_does_raise] success" =
-  require_does_raise [%here] (fun () -> raise_s [%message "Boom!"]);
+  require_does_raise (fun () -> raise_s [%message "Boom!"]);
   [%expect {| Boom! |}]
 ;;
 
 let%expect_test "[require_does_raise] success" =
-  require_does_raise [%here] ~cr:Comment (fun () ->
+  require_does_raise ~cr:Comment (fun () ->
     raise_s [%message "here: " (Source_code_position.to_string nowhere)]);
   [%expect {| ("here: " test:0:0) |}]
 ;;
 
 let%expect_test "[require_does_raise ~hide_positions:true] success" =
-  require_does_raise [%here] ~hide_positions:true (fun () -> raise_s [%message [%here]]);
+  require_does_raise ~hide_positions:true (fun () -> raise_s [%message [%here]]);
   [%expect
     {| lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL |}]
 ;;
@@ -406,11 +527,11 @@ include struct
   end
 
   let%expect_test "[require_some]" =
-    require_some [%here] (Some ());
+    require_some (Some ());
     [%expect {| |}];
-    require_some [%here] (Some ()) ~print_some;
+    require_some (Some ()) ~print_some;
     [%expect {| some |}];
-    require_some [%here] ~cr:Comment None;
+    require_some ~cr:Comment None;
     (* It's silly to print the [None], but it doesn't seem worth special-casing. *)
     [%expect
       {|
@@ -420,9 +541,9 @@ include struct
   ;;
 
   let%expect_test "[require_none]" =
-    require_none [%here] [%sexp_of: _] None;
+    require_none [%sexp_of: _] None;
     [%expect {| |}];
-    require_none [%here] print_some ~cr:Comment (Some ());
+    require_none print_some ~cr:Comment (Some ());
     [%expect
       {|
       (* require-failed: lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL. *)
@@ -431,11 +552,11 @@ include struct
   ;;
 
   let%expect_test "[require_first]" =
-    require_first [%here] [%sexp_of: _] (First ());
+    require_first [%sexp_of: _] (First ());
     [%expect {| |}];
-    require_first [%here] [%sexp_of: _] ~print_first (First ());
+    require_first [%sexp_of: _] ~print_first (First ());
     [%expect {| first |}];
-    require_first [%here] print_second ~cr:Comment (Second ());
+    require_first print_second ~cr:Comment (Second ());
     [%expect
       {|
       (* require-failed: lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL. *)
@@ -444,17 +565,17 @@ include struct
   ;;
 
   let%expect_test "[require_second]" =
-    require_second [%here] print_first (Second ());
+    require_second print_first (Second ());
     [%expect {| |}];
-    require_second [%here] print_first (Second ()) ~print_second;
+    require_second print_first (Second ()) ~print_second;
     [%expect {| second |}];
-    require_second [%here] ~cr:Comment print_first (First ());
+    require_second ~cr:Comment print_first (First ());
     [%expect
       {|
       (* require-failed: lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL. *)
       ("unexpected [First]" first)
       |}];
-    require_second [%here] ~cr:Comment print_first (First ()) ~print_second;
+    require_second ~cr:Comment print_first (First ()) ~print_second;
     [%expect
       {|
       (* require-failed: lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL. *)
@@ -463,17 +584,17 @@ include struct
   ;;
 
   let%expect_test "[require_ok_result]" =
-    require_ok_result [%here] print_error (Ok ());
+    require_ok_result print_error (Ok ());
     [%expect {| |}];
-    require_ok_result [%here] print_error (Ok ()) ~print_ok;
+    require_ok_result print_error (Ok ()) ~print_ok;
     [%expect {| ok |}];
-    require_ok_result [%here] ~cr:Comment print_error (Error ());
+    require_ok_result ~cr:Comment print_error (Error ());
     [%expect
       {|
       (* require-failed: lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL. *)
       ("unexpected [Error]" error)
       |}];
-    require_ok_result [%here] ~cr:Comment print_error (Error ()) ~print_ok;
+    require_ok_result ~cr:Comment print_error (Error ()) ~print_ok;
     [%expect
       {|
       (* require-failed: lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL. *)
@@ -482,17 +603,17 @@ include struct
   ;;
 
   let%expect_test "[require_error_result]" =
-    require_error_result [%here] print_ok (Error ());
+    require_error_result print_ok (Error ());
     [%expect {| |}];
-    require_error_result [%here] print_ok (Error ()) ~print_error;
+    require_error_result print_ok (Error ()) ~print_error;
     [%expect {| error |}];
-    require_error_result [%here] ~cr:Comment print_ok (Ok ());
+    require_error_result ~cr:Comment print_ok (Ok ());
     [%expect
       {|
       (* require-failed: lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL. *)
       ("unexpected [Ok]" ok)
       |}];
-    require_error_result [%here] ~cr:Comment print_ok (Ok ()) ~print_error;
+    require_error_result ~cr:Comment print_ok (Ok ()) ~print_error;
     [%expect
       {|
       (* require-failed: lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL. *)
@@ -501,11 +622,11 @@ include struct
   ;;
 
   let%expect_test "[require_ok]" =
-    require_ok [%here] (Ok ());
+    require_ok (Ok ());
     [%expect {| |}];
-    require_ok [%here] (Ok ()) ~print_ok;
+    require_ok (Ok ()) ~print_ok;
     [%expect {| ok |}];
-    require_ok [%here] ~cr:Comment (Or_error.error_string "arstneio");
+    require_ok ~cr:Comment (Or_error.error_string "arstneio");
     [%expect
       {|
       (* require-failed: lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL. *)
@@ -514,16 +635,23 @@ include struct
   ;;
 
   let%expect_test "[require_error]" =
-    require_error [%here] print_ok (Or_error.error_string "arstneio");
+    require_error print_ok (Or_error.error_string "arstneio");
     [%expect {| |}];
-    require_error [%here] print_ok (Or_error.error_string "arstneio") ~print_error:true;
+    require_error print_ok (Or_error.error_string "arstneio") ~print_error:true;
     [%expect {| arstneio |}];
-    require_error [%here] ~cr:Comment print_ok (Ok ());
+    require_error ~cr:Comment print_ok (Ok ());
     [%expect
       {|
       (* require-failed: lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL. *)
       ("unexpected [Ok]" ok)
-      |}]
+      |}];
+    require_error
+      print_ok
+      (Or_error.error_s [%sexp [%here]])
+      ~hide_positions:true
+      ~print_error:true;
+    [%expect
+      {| lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL |}]
   ;;
 end
 
@@ -558,10 +686,9 @@ let%expect_test "hide_temp_files_in_string" =
 ;;
 
 let%expect_test "[require_sets_are_equal] success" =
-  require_sets_are_equal [%here] (Set.empty (module Int)) (Set.empty (module Int));
+  require_sets_are_equal (Set.empty (module Int)) (Set.empty (module Int));
   [%expect {| |}];
   require_sets_are_equal
-    [%here]
     (Set.of_list (module Int) [ 1; 2; 3 ])
     (Set.of_list (module Int) [ 3; 2; 1 ]);
   [%expect {| |}]
@@ -569,7 +696,6 @@ let%expect_test "[require_sets_are_equal] success" =
 
 let%expect_test "[require_sets_are_equal] failure" =
   require_sets_are_equal
-    [%here]
     ~cr:Comment
     (Set.of_list (module Int) [ 1; 2 ])
     (Set.of_list (module Int) [ 2; 3 ]);
@@ -584,7 +710,6 @@ let%expect_test "[require_sets_are_equal] failure" =
 
 let%expect_test "[require_sets_are_equal] failure with extras only in first" =
   require_sets_are_equal
-    [%here]
     ~cr:Comment
     (Set.of_list (module Int) [ 1; 2 ])
     (Set.of_list (module Int) [ 2 ]);
@@ -597,7 +722,6 @@ let%expect_test "[require_sets_are_equal] failure with extras only in first" =
 
 let%expect_test "[require_sets_are_equal] failure with extras only in second" =
   require_sets_are_equal
-    [%here]
     ~cr:Comment
     (Set.of_list (module Int) [ 2 ])
     (Set.of_list (module Int) [ 2; 3 ]);
@@ -610,7 +734,6 @@ let%expect_test "[require_sets_are_equal] failure with extras only in second" =
 
 let%expect_test "[require_sets_are_equal] failure with names" =
   require_sets_are_equal
-    [%here]
     (Set.of_list (module Int) [ 1; 2 ])
     (Set.of_list (module Int) [ 2; 3 ])
     ~cr:Comment
@@ -628,15 +751,13 @@ let%expect_test "[on_print_cr]" =
   let cr = CR.Comment in
   let hide_positions = true in
   let run () =
-    print_cr [%here] ~cr ~hide_positions [%message "unconditional message"];
+    print_cr ~cr ~hide_positions [%message "unconditional message"];
     require
-      [%here]
       ~cr
       ~hide_positions
       false
       ~if_false_then_print_s:(lazy [%message "conditional message"]);
     require
-      [%here]
       ~cr
       ~hide_positions
       true
@@ -675,11 +796,7 @@ let%expect_test "[on_print_cr]" =
 ;;
 
 let%expect_test "[quickcheck] success" =
-  quickcheck
-    [%here]
-    Base_quickcheck.quickcheck_generator_int
-    ~sexp_of:Int.sexp_of_t
-    ~f:ignore;
+  quickcheck Base_quickcheck.quickcheck_generator_int ~sexp_of:Int.sexp_of_t ~f:ignore;
   [%expect {| |}]
 ;;
 
@@ -689,12 +806,10 @@ let%expect_test "[quickcheck] success" =
 let%expect_test ("[quickcheck] failure" [@tags "64-bits-only"]) =
   let cr = CR.Comment in
   quickcheck
-    [%here]
     ~cr
     Base_quickcheck.quickcheck_generator_int
     ~sexp_of:Int.sexp_of_t
-    ~f:(fun int ->
-    require [%here] ~cr (int > 100) ~if_false_then_print_s:(lazy [%message "BAD"]));
+    ~f:(fun int -> require ~cr (int > 100) ~if_false_then_print_s:(lazy [%message "BAD"]));
   [%expect
     {|
     ("quickcheck: test failed" (input -15508265059))
@@ -706,13 +821,12 @@ let%expect_test ("[quickcheck] failure" [@tags "64-bits-only"]) =
 let%expect_test ("[quickcheck] failure with multiple CRs" [@tags "64-bits-only"]) =
   let cr = CR.Comment in
   quickcheck
-    [%here]
     ~cr
     Base_quickcheck.quickcheck_generator_int
     ~sexp_of:Int.sexp_of_t
     ~f:(fun _ ->
-    print_cr [%here] ~cr [%message "first"];
-    require [%here] ~cr false ~if_false_then_print_s:(lazy [%message "second"]));
+      print_cr ~cr [%message "first"];
+      require ~cr false ~if_false_then_print_s:(lazy [%message "second"]));
   [%expect
     {|
     ("quickcheck: test failed" (input 76753))
@@ -725,9 +839,8 @@ let%expect_test ("[quickcheck] failure with multiple CRs" [@tags "64-bits-only"]
 
 let%expect_test ("[quickcheck] raised exception" [@tags "64-bits-only"]) =
   let cr = CR.Comment in
-  require_does_not_raise [%here] (fun () ->
+  require_does_not_raise (fun () ->
     quickcheck
-      [%here]
       ~cr
       Base_quickcheck.quickcheck_generator_int
       ~sexp_of:Int.sexp_of_t
@@ -743,14 +856,12 @@ let%expect_test ("[quickcheck] raised exception" [@tags "64-bits-only"]) =
 let%expect_test ("[quickcheck] failure with shrinker" [@tags "64-bits-only"]) =
   let cr = CR.Comment in
   quickcheck
-    [%here]
     ~cr
     (Base_quickcheck.Generator.return 10)
     ~sexp_of:[%sexp_of: int]
     ~shrinker:(Base_quickcheck.Shrinker.create (fun int -> Sequence.singleton (int - 1)))
     ~f:(fun int ->
       require
-        [%here]
         ~cr
         (int <= 0)
         ~if_false_then_print_s:(lazy [%message "positive" ~_:(int : int)]));
@@ -769,7 +880,7 @@ module Int_for_quickcheck = struct
 end
 
 let%expect_test "[quickcheck_m] success" =
-  quickcheck_m [%here] (module Int_for_quickcheck) ~f:ignore;
+  quickcheck_m (module Int_for_quickcheck) ~f:ignore;
   [%expect {| |}]
 ;;
 
@@ -778,12 +889,8 @@ let%expect_test "[quickcheck_m] success" =
 
 let%expect_test ("[quickcheck_m] failure" [@tags "64-bits-only"]) =
   let cr = CR.Comment in
-  quickcheck_m
-    [%here]
-    ~cr
-    (module Int_for_quickcheck)
-    ~f:(fun int ->
-      require [%here] ~cr (int > 100) ~if_false_then_print_s:(lazy [%message "BAD"]));
+  quickcheck_m ~cr (module Int_for_quickcheck) ~f:(fun int ->
+    require ~cr (int > 100) ~if_false_then_print_s:(lazy [%message "BAD"]));
   [%expect
     {|
     ("quickcheck: test failed" (input -15508265059))
@@ -794,13 +901,9 @@ let%expect_test ("[quickcheck_m] failure" [@tags "64-bits-only"]) =
 
 let%expect_test ("[quickcheck_m] failure with multiple CRs" [@tags "64-bits-only"]) =
   let cr = CR.Comment in
-  quickcheck_m
-    [%here]
-    ~cr
-    (module Int_for_quickcheck)
-    ~f:(fun _ ->
-      print_cr [%here] ~cr [%message "first"];
-      require [%here] ~cr false ~if_false_then_print_s:(lazy [%message "second"]));
+  quickcheck_m ~cr (module Int_for_quickcheck) ~f:(fun _ ->
+    print_cr ~cr [%message "first"];
+    require ~cr false ~if_false_then_print_s:(lazy [%message "second"]));
   [%expect
     {|
     ("quickcheck: test failed" (input 76753))
@@ -813,12 +916,9 @@ let%expect_test ("[quickcheck_m] failure with multiple CRs" [@tags "64-bits-only
 
 let%expect_test ("[quickcheck_m] raised exception" [@tags "64-bits-only"]) =
   let cr = CR.Comment in
-  require_does_not_raise [%here] (fun () ->
-    quickcheck_m
-      [%here]
-      ~cr
-      (module Int_for_quickcheck)
-      ~f:(fun int -> if int > 100 then raise_s [%message "BAD"]));
+  require_does_not_raise (fun () ->
+    quickcheck_m ~cr (module Int_for_quickcheck) ~f:(fun int ->
+      if int > 100 then raise_s [%message "BAD"]));
   [%expect
     {|
     ("quickcheck: test failed" (input 76753))
@@ -830,7 +930,6 @@ let%expect_test ("[quickcheck_m] raised exception" [@tags "64-bits-only"]) =
 let%expect_test ("[quickcheck_m] failure with shrinker" [@tags "64-bits-only"]) =
   let cr = CR.Comment in
   quickcheck_m
-    [%here]
     ~cr
     (module struct
       type t = int [@@deriving sexp_of]
@@ -843,7 +942,6 @@ let%expect_test ("[quickcheck_m] failure with shrinker" [@tags "64-bits-only"]) 
     end)
     ~f:(fun int ->
       require
-        [%here]
         ~cr
         (int <= 0)
         ~if_false_then_print_s:(lazy [%message "positive" ~_:(int : int)]));
@@ -856,13 +954,12 @@ let%expect_test ("[quickcheck_m] failure with shrinker" [@tags "64-bits-only"]) 
 ;;
 
 let%expect_test "Phys_equal" =
-  require_equal [%here] (module Phys_equal (Int)) 1 1;
+  require_equal (module Phys_equal (Int)) 1 1;
   require_equal
-    [%here]
     ~cr:Comment
     (module Phys_equal (struct
-      type t = string option [@@deriving sexp_of]
-    end))
+        type t = string option [@@deriving sexp_of]
+      end))
     (Some "foo")
     (Some ("fo" ^ "o"));
   [%expect
@@ -874,40 +971,39 @@ let%expect_test "Phys_equal" =
     |}]
 ;;
 
-let%test_module _ =
-  (module struct
-    let%expect_test "[%expect.output]" =
-      let output =
-        print_endline "This is a sentence.";
-        [%expect.output]
-      in
-      [%expect {| |}];
-      print_string output;
-      [%expect {| This is a sentence. |}]
-    ;;
+module%test _ = struct
+  let%expect_test "[%expect.output]" =
+    let output =
+      print_endline "This is a sentence.";
+      [%expect.output]
+    in
+    [%expect {| |}];
+    print_string output;
+    [%expect {| This is a sentence. |}]
+  ;;
 
-    let%expect_test "expect_test_output" =
-      let output =
-        print_endline "This is a sentence.";
-        expect_test_output [%here]
-      in
-      [%expect {| |}];
-      print_string output;
-      [%expect {| This is a sentence. |}]
-    ;;
+  let%expect_test "expect_test_output" =
+    let output =
+      print_endline "This is a sentence.";
+      expect_test_output ()
+    in
+    [%expect {| |}];
+    print_string output;
+    [%expect {| This is a sentence. |}]
+  ;;
 
-    let%expect_test "expect_test_output with source location from different file" =
-      let output =
-        print_endline "This is a sentence.";
-        expect_test_output
-          { pos_fname = "__nonexistent__"; pos_lnum = 1; pos_bol = 0; pos_cnum = 0 }
-      in
-      [%expect {| |}];
-      print_string output;
-      [%expect {| This is a sentence. |}]
-    ;;
-  end)
-;;
+  let%expect_test "expect_test_output with source location from different file" =
+    let output =
+      print_endline "This is a sentence.";
+      expect_test_output
+        ~here:{ pos_fname = "__nonexistent__"; pos_lnum = 1; pos_bol = 0; pos_cnum = 0 }
+        ()
+    in
+    [%expect {| |}];
+    print_string output;
+    [%expect {| This is a sentence. |}]
+  ;;
+end
 
 let%expect_test "smash_sexp" =
   {|
@@ -920,8 +1016,8 @@ let%expect_test "smash_sexp" =
 |}
   |> Parsexp.Single.parse_string_exn
   |> smash_sexp ~f:(function
-       | List [ Atom "Ok"; ok ] -> ok
-       | sexp -> sexp)
+    | List [ Atom "Ok"; ok ] -> ok
+    | sexp -> sexp)
   |> print_s;
   [%expect
     {|
@@ -947,10 +1043,10 @@ let%expect_test "remove_backtrace" =
 let%expect_test "print_and_check_stringable" =
   print_and_check_stringable
     ~cr:Comment
-    [%here]
     (module Int32)
     Int32.[ min_value; minus_one; zero; one; max_value ];
-  [%expect {|
+  [%expect
+    {|
     -2147483648
     -1
     0
@@ -962,10 +1058,10 @@ let%expect_test "print_and_check_stringable" =
 let%expect_test "print_and_check_sexpable" =
   print_and_check_sexpable
     ~cr:Comment
-    [%here]
     (module Int32)
     Int32.[ min_value; minus_one; zero; one; max_value ];
-  [%expect {|
+  [%expect
+    {|
     -2147483648
     -1
     0
@@ -1015,7 +1111,6 @@ let%expect_test "print_and_check_round_trip" =
   let test list =
     print_and_check_round_trip
       ~cr:Comment
-      [%here]
       (module Int64)
       [ (module Int64_as_string)
       ; (module Int64_as_int32_trunc)
@@ -1062,13 +1157,23 @@ let%expect_test "print_and_check_round_trip" =
       (int32_roundtrip -2147483648))
     |}];
   (* conversion raises *)
-  test [ Int64.min_value; Int64.max_value ];
+  test [ Int64.min_value; -2L; 2L; Int64.max_value ];
   [%expect
     {|
     (* require-failed: lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL. *)
     ("unexpectedly raised" (
       Failure
       "conversion from int64 to int63 failed: -9223372036854775808 is out of range"))
+    ((string -2)
+     (int32  -2)
+     (int63  -2))
+    ((string 2)
+     (int32  2)
+     (int63  2))
+    (* require-failed: lib/expect_test_helpers/base/test/test_expect_test_helpers_base.ml:LINE:COL. *)
+    ("unexpectedly raised" (
+      Failure
+      "conversion from int64 to int63 failed: 9223372036854775807 is out of range"))
     |}];
   ()
 ;;
@@ -1077,7 +1182,6 @@ let%expect_test ("test_compare" [@tags "64-bits-only"]) =
   let open Base_quickcheck.Export in
   (* success *)
   test_compare
-    [%here]
     ~cr:Comment
     (module struct
       type t = int [@@deriving compare, quickcheck, sexp_of]
@@ -1085,7 +1189,6 @@ let%expect_test ("test_compare" [@tags "64-bits-only"]) =
   [%expect {| |}];
   (* failure *)
   test_compare
-    [%here]
     ~cr:Comment
     (module struct
       type t = int [@@deriving quickcheck, sexp_of]
@@ -1136,7 +1239,6 @@ let%expect_test ("test_equal" [@tags "64-bits-only"]) =
   let open Base_quickcheck.Export in
   (* success *)
   test_equal
-    [%here]
     ~cr:Comment
     (module struct
       type t = int [@@deriving equal, quickcheck, sexp_of]
@@ -1144,7 +1246,6 @@ let%expect_test ("test_equal" [@tags "64-bits-only"]) =
   [%expect {| |}];
   (* failure *)
   test_equal
-    [%here]
     ~cr:Comment
     (module struct
       type t = int [@@deriving quickcheck, sexp_of]
@@ -1189,7 +1290,6 @@ let%expect_test ("test_compare_and_equal" [@tags "64-bits-only"]) =
   let open Base_quickcheck.Export in
   (* success *)
   test_compare_and_equal
-    [%here]
     ~cr:Comment
     (module struct
       type t = int [@@deriving compare, equal, quickcheck, sexp_of]
@@ -1197,7 +1297,6 @@ let%expect_test ("test_compare_and_equal" [@tags "64-bits-only"]) =
   [%expect {| |}];
   (* failure *)
   test_compare_and_equal
-    [%here]
     ~cr:Comment
     (module struct
       type t = int [@@deriving quickcheck, sexp_of]
@@ -1278,5 +1377,113 @@ let%expect_test ("test_compare_and_equal" [@tags "64-bits-only"]) =
       (y           76753)
       (compare_x_y -15508265059)
       (equal_x_y   true))
+    |}]
+;;
+
+let%expect_test "[with_empty_expect_test_output]" =
+  (* nothing captured *)
+  print_endline "one";
+  with_empty_expect_test_output (fun () -> print_endline "two");
+  print_endline "three";
+  [%expect
+    {|
+    one
+    two
+    three
+    |}];
+  (* output captured *)
+  print_endline "one";
+  with_empty_expect_test_output (fun () ->
+    print_endline "two";
+    [%expect {| two |}]);
+  print_endline "three";
+  [%expect
+    {|
+    one
+    three
+    |}];
+  (* partial output captured *)
+  print_endline "one";
+  with_empty_expect_test_output (fun () ->
+    print_endline "two";
+    [%expect {| two |}];
+    print_endline "three");
+  print_endline "four";
+  [%expect
+    {|
+    one
+    three
+    four
+    |}];
+  (* nothing captured in nested calls *)
+  print_endline "one";
+  with_empty_expect_test_output (fun () ->
+    print_endline "two";
+    with_empty_expect_test_output (fun () -> print_endline "three");
+    print_endline "four");
+  print_endline "five";
+  [%expect
+    {|
+    one
+    two
+    three
+    four
+    five
+    |}];
+  (* output captured in nested calls *)
+  print_endline "one";
+  with_empty_expect_test_output (fun () ->
+    print_endline "two";
+    with_empty_expect_test_output (fun () ->
+      print_endline "three";
+      [%expect {| three |}]);
+    print_endline "four";
+    [%expect
+      {|
+      two
+      four
+      |}]);
+  print_endline "five";
+  [%expect
+    {|
+    one
+    five
+    |}];
+  (* output returned from nested calls *)
+  print_endline "one";
+  let a, b =
+    with_empty_expect_test_output (fun () ->
+      print_endline "two";
+      let a =
+        with_empty_expect_test_output (fun () ->
+          print_endline "three";
+          String.split_lines (expect_test_output ()))
+      in
+      print_endline "four";
+      let b = String.split_lines (expect_test_output ()) in
+      a, b)
+  in
+  print_endline "five";
+  let c = String.split_lines (expect_test_output ()) in
+  print_s [%message "" (a : string list) (b : string list) (c : string list)];
+  [%expect
+    {|
+    ((a (three))
+     (b (two four))
+     (c (one five)))
+    |}];
+  (* multiple successive calls *)
+  with_empty_expect_test_output (fun () ->
+    with_empty_expect_test_output (fun () -> print_endline "one");
+    with_empty_expect_test_output (fun () -> print_endline "two"));
+  with_empty_expect_test_output (fun () ->
+    with_empty_expect_test_output (fun () -> print_endline "three");
+    with_empty_expect_test_output (fun () -> print_endline "four"));
+  [%expect
+    {|
+    one
+    two
+    three
+    four
     |}]
 ;;

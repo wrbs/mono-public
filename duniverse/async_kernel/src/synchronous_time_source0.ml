@@ -4,14 +4,7 @@ open! Import
 module Time_ns = struct
   include Time_ns
 
-  external format : float -> string -> string = "core_time_ns_format"
-
-  (* We use a more pleasant format than [Core.Time_ns.sexp_of_t],
-     which has to be messier for round trippability. *)
-  let sexp_of_t t =
-    [%sexp
-      (format (t |> to_span_since_epoch |> Span.to_sec) "%Y-%m-%dT%H:%M:%S%z" : string)]
-  ;;
+  let sexp_of_t = Core.Time_ns.sexp_of_t
 end
 
 module Alarm = struct
@@ -118,8 +111,8 @@ module T1 = struct
          parts of caml_modify. *)
       let none = (Obj.magic None : t) (* an arbitrary immediate *)
       let some = (Obj.magic : Types.Event.t -> t)
-      let is_none t = phys_equal t none
-      let is_some t = not (is_none t)
+      let is_none (t @ local) = phys_equal t none
+      let is_some (t @ local) = not (is_none t)
       let first_some t1 t2 = if is_some t1 then t1 else t2
       let unsafe_value = (Obj.magic : t -> Types.Event.t)
 
@@ -181,7 +174,7 @@ module T1 = struct
     let sexp_of_t = [%sexp_of: event]
 
     let invariant t =
-      Invariant.invariant [%here] t [%sexp_of: t] (fun () ->
+      Invariant.invariant t [%sexp_of: t] (fun () ->
         let check f = Invariant.check_field t f in
         Fields.iter
           ~alarm:
@@ -313,7 +306,7 @@ module T1 = struct
       [%message "" (now : Time_ns.t) (events : Job_or_event.t list)])
   ;;
 
-  let timing_wheel_now t = Timing_wheel.now t.events
+  let[@zero_alloc] timing_wheel_now t = Timing_wheel.now t.events
 
   let is_in_fired_events =
     let rec search current ~target_event =
@@ -326,7 +319,7 @@ module T1 = struct
   ;;
 
   let invariant_with_jobs (type rw) ~job:(job_invariant : Job.t -> unit) (t : rw t) =
-    Invariant.invariant [%here] t [%sexp_of: _ t] (fun () ->
+    Invariant.invariant t [%sexp_of: _ t] (fun () ->
       let check f = Invariant.check_field t f in
       Fields.iter
         ~id:ignore
@@ -386,11 +379,11 @@ module Read_write = struct
   let invariant_with_jobs = invariant_with_jobs
 end
 
-let id t = t.id
-let is_wall_clock t = t.is_wall_clock
-let length t = Timing_wheel.length t.events
-let max_allowed_alarm_time t = Timing_wheel.max_allowed_alarm_time t.events
-let read_only (t : [> read ] T1.t) = (t :> t)
+let[@zero_alloc] id t = t.id
+let[@zero_alloc] is_wall_clock t = t.is_wall_clock
+let[@zero_alloc] length t = Timing_wheel.length t.events
+let[@zero_alloc] max_allowed_alarm_time t = Timing_wheel.max_allowed_alarm_time t.events
+let[@zero_alloc] read_only (t : [> read ] T1.t) = (t :> t)
 
 (* [fire t event] sets [event.status = Fired] and inserts [event] into
    [t.fired_events] in sorted time order. *)
@@ -441,15 +434,26 @@ let fire t (event : Event.t) =
 
 let alarm_precision t = Timing_wheel.alarm_precision t.events
 let next_alarm_fires_at t = Timing_wheel.next_alarm_fires_at t.events
+let has_events_to_run t = Event.Option.is_some t.fired_events
+
+let[@zero_alloc] has_next_alarm t =
+  has_events_to_run t || not (Timing_wheel.is_empty t.events)
+;;
 
 let next_alarm_runs_at t =
-  if Event.Option.is_some t.fired_events
+  if has_events_to_run t
   then Some (timing_wheel_now t)
   else Timing_wheel.next_alarm_fires_at t.events
 ;;
 
-let now t = if t.is_wall_clock then Time_ns.now () else timing_wheel_now t
-let timing_wheel_now = timing_wheel_now
+let[@zero_alloc] next_alarm_runs_at_exn t =
+  if has_events_to_run t
+  then timing_wheel_now t
+  else Timing_wheel.next_alarm_fires_at_exn t.events
+;;
+
+let[@zero_alloc] now t = if t.is_wall_clock then Time_ns.now () else timing_wheel_now t
+let[@zero_alloc] timing_wheel_now t = timing_wheel_now t
 
 let schedule t (event : Event.t) =
   Event.set_status event Scheduled;
@@ -670,10 +674,13 @@ let run_fired_events t ~(send_exn : send_exn option) =
             a periodic event if its callback raises. *)
          (match event.callback () with
           | exception exn ->
+            let backtrace = Backtrace.Exn.most_recent () in
             (match send_exn with
-             | None -> t.advance_errors <- Error.of_exn exn :: t.advance_errors
+             | None ->
+               t.advance_errors
+               <- Error.of_exn ~backtrace:(`This (Backtrace.to_string backtrace)) exn
+                  :: t.advance_errors
              | Some send_exn ->
-               let backtrace = Backtrace.Exn.most_recent () in
                send_exn event.execution_context.monitor exn ~backtrace:(`This backtrace));
             Event.set_status_if ~is:Happening_periodic_event event Unscheduled
           | () ->
@@ -685,11 +692,11 @@ let run_fired_events t ~(send_exn : send_exn option) =
                  (* The event's callback did not reschedule the event. So reschedule the
                     repeating timer based on the last [at] time. *)
                  event.at
-                   <- Time_ns.next_multiple
-                        ()
-                        ~base:event.at
-                        ~after:(timing_wheel_now t)
-                        ~interval;
+                 <- Time_ns.next_multiple
+                      ()
+                      ~base:event.at
+                      ~after:(timing_wheel_now t)
+                      ~interval;
                  schedule t event)));
          true)
   do
@@ -799,5 +806,3 @@ let duration_of t f =
 let max_alarm_time_in_min_timing_wheel_interval t =
   Timing_wheel.max_alarm_time_in_min_interval t.events
 ;;
-
-let has_events_to_run t = Event.Option.is_some t.fired_events

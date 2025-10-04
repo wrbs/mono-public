@@ -168,8 +168,8 @@ module Make (Pool : Pool.S) = struct
             (List.init num_to_alloc_this_iter ~f:Fn.id)
             ~init:(p, live)
             ~f:(fun (p, live) i ->
-            let p = if Pool.is_full p then Pool.grow p else p in
-            p, create p i (nil ()) :: live)
+              let p = if Pool.is_full p then Pool.grow p else p in
+              p, create p i (nil ()) :: live)
         in
         let to_free, live =
           let r = ref true in
@@ -202,7 +202,7 @@ module Make (Pool : Pool.S) = struct
       assert (is_nil (tail p l));
       free p l
     with
-    | exn -> failwiths ~here:[%here] "failure" (exn, p) [%sexp_of: exn * _ Pool.t]
+    | exn -> failwiths "failure" (exn, p) [%sexp_of: exn * _ Pool.t]
   ;;
 
   (* [sexp_of] *)
@@ -214,7 +214,7 @@ module Make (Pool : Pool.S) = struct
       let l = create p 13 (nil ()) in
       ignore (sexp_of l)
     with
-    | exn -> failwiths ~here:[%here] "failure" (exn, p) [%sexp_of: exn * _ Pool.t]
+    | exn -> failwiths "failure" (exn, p) [%sexp_of: exn * _ Pool.t]
   ;;
 
   (* [id_of_pointer], [pointer_of_id_exn], [Id.to_int63], [Id.of_int63] *)
@@ -241,8 +241,7 @@ module Make (Pool : Pool.S) = struct
   ;;
 end
 
-let%test_module _ = (module Make (Pool))
-
+module%test _ = Make (Pool)
 open! Pool
 
 let%expect_test "use a pool that has been [grow]n" =
@@ -258,30 +257,24 @@ let%expect_test "use a pool that has been [grow]n" =
   [%expect {| (false 13) |}]
 ;;
 
-let%test_module _ =
-  (module Make (struct
+module%test _ = Make (struct
     include Pool.Unsafe
 
     let create (type tuple) (slots : (tuple, _) Slots.t) ~capacity ~dummy:(_ : tuple) =
       create slots ~capacity
     ;;
-  end))
-;;
+  end)
 
-let%test_module "Debug without messages" =
-  (module Make (struct
+module%test [@name "Debug without messages"] _ = Make (struct
     include Pool.Debug (Pool)
 
     let () = show_messages := false
 
     (* or it prints too much *)
-  end))
-;;
+  end)
 
 module Error_checked_pool = Pool.Error_check (Pool)
-
-let%test_module _ = (module Make (Error_checked_pool))
-
+module%test _ = Make (Error_checked_pool)
 open Error_checked_pool
 
 let%expect_test "use a pool that has been [grow]n" =

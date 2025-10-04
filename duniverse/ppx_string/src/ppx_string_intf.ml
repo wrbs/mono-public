@@ -7,13 +7,16 @@ module Definitions = struct
   module Config = struct
     type t =
       { fully_qualified_runtime_module : Longident.t
-          (** Where to find an implementation of [Ppx_string_runtime.S]. The implementation of
+      (** Where to find an implementation of [Ppx_string_runtime.S]. The implementation of
           [[%string]] is at [Ldot (Lident "Ppx_string_runtime", "For_string")] *)
       ; conversion_function_name : string
-          (** Conversion function implied by ["%{expr#Module}"], e.g. ["to_string"]. *)
+      (** Conversion function implied by ["%{expr#Module}"], e.g. ["to_string"]. *)
       ; preprocess_before_parsing : (string -> string) option
-          (** Preprocessing to apply before parsing the string for interpolation. If [None],
+      (** Preprocessing to apply before parsing the string for interpolation. If [None],
           source locations can be computed precisely based on the result of parsing. *)
+      ; assert_list_is_stack_allocated : bool
+      (** Whether to wrap the list passed to [concat] with [stack_] and add the related
+          necessary [[@nontail]] annotations. *)
       }
   end
 
@@ -26,8 +29,8 @@ module Definitions = struct
         ; pad_length : expression option
         ; loc_end : position
         ; interpreted_string : string
-            (** [interpreted_string] is the string of the interpreted part. (e.g. in the
-            example %{foo#Foo}, the string is "foo#Foo") *)
+        (** [interpreted_string] is the string of the interpreted part. (e.g. in the
+            example %[{foo#Foo}], the string is "foo#Foo") *)
         }
     end
 
@@ -57,8 +60,8 @@ module type Ppx_string = sig
     -> string
     -> Parse_result.t
 
-  (** Interpret an interpolated string as an expression, including %{conversions#String}
-      and %{padding#:8}. *)
+  (** Interpret an interpolated string as an expression, including [%{conversions#String}]
+      and [%{padding#:8}]. *)
   val interpret : config:Config.t -> Part.Interpreted.t -> expression
 
   (** Combines [parse], [interpret], and concatenation to expand an interpolated string to
@@ -74,7 +77,8 @@ module type Ppx_string = sig
   (** Construct an [Extension.t] implementing the configured interpolation ppx. *)
   val extension : name:string -> config:Config.t -> Extension.t
 
-  (** Configuration for [[%string]]: string type and conversion type are [string], length
-      type is [int], and no preprocessing. *)
-  val config_for_string : Config.t
+  (** Configuration for [[%string]] family: string type and conversion type are [string],
+      length type is [int], and no preprocessing. When [~local:true], the configuration
+      for [[%string]], otherwise the configuration for [[%string.global]] *)
+  val config_for_string : local:bool -> Config.t
 end

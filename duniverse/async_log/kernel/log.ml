@@ -136,17 +136,19 @@ let surroundf ~on_subsequent_errors ?level ?time ?tags t fmt =
     fmt
 ;;
 
-let set_level_via_param_helper ~f =
+let set_level_via_param_helper ~default ~f =
   let open Command.Param in
   map
     (flag "log-level" (optional Level.arg) ~doc:"LEVEL The log level")
-    ~f:(Option.iter ~f)
+    ~f:(fun level -> Option.first_some level default |> Option.iter ~f)
 ;;
 
-let set_level_via_param log = set_level_via_param_helper ~f:(set_level log)
+let set_level_via_param ?default log =
+  set_level_via_param_helper ~default ~f:(set_level log)
+;;
 
-let set_level_via_param_lazy log =
-  set_level_via_param_helper ~f:(fun level -> set_level (Lazy.force log) level)
+let set_level_via_param_lazy log ~default =
+  set_level_via_param_helper ~default ~f:(fun level -> set_level (Lazy.force log) level)
 ;;
 
 let raw ?time ?tags t fmt = printf ?time ?tags t fmt
@@ -162,12 +164,23 @@ module For_testing = struct
   let create_output = Output.For_testing.create
 
   let create ~map_output level =
-    let output = [ create_output ~map_output ] in
-    create ~output ~level ~on_error:`Raise ~time_source:None ~transform:None
+    let default_outputs = [ create_output ~map_output ] in
+    let named_outputs = Output_name.Map.empty in
+    create
+      ~default_outputs
+      ~named_outputs
+      ~level
+      ~on_error:`Raise
+      ~time_source:None
+      ~transforms:[]
   ;;
+
+  let transform = For_testing.transform
 end
 
 module Private = struct
+  include Private
+
   let push_message_event = Raw_log.push_message_event
   let set_async_trace_hook f = async_trace_hook := Some f
   let set_level_via_param_lazy = set_level_via_param_lazy
@@ -175,7 +188,41 @@ module Private = struct
 end
 
 let create ~level ~output ~on_error ?time_source ?transform () =
-  create ~level ~output ~on_error ~time_source ~transform
+  let named_outputs = Output_name.Map.empty in
+  let transforms =
+    match transform with
+    | None -> []
+    | Some transform -> [ (fun msg -> Some (transform msg)) ]
+  in
+  create ~level ~default_outputs:output ~named_outputs ~on_error ~time_source ~transforms
+;;
+
+module Transform = struct
+  include Transform
+
+  let append' t f = Transform.add t f `After
+  let prepend' t f = Transform.add t f `Before
+  let append t f = ignore (Transform.add t (fun msg -> Some (f msg)) `After : Transform.t)
+
+  let prepend t f =
+    ignore (Transform.add t (fun msg -> Some (f msg)) `Before : Transform.t)
+  ;;
+end
+
+let add_tags t ~tags = Transform.prepend t (Message_event.add_tags ~tags)
+
+let add_tags' t ~tags =
+  Transform.prepend' t (fun message_event ->
+    Some (Message_event.add_tags message_event ~tags))
+;;
+
+let copy ?level ?on_error ?output ?extra_tags t =
+  let t = copy t in
+  Option.iter level ~f:(set_level t);
+  Option.iter on_error ~f:(set_on_error t);
+  Option.iter output ~f:(set_output t);
+  Option.iter extra_tags ~f:(fun tags -> add_tags t ~tags);
+  t
 ;;
 
 let create_null () =

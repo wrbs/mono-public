@@ -27,7 +27,7 @@ let view_resize_observer =
     Type_equal.Id.create
       ~name:"my widget type"
       (fun (_ : ResizeObserver.resizeObserver Js.t * Dom_html.element Js.t) ->
-      Sexp.Atom "<resize-observer-widget>")
+         Sexp.Atom "<resize-observer-widget>")
   in
   Vdom.Node.widget
     ~id:widget_id
@@ -42,14 +42,10 @@ let view_resize_observer =
             Js_of_ocaml.Js.to_array entries
             |> Array.to_list
             |> List.iter ~f:(fun entry ->
-                 let width =
-                   entry##.contentRect##.width |> Js.Optdef.to_option |> Option.value_exn
-                 in
-                 let height =
-                   entry##.contentRect##.height |> Js.Optdef.to_option |> Option.value_exn
-                 in
-                 div##.textContent
-                   := Js.Opt.return (Js.string (sprintf "%f x %f" width height))))
+              let width = entry##.contentRect##.width |> Js.float_of_number in
+              let height = entry##.contentRect##.height |> Js.float_of_number in
+              div##.textContent
+              := Js.Opt.return (Js.string (sprintf "%f x %f" width height))))
           ()
       in
       resize_observer, div)
@@ -74,8 +70,8 @@ let view_colorize_button =
       (* in here we can do raw javascript operations! *)
       let button = Dom_html.document##createElement ("button" |> Js.string) in
       button##.innerHTML
-        := "<b> I hearby agree to not use the widget API unless absolutely necessary </b>"
-           |> Js.string;
+      := "<b> I hearby agree to not use the widget API unless absolutely necessary </b>"
+         |> Js.string;
       (* Our "colorify" widget is stored on the window object *)
       let colorify = Js.Unsafe.get Dom_html.window ("colorify" |> Js.string) in
       Js.Unsafe.fun_call colorify [| Js.Unsafe.inject button |] |> ignore;
@@ -98,9 +94,9 @@ let view _ ~inject:_ =
 let create model ~old_model:_ ~inject =
   let open Incr.Let_syntax in
   let%map apply_action =
-    let%map model = model in
+    let%map model in
     apply_action model
   and view = view model ~inject
-  and model = model in
+  and model in
   Component.create ~apply_action model view
 ;;

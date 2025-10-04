@@ -64,9 +64,7 @@ let interrupt_signals : Signal.t list = [ Int; Quit; Term ]
 
 (* In addition, the scheduler also blocks some other signals so that only
    designated threads can handle them by unblocking *)
-let blocked_signals : Signal.t list =
-  Dune_util.Terminal_signals.signals @ interrupt_signals
-;;
+let blocked_signals : Signal.t list = Terminal_signals.signals @ interrupt_signals
 
 module Thread : sig
   val spawn : (unit -> unit) -> unit
@@ -88,8 +86,8 @@ end = struct
       (* On unix, we make sure to block signals globally before starting a
          thread so that only the signal watcher thread can receive signals. *)
       fun f x ->
-      Lazy.force block_signals;
-      Thread.create f x
+        Lazy.force block_signals;
+        Thread.create f x
   ;;
 
   let spawn f =
@@ -696,13 +694,13 @@ end
 module Alarm_clock : sig
   type t
 
-  val create : Event.Queue.t -> frequency:float -> t
+  val create : Event.Queue.t -> period_seconds:float -> t
 
   type alarm
 
   val await : alarm -> [ `Finished | `Cancelled ] Fiber.t
   val cancel : t -> alarm -> unit
-  val sleep : t -> float -> alarm
+  val sleep : t -> seconds:float -> alarm
   val close : t -> unit
 end = struct
   type alarm = [ `Finished | `Cancelled ] Fiber.Ivar.t
@@ -710,7 +708,7 @@ end = struct
   type t =
     { events : Event.Queue.t
     ; mutex : Mutex.t
-    ; frequency : float
+    ; period_seconds : float
     ; mutable alarms : (float * [ `Finished | `Cancelled ] Fiber.Ivar.t) list
     ; mutable active : bool
     }
@@ -747,7 +745,7 @@ end = struct
         (match Nonempty_list.of_list expired with
          | None -> ()
          | Some expired -> Event.Queue.send_timers_completed t.events expired);
-        Thread.delay t.frequency;
+        Thread.delay t.period_seconds;
         Mutex.lock t.mutex;
         loop ()
     in
@@ -757,20 +755,22 @@ end = struct
     Mutex.unlock t.mutex
   ;;
 
-  let create events ~frequency =
-    let t = { events; active = true; alarms = []; frequency; mutex = Mutex.create () } in
+  let create events ~period_seconds =
+    let t =
+      { events; active = true; alarms = []; period_seconds; mutex = Mutex.create () }
+    in
     Thread.spawn (polling_loop t);
     t
   ;;
 
-  let sleep t duration =
+  let sleep t ~seconds =
     Mutex.lock t.mutex;
     let ivar = Fiber.Ivar.create () in
     if not t.active
     then (
       Mutex.unlock t.mutex;
       Code_error.raise "cannot schedule timers after close" []);
-    t.alarms <- (duration +. Unix.gettimeofday (), ivar) :: t.alarms;
+    t.alarms <- (seconds +. Unix.gettimeofday (), ivar) :: t.alarms;
     Mutex.unlock t.mutex;
     ivar
   ;;
@@ -877,6 +877,7 @@ let wait_for_process t pid =
 type termination_reason =
   | Normal
   | Cancel
+  | Timeout
 
 (* We use this version privately in this module whenever we can pass the
    scheduler explicitly *)
@@ -887,7 +888,12 @@ let wait_for_build_process t pid =
       ~on_cancel:(fun () ->
         Process_watcher.killall t.process_watcher Sys.sigkill;
         Fiber.return ())
-      (fun () -> wait_for_process t pid)
+      (fun () ->
+         let+ r = wait_for_process t pid in
+         (* [kill_process_group] on Windows only kills the pid and by this
+            time the process should've exited anyway *)
+         if not Sys.win32 then kill_process_group pid Sys.sigterm;
+         r)
   in
   ( res
   , match outcome with
@@ -949,7 +955,7 @@ let prepare (config : Config.t) ~(handler : Handler.t) ~events ~file_watcher =
   ; file_watcher
   ; fs_syncs = Dune_file_watcher.Sync_id.Table.create 64
   ; build_inputs_changed = Trigger.create ()
-  ; alarm_clock = lazy (Alarm_clock.create events ~frequency:0.1)
+  ; alarm_clock = lazy (Alarm_clock.create events ~period_seconds:0.1)
   ; cancel
   ; thread_pool = Thread_pool.create ~spawn_thread ~min_workers:4 ~max_workers:50
   }
@@ -1107,6 +1113,12 @@ module Run = struct
     | Automatic
     | No_watcher
 
+  let file_watcher_equal a b =
+    match a, b with
+    | Automatic, Automatic | No_watcher, No_watcher -> true
+    | _, _ -> false
+  ;;
+
   module Build_outcome = Build_outcome
   module Event_queue = Event.Queue
   module Event = Handler.Event
@@ -1225,11 +1237,11 @@ module Run = struct
   ;;
 
   let go
-    (config : Config.t)
-    ?timeout
-    ?(file_watcher = No_watcher)
-    ~(on_event : Config.t -> Handler.Event.t -> unit)
-    run
+        (config : Config.t)
+        ?timeout_seconds
+        ?(file_watcher = No_watcher)
+        ~(on_event : Config.t -> Handler.Event.t -> unit)
+        run
     =
     let events = Event_queue.create config.stats in
     let file_watcher =
@@ -1251,21 +1263,21 @@ module Run = struct
     Memo.reset initial_invalidation;
     let result =
       let run =
-        match timeout with
+        match timeout_seconds with
         | None -> run
         | Some timeout ->
           fun () ->
-            let sleep = Alarm_clock.sleep (Lazy.force t.alarm_clock) timeout in
+            let sleep = Alarm_clock.sleep (Lazy.force t.alarm_clock) ~seconds:timeout in
             Fiber.fork_and_join_unit
               (fun () ->
-                let+ res = Alarm_clock.await sleep in
-                match res with
-                | `Finished -> Event_queue.send_shutdown t.events Timeout
-                | `Cancelled -> ())
+                 let+ res = Alarm_clock.await sleep in
+                 match res with
+                 | `Finished -> Event_queue.send_shutdown t.events Timeout
+                 | `Cancelled -> ())
               (fun () ->
-                Fiber.finalize run ~finally:(fun () ->
-                  Alarm_clock.cancel (Lazy.force t.alarm_clock) sleep;
-                  Fiber.return ()))
+                 Fiber.finalize run ~finally:(fun () ->
+                   Alarm_clock.cancel (Lazy.force t.alarm_clock) sleep;
+                   Fiber.return ()))
       in
       match Run_once.run_and_cleanup t run with
       | Ok a -> Result.Ok a
@@ -1311,48 +1323,50 @@ let inject_memo_invalidation invalidation =
   Fiber.return ()
 ;;
 
-let wait_for_process_with_timeout t pid waiter ~timeout ~is_process_group_leader =
+let wait_for_process_with_timeout t pid waiter ~timeout_seconds ~is_process_group_leader =
   Fiber.of_thunk (fun () ->
-    let sleep = Alarm_clock.sleep (Lazy.force t.alarm_clock) timeout in
-    Fiber.fork_and_join_unit
-      (fun () ->
-        let+ res = Alarm_clock.await sleep in
-        if res = `Finished && Process_watcher.is_running t.process_watcher pid
-        then
-          if is_process_group_leader
-          then kill_process_group pid Sys.sigkill
-          else Unix.kill (Pid.to_int pid) Sys.sigkill)
-      (fun () ->
-        let+ res = waiter t pid in
-        Alarm_clock.cancel (Lazy.force t.alarm_clock) sleep;
-        res))
+    let sleep = Alarm_clock.sleep (Lazy.force t.alarm_clock) ~seconds:timeout_seconds in
+    let+ clock_result =
+      Alarm_clock.await sleep
+      >>| function
+      | `Finished when Process_watcher.is_running t.process_watcher pid ->
+        if is_process_group_leader
+        then kill_process_group pid Sys.sigkill
+        else Unix.kill (Pid.to_int pid) Sys.sigkill;
+        `Timed_out
+      | _ -> `Finished
+    and+ res, termination_reason =
+      let+ res = waiter t pid in
+      Alarm_clock.cancel (Lazy.force t.alarm_clock) sleep;
+      res
+    in
+    ( res
+    , match clock_result with
+      | `Timed_out -> Timeout
+      | `Finished -> termination_reason ))
 ;;
 
-let wait_for_build_process ?timeout ?(is_process_group_leader = false) pid =
+let wait_for_build_process ?timeout_seconds ?(is_process_group_leader = false) pid =
   let* t = t () in
-  match timeout with
+  match timeout_seconds with
   | None -> wait_for_build_process t pid
-  | Some timeout ->
+  | Some timeout_seconds ->
     wait_for_process_with_timeout
       t
       pid
       wait_for_build_process
-      ~timeout
+      ~timeout_seconds
       ~is_process_group_leader
 ;;
 
-let wait_for_process ?timeout ?(is_process_group_leader = false) pid =
-  let* t = t () in
-  match timeout with
-  | None -> wait_for_process t pid
-  | Some timeout ->
-    wait_for_process_with_timeout t pid wait_for_process ~timeout ~is_process_group_leader
+let wait_for_process ?timeout_seconds ?(is_process_group_leader = false) pid =
+  wait_for_build_process ?timeout_seconds ~is_process_group_leader pid >>| fst
 ;;
 
-let sleep duration =
+let sleep ~seconds =
   let* t = t () in
   let alarm_clock = Lazy.force t.alarm_clock in
-  let+ res = Alarm_clock.await (Alarm_clock.sleep alarm_clock duration) in
+  let+ res = Alarm_clock.await (Alarm_clock.sleep alarm_clock ~seconds) in
   match res with
   | `Finished -> ()
   | `Cancelled ->

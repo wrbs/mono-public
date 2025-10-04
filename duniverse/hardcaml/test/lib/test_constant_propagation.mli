@@ -4,6 +4,7 @@ open! Import
 module Trace : sig
   (* Types of traced functions with 1, 2 or 3 arguments *)
   type 'a fn1 = 'a * Signal.t [@@deriving sexp_of]
+  type 'a fn1_opt = 'a * Signal.t option [@@deriving sexp_of]
   type ('a, 'b) fn2 = ('a * 'b) * Signal.t [@@deriving sexp_of]
   type ('a, 'b, 'c) fn3 = ('a * 'b * 'c) * Signal.t [@@deriving sexp_of]
   type signal = Signal.t [@@deriving sexp_of]
@@ -20,6 +21,7 @@ module Trace : sig
   val binary_op_tests
     :  string
     -> (Signal.t -> Signal.t -> Signal.t)
+    -> (Signal.t -> int -> Signal.t)
     -> (Signal.t -> int -> Signal.t)
     -> Sexp.t
 

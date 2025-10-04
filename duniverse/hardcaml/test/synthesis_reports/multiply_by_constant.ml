@@ -2,9 +2,9 @@ open! Core
 module Synth = Hardcaml_xilinx_reports
 
 module Make (Bits : sig
-  val multiply_by : int
-  val bits : int
-end) =
+    val multiply_by : int
+    val bits : int
+  end) =
 struct
   open Hardcaml.Signal
 
@@ -22,7 +22,7 @@ struct
 
   let create _scope (i : _ With_regs.I_with_clock.t) =
     let multiply_by =
-      of_int ~width:(num_bits_to_represent Bits.multiply_by) Bits.multiply_by
+      of_int_trunc ~width:(num_bits_to_represent Bits.multiply_by) Bits.multiply_by
     in
     { O.result = i.i.input *: multiply_by }
   ;;
@@ -49,5 +49,4 @@ let command =
          Synth.Command.With_interface (Clz.With_regs.I_with_clock) (Clz.O)
        in
        Synth.run ~name:"multiply_by_constant" ~flags Clz.create)
-    ~behave_nicely_in_pipeline:false
 ;;

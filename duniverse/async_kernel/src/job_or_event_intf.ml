@@ -5,8 +5,8 @@
       | Job   of Job.t
     ]}
 
-    except that it uses the fact that [Event.t] is a pointer and [Job.t] is an
-    int to be zero alloc. *)
+    except that it uses the fact that [Event.t] is a pointer and [Job.t] is an int to be
+    zero alloc. *)
 
 open! Core
 open! Import
@@ -35,7 +35,7 @@ module type Job_or_event = sig
       | Event : Event.t kind
       | Job : Job.t kind
 
-    type packed = K : _ kind -> packed [@@unboxed] [@@immediate]
+    type packed : immediate = K : _ kind -> packed [@@unboxed]
 
     val kind : t -> packed
     val project : 'a kind -> t -> 'a

@@ -1,4 +1,5 @@
 open Import
+open Memo.O
 
 (* Expands a [String_with_vars.t] with a given function, returning the result
    unless the result is an absolute path in which case a user error is raised. *)
@@ -70,7 +71,6 @@ module File = struct
       match t with
       | File_binding file_binding -> Memo.return [ file_binding ]
       | Glob_files { glob_files; prefix } ->
-        let open Memo.O in
         let* glob_expanded = Glob_files_expand.memo glob_files ~f:expand ~base_dir:dir in
         let glob_loc = String_with_vars.loc glob_files.glob in
         let glob_prefix = Glob_files_expand.Expanded.prefix glob_expanded in
@@ -112,7 +112,7 @@ module File = struct
            ~f:
              (Memo.List.map
                 ~f:
-                  (File_binding.Unexpanded.expand
+                  (File_binding_expand.expand
                      ~dir
                      ~f:
                        (expand_with_check_for_local_path ~expand:(fun p ->
@@ -144,7 +144,6 @@ module File = struct
   ;;
 
   let to_file_bindings_unexpanded ts ~expand ~dir =
-    let open Memo.O in
     Memo.List.concat_map ts ~f:(fun { entry; dune_syntax } ->
       let+ with_include_expanded =
         Recursive_include.expand_include entry ~expand ~dir:(Path.build dir)
@@ -157,7 +156,6 @@ module File = struct
   ;;
 
   let to_file_bindings_expanded ts ~expand ~dir =
-    let open Memo.O in
     let* file_bindings_expanded =
       Memo.List.concat_map ts ~f:(fun { entry; dune_syntax } ->
         let+ with_include_expanded =
@@ -176,7 +174,7 @@ module File = struct
       Memo.parallel_iter
         file_bindings_expanded
         ~f:
-          (File_binding.Expanded.validate_for_install_stanza
+          (File_binding_expand.validate_for_install_stanza
              ~relative_dst_path_starts_with_parent_error_when:
                `Deprecation_warning_from_3_11)
     in
@@ -196,19 +194,18 @@ module Dir = struct
   type t = File_binding.Unexpanded.t Recursive_include.t
 
   let to_file_bindings_expanded
-    ts
-    ~expand
-    ~(dir : Path.Build.t)
-    ~relative_dst_path_starts_with_parent_error_when
+        ts
+        ~expand
+        ~(dir : Path.Build.t)
+        ~relative_dst_path_starts_with_parent_error_when
     =
-    let open Memo.O in
     let* file_bindings_expanded =
       Memo.List.concat_map
         ts
         ~f:(Recursive_include.expand_include ~expand ~dir:(Path.build dir))
       >>= Memo.List.map
             ~f:
-              (File_binding.Unexpanded.expand
+              (File_binding_expand.expand
                  ~dir
                  ~f:
                    (expand_with_check_for_local_path ~expand:(fun s ->
@@ -221,7 +218,7 @@ module Dir = struct
       Memo.parallel_iter
         file_bindings_expanded
         ~f:
-          (File_binding.Expanded.validate_for_install_stanza
+          (File_binding_expand.validate_for_install_stanza
              ~relative_dst_path_starts_with_parent_error_when)
     in
     file_bindings_expanded

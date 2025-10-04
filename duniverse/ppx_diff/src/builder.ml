@@ -4,7 +4,7 @@ open Shared
 
 module type Ast_builders = sig
   include Ast_builder.S
-  include Ppxlib_jane.Ast_builder.S_with_implicit_loc
+  module Jane_ast : Ppxlib_jane.Ast_builder.S_with_implicit_loc
 end
 
 module type S = sig
@@ -54,6 +54,8 @@ let create (module M : Ast_builders) =
       | Local_expr t -> pattern t
     ;;
 
+    let raise_error s = Location.raise_errorf ~loc "ppx_%s: %s" name_of_ppx s
+
     let rec expression t =
       match t with
       | Text s -> pexp_ident (Located.mk (Lident s))
@@ -62,12 +64,11 @@ let create (module M : Ast_builders) =
         pexp_record (record ~module_ ~fields ~f:expression) None
       | Variant_row row ->
         v row ~f_value:expression ~f_variant:pexp_variant ~f_construct:pexp_construct
-      | Local_expr t -> [%expr [%e expression t]]
+      | Local_expr t -> [%expr local_ [%e expression t]]
     ;;
 
     let p = pattern
     let e = expression
-    let raise_error s = Location.raise_errorf ~loc "ppx_%s: %s" name_of_ppx s
   end
   in
   (module M : S)

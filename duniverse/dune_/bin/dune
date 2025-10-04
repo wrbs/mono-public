@@ -8,6 +8,7 @@
   (<> %{profile} dune-bootstrap))
  (libraries
   memo
+  promote
   ocaml
   ocaml_config
   dune_lang
@@ -31,7 +32,6 @@
   dune_util
   dune_upgrader
   dune_pkg
-  dune_pkg_outdated
   cmdliner
   threads
   ; Kept to keep implicit_transitive_deps false working in 4.x
@@ -47,8 +47,9 @@
   dune_rules_rpc
   dune_rpc_private
   dune_rpc_client
-  spawn
+  dune_spawn
   opam_format
+  source
   xdg)
  (bootstrap_info bootstrap-info))
 

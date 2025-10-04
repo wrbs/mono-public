@@ -7,10 +7,10 @@ let websocket_accept_header_name = "Sec-Websocket-Accept"
 
 module Server = struct
   module On_connection = struct
-    type t =
+    type 'msg t =
       { set_response_headers : Header.t
       ; should_overwrite_sec_accept_header : bool
-      ; handle_connection : Websocket.t -> unit Deferred.t
+      ; handle_connection : 'msg Websocket.t -> unit Deferred.t
       }
 
     let create
@@ -22,11 +22,11 @@ module Server = struct
     ;;
   end
 
-  type websocket_handler =
+  type 'msg websocket_handler =
     inet:Socket.Address.Inet.t
     -> subprotocol:string option
     -> Cohttp.Request.t
-    -> On_connection.t Deferred.t
+    -> 'msg On_connection.t Deferred.t
 
   (* {v
        [1] https://tools.ietf.org/html/rfc6455#section-1.3
@@ -202,8 +202,6 @@ module Server = struct
       Header.add_websocket_subprotocol header ~subprotocol)
   ;;
 
-  module Expect_test_config = Core.Expect_test_config
-
   (* {v https://tools.ietf.org/html/rfc6455#section-10.2
             10.2.  Origin Considerations
 
@@ -225,7 +223,7 @@ module Server = struct
          v}
   *)
   let detect_request_type_and_authorize ~auth ~inet headers =
-    let open Result.Let_syntax in
+    let open Deferred.Result.Let_syntax in
     let maybe_websocket_key = Header.get headers "sec-websocket-key" in
     let%map () =
       auth inet headers ~is_websocket_request:(Option.is_some maybe_websocket_key)
@@ -236,88 +234,96 @@ module Server = struct
   ;;
 
   let default_auth (_ : Socket.Address.Inet.t) header ~is_websocket_request =
-    if is_websocket_request then Header.origin_and_host_match header else Ok ()
+    Deferred.return
+      (if is_websocket_request then Header.origin_and_host_match header else Ok ())
   ;;
 
-  let%test_module _ =
-    (module struct
-      let irrelevant_inet = Socket.Address.Inet.create_bind_any ~port:0
+  module%test _ = struct
+    let irrelevant_inet = Socket.Address.Inet.create_bind_any ~port:0
 
-      let check ~auth headers =
-        print_s
-          [%sexp
-            (detect_request_type_and_authorize ~inet:irrelevant_inet ~auth headers
-              : [ `Not_a_websocket_request
-                | `Websocket_request of [ `Sec_websocket_key of string ]
-                ]
-                Or_error.t)]
-      ;;
+    let check ~auth headers =
+      let%map result =
+        detect_request_type_and_authorize ~inet:irrelevant_inet ~auth headers
+      in
+      print_s
+        [%sexp
+          (result
+           : [ `Not_a_websocket_request
+             | `Websocket_request of [ `Sec_websocket_key of string ]
+             ]
+               Or_error.t)]
+    ;;
 
-      let%expect_test "Only perform websocket validation if the request is for a \
-                       websocket upgrade"
-        =
-        let check = check ~auth:default_auth in
-        check (Header.of_list [ "host", "valid-host"; "origin", "https://bogus" ]);
-        [%expect {| (Ok Not_a_websocket_request) |}];
-        check (Header.of_list [ "sec-websocket-key", "not-important" ]);
-        [%expect
-          {| (Error ("Missing one of origin or host header" (origin ()) (host ()))) |}];
+    let%expect_test "Only perform websocket validation if the request is for a websocket \
+                     upgrade"
+      =
+      let check = check ~auth:default_auth in
+      let%bind () =
+        check (Header.of_list [ "host", "valid-host"; "origin", "https://bogus" ])
+      in
+      [%expect {| (Ok Not_a_websocket_request) |}];
+      let%bind () = check (Header.of_list [ "sec-websocket-key", "not-important" ]) in
+      [%expect
+        {| (Error ("Missing one of origin or host header" (origin ()) (host ()))) |}];
+      let%bind () =
         check
           (Header.of_list
-             [ "origin", "http://h"; "host", "h"; "sec-websocket-key", "not-important" ]);
-        [%expect {| (Ok (Websocket_request (Sec_websocket_key not-important))) |}]
-      ;;
+             [ "origin", "http://h"; "host", "h"; "sec-websocket-key", "not-important" ])
+      in
+      [%expect {| (Ok (Websocket_request (Sec_websocket_key not-important))) |}];
+      return ()
+    ;;
 
-      let%expect_test "detect_request_type_and_authorize provides correct \
-                       [is_websocket_request] and faithfully returns the result of the \
-                       auth function"
-        =
-        let auth response address headers ~is_websocket_request =
-          print_s
-            [%sexp
-              { address : Socket.Address.Inet.t
-              ; is_websocket_request : bool
-              ; headers : Header.t
-              }];
-          response
-        in
-        let check response headers = check ~auth:(auth response) headers in
-        let non_websocket_headers =
-          Header.of_list [ "host", "valid-host"; "origin", "https://bogus" ]
-        in
-        let websocket_headers = Header.of_list [ "sec-websocket-key", "not-important" ] in
-        let fail = error_s [%message "fail"] in
-        check (Ok ()) non_websocket_headers;
-        [%expect
-          {|
-          ((address 0.0.0.0:PORT) (is_websocket_request false)
-           (headers ((host valid-host) (origin https://bogus))))
-          (Ok Not_a_websocket_request)
-          |}];
-        check fail non_websocket_headers;
-        [%expect
-          {|
-          ((address 0.0.0.0:PORT) (is_websocket_request false)
-           (headers ((host valid-host) (origin https://bogus))))
-          (Error fail)
-          |}];
-        check (Ok ()) websocket_headers;
-        [%expect
-          {|
-          ((address 0.0.0.0:PORT) (is_websocket_request true)
-           (headers ((sec-websocket-key not-important))))
-          (Ok (Websocket_request (Sec_websocket_key not-important)))
-          |}];
-        check fail websocket_headers;
-        [%expect
-          {|
-          ((address 0.0.0.0:PORT) (is_websocket_request true)
-           (headers ((sec-websocket-key not-important))))
-          (Error fail)
-          |}]
-      ;;
-    end)
-  ;;
+    let%expect_test "detect_request_type_and_authorize provides correct \
+                     [is_websocket_request] and faithfully returns the result of the \
+                     auth function"
+      =
+      let auth response address headers ~is_websocket_request =
+        print_s
+          [%sexp
+            { address : Socket.Address.Inet.t
+            ; is_websocket_request : bool
+            ; headers : Header.t
+            }];
+        Deferred.return response
+      in
+      let check response headers = check ~auth:(auth response) headers in
+      let non_websocket_headers =
+        Header.of_list [ "host", "valid-host"; "origin", "https://bogus" ]
+      in
+      let websocket_headers = Header.of_list [ "sec-websocket-key", "not-important" ] in
+      let fail = error_s [%message "fail"] in
+      let%bind () = check (Ok ()) non_websocket_headers in
+      [%expect
+        {|
+        ((address 0.0.0.0:PORT) (is_websocket_request false)
+         (headers ((host valid-host) (origin https://bogus))))
+        (Ok Not_a_websocket_request)
+        |}];
+      let%bind () = check fail non_websocket_headers in
+      [%expect
+        {|
+        ((address 0.0.0.0:PORT) (is_websocket_request false)
+         (headers ((host valid-host) (origin https://bogus))))
+        (Error fail)
+        |}];
+      let%bind () = check (Ok ()) websocket_headers in
+      [%expect
+        {|
+        ((address 0.0.0.0:PORT) (is_websocket_request true)
+         (headers ((sec-websocket-key not-important))))
+        (Ok (Websocket_request (Sec_websocket_key not-important)))
+        |}];
+      let%bind () = check fail websocket_headers in
+      [%expect
+        {|
+        ((address 0.0.0.0:PORT) (is_websocket_request true)
+         (headers ((sec-websocket-key not-important))))
+        (Error fail)
+        |}];
+      return ()
+    ;;
+  end
 
   let forbidden request e =
     [%log.global.error
@@ -327,18 +333,18 @@ module Server = struct
     return (`Response (Response.make () ~status:`Forbidden, Body.empty))
   ;;
 
-  let create
+  let create_gen
+    ~websocket_create
     ~non_ws_request
-    ?opcode
     ?(should_process_request = default_auth)
     ?(websocket_subprotocol_selection = Fn.const (`Subprotocol None))
-    (f : websocket_handler)
+    (f : _ websocket_handler)
     ~body
     inet
     request
     =
     let headers = request.Request.headers in
-    match
+    match%bind
       detect_request_type_and_authorize ~auth:should_process_request ~inet headers
     with
     | Error e -> forbidden request e
@@ -359,7 +365,9 @@ module Server = struct
           ~subprotocol
       in
       let io_handler reader writer =
-        let websocket = Websocket.create ?opcode ~role:Server reader writer in
+        let websocket =
+          websocket_create ~role:Websocket.Websocket_role.Server reader writer
+        in
         Deferred.all_unit
           [ handle_connection websocket
           ; Deferred.ignore_m (Websocket.close_finished websocket)
@@ -373,9 +381,50 @@ module Server = struct
           ~headers
       in
       return (`Expert (response, io_handler))
-    | Ok `Not_a_websocket_request ->
-      let%map r = non_ws_request ~body inet request in
-      `Response r
+    | Ok `Not_a_websocket_request -> non_ws_request ~body inet request
+  ;;
+
+  let create'
+    ~non_ws_request
+    ?should_process_request
+    ?websocket_subprotocol_selection
+    f
+    ~body
+    inet
+    request
+    =
+    create_gen
+      ~websocket_create:Websocket.create'
+      ~non_ws_request
+      ?should_process_request
+      ?websocket_subprotocol_selection
+      f
+      ~body
+      inet
+      request
+  ;;
+
+  let create
+    ~non_ws_request
+    ?opcode
+    ?should_process_request
+    ?websocket_subprotocol_selection
+    f
+    ~body
+    inet
+    request
+    =
+    create_gen
+      ~websocket_create:(Websocket.create ?opcode)
+      ~non_ws_request:(fun ~body address request ->
+        let%map r = non_ws_request ~body address request in
+        `Response r)
+      ?should_process_request
+      ?websocket_subprotocol_selection
+      f
+      ~body
+      inet
+      request
   ;;
 end
 
@@ -572,7 +621,13 @@ module Client = struct
         Some host_and_port, reader, writer
   ;;
 
-  let create ?bind_to_address ?force_ssl_overriding_SNI_hostname ?opcode ?headers uri =
+  let create_gen
+    ?bind_to_address
+    ?force_ssl_overriding_SNI_hostname
+    ?headers
+    uri
+    ~websocket_create
+    =
     match tcp_connector_for_uri uri with
     | Error _ as error -> return error
     | Ok connector ->
@@ -594,11 +649,7 @@ module Client = struct
            | Some hostname_for_ssl -> wrap_in_ssl ~hostname_for_ssl reader writer
            | None ->
              (match uri_is_ssl uri with
-              | true ->
-                wrap_in_ssl
-                  ?hostname_for_ssl:force_ssl_overriding_SNI_hostname
-                  reader
-                  writer
+              | true -> wrap_in_ssl ?hostname_for_ssl:(Uri.host uri) reader writer
               | false ->
                 let close () = Writer.close writer in
                 return (close, reader, writer))
@@ -612,7 +663,9 @@ module Client = struct
             return error
           | Ok response ->
             let open Deferred.Let_syntax in
-            let ws = Websocket.create ?opcode ~role:Client reader writer in
+            let ws =
+              websocket_create ~role:Websocket.Websocket_role.Client reader writer
+            in
             let reader, writer = Websocket.pipes ws in
             don't_wait_for
               (let%bind () =
@@ -633,13 +686,40 @@ module Client = struct
             return (Ok (response, ws))))
   ;;
 
-  let with_websocket_client ?opcode ?headers uri ~f =
-    match%bind create ?opcode ?headers uri with
+  let create ?bind_to_address ?force_ssl_overriding_SNI_hostname ?opcode ?headers uri =
+    create_gen
+      ?bind_to_address
+      ?force_ssl_overriding_SNI_hostname
+      ?headers
+      uri
+      ~websocket_create:(Websocket.create ?opcode)
+  ;;
+
+  let create' ?bind_to_address ?force_ssl_overriding_SNI_hostname ?headers uri =
+    create_gen
+      ?bind_to_address
+      ?force_ssl_overriding_SNI_hostname
+      ?headers
+      uri
+      ~websocket_create:Websocket.create'
+  ;;
+
+  let with_websocket_client_internal ?headers uri ~f ~create =
+    match%bind create ?headers uri with
     | Error _ as err -> return err
     | Ok (response, ws) ->
       let%bind result = f response ws in
       let _reader, writer = Websocket.pipes ws in
       Pipe.close writer;
       return (Ok result)
+  ;;
+
+  let with_websocket_client ?opcode =
+    with_websocket_client_internal ~create:(fun ?headers uri ->
+      create ?opcode ?headers uri)
+  ;;
+
+  let with_websocket_client' =
+    with_websocket_client_internal ~create:(fun ?headers uri -> create' ?headers uri)
   ;;
 end

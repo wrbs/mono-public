@@ -40,6 +40,49 @@ module Node = Cyclesim_lookup.Node
 module Reg = Cyclesim_lookup.Reg
 module Memory = Cyclesim_lookup.Memory
 
+(* Find all nodes we wish to trace, and generate unique names. *)
+module Traced_nodes = struct
+  let create_mangler circuit =
+    let mangler = Mangler.create ~case_sensitive:true in
+    let io_port_names =
+      Circuit.inputs circuit @ Circuit.outputs circuit
+      |> List.map ~f:(fun s -> Signal.names s |> List.hd_exn)
+    in
+    Mangler.add_identifiers_exn mangler io_port_names;
+    mangler
+  ;;
+
+  let internal_signal mangler signal =
+    let mangled_names = Signal.names signal |> List.map ~f:(Mangler.mangle mangler) in
+    { Traced.signal; mangled_names }
+  ;;
+
+  let io_port signal =
+    let name = Signal.names signal |> List.hd_exn in
+    { Traced.signal; name }
+  ;;
+
+  let create circuit ~is_internal_port =
+    let internal_signals =
+      match is_internal_port with
+      | None -> []
+      | Some f ->
+        let mangler = create_mangler circuit in
+        Signal_graph.filter (Circuit.signal_graph circuit) ~f:(fun s ->
+          (not (Circuit.is_input circuit s))
+          && (not (Circuit.is_output circuit s))
+          && (not (Signal.is_empty s))
+          && f s)
+        |> List.rev
+        |> List.map ~f:(internal_signal mangler)
+    in
+    { Traced.input_ports = List.map (Circuit.inputs circuit) ~f:io_port
+    ; output_ports = List.map (Circuit.outputs circuit) ~f:io_port
+    ; internal_signals
+    }
+  ;;
+end
+
 type ('i, 'o) t =
   { in_ports : Port_list.t
   ; out_ports_before_clock_edge : Port_list.t
@@ -53,7 +96,9 @@ type ('i, 'o) t =
   ; cycle_at_clock_edge : task
   ; cycle_after_clock_edge : task
   ; traced : Traced.t
+  ; lookup_node_by_id : Signal.Type.Uid.t -> Node.t option
   ; lookup_node : Traced.internal_signal -> Node.t option
+  ; lookup_reg_by_id : Signal.Type.Uid.t -> Reg.t option
   ; lookup_reg : Traced.internal_signal -> Reg.t option
   ; lookup_mem : Traced.internal_signal -> Memory.t option
   ; circuit : Circuit.t option
@@ -74,11 +119,32 @@ let sexp_of_t sexp_of_i sexp_of_o t =
 type t_port_list = (Port_list.t, Port_list.t) t
 
 module Config = struct
+  module Random_initializer = struct
+    type t =
+      { random_state : Splittable_random.t
+      ; initialize : Signal.t -> bool
+      }
+
+    let create ?random_state initialize =
+      { random_state =
+          (match random_state with
+           | None -> Splittable_random.of_int 0
+           | Some r -> r)
+      ; initialize
+      }
+    ;;
+
+    let randomize_regs s = Signal.Type.is_reg s && not (Signal.Type.has_initializer s)
+    let randomize_memories s = Signal.Type.is_mem s && not (Signal.Type.has_initializer s)
+    let randomize_all s = randomize_regs s || randomize_memories s
+  end
+
   type t =
     { is_internal_port : (Signal.t -> bool) option
     ; combinational_ops_database : Combinational_ops_database.t
     ; deduplicate_signals : bool
     ; store_circuit : bool
+    ; random_initializer : Random_initializer.t option
     }
 
   let empty_ops_database = Combinational_ops_database.create ()
@@ -88,6 +154,7 @@ module Config = struct
     ; combinational_ops_database = empty_ops_database
     ; deduplicate_signals = false
     ; store_circuit = false
+    ; random_initializer = None
     }
   ;;
 
@@ -100,10 +167,12 @@ module Config = struct
     ; combinational_ops_database = empty_ops_database
     ; deduplicate_signals = false
     ; store_circuit = false
+    ; random_initializer = None
     }
   ;;
 
   let trace_all = trace `All_named
+  let add_random_initialization t i = { t with random_initializer = Some i }
 end
 
 module type Private = Cyclesim0_intf.Private
@@ -150,7 +219,9 @@ module Private = struct
     ~cycle_at_clock_edge
     ~cycle_after_clock_edge
     ~traced
+    ~lookup_node_by_id
     ~lookup_node
+    ~lookup_reg_by_id
     ~lookup_reg
     ~lookup_mem
     ()
@@ -167,7 +238,9 @@ module Private = struct
     ; cycle_at_clock_edge
     ; cycle_after_clock_edge
     ; traced
+    ; lookup_node_by_id
     ; lookup_node
+    ; lookup_reg_by_id
     ; lookup_reg
     ; lookup_mem
     ; circuit

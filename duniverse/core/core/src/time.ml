@@ -5,7 +5,7 @@ open Std_internal
 open! Int.Replace_polymorphic_compare
 include Time_intf
 
-module Make (Time0 : Time0_intf.S) = struct
+module Make (Time0 : Time0_intf.S) () = struct
   module Time0 = Time0
   include Time0
 
@@ -13,7 +13,7 @@ module Make (Time0 : Time0_intf.S) = struct
   let is_earlier t1 ~than:t2 = t1 <. t2
   let is_later t1 ~than:t2 = t1 >. t2
 
-  module Zone : sig
+  module Zone : sig @@ portable
     include Time_intf.Zone with module Time := Time0
   end = struct
     include Zone
@@ -22,6 +22,11 @@ module Make (Time0 : Time0_intf.S) = struct
       (* NB. no actual rounding or exns can occur here *)
       Time_in_seconds.Span.to_int63_seconds_round_down_exn span_in_seconds
       |> Time0.Span.of_int63_seconds
+    ;;
+
+    let to_span_in_seconds_round_down span =
+      Time0.Span.to_int63_seconds_round_down_exn span
+      |> Time_in_seconds.Span.of_int63_seconds
     ;;
 
     let of_time_in_seconds time_in_seconds =
@@ -46,10 +51,21 @@ module Make (Time0 : Time0_intf.S) = struct
       |> Time_in_seconds.Date_and_ofday.of_synthetic_span_since_epoch
     ;;
 
+    let of_utc_offset_in_seconds_round_down ?name span =
+      of_utc_offset_in_seconds_round_down ?name (to_span_in_seconds_round_down span)
+    ;;
+
+    let add_offset_in_seconds_round_down t ~name ~span =
+      add_offset_in_seconds_round_down t ~name ~span:(to_span_in_seconds_round_down span)
+    ;;
+
     let index t time = index t (to_time_in_seconds_round_down_exn time)
 
-    let index_of_date_and_ofday t relative =
-      index_of_date_and_ofday t (to_date_and_ofday_in_seconds_round_down_exn relative)
+    let index_of_date_and_ofday ?prefer t relative =
+      index_of_date_and_ofday
+        ?prefer
+        t
+        (to_date_and_ofday_in_seconds_round_down_exn relative)
     ;;
 
     let index_offset_from_utc_exn t index =
@@ -90,6 +106,22 @@ module Make (Time0 : Time0_intf.S) = struct
     let prev_clock_shift t ~at_or_before:time = index_prev_clock_shift t (index t time)
     let next_clock_shift t ~strictly_after:time = index_next_clock_shift t (index t time)
 
+    let next_clock_shift_incl t ~at_or_after:time =
+      let index = index t time in
+      let shift_at_time =
+        if index_has_prev_clock_shift t index
+        then (
+          let shift_time = index_prev_clock_shift_time_exn t index in
+          if Time0.equal time shift_time
+          then Some (shift_time, index_prev_clock_shift_amount_exn t index)
+          else None)
+        else None
+      in
+      match shift_at_time with
+      | Some _ -> shift_at_time
+      | None -> index_next_clock_shift t index
+    ;;
+
     let date_and_ofday_of_absolute_time t time =
       let index = index t time in
       (* no exn because [index] always returns a valid index *)
@@ -97,8 +129,8 @@ module Make (Time0 : Time0_intf.S) = struct
       Time0.Date_and_ofday.of_absolute time ~offset_from_utc
     ;;
 
-    let absolute_time_of_date_and_ofday t relative =
-      let index = index_of_date_and_ofday t relative in
+    let absolute_time_of_date_and_ofday ?prefer t relative =
+      let index = index_of_date_and_ofday ?prefer t relative in
       (* no exn because [index_of_date_and_ofday] always returns a valid index *)
       let offset_from_utc = index_offset_from_utc_exn t index in
       Time0.Date_and_ofday.to_absolute relative ~offset_from_utc
@@ -107,16 +139,16 @@ module Make (Time0 : Time0_intf.S) = struct
 
   let abs_diff t1 t2 = Span.abs (diff t1 t2)
 
-  let of_date_ofday ~zone date ofday =
+  let of_date_ofday ?prefer ~zone date ofday =
     let relative = Date_and_ofday.of_date_ofday date ofday in
-    Zone.absolute_time_of_date_and_ofday zone relative
+    Zone.absolute_time_of_date_and_ofday ?prefer zone relative
   ;;
 
   let of_date_ofday_precise date ofday ~zone =
-    (* We assume that there will be only one zone shift within a given local day.  *)
-    let start_of_day = of_date_ofday ~zone date Ofday.start_of_day in
+    (* We assume that there will be only one zone shift within a given local day. *)
+    let start_of_day = of_date_ofday ~prefer:Earlier ~zone date Ofday.start_of_day in
     let proposed_time = add start_of_day (Ofday.to_span_since_start_of_day ofday) in
-    match Zone.next_clock_shift zone ~strictly_after:start_of_day with
+    match Zone.next_clock_shift_incl zone ~at_or_after:start_of_day with
     | None -> `Once proposed_time
     | Some (shift_start, shift_amount) ->
       let shift_backwards = Span.(shift_amount < zero) in
@@ -136,86 +168,24 @@ module Make (Time0 : Time0_intf.S) = struct
       else `Once (sub proposed_time shift_amount)
   ;;
 
-  module Date_cache = struct
-    type t =
-      { mutable zone : Zone.t
-      ; mutable cache_start_incl : Time0.t
-      ; mutable cache_until_excl : Time0.t
-      ; mutable effective_day_start : Time0.t
-      ; mutable date : Date0.t
-      }
-  end
+  module Shared_date_cache =
+    Date_cache.Make
+      (struct
+        include Time0
+        module Zone = Zone
 
-  let date_cache : Date_cache.t =
-    { zone = Zone.utc
-    ; cache_start_incl = epoch
-    ; cache_until_excl = epoch
-    ; effective_day_start = epoch
-    ; date = Date0.unix_epoch
-    }
-  ;;
+        let epoch = epoch
+      end)
+      ()
 
-  let reset_date_cache () =
-    date_cache.zone <- Zone.utc;
-    date_cache.cache_start_incl <- epoch;
-    date_cache.cache_until_excl <- epoch;
-    date_cache.effective_day_start <- epoch;
-    date_cache.date <- Date0.unix_epoch
-  ;;
-
-  let is_in_cache time ~zone =
-    phys_equal zone date_cache.zone
-    && Time0.( >= ) time date_cache.cache_start_incl
-    && Time0.( < ) time date_cache.cache_until_excl
-  ;;
-
-  let set_date_cache time ~zone =
-    match is_in_cache time ~zone with
-    | true -> ()
-    | false ->
-      let index = Zone.index zone time in
-      (* no exn because [Zone.index] always returns a valid index *)
-      let offset_from_utc = Zone.index_offset_from_utc_exn zone index in
-      let rel = Date_and_ofday.of_absolute time ~offset_from_utc in
-      let date = Date_and_ofday.to_date rel in
-      let span = Date_and_ofday.to_ofday rel |> Ofday.to_span_since_start_of_day in
-      let effective_day_start =
-        Time0.sub (Date_and_ofday.to_absolute rel ~offset_from_utc) span
-      in
-      let effective_day_until = Time0.add effective_day_start Span.day in
-      let cache_start_incl =
-        match Zone.index_has_prev_clock_shift zone index with
-        | false -> effective_day_start
-        | true ->
-          effective_day_start
-          |> Time0.max (Zone.index_prev_clock_shift_time_exn zone index)
-      in
-      let cache_until_excl =
-        match Zone.index_has_next_clock_shift zone index with
-        | false -> effective_day_until
-        | true ->
-          effective_day_until
-          |> Time0.min (Zone.index_next_clock_shift_time_exn zone index)
-      in
-      date_cache.zone <- zone;
-      date_cache.cache_start_incl <- cache_start_incl;
-      date_cache.cache_until_excl <- cache_until_excl;
-      date_cache.effective_day_start <- effective_day_start;
-      date_cache.date <- date
-  ;;
-
-  let to_date time ~zone =
-    set_date_cache time ~zone;
-    date_cache.date
-  ;;
-
-  let end_of_day = Ofday.prev Ofday.start_of_next_day |> Option.value_exn ~here:[%here]
+  let reset_date_cache = Shared_date_cache.reset
+  let to_date time ~zone : Date0.t = Shared_date_cache.get_date time ~zone
+  let end_of_day = Ofday.prev Ofday.start_of_next_day |> Option.value_exn
 
   let to_ofday time ~zone =
-    set_date_cache time ~zone;
+    let effective_day_start = Shared_date_cache.get_day_start time ~zone in
     let of_day =
-      Time0.diff time date_cache.effective_day_start
-      |> Ofday.of_span_since_start_of_day_exn
+      Time0.diff time effective_day_start |> Ofday.of_span_since_start_of_day_exn
     in
     if Ofday.equal of_day Ofday.start_of_next_day then end_of_day else of_day
   ;;
@@ -451,35 +421,42 @@ module Make (Time0 : Time0_intf.S) = struct
   let of_string_with_utc_offset s =
     let default_zone () = raise_s [%message "time has no time zone or UTC offset" s] in
     let find_zone zone_name =
-      failwithf "unable to lookup Zone %s.  Try using Core.Time.of_string" zone_name ()
+      failwithf
+        "unable to lookup Zone %s. Try using Core.Time_float.of_string"
+        zone_name
+        ()
     in
     of_string_gen ~default_zone ~find_zone s
   ;;
 
   let of_string = of_string_with_utc_offset
 
-  let quickcheck_shrinker =
-    Quickcheck.Shrinker.map
+  let%template quickcheck_shrinker =
+    (Quickcheck.Shrinker.map [@mode portable])
       Span.quickcheck_shrinker
       ~f:of_span_since_epoch
       ~f_inverse:to_span_since_epoch
   ;;
 
-  let quickcheck_observer =
-    Quickcheck.Observer.unmap Span.quickcheck_observer ~f:to_span_since_epoch
+  let%template quickcheck_observer =
+    (Quickcheck.Observer.unmap [@mode portable])
+      Span.quickcheck_observer
+      ~f:to_span_since_epoch
   ;;
 
-  let quickcheck_generator =
-    Quickcheck.Generator.map Span.quickcheck_generator ~f:of_span_since_epoch
+  let%template quickcheck_generator =
+    (Quickcheck.Generator.map [@mode portable])
+      Span.quickcheck_generator
+      ~f:of_span_since_epoch
   ;;
 
   let gen_incl lo hi =
     Span.gen_incl (to_span_since_epoch lo) (to_span_since_epoch hi)
-    |> Quickcheck.Generator.map ~f:of_span_since_epoch
+    |> Base_quickcheck.Generator.map ~f:of_span_since_epoch
   ;;
 
   let gen_uniform_incl lo hi =
     Span.gen_uniform_incl (to_span_since_epoch lo) (to_span_since_epoch hi)
-    |> Quickcheck.Generator.map ~f:of_span_since_epoch
+    |> Base_quickcheck.Generator.map ~f:of_span_since_epoch
   ;;
 end

@@ -1,4 +1,6 @@
-(** A module internal to Incremental.  Users should see {!Incremental_intf}.
+@@ portable
+
+(** A module internal to Incremental. Users should see {!Incremental_intf}.
 
     A [Snapshot.t] is a kind of DAG node. *)
 

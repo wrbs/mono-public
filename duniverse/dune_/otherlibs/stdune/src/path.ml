@@ -488,6 +488,7 @@ module External : sig
   include Path_intf.S
   module Table : Hashtbl.S with type key = t
 
+  val root : t
   val relative : t -> string -> t
   val mkdir_p : ?perms:int -> t -> unit
   val initial_cwd : t
@@ -495,6 +496,7 @@ module External : sig
   val as_local : t -> string
   val append_local : t -> Local.t -> t
   val of_filename_relative_to_initial_cwd : string -> t
+  val is_broken_symlink : t -> bool
 end = struct
   module Table = String.Table
 
@@ -569,6 +571,8 @@ end = struct
   let of_filename_relative_to_initial_cwd fn =
     if Filename.is_relative fn then relative initial_cwd fn else of_string fn
   ;;
+
+  let is_broken_symlink = Fpath.is_broken_symlink
 
   include (
     Comparator.Operators (struct
@@ -1063,6 +1067,12 @@ let as_in_source_tree_exn t =
       [ "t", to_dyn t ]
 ;;
 
+let as_outside_build_dir : t -> Outside_build_dir.t option = function
+  | In_source_tree s -> Some (In_source_dir s)
+  | External s -> Some (External s)
+  | In_build_dir _ -> None
+;;
+
 let as_outside_build_dir_exn : t -> Outside_build_dir.t = function
   | In_source_tree s -> In_source_dir s
   | External s -> External s
@@ -1182,19 +1192,6 @@ let split_first_component t =
     Option.map (Local.split_first_component t) ~f:(fun (before, after) ->
       before, after |> in_source_tree)
   | _ -> None
-;;
-
-let explode t =
-  match local_or_external t with
-  | In_source_dir p when Local.is_root p -> Some []
-  | In_source_dir s -> Some (String.split (Local.to_string s) ~on:'/')
-  | External _ -> None
-;;
-
-let explode_exn t =
-  match explode t with
-  | Some s -> s
-  | None -> Code_error.raise "Path.explode_exn" [ "path", to_dyn t ]
 ;;
 
 let relative_to_source_in_build_or_external ?error_loc ~dir s =
@@ -1440,19 +1437,25 @@ let set_of_build_paths_list =
 let set_of_external_paths set = External.Set.to_list set |> Set.of_list_map ~f:external_
 let rename old_path new_path = Unix.rename (to_string old_path) (to_string new_path)
 let chmod t ~mode = Unix.chmod (to_string t) mode
-let follow_symlink path = Fpath.follow_symlink (to_string path) |> Result.map ~f:of_string
 
 let drop_prefix path ~prefix =
-  if prefix = path
-  then Some Local.root
-  else (
-    let prefix_s = to_string prefix in
-    let prefix =
-      if String.is_suffix ~suffix:"/" prefix_s then prefix_s else prefix_s ^ "/"
-    in
+  let prefix_s = to_string prefix in
+  let path_s = to_string path in
+  match Int.compare (String.length prefix_s) (String.length path_s) with
+  | Eq -> if prefix = path then Some Local.root else None
+  | Gt -> None
+  | Lt ->
     let open Option.O in
-    let+ suffix = String.drop_prefix (to_string path) ~prefix in
-    Local.of_string suffix)
+    let* prefix =
+      let* last = String.last prefix_s in
+      if is_dir_sep last
+      then Some prefix_s
+      else if is_dir_sep path_s.[String.length prefix_s]
+      then Some (prefix_s ^ String.make 1 path_s.[String.length prefix_s])
+      else None
+    in
+    let+ suffix = String.drop_prefix path_s ~prefix in
+    Local.of_string suffix
 ;;
 
 let drop_prefix_exn t ~prefix =
@@ -1460,6 +1463,14 @@ let drop_prefix_exn t ~prefix =
   | None ->
     Code_error.raise "Path.drop_prefix_exn" [ "t", to_dyn t; "prefix", to_dyn prefix ]
   | Some p -> p
+;;
+
+let is_broken_symlink = function
+  | External e -> External.is_broken_symlink e
+  | In_source_tree _ | In_build_dir _ ->
+    (* Paths within the source tree and build dir are always fully-expanded,
+       so there's no possibility for them to be broken symlinks. *)
+    false
 ;;
 
 module Expert = struct

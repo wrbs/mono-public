@@ -46,7 +46,7 @@ type constructors = Stanza.Parser.t list
 let stanzas : constructors =
   [ Site_stanzas.all
   ; Cram_stanza.stanza
-  ; List.map Dune_file0.statically_evaluated_stanzas ~f:(fun stanza ->
+  ; List.map Source.Dune_file.statically_evaluated_stanzas ~f:(fun stanza ->
       ( stanza
       , let* loc = loc in
         User_error.raise
@@ -64,8 +64,8 @@ let stanzas : constructors =
         | Some r -> Library_redirect.Local.make_stanza r :: base )
     ; ( "foreign_library"
       , let+ () = Dune_lang.Syntax.since Stanza.syntax (2, 0)
-        and+ x = Foreign.Library.decode in
-        [ Foreign.Library.make_stanza x ] )
+        and+ x = Foreign_library.decode in
+        [ Foreign_library.make_stanza x ] )
     ; "executable", Executables.single >>| execs
     ; "executables", Executables.multi >>| execs
     ; ( "rule"

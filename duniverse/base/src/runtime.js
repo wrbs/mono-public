@@ -1,10 +1,3 @@
-//Provides: Base_int_math_int_popcount const
-function Base_int_math_int_popcount(v) {
-  v = v - ((v >>> 1) & 0x55555555);
-  v = (v & 0x33333333) + ((v >>> 2) & 0x33333333);
-  return ((v + (v >>> 4) & 0xF0F0F0F) * 0x1010101) >>> 24;
-}
-
 //Provides: Base_clear_caml_backtrace_pos const
 function Base_clear_caml_backtrace_pos(x) {
   return 0;
@@ -13,92 +6,6 @@ function Base_clear_caml_backtrace_pos(x) {
 //Provides: Base_caml_exn_is_most_recent_exn const
 function Base_caml_exn_is_most_recent_exn(x) {
   return 1;
-}
-
-//Provides: Base_int_math_int32_clz const
-function Base_int_math_int32_clz(x) {
-  var n = 32;
-  var y;
-  y = x >> 16; if (y != 0) { n = n - 16; x = y; }
-  y = x >> 8; if (y != 0) { n = n - 8; x = y; }
-  y = x >> 4; if (y != 0) { n = n - 4; x = y; }
-  y = x >> 2; if (y != 0) { n = n - 2; x = y; }
-  y = x >> 1; if (y != 0) return n - 2;
-  return n - x;
-}
-
-//Provides: Base_int_math_int_clz const
-//Requires: Base_int_math_int32_clz
-function Base_int_math_int_clz(x) { return Base_int_math_int32_clz(x); }
-
-//Provides: Base_int_math_nativeint_clz const
-//Requires: Base_int_math_int32_clz
-function Base_int_math_nativeint_clz(x) { return Base_int_math_int32_clz(x); }
-
-//Provides: Base_int_math_int64_clz const
-//Requires: caml_int64_shift_right_unsigned, caml_int64_is_zero, caml_int64_to_int32
-function Base_int_math_int64_clz(x) {
-  var n = 64;
-  var y;
-  y = caml_int64_shift_right_unsigned(x, 32);
-  if (!caml_int64_is_zero(y)) { n = n - 32; x = y; }
-  y = caml_int64_shift_right_unsigned(x, 16);
-  if (!caml_int64_is_zero(y)) { n = n - 16; x = y; }
-  y = caml_int64_shift_right_unsigned(x, 8);
-  if (!caml_int64_is_zero(y)) { n = n - 8; x = y; }
-  y = caml_int64_shift_right_unsigned(x, 4);
-  if (!caml_int64_is_zero(y)) { n = n - 4; x = y; }
-  y = caml_int64_shift_right_unsigned(x, 2);
-  if (!caml_int64_is_zero(y)) { n = n - 2; x = y; }
-  y = caml_int64_shift_right_unsigned(x, 1);
-  if (!caml_int64_is_zero(y)) return n - 2;
-  return n - caml_int64_to_int32(x);
-}
-
-//Provides: Base_int_math_int32_ctz const
-function Base_int_math_int32_ctz(x) {
-  if (x === 0) { return 32; }
-  var n = 1;
-  if ((x & 0x0000FFFF) === 0) { n = n + 16; x = x >> 16; }
-  if ((x & 0x000000FF) === 0) { n = n + 8; x = x >> 8; }
-  if ((x & 0x0000000F) === 0) { n = n + 4; x = x >> 4; }
-  if ((x & 0x00000003) === 0) { n = n + 2; x = x >> 2; }
-  return n - (x & 1);
-}
-
-//Provides: Base_int_math_int_ctz const
-//Requires: Base_int_math_int32_ctz
-function Base_int_math_int_ctz(x) { return Base_int_math_int32_ctz(x); }
-
-//Provides: Base_int_math_nativeint_ctz const
-//Requires: Base_int_math_int32_ctz
-function Base_int_math_nativeint_ctz(x) { return Base_int_math_int32_ctz(x); }
-
-//Provides: Base_int_math_int64_ctz const
-//Requires: caml_int64_shift_right_unsigned, caml_int64_is_zero, caml_int64_to_int32
-//Requires: caml_int64_and, caml_int64_of_int32, caml_int64_create_lo_mi_hi
-function Base_int_math_int64_ctz(x) {
-  if (caml_int64_is_zero(x)) { return 64; }
-  var n = 1;
-  function is_zero(x) { return caml_int64_is_zero(x); }
-  function land(x, y) { return caml_int64_and(x, y); }
-  function small_int64(x) { return caml_int64_create_lo_mi_hi(x, 0, 0); }
-  if (is_zero(land(x, caml_int64_create_lo_mi_hi(0xFFFFFF, 0x0000FF, 0x0000)))) {
-    n = n + 32; x = caml_int64_shift_right_unsigned(x, 32);
-  }
-  if (is_zero(land(x, small_int64(0x00FFFF)))) {
-    n = n + 16; x = caml_int64_shift_right_unsigned(x, 16);
-  }
-  if (is_zero(land(x, small_int64(0x0000FF)))) {
-    n = n + 8; x = caml_int64_shift_right_unsigned(x, 8);
-  }
-  if (is_zero(land(x, small_int64(0x00000F)))) {
-    n = n + 4; x = caml_int64_shift_right_unsigned(x, 4);
-  }
-  if (is_zero(land(x, small_int64(0x000003)))) {
-    n = n + 2; x = caml_int64_shift_right_unsigned(x, 2);
-  }
-  return n - (caml_int64_to_int32(caml_int64_and(x, small_int64(0x000001))));
 }
 
 //Provides: Base_int_math_int_pow_stub const
@@ -134,14 +41,14 @@ function Base_int_math_int64_pow_stub(base, exponent) {
 }
 
 //Provides: Base_hash_string mutable
-//Requires: caml_hash
+//Requires: caml_hash_exn
 function Base_hash_string(s) {
-  return caml_hash(1, 1, 0, s)
+  return caml_hash_exn(1, 1, 0, s)
 }
 //Provides: Base_hash_double const
-//Requires: caml_hash
+//Requires: caml_hash_exn
 function Base_hash_double(d) {
-  return caml_hash(1, 1, 0, d);
+  return caml_hash_exn(1, 1, 0, d);
 }
 
 //Provides: Base_am_testing const
@@ -167,5 +74,55 @@ function caml_make_local_vect(v_len, v_elt) {
 
 //Provides: caml_dummy_obj_is_stack
 function caml_dummy_obj_is_stack(x) {
-  throw new Error(`BUG: this function should be unreachable; please report to compiler or base devs.`);
+  return 0;
+}
+
+//Provides: caml_dummy_succ_scannable_prefix_len
+function caml_dummy_succ_scannable_prefix_len(x) {
+  return 0;
+}
+
+//Provides: Base_caml_modf_positive_float_unboxed_exn
+//Requires: caml_invalid_argument
+function Base_caml_modf_positive_float_unboxed_exn(a, b) {
+  if (b < 0) {
+    caml_invalid_argument(`${a} % ${b} in float.ml: modulus should be positive`)
+  }
+  let m = a % b;
+  return m < 0 ? m + b : m;
+}
+
+//Provides: Base_caml_modf_positive_float_exn
+//Requires: Base_caml_modf_positive_float_unboxed_exn
+function Base_caml_modf_positive_float_exn(a, b) {
+  return Base_caml_modf_positive_float_unboxed_exn(a, b);
+}
+
+//Provides: Base_string_concat_array
+//Requires: caml_ml_string_length, caml_create_bytes, caml_blit_bytes
+//Requires: caml_string_of_bytes, caml_string_of_jsstring
+function Base_string_concat_array(v_string_array, v_sep) {
+  // Arrays have a header element at the beginning, so the indices in this function
+  // are off by one. Here, checking for length === 1 means the OCaml array is empty.
+  if (v_string_array.length === 1) {
+    return caml_string_of_jsstring("");
+  }
+  const sep_len = caml_ml_string_length(v_sep);
+  let string_len = sep_len * (v_string_array.length - 2);
+  for (let i = 1; i < v_string_array.length; i++) {
+    string_len += caml_ml_string_length(v_string_array[i]);
+  }
+  const result = caml_create_bytes(string_len);
+  let pos = 0;
+  for (let i = 1; i < v_string_array.length; i++) {
+    if (i !== 1) {
+      caml_blit_bytes(v_sep, 0, result, pos, sep_len);
+      pos += sep_len;
+    }
+    const string = v_string_array[i];
+    const len = caml_ml_string_length(string);
+    caml_blit_bytes(string, 0, result, pos, len);
+    pos += len;
+  }
+  return caml_string_of_bytes(result);
 }

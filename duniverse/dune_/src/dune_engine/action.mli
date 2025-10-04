@@ -46,6 +46,7 @@ module Diff : sig
 end
 
 module Ext : module type of Action_intf.Ext
+include module type of Action_intf.Exec
 
 (** result of the lookup of a program, the path to it or information about the
     failure and possibly a hint how to fix it *)
@@ -101,7 +102,7 @@ module For_shell : sig
     with type path := string
     with type target := string
     with type string := string
-    with type ext := Dune_sexp.t
+    with type ext := Sexp.t
 end
 
 (** Convert the action to a format suitable for printing *)
@@ -151,7 +152,8 @@ module Full : sig
   val make
     :  ?env:Env.t (** default [Env.empty] *)
     -> ?locks:Path.t list (** default [[]] *)
-    -> ?can_go_in_shared_cache:bool (** default [true] *)
+    -> ?can_go_in_shared_cache:bool
+         (** default [!Clflags.can_fo_in_shared_cache_default] *)
     -> ?sandbox:Sandbox_config.t (** default [Sandbox_config.default] *)
     -> action
     -> t

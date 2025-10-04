@@ -1,4 +1,6 @@
-(** This module extends {{!Base.List}[Base.List]} with bin_io and quickcheck. *)
+@@ portable
+
+(** This module extends {{!Base.List} [Base.List]} with bin_io and quickcheck. *)
 
 open! Import
 
@@ -9,15 +11,15 @@ include module type of struct
   include Base.List
 end
 
-type 'a t = 'a list [@@deriving bin_io ~localize, typerep]
+[%%rederive: type nonrec 'a t = 'a list [@@deriving bin_io ~localize, typerep]]
 
 module Assoc : sig
   type ('a, 'b) t = ('a, 'b) Base.List.Assoc.t [@@deriving bin_io ~localize]
 
   val compare : [%compare: 'a] -> [%compare: 'b] -> [%compare: ('a, 'b) t]
-    [@@deprecated
-      "[since 2016-06] This does not respect the equivalence class promised by List.Assoc.\n\
-       Use List.compare directly if that's what you want."]
+  [@@deprecated
+    "[since 2016-06] This does not respect the equivalence class promised by List.Assoc.\n\
+     Use List.compare directly if that's what you want."]
 
   include module type of struct
       include Base.List.Assoc
@@ -26,16 +28,6 @@ module Assoc : sig
 end
 
 (** {2 Extensions} *)
-
-(** [stable_dedup_staged] is the same as [dedup_and_sort] but maintains the order of the
-    list.  This function is staged because it instantiates a functor when [compare] is
-    passed.
-
-    See also [Set.stable_dedup_list], which is the underlying implementation of this
-    function and lets you avoid the functor instantiation when you already have such a
-    module on hand. *)
-val stable_dedup_staged : compare:('a -> 'a -> int) -> ('a list -> 'a list) Staged.t
-  [@@deprecated "[since 2023-04] Use [List.stable_dedup] instead."]
 
 (** Only raised in [exn_if_dup] below. *)
 exception
@@ -59,8 +51,8 @@ val exn_if_dup
     [stop = length t]. *)
 val slice : 'a t -> int -> int -> 'a t
 
-include Comparator.Derived with type 'a t := 'a t
-include Quickcheckable.S1 with type 'a t := 'a t
+include%template Comparator.Derived [@modality portable] with type 'a t := 'a t
+include%template Quickcheckable.S1 [@modality portable] with type 'a t := 'a t
 
 val to_string : f:('a -> string) -> 'a t -> string
 
@@ -74,7 +66,7 @@ val gen_with_length : int -> 'a Quickcheck.Generator.t -> 'a t Quickcheck.Genera
     the length of the input, inclusive. *)
 val gen_filtered : 'a t -> 'a t Quickcheck.Generator.t
 
-(** [gen_permutations t] generates all permutations of [list].  If [t] contains duplicate
+(** [gen_permutations t] generates all permutations of [list]. If [t] contains duplicate
     values, then [gen_permutations t] will produce duplicate lists. *)
 val gen_permutations : 'a t -> 'a t Quickcheck.Generator.t
 
@@ -91,8 +83,18 @@ val zip_with_remainder
 
 module Stable : sig
   module V1 : sig
+    type%template nonrec ('a : k) t = ('a t[@kind k])
+    [@@kind k = (float64, bits32, bits64, word)]
+    [@@deriving compare ~localize, equal ~localize]
+
     type nonrec 'a t = 'a t
     [@@deriving
-      sexp, sexp_grammar, bin_io ~localize, compare, equal, hash, stable_witness]
+      sexp
+      , sexp_grammar
+      , bin_io ~localize
+      , compare ~localize
+      , equal ~localize
+      , hash
+      , stable_witness]
   end
 end

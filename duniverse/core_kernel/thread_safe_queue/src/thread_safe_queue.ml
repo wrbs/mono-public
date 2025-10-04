@@ -2,10 +2,11 @@
    certain conditions.  It can therefore avoid using mutexes.
 
    Given the semantics of the current OCaml runtime (and for the foreseeable future), code
-   sections documented as atomic below will never contain a context-switch.  The deciding
-   criterion is whether they contain allocations or calls to external/builtin functions.
-   If there is none, a context-switch cannot happen.  Assignments without allocations,
-   field access, pattern-matching, etc., do not trigger context-switches.
+   sections documented as atomic below will never contain a context-switch. Allocations
+   and calls to external/builtin functions can always cause a context switch. Loops and
+   calls to other functions can sometimes cause a context switch - see the documentation
+   on OCaml's "safe points". Assignments without allocations, field access,
+   pattern-matching, etc., do not trigger context-switches.
 
    Code reviewers should therefore make sure that the sections documented as atomic below
    do not violate the above assumptions.  It is prudent to disassemble the .o file (using
@@ -21,7 +22,7 @@ module Elt = struct
     }
   [@@deriving sexp_of]
 
-  let create () = { value = Uopt.none; next = Uopt.none }
+  let create () = { value = Uopt.get_none (); next = Uopt.get_none () }
 end
 
 type 'a t =
@@ -37,7 +38,7 @@ type 'a t =
 [@@deriving fields ~getters ~iterators:iter, sexp_of]
 
 let invariant _invariant_a t =
-  Invariant.invariant [%here] t [%sexp_of: _ t] (fun () ->
+  Invariant.invariant t [%sexp_of: _ t] (fun () ->
     let check f = Invariant.check_field t f in
     Fields.iter
       ~length:(check (fun length -> assert (length >= 0)))
@@ -65,7 +66,7 @@ let invariant _invariant_a t =
 
 let create () =
   let elt = Elt.create () in
-  { front = elt; back = elt; length = 0; unused_elts = Uopt.none }
+  { front = elt; back = elt; length = 0; unused_elts = Uopt.get_none () }
 ;;
 
 (* This doesn't actually need the attributes to ensure atomic semantics,
@@ -97,30 +98,52 @@ let[@inline never] [@specialise never] [@local never] enqueue (type a) (t : a t)
 (* Same comment about [@inline never][@specialise never][@local never] as for [get_unused_elt], above. *)
 let[@inline never] [@specialise never] [@local never] return_unused_elt t (elt : _ Elt.t) =
   (* BEGIN ATOMIC SECTION *)
-  elt.value <- Uopt.none;
+  elt.value <- Uopt.get_none ();
   elt.next <- t.unused_elts;
   t.unused_elts <- Uopt.some elt;
   (* END ATOMIC SECTION *)
   ()
 ;;
 
-let[@inline never] [@specialise never] [@local never] raise_dequeue_empty t =
-  failwiths ~here:[%here] "Thread_safe_queue.dequeue_exn of empty queue" t [%sexp_of: _ t]
-;;
+module Dequeue_result = struct
+  (* It's important that dequeue does not allocate.
+     - We could accomplish this by having it raise an exception when the queue is
+       empty. But that would have poor performance in javascript (and this library is used
+       by javascript applications via incremental).
+     - We could use Uopt, as this module does internally. But using Uopt correctly is
+       subtle, so we prefer not to expose it to users.
+     - Instead we employ a local (stack allocated) return of the below type.
+  *)
+  type 'a t =
+    | Empty
+    | Not_empty of { global_ elt : 'a }
+  [@@deriving sexp, compare]
+end
 
-let[@inline never] [@specialise never] [@local never] dequeue_exn t =
+let[@inline never] [@specialise never] [@local never] dequeue t =
   (* BEGIN ATOMIC SECTION *)
-  if t.length = 0 then raise_dequeue_empty t;
-  let elt = t.front in
-  let a = elt.value in
-  t.front <- Uopt.unsafe_value elt.next;
-  t.length <- t.length - 1;
-  (* END ATOMIC SECTION *)
-  return_unused_elt t elt;
-  Uopt.unsafe_value a
+  if t.length = 0
+  then Dequeue_result.Empty
+  else (
+    let elt = t.front in
+    let a = elt.value in
+    t.front <- Uopt.unsafe_value elt.next;
+    t.length <- t.length - 1;
+    (* END ATOMIC SECTION *)
+    return_unused_elt t elt;
+    exclave_ Not_empty { elt = Uopt.unsafe_value a })
 ;;
 
-let clear_internal_pool t = t.unused_elts <- Uopt.none
+let[@inline] dequeue_until_empty ~(local_ f) t =
+  let keep_going = ref true in
+  while !keep_going do
+    match dequeue t with
+    | Not_empty { elt } -> f elt
+    | Empty -> keep_going := false
+  done
+;;
+
+let clear_internal_pool t = t.unused_elts <- Uopt.get_none ()
 
 module Private = struct
   module Uopt = Uopt

@@ -78,8 +78,8 @@ val longest : string list -> int
 
 val longest_map : 'a list -> f:('a -> string) -> int
 val longest_prefix : t list -> t
-val exists : t -> f:(char -> bool) -> bool
-val for_all : t -> f:(char -> bool) -> bool
+val exists : f:(char -> bool) -> t -> bool
+val for_all : f:(char -> bool) -> t -> bool
 
 (** [maybe_quoted s] is [s] if [s] doesn't need escaping according to OCaml
     lexing conventions and [sprintf "%S" s] otherwise.
@@ -116,9 +116,11 @@ val need_quoting : string -> bool
     [true] *)
 val quote_for_shell : string -> string
 
-(** [quote_list_for_shell l] is
-    [List.map l ~f:quote_for_shell |> concat ~sep:" "] *)
+(** [quote_list_for_shell l] quotes a command-line so that it can be passed to
+    the system shell (eg by using [Sys.command]). *)
 val quote_list_for_shell : string list -> string
 
 val filter_map : string -> f:(char -> char option) -> string
 val contains_double_underscore : string -> bool
+val last : string -> char option
+val replace_char : string -> from:char -> to_:char -> string

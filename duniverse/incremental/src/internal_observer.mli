@@ -1,4 +1,6 @@
-(** A module internal to Incremental.  Users should see {!Incremental_intf}.
+@@ portable
+
+(** A module internal to Incremental. Users should see {!Incremental_intf}.
 
     An observer is a root of the incremental DAG -- all descendants of an observer are
     "necessary", so that stabilization ensures their values are up to date. *)
@@ -19,7 +21,7 @@ val on_update_exn : 'a t -> 'a On_update_handler.t -> unit
 val unlink : _ t -> unit
 val incr_state : _ t -> Types.State.t
 
-module Packed : sig
+module (Packed @@ nonportable) : sig @@ portable
   type t = Types.Internal_observer.Packed.t = T : _ Types.Internal_observer.t -> t
   [@@unboxed] [@@deriving sexp_of]
 

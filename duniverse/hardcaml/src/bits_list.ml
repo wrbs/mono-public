@@ -34,9 +34,9 @@ module Make_gates (T : T) = struct
   let of_constant x =
     Constant.to_bit_list x
     |> List.map ~f:(function
-         | 0 -> T.gnd
-         | 1 -> T.vdd
-         | _ -> raise_s [%message "invalid constant"])
+      | 0 -> T.gnd
+      | 1 -> T.vdd
+      | _ -> raise_s [%message "invalid constant"])
   ;;
 
   let to_constant c =
@@ -51,7 +51,7 @@ module Make_gates (T : T) = struct
 
   let concat_msb l = List.concat l
 
-  let select s h l =
+  let select s ~high:h ~low:l =
     let rec sel b i =
       match b with
       | [] -> []
@@ -77,7 +77,11 @@ module Make_gates (T : T) = struct
 
   let to_bstr = to_bstr
   let to_string t = Sexp.to_string_hum (sexp_of_t t)
-  let ( -- ) a _ = a
+
+  let ( -- ) ~(loc : [%call_pos]) a _ =
+    ignore loc;
+    a
+  ;;
 
   let sexp_of_t =
     if T.constant_only
@@ -243,11 +247,11 @@ module X_comb = struct
   let of_bit_string s =
     String.to_list s
     |> List.filter_map ~f:(function
-         | '0' -> Some X.F
-         | '1' -> Some X.T
-         | 'x' | 'X' -> Some X.X
-         | '_' -> None
-         | _ -> raise_s [%message "invalid character in bit string"])
+      | '0' -> Some X.F
+      | '1' -> Some X.T
+      | 'x' | 'X' -> Some X.X
+      | '_' -> None
+      | _ -> raise_s [%message "invalid character in bit string"])
   ;;
 
   let of_string s =

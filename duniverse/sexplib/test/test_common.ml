@@ -1,7 +1,7 @@
 open Sexplib
 
 let () =
-  Printexc.register_printer (function
+  (Printexc.register_printer [@ocaml.alert "-unsafe_multidomain"]) (function
     | Sexp.Parse_error { Sexp.err_msg; parse_state = _ } ->
       Some (Printf.sprintf "Sexp.parse_error {err_msg = %S}" err_msg)
     | _ -> None)
@@ -33,8 +33,8 @@ let newline_adapters =
           ""
           (List.map
              (function
-              | '\n' -> "\r\n"
-              | c -> String.make 1 c)
+               | '\n' -> "\r\n"
+               | c -> String.make 1 c)
              (Base.String.to_list s)))
     , "windows" )
   ]

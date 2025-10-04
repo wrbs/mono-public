@@ -113,12 +113,12 @@ let fold t ~init ~f =
 let length t = t.length
 
 module C = Container.Make (struct
-  type nonrec 'a t = 'a t
+    type nonrec 'a t = 'a t
 
-  let fold = fold
-  let iter = `Define_using_fold
-  let length = `Custom length
-end)
+    let fold = fold
+    let iter = `Define_using_fold
+    let length = `Custom length
+  end)
 
 let is_empty t = Option.is_none t.heap
 let iter = C.iter
@@ -138,7 +138,8 @@ let fold_until = C.fold_until
 (* We could avoid the intermediate list here, but it doesn't seem like a big deal. *)
 let to_array = C.to_array
 
-type ('a, 'at, 'accum) folder = 'at -> init:'accum -> f:('accum -> 'a -> 'accum) -> 'accum
+type ('a, 'at, 'accum) folder =
+  'at -> init:'accum -> f:local_ ('accum -> 'a -> 'accum) -> 'accum
 
 let of_fold c ~compare (fold : _ folder) =
   let h = create ~compare in

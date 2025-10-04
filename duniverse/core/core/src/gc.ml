@@ -7,60 +7,18 @@ module Stable = struct
         | Next_fit
         | First_fit
         | Best_fit
-      [@@deriving bin_io, compare, equal, hash, sexp, stable_witness]
+      [@@deriving
+        bin_io
+        , compare ~localize
+        , equal ~localize
+        , hash
+        , sexp
+        , sexp_grammar
+        , stable_witness]
     end
   end
 
   module Stat = struct
-    [%%if ocaml_version < (4, 12, 0)]
-
-    module V1 = struct
-      type t = Stdlib.Gc.stat =
-        { minor_words : float
-        ; promoted_words : float
-        ; major_words : float
-        ; minor_collections : int
-        ; major_collections : int
-        ; heap_words : int
-        ; heap_chunks : int
-        ; live_words : int
-        ; live_blocks : int
-        ; free_words : int
-        ; free_blocks : int
-        ; largest_free : int
-        ; fragments : int
-        ; compactions : int
-        ; top_heap_words : int
-        ; stack_size : int
-        }
-      [@@deriving bin_io, compare, equal, hash, sexp, stable_witness]
-    end
-
-    module V2 = struct
-      type t =
-        { minor_words : float
-        ; promoted_words : float
-        ; major_words : float
-        ; minor_collections : int
-        ; major_collections : int
-        ; heap_words : int
-        ; heap_chunks : int
-        ; live_words : int
-        ; live_blocks : int
-        ; free_words : int
-        ; free_blocks : int
-        ; largest_free : int
-        ; fragments : int
-        ; compactions : int
-        ; top_heap_words : int
-        ; stack_size : int
-        ; forced_major_collections : int
-        }
-      [@@deriving bin_io, compare, equal, hash, sexp, stable_witness]
-    end
-
-    [%%else]
-
     module V1 = struct
       type t =
         { minor_words : float
@@ -80,7 +38,14 @@ module Stable = struct
         ; top_heap_words : int
         ; stack_size : int
         }
-      [@@deriving bin_io, compare, equal, hash, sexp, stable_witness]
+      [@@deriving
+        bin_io
+        , compare ~localize
+        , equal ~localize
+        , hash
+        , sexp
+        , sexp_grammar
+        , stable_witness]
     end
 
     module V2 = struct
@@ -103,36 +68,18 @@ module Stable = struct
         ; stack_size : int
         ; forced_major_collections : int
         }
-      [@@deriving bin_io, compare, equal, hash, sexp, stable_witness]
+      [@@deriving
+        bin_io
+        , compare ~localize
+        , equal ~localize
+        , hash
+        , sexp
+        , sexp_grammar
+        , stable_witness]
     end
-
-    [%%endif]
   end
 
   module Control = struct
-    [%%if ocaml_version < (5, 0, 0)]
-
-    module V1 = struct
-      [@@@ocaml.warning "-3"]
-
-      type t = Stdlib.Gc.control =
-        { mutable minor_heap_size : int
-        ; mutable major_heap_increment : int
-        ; mutable space_overhead : int
-        ; mutable verbose : int
-        ; mutable max_overhead : int
-        ; mutable stack_limit : int
-        ; mutable allocation_policy : int
-        ; window_size : int
-        ; custom_major_ratio : int
-        ; custom_minor_ratio : int
-        ; custom_minor_max_size : int
-        }
-      [@@deriving bin_io, compare, equal, sexp, stable_witness]
-    end
-
-    [%%else]
-
     module V1 = struct
       [@@@ocaml.warning "-3"]
 
@@ -149,10 +96,9 @@ module Stable = struct
         ; custom_minor_ratio : int
         ; custom_minor_max_size : int
         }
-      [@@deriving bin_io, compare, equal, sexp, stable_witness]
+      [@@deriving
+        bin_io, compare ~localize, equal ~localize, sexp, sexp_grammar, stable_witness]
     end
-
-    [%%endif]
   end
 end
 
@@ -160,30 +106,6 @@ include Stdlib.Gc
 
 module Stat = struct
   module T = struct
-    [%%if ocaml_version < (4, 12, 0)]
-
-    type t = Stdlib.Gc.stat =
-      { minor_words : float
-      ; promoted_words : float
-      ; major_words : float
-      ; minor_collections : int
-      ; major_collections : int
-      ; heap_words : int
-      ; heap_chunks : int
-      ; live_words : int
-      ; live_blocks : int
-      ; free_words : int
-      ; free_blocks : int
-      ; largest_free : int
-      ; fragments : int
-      ; compactions : int
-      ; top_heap_words : int
-      ; stack_size : int
-      }
-    [@@deriving compare, hash, bin_io, sexp]
-
-    [%%else]
-
     type t = Stdlib.Gc.stat =
       { minor_words : float
       ; promoted_words : float
@@ -204,7 +126,7 @@ module Stat = struct
       ; forced_major_collections : int
       }
     [@@deriving
-      compare
+      compare ~localize
       , hash
       , sexp_of
       , fields
@@ -213,36 +135,10 @@ module Stat = struct
           ~fields
           ~iterators:(create, fold, iter, map, to_list)
           ~direct_iterators:to_list]
-
-    [%%endif]
   end
 
   include T
   include Comparable.Make_plain (T)
-
-  [%%if ocaml_version < (4, 12, 0)]
-
-  let combine first second ~float_f ~int_f =
-    { minor_words = float_f first.minor_words second.minor_words
-    ; promoted_words = float_f first.promoted_words second.promoted_words
-    ; major_words = float_f first.major_words second.major_words
-    ; minor_collections = int_f first.minor_collections second.minor_collections
-    ; major_collections = int_f first.major_collections second.major_collections
-    ; heap_words = int_f first.heap_words second.heap_words
-    ; heap_chunks = int_f first.heap_chunks second.heap_chunks
-    ; live_words = int_f first.live_words second.live_words
-    ; live_blocks = int_f first.live_blocks second.live_blocks
-    ; free_words = int_f first.free_words second.free_words
-    ; free_blocks = int_f first.free_blocks second.free_blocks
-    ; largest_free = int_f first.largest_free second.largest_free
-    ; fragments = int_f first.fragments second.fragments
-    ; compactions = int_f first.compactions second.compactions
-    ; top_heap_words = int_f first.top_heap_words second.top_heap_words
-    ; stack_size = int_f first.stack_size second.stack_size
-    }
-  ;;
-
-  [%%else]
 
   let combine first second ~float_f ~int_f =
     { minor_words = float_f first.minor_words second.minor_words
@@ -266,37 +162,11 @@ module Stat = struct
     }
   ;;
 
-  [%%endif]
-
   let add = combine ~float_f:Float.( + ) ~int_f:Int.( + )
   let diff = combine ~float_f:Float.( - ) ~int_f:Int.( - )
 end
 
 module Control = struct
-  [%%if ocaml_version < (5, 0, 0)]
-
-  module T = struct
-    [@@@ocaml.warning "-3"]
-
-    type t = Stdlib.Gc.control =
-      { mutable minor_heap_size : int
-      ; mutable major_heap_increment : int
-      ; mutable space_overhead : int
-      ; mutable verbose : int
-      ; mutable max_overhead : int
-      ; mutable stack_limit : int
-      ; mutable allocation_policy : int
-      ; window_size : int
-      ; custom_major_ratio : int
-      ; custom_minor_ratio : int
-      ; custom_minor_max_size : int
-      }
-    [@@deriving
-      compare, sexp_of, fields ~getters ~setters ~fields ~iterators:(map, to_list)]
-  end
-
-  [%%else]
-
   module T = struct
     [@@@ocaml.warning "-3"]
 
@@ -314,10 +184,10 @@ module Control = struct
       ; custom_minor_max_size : int
       }
     [@@deriving
-      compare, sexp_of, fields ~getters ~setters ~fields ~iterators:(map, to_list)]
+      compare ~localize
+      , sexp_of
+      , fields ~getters ~setters ~fields ~iterators:(map, to_list)]
   end
-
-  [%%endif]
 
   include T
   include Comparable.Make_plain (T)
@@ -328,7 +198,7 @@ module Allocation_policy = struct
     | Next_fit
     | First_fit
     | Best_fit
-  [@@deriving compare, equal, hash, sexp_of]
+  [@@deriving compare ~localize, equal ~localize, hash, sexp_of]
 
   let to_int = function
     | Next_fit -> 0
@@ -406,49 +276,10 @@ external major_collections : unit -> int = "core_gc_major_collections" [@@noallo
 external major_plus_minor_words : unit -> int = "core_gc_major_plus_minor_words"
 external allocated_words : unit -> int = "core_gc_allocated_words"
 external run_memprof_callbacks : unit -> unit = "core_gc_run_memprof_callbacks"
-
-module Runtime4 = struct
-  external heap_words : unit -> int = "core_gc_heap_words" [@@noalloc]
-  external heap_chunks : unit -> int = "core_gc_heap_chunks" [@@noalloc]
-  external top_heap_words : unit -> int = "core_gc_top_heap_words" [@@noalloc]
-end
-
-[%%import "gc_stubs.h"]
-[%%if ocaml_version < (5, 0, 0)]
-
 external compactions : unit -> int = "core_gc_compactions" [@@noalloc]
-
-let heap_words = Runtime4.heap_words
-let heap_chunks = Runtime4.heap_chunks
-let top_heap_words = Runtime4.top_heap_words
-
-[%%else]
-
-module Runtime5 = struct
-  let heap_words () = (quick_stat ()).heap_words
-  let heap_chunks () = (quick_stat ()).heap_chunks
-  let top_heap_words () = (quick_stat ()).top_heap_words
-end
-
-[%%if OCAML_5_MINUS]
-
-external runtime5 : unit -> bool = "%runtime5"
-external compactions : unit -> int = "core_gc_compactions" [@@noalloc]
-
-let runtime5 = runtime5 ()
-let heap_words = if runtime5 then Runtime5.heap_words else Runtime4.heap_words
-let heap_chunks = if runtime5 then Runtime5.heap_chunks else Runtime4.heap_chunks
-let top_heap_words = if runtime5 then Runtime5.top_heap_words else Runtime4.top_heap_words
-
-[%%else]
-
-let compactions () = (quick_stat ()).compactions
-let heap_words = Runtime5.heap_words
-let heap_chunks = Runtime5.heap_chunks
-let top_heap_words = Runtime5.top_heap_words
-
-[%%endif]
-[%%endif]
+external heap_words : unit -> int = "core_gc_heap_words" [@@noalloc]
+external heap_chunks : unit -> int = "core_gc_heap_chunks" [@@noalloc]
+external top_heap_words : unit -> int = "core_gc_top_heap_words" [@@noalloc]
 
 let stat_size_lazy =
   lazy (Obj.reachable_words (Obj.repr (Stdlib.Gc.quick_stat () : Stat.t)))
@@ -456,17 +287,44 @@ let stat_size_lazy =
 
 let stat_size () = Lazy.force stat_size_lazy
 let zero = Sys.opaque_identity (int_of_string "0")
+let compact_if_not_running_test () = if not am_running_test then compact ()
 
 (* The compiler won't optimize int_of_string away so it won't
    perform constant folding below. *)
 let rec keep_alive o = if zero <> 0 then keep_alive (Sys.opaque_identity o)
 
 module For_testing = struct
-  type 'a globl = { g : 'a } [@@unboxed]
+  module Allocation_report = struct
+    type t =
+      { major_words_allocated : int [@globalized]
+      ; minor_words_allocated : int [@globalized]
+      }
+    [@@deriving sexp_of, globalize]
+
+    let create ~major_words_allocated ~minor_words_allocated = exclave_
+      { major_words_allocated; minor_words_allocated }
+    ;;
+  end
+
+  module Allocation_log = struct
+    type t =
+      { size_in_words : int [@globalized]
+      ; is_major : bool [@globalized]
+      ; backtrace : string
+      }
+    [@@deriving sexp_of, globalize]
+  end
+
+  type memprof = Stdlib.Gc.Memprof.t
+
+  [%%template
+  [@@@kind.default k = (value, float64, bits32, bits64, word)]
+
+  type ('a : k) globl = { global_ g : 'a } [@@unboxed]
 
   (* We disable inlining for this function so the GC stats and the call to [f] are never
      rearranged. *)
-  let[@cold] measure_internal ~on_result (f : unit -> 'a) =
+  let[@cold] measure_internal ~on_result (f : unit -> local_ 'a) = exclave_
     let minor_words_before = minor_words () in
     let major_words_before = major_words () in
     (* We wrap [f ()] with [Sys.opaque_identity] to prevent the return value from being
@@ -477,39 +335,33 @@ module For_testing = struct
     let major_words_allocated = major_words_after - major_words_before in
     let minor_words_allocated = minor_words_after - minor_words_before in
     on_result ~major_words_allocated ~minor_words_allocated x
+  [@@kind k = (k, k & value)]
   ;;
 
-  let is_zero_alloc_local (type a) (f : unit -> a) =
+  let is_zero_alloc_local (type a : k) (f : unit -> local_ a) =
     (* Instead of using [Allocation_report.measure], and matching on the result, we use
        this construction, in order to have [is_zero_alloc] not allocate itself. This
        enables [is_zero_alloc] to be used in a nested way. *)
-    measure_internal
+    (measure_internal [@kind k])
       f
       ~on_result:(fun ~major_words_allocated ~minor_words_allocated value ->
-      ignore (Sys.opaque_identity value : a);
-      major_words_allocated == 0 && minor_words_allocated == 0) [@nontail]
+        ignore (Sys.opaque_identity value : a);
+        major_words_allocated == 0 && minor_words_allocated == 0)
+    [@nontail]
   ;;
 
-  let is_zero_alloc f = is_zero_alloc_local (fun () -> { g = f () }) [@nontail]
-
-  module Allocation_report = struct
-    type t =
-      { major_words_allocated : int [@globalized]
-      ; minor_words_allocated : int [@globalized]
-      }
-    [@@deriving sexp_of, globalize]
-
-    let create ~major_words_allocated ~minor_words_allocated =
-      { major_words_allocated; minor_words_allocated }
-    ;;
-  end
-
-  let measure_allocation_local f =
-    measure_internal f ~on_result:(fun ~major_words_allocated ~minor_words_allocated x ->
-      x, Allocation_report.create ~major_words_allocated ~minor_words_allocated)
+  let is_zero_alloc (local_ f) =
+    (is_zero_alloc_local [@kind k]) (fun () -> { g = f () }) [@nontail]
   ;;
 
-  let measure_allocation_for_runtime5_local f =
+  let measure_allocation_local f = exclave_
+    (measure_internal [@kind k & value])
+      f
+      ~on_result:(fun ~major_words_allocated ~minor_words_allocated x -> exclave_
+        #(x, Allocation_report.create ~major_words_allocated ~minor_words_allocated))
+  ;;
+
+  let measure_allocation_for_runtime5_local f = exclave_
     let minor_words_before = minor_words () in
     let promoted_words_before = promoted_words () in
     let major_words_before = major_words () in
@@ -523,28 +375,17 @@ module For_testing = struct
       - (major_words_before - promoted_words_before)
     in
     let minor_words_allocated = minor_words_after - minor_words_before in
-    x, Allocation_report.create ~major_words_allocated ~minor_words_allocated
+    #(x, Allocation_report.create ~major_words_allocated ~minor_words_allocated)
   ;;
 
   let measure_allocation f =
-    let%tydi { g }, allocation_report =
-      measure_allocation_local (fun () -> { g = f () })
+    let #({ g }, allocation_report) =
+      (measure_allocation_local [@kind k]) (fun () -> { g = f () })
     in
-    g, [%globalize: Allocation_report.t] allocation_report
+    #(g, [%globalize: Allocation_report.t] allocation_report)
   ;;
 
-  module Allocation_log = struct
-    type t =
-      { size_in_words : int [@globalized]
-      ; is_major : bool [@globalized]
-      ; backtrace : string
-      }
-    [@@deriving sexp_of, globalize]
-  end
-
-  [%%if ocaml_version >= (4, 11, 0)]
-
-  let measure_and_log_allocation_local (f : unit -> 'a) =
+  let measure_and_log_allocation_local (local_ (f : unit -> local_ 'a)) = exclave_
     let log : Allocation_log.t list ref = ref []
     and major_allocs = ref 0
     and minor_allocs = ref 0 in
@@ -552,7 +393,7 @@ module For_testing = struct
       if is_major
       then major_allocs := !major_allocs + info.n_samples
       else minor_allocs := !minor_allocs + info.n_samples;
-      let backtrace = Stdlib.Printexc.raw_backtrace_to_string info.callstack in
+      let backtrace = Backtrace.to_string info.callstack in
       (* Make backtraces easier to read by deleting everything below this function *)
       let backtrace =
         match String.substr_index backtrace ~pattern:"measure_and_log_allocation" with
@@ -562,8 +403,8 @@ module For_testing = struct
         | Some p ->
           String.sub ~pos:0 ~len:p backtrace
           |> String.rstrip ~drop:(function
-               | '\n' -> false
-               | _ -> true)
+            | '\n' -> false
+            | _ -> true)
       in
       let info : Allocation_log.t =
         { size_in_words = info.n_samples; is_major; backtrace }
@@ -577,8 +418,8 @@ module For_testing = struct
       ; alloc_major = on_alloc ~is_major:true
       }
     in
-    match Stdlib.Gc.Memprof.start ~sampling_rate:1.0 tracker with
-    | _ ->
+    match Memprof.start ~sampling_rate:1.0 tracker with
+    | (_ : memprof) ->
       (* Exn.protect, manually inlined to guarantee no allocations *)
       let result =
         match f () with
@@ -587,68 +428,64 @@ module For_testing = struct
              delayed if they happened during C code and there has been no allocation since),
              so we explictly flush them *)
           run_memprof_callbacks ();
-          Stdlib.Gc.Memprof.stop ();
+          Memprof.stop ();
           x
         | exception e ->
           run_memprof_callbacks ();
-          Stdlib.Gc.Memprof.stop ();
-          raise e
+          Memprof.stop ();
+          raise e |> (Never_returns.never_returns [@kind k])
       in
-      ( result
-      , Allocation_report.create
-          ~major_words_allocated:!major_allocs
-          ~minor_words_allocated:!minor_allocs
-      , List.rev !log )
+      #( result
+       , Allocation_report.create
+           ~major_words_allocated:!major_allocs
+           ~minor_words_allocated:!minor_allocs
+       , List.rev !log )
     | exception Failure msg ->
       if String.equal msg "Gc.memprof.start: not implemented in multicore"
       then (
-        let a, b = measure_allocation_for_runtime5_local f in
-        a, b, [])
-      else failwith msg
+        let #(a, b) = (measure_allocation_for_runtime5_local [@kind k]) f in
+        #(a, b, []))
+      else (
+        match failwith msg with
+        | (_ : Nothing.t) -> .)
   ;;
 
   let measure_and_log_allocation f =
-    let { g }, allocation_report, log =
-      measure_and_log_allocation_local (fun () -> { g = f () })
+    let #({ g }, allocation_report, log) =
+      (measure_and_log_allocation_local [@kind k]) (fun () -> { g = f () })
     in
-    ( g
-    , [%globalize: Allocation_report.t] allocation_report
-    , [%globalize: Allocation_log.t list] log )
+    #( g
+     , [%globalize: Allocation_report.t] allocation_report
+     , [%globalize: Allocation_log.t list] log )
   ;;
-
-  [%%else]
-
-  let measure_and_log_allocation f =
-    let x, report = measure_allocation f in
-    x, report, []
-  ;;
-
-  let measure_and_log_allocation_local = measure_and_log_allocation
-
-  [%%endif]
 
   let[@cold] require_no_allocation_local_failed here allocation_report allocation_log =
     let allocation_report = [%globalize: Allocation_report.t] allocation_report in
     let allocation_log = [%globalize: Allocation_log.t list] allocation_log in
+    let here = if Source_code_position.is_dummy here then None else Some here in
     raise_s
       [%message
         "allocation detected"
-          (here : Source_code_position.t)
+          (here : (Source_code_position.t option[@sexp.option]))
           (allocation_report : Allocation_report.t)
           (allocation_log : Allocation_log.t list)]
   ;;
 
-  let assert_no_allocation_local here f =
-    let result, allocation_report, allocation_log = measure_and_log_allocation_local f in
+  let assert_no_allocation_local ~(here : [%call_pos]) f = exclave_
+    let #(result, allocation_report, allocation_log) =
+      (measure_and_log_allocation_local [@kind k]) f
+    in
     if allocation_report.major_words_allocated > 0
        || allocation_report.minor_words_allocated > 0
-    then require_no_allocation_local_failed here allocation_report allocation_log;
+    then
+      (require_no_allocation_local_failed [@kind k]) here allocation_report allocation_log;
     result
   ;;
 
-  let assert_no_allocation here f =
-    (assert_no_allocation_local here (fun () -> { g = f () })).g
-  ;;
+  let assert_no_allocation ~(here : [%call_pos]) f =
+    let { g } = (assert_no_allocation_local [@kind k]) ~here (fun () -> { g = f () }) in
+    g
+  ;;]
 end
 
 module Expert = struct
@@ -662,15 +499,20 @@ module Expert = struct
       ()
   ;;
 
-  (* [add_finalizer_exn] is the same as [add_finalizer].  However, their types in
+  (* [add_finalizer_ignore] is the same as [add_finalizer].  However, their types in
      core_gc.mli are different, and the type of [add_finalizer] guarantees that it always
      receives a heap block, which ensures that it will not raise, while
      [add_finalizer_exn] accepts any type, and so may raise. *)
+  let add_finalizer_ignore x f =
+    try Stdlib.Gc.finalise (fun x -> Exn.handle_uncaught_and_exit (fun () -> f x)) x with
+    | Invalid_argument _ -> ()
+  ;;
+
   let add_finalizer_exn x f =
     try Stdlib.Gc.finalise (fun x -> Exn.handle_uncaught_and_exit (fun () -> f x)) x with
     | Invalid_argument _ ->
-      ignore (Heap_block.create x : _ Heap_block.t option);
-      (* If [Heap_block.create] succeeds then [x] is static data and so
+      ignore (Heap_block.create_exn x : _ Heap_block.t);
+      (* If [Heap_block.create_exn] succeeds then [x] is static data and so
          we can simply drop the finaliser. *)
       ()
   ;;
@@ -685,16 +527,50 @@ module Expert = struct
       ()
   ;;
 
+  let add_finalizer_last_ignore x f =
+    try Stdlib.Gc.finalise_last (fun () -> Exn.handle_uncaught_and_exit f) x with
+    | Invalid_argument _ -> ()
+  ;;
+
   let add_finalizer_last_exn x f =
     try Stdlib.Gc.finalise_last (fun () -> Exn.handle_uncaught_and_exit f) x with
     | Invalid_argument _ ->
-      ignore (Heap_block.create x : _ Heap_block.t option);
-      (* If [Heap_block.create] succeeds then [x] is static data and so
+      ignore (Heap_block.create_exn x : _ Heap_block.t);
+      (* If [Heap_block.create_exn] succeeds then [x] is static data and so
          we can simply drop the finaliser. *)
       ()
   ;;
 
+  module With_leak_protection = struct
+    let protect_finalizer x finalizer =
+      let ephemeron = Ephemeron.K1.make x finalizer in
+      fun x ->
+        match Ephemeron.K1.query ephemeron x with
+        | None -> assert false
+        | Some finalizer -> finalizer x
+    ;;
+
+    let add_finalizer x f =
+      let f = protect_finalizer x f in
+      add_finalizer x f
+    ;;
+
+    let add_finalizer_exn x f =
+      let f = protect_finalizer x f in
+      add_finalizer_exn x f
+    ;;
+
+    let add_finalizer_ignore x f =
+      let f = protect_finalizer x f in
+      add_finalizer_ignore x f
+    ;;
+  end
+
   let finalize_release = Stdlib.Gc.finalise_release
+
+  (* Sys.opaque_identity means accesses to the ref cannot be optimized out *)
+  let leaked_values : Obj.t list ref = Sys.opaque_identity (ref [])
+  let leak a = leaked_values := Obj.repr a :: !leaked_values
 
   module Alarm = struct
     type t = alarm

@@ -22,15 +22,19 @@ module Async_rpc_kernel_stable = struct
 end
 
 module Async_rpc_kernel_private = struct
-  module Rpc_metadata : module type of Rpc_metadata_private with type t = Rpc_metadata.t =
-    Rpc_metadata_private
+  module Rpc_metadata : module type of Rpc_metadata_private = Rpc_metadata_private
 
   module Connection : Connection_intf.S_private with type t = Rpc.Connection.t =
     Connection
 
+  module Handshake_error = Handshake_error
+  module Header = Header
   module Protocol = Protocol
+  module Protocol_local_readers = Protocol_local_readers
   module Transport = Transport
   module Util = Util
+  module Version_dependent_feature = Version_dependent_feature
+  module Writer_with_length = Writer_with_length
 
   let default_handshake_timeout = Connection.default_handshake_timeout
 end

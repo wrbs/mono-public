@@ -166,6 +166,14 @@ let sets_temporarily_async and_values ~f =
 
 let set_temporarily_async r x ~f = sets_temporarily_async [ T (r, x) ] ~f
 
+let with_temporarily_async d x ~f =
+  let restore_to = Dynamic.get d in
+  Dynamic.set_root d x;
+  Monitor.protect f ~finally:(fun () ->
+    Dynamic.set_root d restore_to;
+    return ())
+;;
+
 let try_with f ~rest =
   let monitor = Monitor.create () in
   Monitor.detach_and_iter_errors monitor ~f:(fun exn -> rest (Monitor.extract_exn exn));
@@ -181,31 +189,45 @@ let show_raise_async (type a) ?hide_positions ?show_backtrace (f : unit -> a Def
   show_raise ?hide_positions ?show_backtrace (fun () -> Result.ok_exn result)
 ;;
 
-let require_does_not_raise_async ?cr ?hide_positions ?show_backtrace here f =
+let require_does_not_raise_async
+  ?cr
+  ?hide_positions
+  ?show_backtrace
+  ~(here : [%call_pos])
+  f
+  =
   let%map result =
     try_with f ~rest:(fun exn ->
-      print_cr here ?cr ?hide_positions [%message "Raised after return" ~_:(exn : exn)])
+      print_cr ~here ?cr ?hide_positions [%message "Raised after return" ~_:(exn : exn)])
   in
-  require_does_not_raise ?cr ?hide_positions ?show_backtrace here (fun () ->
+  require_does_not_raise ?cr ?hide_positions ?show_backtrace ~here (fun () ->
     Result.ok_exn result)
 ;;
 
 let require_does_raise_async
   ?(cr = CR.CR)
   ?(hide_positions = CR.hide_unstable_output cr)
-  ?show_backtrace
-  here
+  ?(show_backtrace = false)
+  ~(here : [%call_pos])
   f
   =
   let%map result =
-    try_with f ~rest:(fun exn ->
-      (* It's not clear what do if we get exceptions after the deferred is
-         returned... Just printing out "Raised after return" for now. *)
-      print_s
-        ~hide_positions
-        [%message "Raised after return" ~_:(here : Source_code_position.t) ~_:(exn : exn)])
+    try_with
+      (fun () ->
+        let backtrace_recording = Backtrace.Exn.am_recording () in
+        Backtrace.Exn.set_recording show_backtrace;
+        Monitor.protect f ~finally:(fun () ->
+          Backtrace.Exn.set_recording backtrace_recording;
+          return ()))
+      ~rest:(fun exn ->
+        (* It's not clear what do if we get exceptions after the deferred is
+           returned... Just printing out "Raised after return" for now. *)
+        print_s
+          ~hide_positions
+          [%message
+            "Raised after return" ~_:(here : Source_code_position.t) ~_:(exn : exn)])
   in
-  require_does_raise ~cr ~hide_positions ?show_backtrace here (fun () ->
+  require_does_raise ~cr ~hide_positions ~show_backtrace ~here (fun () ->
     Result.ok_exn result)
 ;;
 
@@ -260,4 +282,15 @@ let with_robust_global_log_output ?(map_output = Fn.id) fn =
     (fun () ->
       Log.Global.set_output [ Log.For_testing.create_output ~map_output ];
       fn ())
+;;
+
+let with_sexp_round_floats f ~significant_digits =
+  let restore_to = Dynamic.get Sexplib0.Sexp_conv.default_string_of_float in
+  Dynamic.set_root
+    Sexplib0.Sexp_conv.default_string_of_float
+    (Portability_hacks.magic_portable__needs_base_and_core (fun v ->
+       Float.to_string (Float.round_significant ~significant_digits v)));
+  Monitor.protect f ~finally:(fun () ->
+    Dynamic.set_root Sexplib0.Sexp_conv.default_string_of_float restore_to;
+    Deferred.unit)
 ;;

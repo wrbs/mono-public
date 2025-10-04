@@ -1,5 +1,6 @@
 open Base
 open Ppxlib
+module Modes = Ppxlib_jane.Shim.Modes
 
 module Functions = struct
   type t =
@@ -21,49 +22,55 @@ module Functions = struct
     let pointer type_declaration =
       type_declaration |> Type_declaration.pointer |> Type_kind.core_to_ppx ~builder
     in
-    let get_base (derived_on_mode, derived_on) t =
-      let arg label =
-        { arg_label = Labelled label; arg_mode = derived_on_mode; arg_type = derived_on }
+    let get_base (derived_on_modes, derived_on) t =
+      let arg label : Ppxlib_jane.arrow_argument =
+        { arg_label = Labelled label
+        ; arg_modes = derived_on_modes
+        ; arg_type = derived_on
+        }
       in
-      tarrow
+      Jane_ast.tarrow
         [ arg "from"; arg "to_" ]
-        { result_mode = Some Local; result_type = [%type: [%t t] Optional_diff.t] }
+        { result_modes = Modes.local; result_type = [%type: [%t t] Optional_diff.t] }
     in
-    let apply_base (derived_on_mode, derived_on) t =
-      tarrow
-        [ { arg_label = Nolabel; arg_mode = derived_on_mode; arg_type = derived_on }
-        ; { arg_label = Nolabel; arg_mode = None; arg_type = t }
+    let apply_base (derived_on_modes, derived_on) t =
+      Jane_ast.tarrow
+        [ { arg_label = Nolabel; arg_modes = derived_on_modes; arg_type = derived_on }
+        ; { arg_label = Nolabel; arg_modes = Modes.none; arg_type = t }
         ]
-        { result_mode = derived_on_mode; result_type = derived_on }
+        { result_modes = derived_on_modes; result_type = derived_on }
     in
     let of_list_base _derived_on t =
-      tarrow
-        [ { arg_label = Nolabel; arg_mode = None; arg_type = [%type: [%t t] list] } ]
-        { result_mode = Some Local; result_type = [%type: [%t t] Optional_diff.t] }
+      Jane_ast.tarrow
+        [ { arg_label = Nolabel; arg_modes = Modes.none; arg_type = [%type: [%t t] list] }
+        ]
+        { result_modes = Modes.local; result_type = [%type: [%t t] Optional_diff.t] }
     in
     let fun_type base ~var_functions =
       let v = Var.core_type ~builder in
-      let derived_on_mode = if derived_on_type_is_local then Some Local else None in
+      let derived_on_modes =
+        if derived_on_type_is_local then Modes.local else Modes.none
+      in
       (* Generate the parametrized functions, e.g.
          (from:'a -> to_:'a -> local_ 'a_diff Optional_diff.t)
          (from:'b -> to_:'b -> local_ 'b_diff Optional_diff.t)
       *)
-      tarrow_maybe
+      Jane_ast.tarrow_maybe
         (List.concat_map vars ~f:(fun var ->
-           List.map var_functions ~f:(fun fn ->
-             let arg_type = fn (None, v var) (v (Var.diff_var var)) in
-             { arg_label = Nolabel; arg_mode = None; arg_type })))
+           List.map var_functions ~f:(fun fn : Ppxlib_jane.arrow_argument ->
+             let arg_type = fn ([], v var) (v (Var.diff_var var)) in
+             { arg_label = Nolabel; arg_modes = Modes.none; arg_type })))
         (base
-           (derived_on_mode, pointer derived_on_type_declaration)
+           (derived_on_modes, pointer derived_on_type_declaration)
            (pointer diff_type_declaration))
     in
     let sig_items =
-      [%sig:
-        val get : [%t fun_type get_base ~var_functions:[ get_base ]]
-        val apply_exn : [%t fun_type apply_base ~var_functions:[ apply_base ]]
-
-        val of_list_exn
-          : [%t fun_type of_list_base ~var_functions:[ of_list_base; apply_base ]]]
+      [ [%sigi: val get : [%t fun_type get_base ~var_functions:[ get_base ]]]
+      ; [%sigi: val apply_exn : [%t fun_type apply_base ~var_functions:[ apply_base ]]]
+      ; [%sigi:
+          val of_list_exn
+            : [%t fun_type of_list_base ~var_functions:[ of_list_base; apply_base ]]]
+      ]
     in
     let struct_items =
       Result.map t_or_error ~f:(fun { get; apply_exn; of_list_exn } ->
@@ -224,22 +231,26 @@ let to_items t ~context ~(type_to_diff_declaration : unit Type_declaration.t) =
         String.uncapitalize (Variant_row_name.to_string row_name)
       in
       let create_type =
-        tarrow_maybe
-          (List.map single_kind ~f:(fun (row_name, row_type) ->
-             let arg_name = create_arg_name row_name in
-             let arg_type = core_to_ppx row_type in
-             { arg_label = Optional arg_name; arg_mode = None; arg_type }))
+        Jane_ast.tarrow_maybe
+          (List.map
+             single_kind
+             ~f:(fun (row_name, row_type) : Ppxlib_jane.arrow_argument ->
+               let arg_name = create_arg_name row_name in
+               let arg_type = core_to_ppx row_type in
+               { arg_label = Optional arg_name; arg_modes = Modes.none; arg_type }))
           [%type: unit -> [%t t_]]
       in
       let create_of_variants_type =
-        tarrow_maybe
-          (List.map single_kind ~f:(fun (row_name, row_type) ->
-             let arg_name = create_arg_name row_name in
-             let arg_type =
-               [%type:
-                 ([%t core_to_ppx row_type], [%t core_to_ppx single_type]) Of_variant.t]
-             in
-             { arg_label = Labelled arg_name; arg_mode = Some Local; arg_type }))
+        Jane_ast.tarrow_maybe
+          (List.map
+             single_kind
+             ~f:(fun (row_name, row_type) : Ppxlib_jane.arrow_argument ->
+               let arg_name = create_arg_name row_name in
+               let arg_type =
+                 [%type:
+                   ([%t core_to_ppx row_type], [%t core_to_ppx single_type]) Of_variant.t]
+               in
+               { arg_label = Labelled arg_name; arg_modes = Modes.local; arg_type }))
           t_
       in
       let create_arg_names =
@@ -310,10 +321,10 @@ let to_items t ~context ~(type_to_diff_declaration : unit Type_declaration.t) =
       in
       let create_functions =
         let sig_items =
-          [%sig:
-            val singleton : [%t core_to_ppx single_type] -> [%t t_]
-            val create : [%t create_type]
-            val create_of_variants : [%t create_of_variants_type]]
+          [ [%sigi: val singleton : [%t core_to_ppx single_type] -> [%t t_]]
+          ; [%sigi: val create : [%t create_type]]
+          ; [%sigi: val create_of_variants : [%t create_of_variants_type]]
+          ]
         in
         let create =
           [%str
@@ -331,8 +342,8 @@ let to_items t ~context ~(type_to_diff_declaration : unit Type_declaration.t) =
                   `optional_diff
                   ~args_are_optional:false
                   ~row_diff:(fun row_name ->
-                  let name = create_arg_name row_name in
-                  [%expr [%e Text name |> e] [%e variants name]])]
+                    let name = create_arg_name row_name in
+                    [%expr [%e Text name |> e] [%e variants name]])]
             ;;]
         in
         let t_of_sexp =
@@ -423,7 +434,7 @@ let to_items t ~context ~(type_to_diff_declaration : unit Type_declaration.t) =
           let module_expr =
             pmod_constraint
               structure
-              ([%sig: [@@@ocaml.warning "-32"]] @ sig_items |> pmty_signature)
+              ([%sigi: [@@@ocaml.warning "-32"]] :: sig_items |> pmty_signature)
           in
           [%str include [%m module_expr]])
       in

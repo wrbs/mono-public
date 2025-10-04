@@ -2,10 +2,10 @@ open! Core
 
 module Instrumentation = struct
   (** All [Incr_map] functions take an optional [instrumentation] parameter that has type
-      [Instrumentation.t].  A value of this type is a record containing a function which
-      is polymorphic over a universally-quantified type ['a]. This function is passed
-      a [unit -> 'a] function, which must be immediately executed, and the result of
-      which must be returned.
+      [Instrumentation.t]. A value of this type is a record containing a function which is
+      polymorphic over a universally-quantified type ['a]. This function is passed a
+      [unit -> 'a] function, which must be immediately executed, and the result of which
+      must be returned.
 
       The function passed to the instrumentor will be doing the bulk of the work for the
       [Incr_map] function in question (usually a [Map.fold_symmetric_diff]).
@@ -15,13 +15,14 @@ module Instrumentation = struct
 
       {[
         let profile name =
-          { Incr_map.Instrumentation.f = fun f ->
-              let before = Time.now () in
-              let r = f () in
-              let after = Time.now () in
-              let delta = Time.sub after before in
-              printf "%s took %s" name (Time.Span.to_string_hum delta);
-              r
+          { Incr_map.Instrumentation.f =
+              (fun f ->
+                let before = Time.now () in
+                let r = f () in
+                let after = Time.now () in
+                let delta = Time.sub after before in
+                printf "%s took %s" name (Time.Span.to_string_hum delta);
+                r)
           }
         ;;
 
@@ -31,7 +32,7 @@ module Instrumentation = struct
   type t = { f : 'a. (unit -> 'a) -> 'a } [@@unboxed]
 end
 
-(** [S_gen] is the type of the module returned by [Incr_map.Make].  It is a specialization
+(** [S_gen] is the type of the module returned by [Incr_map.Make]. It is a specialization
     of the interface of [Incr_map], with:
 
     - the ['w] state_witness type parameter removed
@@ -304,6 +305,16 @@ module type S_gen = sig
     -> f:(key:'k -> data:'v Incr.t -> 'v1 Incr.t * 'v2 Incr.t)
     -> ('k, 'v1, 'cmp) Map.t Incr.t * ('k, 'v2, 'cmp) Map.t Incr.t
 
+  val unzip3_mapi'
+    :  ?instrumentation:Instrumentation.t
+    -> ?cutoff:'v Incr.Cutoff.t
+    -> ?data_equal:('v -> 'v -> bool)
+    -> ('k, 'v, 'cmp) Map.t Incr.t
+    -> f:(key:'k -> data:'v Incr.t -> 'v1 Incr.t * 'v2 Incr.t * 'v3 Incr.t)
+    -> ('k, 'v1, 'cmp) Map.t Incr.t
+       * ('k, 'v2, 'cmp) Map.t Incr.t
+       * ('k, 'v3, 'cmp) Map.t Incr.t
+
   val merge'
     :  ?instrumentation:Instrumentation.t
     -> ?cutoff:('v1, 'v2) Map.Merge_element.t Incr.Cutoff.t
@@ -347,7 +358,6 @@ module type S_gen = sig
 
   val subrange_by_rank
     :  ?instrumentation:Instrumentation.t
-    -> ?data_equal:('v -> 'v -> bool)
     -> ('k, 'v, 'cmp) Map.t Incr.t
     -> (int Maybe_bound.As_lower_bound.t * int Maybe_bound.As_upper_bound.t) Incr.t
     -> ('k, 'v, 'cmp) Map.t Incr.t
@@ -406,12 +416,20 @@ module type S_gen = sig
     -> ('outer_key, ('inner_key, 'v, 'inner_cmp) Map.t, 'outer_cmp) Map.t Incr.t
     -> comparator:('inner_key, 'inner_cmp) Comparator.Module.t
     -> ( 'outer_key * 'inner_key
-       , 'v
-       , ('outer_cmp, 'inner_cmp) Tuple2.comparator_witness )
-       Map.t
-       Incr.t
+         , 'v
+         , ('outer_cmp, 'inner_cmp) Tuple2.comparator_witness )
+         Map.t
+         Incr.t
 
   val collapse_by
+    :  ?instrumentation:Instrumentation.t
+    -> ?data_equal:('v -> 'v -> bool)
+    -> ('outer_key, ('inner_key, 'v, 'inner_cmp) Map.t, 'outer_cmp) Map.t Incr.t
+    -> merge_keys:('outer_key -> 'inner_key -> 'combined_key)
+    -> comparator:('combined_key, 'combined_cmp) Comparator.Module.t
+    -> ('combined_key, 'v, 'combined_cmp) Map.t Incr.t
+
+  val collapse_by_loosened_requirements
     :  ?instrumentation:Instrumentation.t
     -> ?data_equal:('v -> 'v -> bool)
     -> ('outer_key, ('inner_key, 'v, 'inner_cmp) Map.t, 'outer_cmp) Map.t Incr.t
@@ -483,22 +501,30 @@ module type S_gen = sig
     -> f:(('k, 'v) Map.Symmetric_diff_element.t -> unit)
     -> unit
 
+  val cartesian_product
+    :  ?instrumentation:Instrumentation.t
+    -> ?data_equal_left:('v1 -> 'v1 -> bool)
+    -> ?data_equal_right:('v2 -> 'v2 -> bool)
+    -> ('k1, 'v1, 'cmp1) Map.t Incr.t
+    -> ('k2, 'v2, 'cmp2) Map.t Incr.t
+    -> ('k1 * 'k2, 'v1 * 'v2, ('cmp1, 'cmp2) Tuple2.comparator_witness) Map.t Incr.t
+
   module Lookup : sig
     type ('k, 'v, 'cmp) t
 
     val create
       :  ?instrumentation:Instrumentation.t
       -> ?data_equal:('v -> 'v -> bool)
+      -> ('k, 'cmp) Comparator.Module.t
       -> ('k, 'v, 'cmp) Map.t Incr.t
-      -> comparator:('k, 'cmp) Comparator.t
       -> ('k, 'v, 'cmp) t
 
     val find : ('k, 'v, _) t -> 'k -> 'v option Incr.t
 
     module M (K : sig
-      type t
-      type comparator_witness
-    end) : sig
+        type t
+        type comparator_witness
+      end) : sig
       type nonrec 'v t = (K.t, 'v, K.comparator_witness) t
     end
 
@@ -506,26 +532,18 @@ module type S_gen = sig
       val sexp_of_t : ('k -> Sexp.t) -> ('v -> Sexp.t) -> ('k, 'v, 'cmp) t -> Sexp.t
     end
   end
-
-  module For_testing : sig
-    val find_key_range_linear
-      :  from:int
-      -> to_:int
-      -> ('a, 'b, 'c) Base.Map.t
-      -> ('a * 'a option) option
-  end
 end
 
-module type Incr_map = sig
-  (** Functions for using maps efficiently within Incremental.  The goal of the algorithms
+module type Incr_map = sig @@ portable
+  (** Functions for using maps efficiently within Incremental. The goal of the algorithms
       here is to do work on the output of the computation proportional to the amount of
-      work done on the input.  i.e., [k] modifications to the input map for some
-      computation will result in [k] modifications to the output map.  The changes to the
+      work done on the input. i.e., [k] modifications to the input map for some
+      computation will result in [k] modifications to the output map. The changes to the
       input map are typically computed using [Map.symmetric_diff].
 
       Unless stated otherwise, the non-incremental semantics of these functions (i.e..,
       ignoring performance) is the same as the corresponding function in Core's [Map]
-      module.  *)
+      module. *)
 
   module Instrumentation = Instrumentation
 
@@ -570,12 +588,12 @@ module type Incr_map = sig
     -> f:(key:'k -> data:('v1, 'w) Incremental.t -> ('v2 option, 'w) Incremental.t)
     -> (('k, 'v2, 'cmp) Map.t, 'w) Incremental.t
 
-  val map'
+  val mapi'
     :  ?instrumentation:Instrumentation.t
     -> ?cutoff:'v1 Incremental.Cutoff.t
     -> ?data_equal:('v1 -> 'v1 -> bool)
     -> (('k, 'v1, 'cmp) Map.t, 'w) Incremental.t
-    -> f:(('v1, 'w) Incremental.t -> ('v2, 'w) Incremental.t)
+    -> f:(key:'k -> data:('v1, 'w) Incremental.t -> ('v2, 'w) Incremental.t)
     -> (('k, 'v2, 'cmp) Map.t, 'w) Incremental.t
 
   val filter_map'
@@ -586,12 +604,12 @@ module type Incr_map = sig
     -> f:(('v1, 'w) Incremental.t -> ('v2 option, 'w) Incremental.t)
     -> (('k, 'v2, 'cmp) Map.t, 'w) Incremental.t
 
-  val mapi'
+  val map'
     :  ?instrumentation:Instrumentation.t
     -> ?cutoff:'v1 Incremental.Cutoff.t
     -> ?data_equal:('v1 -> 'v1 -> bool)
     -> (('k, 'v1, 'cmp) Map.t, 'w) Incremental.t
-    -> f:(key:'k -> data:('v1, 'w) Incremental.t -> ('v2, 'w) Incremental.t)
+    -> f:(('v1, 'w) Incremental.t -> ('v2, 'w) Incremental.t)
     -> (('k, 'v2, 'cmp) Map.t, 'w) Incremental.t
 
   val partition_mapi
@@ -620,27 +638,27 @@ module type Incr_map = sig
       ]}
 
       assuming that [remove] is the inverse of [add], and that the operations for
-      different keys can be performed in any order. Note that [data_equal] defaults
-      to [phys_equal], but a more precise equality can be provided instead.
+      different keys can be performed in any order. Note that [data_equal] defaults to
+      [phys_equal], but a more precise equality can be provided instead.
 
-      When the data for a key updates, by default [remove] is called on the old data
-      and then [add] is called on the new data.
-      [update] provides an alternative single function to call each time a key's data
-      updates, and can be used to improve efficiency.
+      When the data for a key updates, by default [remove] is called on the old data and
+      then [add] is called on the new data. [update] provides an alternative single
+      function to call each time a key's data updates, and can be used to improve
+      efficiency.
 
       For the initial computation, by default [add] is called on all the elements in the
       map. As this can be inefficient, [specialized_initial] can be provided to perform
       the computation in a more effective way.
 
-      If [revert_to_init_when_empty] is true, then if the input map transitions from
-      being full to empty, then instead of calling [remove] on every kv-pair, it will
-      instead just set the output to whatever you've passed as [init].
-      The default value of [revert_to_init_when_empty] is [false], so this optimization
-      does not apply automatically.
+      If [revert_to_init_when_empty] is true, then if the input map transitions from being
+      full to empty, then instead of calling [remove] on every kv-pair, it will instead
+      just set the output to whatever you've passed as [init]. The default value of
+      [revert_to_init_when_empty] is [false], so this optimization does not apply
+      automatically.
 
-      [finalize] defaults to [Fn.id] is called immediately before the accumulator value
-      is stored and returned during stabilization.  You can use it to e.g. process the
-      fold operations in a different order. *)
+      [finalize] defaults to [Fn.id] is called immediately before the accumulator value is
+      stored and returned during stabilization. You can use it to e.g. process the fold
+      operations in a different order. *)
   val unordered_fold
     :  ?instrumentation:Instrumentation.t
     -> ?data_equal:('v -> 'v -> bool)
@@ -654,9 +672,9 @@ module type Incr_map = sig
     -> remove:(key:'k -> data:'v -> 'acc -> 'acc)
     -> ('acc, 'w) Incremental.t
 
-  (** [unordered_fold_with_extra] is similar to [unordered_fold], but it also
-      depends on another arbitrary incremental value which can be factored into
-      the folding computation. *)
+  (** [unordered_fold_with_extra] is similar to [unordered_fold], but it also depends on
+      another arbitrary incremental value which can be factored into the folding
+      computation. *)
   val unordered_fold_with_extra
     :  ?instrumentation:Instrumentation.t
     -> ?data_equal:('v -> 'v -> bool)
@@ -678,28 +696,24 @@ module type Incr_map = sig
           -> 'acc)
     -> ('acc, 'w) Incremental.t
 
-  (** [cutoff] applies a cutoff to values in the map as they pass through the
-      function.  It has the same behavior as calling [Incr_map.map'] with an
-      [Incr.set_cutoff] inside, but with considerably better performance and
-      memory usage. *)
+  (** [cutoff] applies a cutoff to values in the map as they pass through the function. It
+      has the same behavior as calling [Incr_map.map'] with an [Incr.set_cutoff] inside,
+      but with considerably better performance and memory usage. *)
   val cutoff
     :  ?instrumentation:Instrumentation.t
     -> (('k, 'v, 'cmp) Map.t, 'w) Incremental.t
     -> cutoff:'v Incremental.Cutoff.t
     -> (('k, 'v, 'cmp) Map.t, 'w) Incremental.t
 
-  (** Given an input map and a function mapping a kv-pair to a new
-      value, [mapi_count] will compute a multi-set keyed on that
-      new value.
+  (** Given an input map and a function mapping a kv-pair to a new value, [mapi_count]
+      will compute a multi-set keyed on that new value.
 
-      Any value that would otherwise have a count of "0" is instead
-      removed from the map.
+      Any value that would otherwise have a count of "0" is instead removed from the map.
 
-      It is assumed that [f] is quite fast as the function will be
-      called more often than strictly necessary, but it does this
-      in order to avoid allocating an extra map.  If [f] is very slow
-      and you don't mind the extra allocations, use
-      [Incr_map.index_byi] composed with [Incr_map.map ~f:Map.length] *)
+      It is assumed that [f] is quite fast as the function will be called more often than
+      strictly necessary, but it does this in order to avoid allocating an extra map. If
+      [f] is very slow and you don't mind the extra allocations, use [Incr_map.index_byi]
+      composed with [Incr_map.map ~f:Map.length] *)
   val mapi_count
     :  ?instrumentation:Instrumentation.t
     -> ?data_equal:('v -> 'v -> bool)
@@ -708,8 +722,8 @@ module type Incr_map = sig
     -> f:(key:'k1 -> data:'v -> 'k2)
     -> (('k2, int, 'cmp2) Map.t, 'w) Incremental.t
 
-  (** The same as [mapi_count] but the [f] function only gets to see the
-      data instead of both the key and the data. *)
+  (** The same as [mapi_count] but the [f] function only gets to see the data instead of
+      both the key and the data. *)
   val map_count
     :  ?instrumentation:Instrumentation.t
     -> ?data_equal:('v -> 'v -> bool)
@@ -718,8 +732,7 @@ module type Incr_map = sig
     -> f:('v -> 'k2)
     -> (('k2, int, 'cmp2) Map.t, 'w) Incremental.t
 
-  (** Computes the smallest [r] where [r] is computed for each kv-pair in the
-      input map. *)
+  (** Computes the smallest [r] where [r] is computed for each kv-pair in the input map. *)
   val mapi_min
     :  ?instrumentation:Instrumentation.t
     -> ?data_equal:('v -> 'v -> bool)
@@ -728,8 +741,7 @@ module type Incr_map = sig
     -> f:(key:'k -> data:'v -> 'r)
     -> ('r option, 'w) Incremental.t
 
-  (** Computes the largest [r] where [r] is computed for each kv-pair in the
-      input map. *)
+  (** Computes the largest [r] where [r] is computed for each kv-pair in the input map. *)
   val mapi_max
     :  ?instrumentation:Instrumentation.t
     -> ?data_equal:('v -> 'v -> bool)
@@ -738,8 +750,7 @@ module type Incr_map = sig
     -> f:(key:'k -> data:'v -> 'r)
     -> ('r option, 'w) Incremental.t
 
-  (** Computes the smallest [r] where [r] is computed for each kv-pair in the
-      input map. *)
+  (** Computes the smallest [r] where [r] is computed for each kv-pair in the input map. *)
   val map_min
     :  ?instrumentation:Instrumentation.t
     -> ?data_equal:('v -> 'v -> bool)
@@ -748,8 +759,7 @@ module type Incr_map = sig
     -> f:('v -> 'r)
     -> ('r option, 'w) Incremental.t
 
-  (** Computes the largest [r] where [r] is computed for each kv-pair in the
-      input map. *)
+  (** Computes the largest [r] where [r] is computed for each kv-pair in the input map. *)
   val map_max
     :  ?instrumentation:Instrumentation.t
     -> ?data_equal:('v -> 'v -> bool)
@@ -774,8 +784,7 @@ module type Incr_map = sig
     -> comparator:('v, _) Comparator.Module.t
     -> ('v option, 'w) Incremental.t
 
-  (** Computes [min * max] where the value is computed for each kv-pair
-      in the input map *)
+  (** Computes [min * max] where the value is computed for each kv-pair in the input map *)
   val mapi_bounds
     :  ?instrumentation:Instrumentation.t
     -> ?data_equal:('v -> 'v -> bool)
@@ -784,8 +793,7 @@ module type Incr_map = sig
     -> f:(key:'k -> data:'v -> 'r)
     -> (('r * 'r) option, 'w) Incremental.t
 
-  (** Computes [min * max] where the value is computed for each kv-pair
-      in the input map *)
+  (** Computes [min * max] where the value is computed for each kv-pair in the input map *)
   val map_bounds
     :  ?instrumentation:Instrumentation.t
     -> ?data_equal:('v -> 'v -> bool)
@@ -825,9 +833,9 @@ module type Incr_map = sig
     -> f:(key:'k -> 'v1 -> 'v2 -> 'v3)
     -> (('k, 'v3, 'cmp) Map.t, 'w) Incremental.t
 
-  (** [merge_disjoint] merges two maps that _must_ not share any keys on a given 
-      stabilization.  If this invariant is not upheld by the caller, incremental may 
-      crash, or the output map may contain incorrect results. *)
+  (** [merge_disjoint] merges two maps that _must_ not share any keys on a given
+      stabilization. If this invariant is not upheld by the caller, incremental may crash,
+      or the output map may contain incorrect results. *)
   val merge_disjoint
     :  ?instrumentation:Instrumentation.t
     -> ?data_equal:('v -> 'v -> bool)
@@ -895,15 +903,45 @@ module type Incr_map = sig
     -> (('k, 'v1, 'cmp) Map.t, 'w) Incremental.t
        * (('k, 'v2, 'cmp) Map.t, 'w) Incremental.t
 
+  (** [unzip3_mapi'] is like [unzip_mapi'], but allows you to return a 3-tuple instead of
+      a 2-tuple of incremental nodes
+
+      The naive implementation (see below) is behaviorally identical, but produces worse
+      Incremental graphs.
+
+      {[
+        let temp =
+          Incr_map.mapi' input ~f:(fun ~key ~data ->
+            let a, b, c = f ~key ~data in
+            let%map a and b and c = a, b, c)
+        in
+        let left = Incr_map.map temp ~f:Tuple3.get1 in
+        let middle = Incr_map.map temp ~f:Tuple3.get2 in
+        let right = Incr_map.map temp ~f:Tuple3.get3 in
+        left, middle, right
+      ]} *)
+  val unzip3_mapi'
+    :  ?instrumentation:Instrumentation.t
+    -> ?cutoff:'v Incremental.Cutoff.t
+    -> ?data_equal:('v -> 'v -> bool)
+    -> (('k, 'v, 'cmp) Map.t, 'w) Incremental.t
+    -> f:
+         (key:'k
+          -> data:('v, 'w) Incremental.t
+          -> ('v1, 'w) Incremental.t * ('v2, 'w) Incremental.t * ('v3, 'w) Incremental.t)
+    -> (('k, 'v1, 'cmp) Map.t, 'w) Incremental.t
+       * (('k, 'v2, 'cmp) Map.t, 'w) Incremental.t
+       * (('k, 'v3, 'cmp) Map.t, 'w) Incremental.t
+
   (** This is the "easy" version of [join] *)
   val flatten
     :  'w Incremental.State.t
     -> ('k, ('v, 'w) Incremental.t, 'cmp) Map.t
     -> (('k, 'v, 'cmp) Map.t, 'w) Incremental.t
 
-  (** The non-incremental semantics of this function is the identity function.  Its
-      purpose is to collapse the extra level of incrementality at the level of the data of
-      the map.*)
+  (** The non-incremental semantics of this function is the identity function. Its purpose
+      is to collapse the extra level of incrementality at the level of the data of the
+      map. *)
   val join
     :  ?instrumentation:Instrumentation.t
     -> (('k, ('v, 'w) Incremental.t, 'cmp) Map.t, 'w) Incremental.t
@@ -921,18 +959,16 @@ module type Incr_map = sig
     -> (('k, 'c) Set.t, 'w) Incremental.t
 
   (** Computes the [rank] of a key (given incrementally) inside of a map (also
-      incremental).  The traditional [Map.rank] function is O(n), and this incremental
-      rank function has the following performance characteristics:
+      incremental). The traditional [Map.rank] function is O(n), and this incremental rank
+      function has the following performance characteristics:
 
-      definitions:
-      n : the size of the map
-      r : the time to compute [Map.symmetric_diff] between the two maps
-      k : the change in rank of the key between two stabilizations
+      definitions: n : the size of the map r : the time to compute [Map.symmetric_diff]
+      between the two maps k : the change in rank of the key between two stabilizations
 
       note that [r] and [k] are _much_ smaller than [n] for most practical purposes
 
-      - O(log n) when the key is not in the map.
-        This takes precedence over other every other scenario.
+      - O(log n) when the key is not in the map. This takes precedence over other every
+        other scenario.
       - O(n) on the initial stabilization
       - O(n) when the key transitions from not being in the map to being in the map
       - O(log n + r) when the map changes
@@ -962,11 +998,12 @@ module type Incr_map = sig
     -> ?data_equal:('v -> 'v -> bool)
     -> (('k, 'v, 'cmp) Map.t, 'w) Incremental.t
     -> ( ('k Maybe_bound.As_lower_bound.t * 'k Maybe_bound.As_upper_bound.t) option
-       , 'w )
-       Incremental.t
+         , 'w )
+         Incremental.t
     -> (('k, 'v, 'cmp) Map.t, 'w) Incremental.t
 
-  (** [subrange_by_rank map (s, e)] constructs an incremental submap that includes (e-s+1)
+  (** {v
+ [subrange_by_rank map (s, e)] constructs an incremental submap that includes (e-s+1)
       keys between s-th and e-th, inclusive.
 
       If s is greater or equal to map length, the result is empty.
@@ -983,22 +1020,20 @@ module type Incr_map = sig
       - m is the total impact of map changes on the range, bounded by k (e.g. if we add
         1001 keys and remove 1000 below s, then m = 1)
       - m' = O( |new s - old s| + |new e - old e| ).
-  *)
+      v} *)
   val subrange_by_rank
     :  ?instrumentation:Instrumentation.t
-    -> ?data_equal:('v -> 'v -> bool)
     -> (('k, 'v, 'cmp) Map.t, 'w) Incremental.t
     -> ( int Maybe_bound.As_lower_bound.t * int Maybe_bound.As_upper_bound.t
-       , 'w )
-       Incremental.t
+         , 'w )
+         Incremental.t
     -> (('k, 'v, 'cmp) Map.t, 'w) Incremental.t
 
-  (** [rekey] transforms a map by modifying the type of the key.  The user is
-      responsible for ensuring that [f] doesn't return the same output key for
-      multiple input keys.
+  (** [rekey] transforms a map by modifying the type of the key. The user is responsible
+      for ensuring that [f] doesn't return the same output key for multiple input keys.
 
-      This function assumes [f] is cheap to compute and accordingly may call
-      it multiple times. *)
+      This function assumes [f] is cheap to compute and accordingly may call it multiple
+      times. *)
   val rekey
     :  ?instrumentation:Instrumentation.t
     -> ?data_equal:('v -> 'v -> bool)
@@ -1036,8 +1071,8 @@ module type Incr_map = sig
     -> comparator:('outer_key, 'outer_cmp) Comparator.Module.t
     -> index:(key:'inner_key -> data:'v -> 'outer_key option)
     -> ( ('outer_key, ('inner_key, 'v, 'inner_cmp) Map.t, 'outer_cmp) Map.t
-       , 'w )
-       Incremental.t
+         , 'w )
+         Incremental.t
 
   (** [index_by map ~comparator ~index] is like [index_byi map ~comparator ~index], but
       the [index] function does not take the inner map's [key]. *)
@@ -1048,8 +1083,8 @@ module type Incr_map = sig
     -> comparator:('outer_key, 'outer_cmp) Comparator.Module.t
     -> index:('v -> 'outer_key option)
     -> ( ('outer_key, ('inner_key, 'v, 'inner_cmp) Map.t, 'outer_cmp) Map.t
-       , 'w )
-       Incremental.t
+         , 'w )
+         Incremental.t
 
   val unordered_fold_nested_maps
     :  ?instrumentation:Instrumentation.t
@@ -1063,8 +1098,8 @@ module type Incr_map = sig
           -> 'acc
           -> 'acc)
     -> ( ('outer_key, ('inner_key, 'v, 'inner_cmp) Map.t, 'outer_cmp) Map.t
-       , 'w )
-       Incremental.t
+         , 'w )
+         Incremental.t
     -> init:'acc
     -> add:(outer_key:'outer_key -> inner_key:'inner_key -> data:'v -> 'acc -> 'acc)
     -> remove:(outer_key:'outer_key -> inner_key:'inner_key -> data:'v -> 'acc -> 'acc)
@@ -1084,17 +1119,18 @@ module type Incr_map = sig
     :  ?instrumentation:Instrumentation.t
     -> ?data_equal:('v -> 'v -> bool)
     -> ( ('outer_key, ('inner_key, 'v, 'inner_cmp) Map.t, 'outer_cmp) Map.t
-       , 'w )
-       Incremental.t
+         , 'w )
+         Incremental.t
     -> comparator:('inner_key, 'inner_cmp) Comparator.Module.t
     -> ( ( 'outer_key * 'inner_key
-         , 'v
-         , ('outer_cmp, 'inner_cmp) Tuple2.comparator_witness )
-         Map.t
-       , 'w )
-       Incremental.t
+           , 'v
+           , ('outer_cmp, 'inner_cmp) Tuple2.comparator_witness )
+           Map.t
+         , 'w )
+         Incremental.t
 
-  (** [collapse_by] is similar to [collapse], but it allows the user to
+  (** {v
+ [collapse_by] is similar to [collapse], but it allows the user to
       choose how to combine the two keys from the outer and inner maps.
       This does mean that it's the responsibility of the implementor of the
       [merge_keys] function to uphold this invariant:
@@ -1106,13 +1142,41 @@ module type Incr_map = sig
       The [~comparator] argument the first-class module of the output key, it
       usually looks like this:
       [ ~comparator:(module Combined_key) ]
-      but make sure that the module implements the [Comparator.S] signature. *)
+      but make sure that the module implements the [Comparator.S] signature.
+      v} *)
   val collapse_by
     :  ?instrumentation:Instrumentation.t
     -> ?data_equal:('v -> 'v -> bool)
     -> ( ('outer_key, ('inner_key, 'v, 'inner_cmp) Map.t, 'outer_cmp) Map.t
-       , 'w )
-       Incremental.t
+         , 'w )
+         Incremental.t
+    -> merge_keys:('outer_key -> 'inner_key -> 'combined_key)
+    -> comparator:('combined_key, 'combined_cmp) Comparator.Module.t
+    -> (('combined_key, 'v, 'combined_cmp) Map.t, 'w) Incremental.t
+
+  (** {v
+ Just like [collapse_by] but instead of the user-upheld invariant being
+
+      > a merged-key being equal to another merged-key implies that the
+      > outer-keys and inner-keys which were used to build the merged keys also
+      > compare to be equal to one another
+
+      the invariant is instead
+
+      > the input map must contain no duplicate combined keys at any point in time
+
+      This invariant is easier to uphold, but is slightly slower, as
+      [collapse_by_loosened_requirements] needs to do some extra bookkeeping.
+      In addition, this function makes no attempt at enforcing this invariant;
+      if the input does contain duplicate combined keys, the resulting map may
+      contain incorrect data.
+      v} *)
+  val collapse_by_loosened_requirements
+    :  ?instrumentation:Instrumentation.t
+    -> ?data_equal:('v -> 'v -> bool)
+    -> ( ('outer_key, ('inner_key, 'v, 'inner_cmp) Map.t, 'outer_cmp) Map.t
+         , 'w )
+         Incremental.t
     -> merge_keys:('outer_key -> 'inner_key -> 'combined_key)
     -> comparator:('combined_key, 'combined_cmp) Comparator.Module.t
     -> (('combined_key, 'v, 'combined_cmp) Map.t, 'w) Incremental.t
@@ -1128,8 +1192,8 @@ module type Incr_map = sig
     -> outer_comparator:('outer_key, 'outer_cmp) Comparator.Module.t
     -> inner_comparator:('inner_key, 'inner_cmp) Comparator.Module.t
     -> ( ('outer_key, ('inner_key, 'v, 'inner_cmp) Map.t, 'outer_cmp) Map.t
-       , 'w )
-       Incremental.t
+         , 'w )
+         Incremental.t
 
   val counti
     :  ?instrumentation:Instrumentation.t
@@ -1176,8 +1240,7 @@ module type Incr_map = sig
   (** Incrementally compute the sum of all of the values in the map.
 
       Beware of float's negative infinities. They aren't commutative and will misbehave
-      here.
-  *)
+      here. *)
   val sum
     :  ?instrumentation:Instrumentation.t
     -> ?data_equal:('v -> 'v -> bool)
@@ -1186,12 +1249,12 @@ module type Incr_map = sig
     -> f:('v -> 'u)
     -> ('u, 'w) Incremental.t
 
-  (** Observes changes to an incremental map.  Every stabilize, this observer will
-      compare the map from the previous stabilization and the current stabilization,
-      calling [f] for every change that it detects.
+  (** Observes changes to an incremental map. Every stabilize, this observer will compare
+      the map from the previous stabilization and the current stabilization, calling [f]
+      for every change that it detects.
 
-      It is important to note that changes to the map _between_ stabilizations will
-      not be processed, for example: 
+      It is important to note that changes to the map _between_ stabilizations will not be
+      processed, for example:
 
       {[
         let var = Incr.Var.create String.Map.empty in
@@ -1205,18 +1268,41 @@ module type Incr_map = sig
         Incr.stabilize ();
       ]}
 
-      won't result in any calls to [f], because the map contents didn't change 
-      from one stabilization to another.
+      won't result in any calls to [f], because the map contents didn't change from one
+      stabilization to another.
 
-      [observe_changes_exn] must only be called from the top-level incremental 
-      scope.  In practice this means that it must not be inside of an incremental
-      bind, or a call to [Incremental.Scope.within].  If not invoked at top-level,
-      an exception will be raised, irreversibly destroying your incremental universe. *)
+      [observe_changes_exn] must only be called from the top-level incremental scope. In
+      practice this means that it must not be inside of an incremental bind, or a call to
+      [Incremental.Scope.within]. If not invoked at top-level, an exception will be
+      raised, irreversibly destroying your incremental universe. *)
   val observe_changes_exn
     :  ?data_equal:('v -> 'v -> bool)
     -> (('k, 'v, 'cmp) Map.t, _) Incremental.t
     -> f:(('k, 'v) Map.Symmetric_diff_element.t -> unit)
     -> unit
+    @@ (* not portable because it requires [Incremental.observe] to be portable *)
+       nonportable
+
+  (** [cartesian_product] provides a way to compute the cartesian product of two maps,
+      performed incrementally. The number of keys in the resulting map is the product of
+      the number keys of each map.
+
+      Definitions: n1,n2 : size of maps (the max of the size of the map between two
+      stabilizations) r1,r2 : time to call symmetric diff on each map between two
+      stabilizations k1,k2 : size of the diff of each map as a result of symmetric diff
+      between two stablizations
+
+      The marginal stabilization runs in:
+      [O(r1 + r2 + ((k1 * n2) + (k2 * n1)) * log (n1 * n2))] *)
+  val cartesian_product
+    :  ?instrumentation:Instrumentation.t
+    -> ?data_equal_left:('v1 -> 'v1 -> bool)
+    -> ?data_equal_right:('v2 -> 'v2 -> bool)
+    -> (('k1, 'v1, 'cmp1) Map.t, 'w) Incremental.t
+    -> (('k2, 'v2, 'cmp2) Map.t, 'w) Incremental.t
+    -> ( ('k1 * 'k2, 'v1 * 'v2, ('cmp1, 'cmp2) Tuple2.comparator_witness) Map.t
+         , 'w )
+         Incremental.t
 
   (** [('k, 'v) Lookup.t] provides a way to lookup keys in a map which uses symmetric
       diffs to trigger updates of the lookups.
@@ -1239,40 +1325,31 @@ module type Incr_map = sig
     val create
       :  ?instrumentation:Instrumentation.t
       -> ?data_equal:('v -> 'v -> bool)
+      -> ('k, 'cmp) Comparator.Module.t
       -> (('k, 'v, 'cmp) Map.t, 'w) Incremental.t
-      -> comparator:('k, 'cmp) Comparator.t
       -> ('k, 'v, 'cmp, 'w) t
 
     (** Create a node which performs [Map.find] on the input map.
 
-        [find (create incr_map) key] should be equivalent to [Incr.map ~f:(fun m ->
-        Map.find m key) incr_map], but when you call [find] many times for a single
-        [create] the nodes should update more efficiently in stabilisation when [incr_map]
-        changes in a way which can be efficiently diffed.
+        [find (create incr_map) key] should be equivalent to
+        [Incr.map ~f:(fun m -> Map.find m key) incr_map], but when you call [find] many
+        times for a single [create] the nodes should update more efficiently in
+        stabilisation when [incr_map] changes in a way which can be efficiently diffed.
 
-        This will re-use existing nodes when it can, but will not always do so.
-    *)
+        This will re-use existing nodes when it can, but will not always do so. *)
     val find : ('k, 'v, _, 'w) t -> 'k -> ('v option, 'w) Incremental.t
 
     (** A convenient way to refer to the type for a given key. *)
     module M (K : sig
-      type t
-      type comparator_witness
-    end) : sig
+        type t
+        type comparator_witness
+      end) : sig
       type nonrec ('v, 'w) t = (K.t, 'v, K.comparator_witness, 'w) t
     end
 
     module For_debug : sig
       val sexp_of_t : ('k -> Sexp.t) -> ('v -> Sexp.t) -> ('k, 'v, 'cmp, _) t -> Sexp.t
     end
-  end
-
-  module For_testing : sig
-    val find_key_range_linear
-      :  from:int
-      -> to_:int
-      -> ('a, 'b, 'c) Base.Map.t
-      -> ('a * 'a option) option
   end
 
   module type S_gen = S_gen
@@ -1282,9 +1359,9 @@ module type Incr_map = sig
 
     include
       S_gen
-        with type 'a Incr.t = ('a, state_witness) Incremental.t
-         and type 'a Incr.Cutoff.t = 'a Incremental.Cutoff.t
-         and type ('k, 'v, 'cmp) Lookup.t = ('k, 'v, 'cmp, state_witness) Lookup.t
+      with type 'a Incr.t = ('a, state_witness) Incremental.t
+       and type 'a Incr.Cutoff.t = 'a Incremental.Cutoff.t
+       and type ('k, 'v, 'cmp) Lookup.t = ('k, 'v, 'cmp, state_witness) Lookup.t
   end
 
   module Make (Incr : Incremental.S) :

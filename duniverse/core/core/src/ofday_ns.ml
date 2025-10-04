@@ -4,7 +4,12 @@ module Span = Span_ns
 type underlying = Int63.t
 type t = Span.t (* since wall-clock midnight *) [@@deriving typerep]
 
-include (Span : Robustly_comparable.S with type t := t)
+include (
+  Span :
+  sig
+  @@ portable
+    include Robustly_comparable.S with type t := t
+  end)
 
 let to_parts t = Span.to_parts t
 let start_of_day : t = Span.zero
@@ -36,8 +41,8 @@ let of_span_since_start_of_day_exn span =
 ;;
 
 let of_span_since_start_of_day_opt span = if is_invalid span then None else Some span
-let add_exn t span = of_span_since_start_of_day_exn (Span.( + ) t span)
-let sub_exn t span = of_span_since_start_of_day_exn (Span.( - ) t span)
+let[@zero_alloc] add_exn t span = of_span_since_start_of_day_exn (Span.( + ) t span)
+let[@zero_alloc] sub_exn t span = of_span_since_start_of_day_exn (Span.( - ) t span)
 let add t span = of_span_since_start_of_day_opt (Span.( + ) t span)
 let sub t span = of_span_since_start_of_day_opt (Span.( - ) t span)
 let next t = of_span_since_start_of_day_opt (Span.next t)
@@ -55,18 +60,32 @@ let create ?hr ?min ?sec ?ms ?us ?ns () =
   of_span_since_start_of_day_exn (Span.create ?hr ?min ?sec ?ms ?us ?ns ())
 ;;
 
+let ( ^: ) hr min = create ~hr ~min ()
+
 module Stable = struct
   module Option = struct end
   module Zoned = struct end
 
   module V1 = struct
-    type t = Span.Stable.V2.t [@@deriving bin_io, compare, equal, hash, stable_witness]
+    type t = Span.Stable.V2.t
+    [@@deriving
+      bin_io ~localize
+      , compare ~localize
+      , equal ~localize
+      , globalize
+      , hash
+      , stable_witness
+      , typerep]
 
     include (
       Span.Stable.V2 :
-        Comparator.S
+      sig
+      @@ portable
+        include
+          Comparator.S
           with type t := t
-           and type comparator_witness = Span.Stable.V2.comparator_witness)
+           and type comparator_witness = Span.Stable.V2.comparator_witness
+      end)
 
     let to_string_with_unit =
       let ( / ) = Int63.( / ) in
@@ -196,35 +215,60 @@ module Stable = struct
     let to_int63 t = Span_ns.Stable.V2.to_int63 t
     let of_int63_exn t = of_span_since_start_of_day_exn (Span_ns.Stable.V2.of_int63_exn t)
 
-    include Diffable.Atomic.Make (struct
-      type nonrec t = t [@@deriving bin_io, equal, sexp]
-    end)
+    include%template Diffable.Atomic.Make [@modality portable] (struct
+        type nonrec t = t [@@deriving bin_io, equal ~localize, sexp]
+      end)
   end
 end
 
 include (
   Stable.V1 :
-    Comparator.S
-      with type t := t
-       and type comparator_witness = Stable.V1.comparator_witness)
-
-include Identifiable.Make_using_comparator (struct
-  type t = Stable.V1.t [@@deriving bin_io, compare, hash, sexp]
-
-  include (
-    Stable.V1 :
+  sig
+  @@ portable
+    include
       Comparator.S
-        with type t := t
-         and type comparator_witness = Stable.V1.comparator_witness)
+      with type t := t
+       and type comparator_witness = Stable.V1.comparator_witness
+  end)
 
-  include (Stable.V1 : Stringable.S with type t := t)
+[%%rederive.portable
+  type nonrec t = Stable.V1.t [@@deriving compare ~localize, equal ~localize, globalize]]
 
-  let module_name = "Core.Time_ns.Ofday"
-end)
+include%template
+  Identifiable.Make_using_comparator [@mode local] [@modality portable] (struct
+    type t = Stable.V1.t [@@deriving bin_io ~localize, compare ~localize, hash, sexp]
 
-include Diffable.Atomic.Make (Stable.V1)
+    include (
+      Stable.V1 :
+      sig
+      @@ portable
+        include
+          Comparator.S
+          with type t := t
+           and type comparator_witness = Stable.V1.comparator_witness
+      end)
 
-let t_sexp_grammar = Sexplib.Sexp_grammar.coerce Stable.V1.t_sexp_grammar
+    include (
+      Stable.V1 :
+      sig
+      @@ portable
+        include Stringable.S with type t := t
+      end)
+
+    let module_name = "Core.Time_ns.Ofday"
+  end)
+
+include%template (
+  Stable.V1 :
+  sig
+  @@ portable
+    include Binable.S [@mode local] with type t := t
+  end)
+
+include%template Diffable.Atomic.Make [@modality portable] (Stable.V1)
+
+let t_sexp_grammar = Stable.V1.t_sexp_grammar
+let to_nanosecond_string t = Stable.V1.to_string_with_unit t ~unit:`Nanosecond
 let to_microsecond_string t = Stable.V1.to_string_with_unit t ~unit:`Microsecond
 let to_millisecond_string t = Stable.V1.to_string_with_unit t ~unit:`Millisecond
 let to_sec_string t = Stable.V1.to_string_with_unit t ~unit:`Second
@@ -269,6 +313,16 @@ let every =
   in
   every
 ;;
+
+module O = struct
+  let ( ^: ) = ( ^: )
+  let ( < ) = ( < )
+  let ( <= ) = ( <= )
+  let ( = ) = ( = )
+  let ( >= ) = ( >= )
+  let ( > ) = ( > )
+  let ( <> ) = ( <> )
+end
 
 let small_diff =
   let hour = Span.to_int63_ns Span.hour in
@@ -317,17 +371,13 @@ let quickcheck_generator = gen_incl start_of_day start_of_next_day
 let quickcheck_observer = Span.quickcheck_observer
 let quickcheck_shrinker = Quickcheck.Shrinker.empty ()
 
-include (Span : Comparisons.S with type t := t)
+include (
+  Span :
+  sig
+  @@ portable
+    include Comparisons.S with type t := t
+  end)
 
 (* deprecated bindings *)
 let of_span_since_start_of_day = of_span_since_start_of_day_exn
 let to_millisec_string = to_millisecond_string
-let arg_type = `Use_Time_ns_unix
-let now = `Use_Time_ns_unix
-let of_ofday_float_round_nearest = `Use_Time_ns_unix
-let of_ofday_float_round_nearest_microsecond = `Use_Time_ns_unix
-let to_ofday_float_round_nearest = `Use_Time_ns_unix
-let to_ofday_float_round_nearest_microsecond = `Use_Time_ns_unix
-
-module Option = struct end
-module Zoned = struct end

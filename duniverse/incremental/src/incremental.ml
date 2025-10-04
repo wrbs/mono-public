@@ -33,6 +33,8 @@ module Generic = struct
         let t = create (module Config.Default ()) ~max_height_allowed
       end)
     ;;
+
+    let create = Portability_hacks.magic_portable__needs_portable_functors create
   end
 
   module Scope = struct
@@ -47,10 +49,12 @@ module Generic = struct
   module Packed = struct
     include Packed
 
-    let save_dot ?(emit_bind_edges = true) = Node_to_dot.save_dot ~emit_bind_edges
+    let save_dot ?(emit_bind_edges = true) formatter =
+      Node_to_dot.save_dot ~emit_bind_edges formatter
+    ;;
 
-    let save_dot_to_file ?(emit_bind_edges = true) =
-      Node_to_dot.save_dot_to_file ~emit_bind_edges
+    let save_dot_to_file ?(emit_bind_edges = true) file =
+      Node_to_dot.save_dot_to_file ~emit_bind_edges file
     ;;
   end
 
@@ -59,6 +63,7 @@ module Generic = struct
   let const state a = State.const state a
   let return = const
   let observe = State.create_observer
+  let observe_no_finalization = State.create_observer_no_finalization
   let map = State.map
   let bind = State.bind
 
@@ -149,7 +154,6 @@ module Generic = struct
         | Invalidated -> f Invalidated
         | Unnecessary ->
           failwiths
-            ~here:[%here]
             "Incremental bug -- Observer.on_update_exn got unexpected update Unnecessary"
             t
             [%sexp_of: _ t])
@@ -189,6 +193,8 @@ module Generic = struct
           (Timing_wheel.Level_bits.create_exn level_bits ~extend_to_max_num_bits:true)
         ()
     ;;
+
+    let get_default_timing_wheel_config () = default_timing_wheel_config
 
     let create state ?(timing_wheel_config = default_timing_wheel_config) ~start () =
       (* Make sure [start] is rounded to the nearest microsecond.  Otherwise, if you
@@ -390,7 +396,9 @@ module Make_with_config (Incremental_config : Incremental_config) () = struct
   let save_dot ?(emit_bind_edges = true) out = save_dot ~emit_bind_edges State.t out
 
   let save_dot_to_file ?(emit_bind_edges = true) file =
-    Out_channel.with_file file ~f:(save_dot ~emit_bind_edges)
+    Out_channel.with_file file ~f:(fun output_channel ->
+      let formatter = Format.formatter_of_out_channel output_channel in
+      save_dot ~emit_bind_edges formatter)
   ;;
 
   let lazy_from_fun f = lazy_from_fun State.t f
@@ -408,13 +416,15 @@ module Make () = Make_with_config (Config.Default ()) ()
 include Generic
 
 module Add_witness0 (M : sig
-  type t [@@deriving sexp_of]
+  @@ portable
+    type t [@@deriving sexp_of]
 
-  include Invariant.S with type t := t
-end) : sig
+    include Invariant.S with type t := t @@ nonportable
+  end) : sig
+  @@ portable
   type 'w t = M.t [@@deriving sexp_of]
 
-  include Invariant.S1 with type 'a t := 'a t
+  include Invariant.S1 with type 'a t := 'a t @@ nonportable
 end = struct
   type 'w t = M.t
 
@@ -423,13 +433,15 @@ end = struct
 end
 
 module Add_witness1 (M : sig
-  type 'a t [@@deriving sexp_of]
+  @@ portable
+    type 'a t [@@deriving sexp_of]
 
-  include Invariant.S1 with type 'a t := 'a t
-end) : sig
+    include Invariant.S1 with type 'a t := 'a t @@ nonportable
+  end) : sig
+  @@ portable
   type ('a, 'w) t = 'a M.t [@@deriving sexp_of]
 
-  include Invariant.S2 with type ('a, 'b) t := ('a, 'b) t
+  include Invariant.S2 with type ('a, 'b) t := ('a, 'b) t @@ nonportable
 end = struct
   type ('a, 'w) t = 'a M.t
 
@@ -449,20 +461,20 @@ module Expert = struct
     include Dependency
 
     include Add_witness1 (struct
-      include Dependency
+        include Dependency
 
-      let invariant _ _ = ()
-    end)
+        let invariant _ _ = ()
+      end)
   end
 
   module Node = struct
     include Node
 
     include Add_witness1 (struct
-      include Node
+        include Node
 
-      let invariant _ _ = ()
-    end)
+        let invariant _ _ = ()
+      end)
   end
 
   module Step_result = State.Step_result
@@ -505,23 +517,23 @@ module type S = sig
 
   include
     S_gen
-      with type 'a t = ('a, state_witness) incremental
-      with type Before_or_after.t = Before_or_after.t
-      with type Clock.t = state_witness Clock.t
-      with type 'a Cutoff.t = 'a Cutoff.t
-      with type 'a Expert.Dependency.t = ('a, state_witness) Expert.Dependency.t
-      with type 'a Expert.Node.t = ('a, state_witness) Expert.Node.t
-      with type Expert.Step_result.t = Expert.Step_result.t
-      with type 'a Observer.t = ('a, state_witness) Observer.t
-      with type 'a Observer.Update.t = 'a Observer.Update.t
-      with type Packed.t = Packed.t
-      with type Scope.t = state_witness Scope.t
-      with type State.t = state_witness State.t
-      with type State.Stats.t = State.Stats.t
-      with type ('a, 'b) Unordered_array_fold_update.t =
-        ('a, 'b) Unordered_array_fold_update.t
-      with type 'a Update.t = 'a Update.t
-      with type 'a Var.t = ('a, state_witness) Var.t
+    with type 'a t = ('a, state_witness) incremental
+    with type Before_or_after.t = Before_or_after.t
+    with type Clock.t = state_witness Clock.t
+    with type 'a Cutoff.t = 'a Cutoff.t
+    with type 'a Expert.Dependency.t = ('a, state_witness) Expert.Dependency.t
+    with type 'a Expert.Node.t = ('a, state_witness) Expert.Node.t
+    with type Expert.Step_result.t = Expert.Step_result.t
+    with type 'a Observer.t = ('a, state_witness) Observer.t
+    with type 'a Observer.Update.t = 'a Observer.Update.t
+    with type Packed.t = Packed.t
+    with type Scope.t = state_witness Scope.t
+    with type State.t = state_witness State.t
+    with type State.Stats.t = State.Stats.t
+    with type ('a, 'b) Unordered_array_fold_update.t =
+      ('a, 'b) Unordered_array_fold_update.t
+    with type 'a Update.t = 'a Update.t
+    with type 'a Var.t = ('a, state_witness) Var.t
 end
 
 module Private = struct

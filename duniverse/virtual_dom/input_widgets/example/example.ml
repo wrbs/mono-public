@@ -95,7 +95,7 @@ module App = struct
   ;;
 
   let view (model : Model.t Incr.t) ~(inject : Action.t -> unit Effect.t) =
-    let%map model = model in
+    let%map model in
     let widgets =
       [ ( "Dropdown.of_values"
         , Dropdown.of_values
@@ -290,7 +290,7 @@ module App = struct
             ~merge_behavior:Legacy_dont_merge
             "Set date to now"
             ~on_click:(fun () ->
-            inject (Set { model with time_ns_opt = Some (Time_ns.now ()) })) )
+              inject (Set { model with time_ns_opt = Some (Time_ns.now ()) })) )
       ; ( "Button.submit"
         , Button.with_validation
             ~merge_behavior:Legacy_dont_merge
@@ -335,7 +335,7 @@ module App = struct
   ;;
 
   let create model ~old_model:_ ~inject =
-    let%map model = model
+    let%map model
     and view = view model ~inject
     and apply_action =
       let%map _model = model in

@@ -34,11 +34,12 @@ let trace' sim assertion_manager =
   let asserts =
     Map.to_alist assertions
     |> List.map ~f:(fun (port_name, _) ->
-         port_name, Cyclesim.out_port sim ~clock_edge:Before port_name)
+      port_name, Cyclesim.out_port sim ~clock_edge:Before port_name)
   in
   let check_assertions () =
     List.iter asserts ~f:(fun (name, bits) ->
-      if Bits.is_gnd !bits then Hashtbl.add_multi asserted ~key:name ~data:!cycle_no);
+      if not (Bits.to_bool !bits)
+      then Hashtbl.add_multi asserted ~key:name ~data:!cycle_no);
     Int.incr cycle_no
   in
   let sim =
@@ -84,7 +85,7 @@ let add scope name assertion =
 module Always = struct
   let add scope name assertion =
     check_assertion_width name assertion;
-    let assertion_var = Always.Variable.wire ~default:(Signal.one 1) in
+    let assertion_var = Always.Variable.wire ~default:(Signal.one 1) () in
     add scope name (Always.Variable.value assertion_var);
     Always.( <-- ) assertion_var assertion
   ;;

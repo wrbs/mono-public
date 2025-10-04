@@ -7,8 +7,8 @@ module Http_handler = struct
   type t = body:Body.t -> Socket.Address.Inet.t -> Request.t -> Server.response Deferred.t
 end
 
-(** There are multiple ways to refer to "index.html", but there should only be one.
-    This is an elementary URI router *)
+(** There are multiple ways to refer to "index.html", but there should only be one. This
+    is an elementary URI router *)
 module Canonicalize = struct
   type t =
     | Index
@@ -42,10 +42,16 @@ let log_file_not_found ?(log = Lazy.force Log.Global.log) filename =
   [%log.debug log "File not found" (filename : String.t)]
 ;;
 
-(** Same as [Cohttp_async.Server.respond_with_file], but if a gzipped version of the
-    file is available, the gzipped version will be served instead. *)
-let respond_with_file_or_gzipped ?log ?flush ?headers ?error_body filename =
+(** Same as [Cohttp_async.Server.respond_with_file], but if a gzipped version of the file
+    is available, the gzipped version will be served instead. *)
+let respond_with_file_or_gzipped ?log ?flush ?headers ?content_type ?error_body filename =
   let gz_filename = filename ^ ".gz" in
+  let headers =
+    match content_type with
+    | None -> headers
+    | Some content_type ->
+      Some (Cohttp.Header.add_opt headers "Content-Type" content_type)
+  in
   let%bind headers, filename =
     match%bind Sys.file_exists gz_filename with
     | `Yes -> return (Some (Header.add_opt headers "content-encoding" "gzip"), gz_filename)
@@ -59,16 +65,20 @@ let respond_with_file_or_gzipped ?log ?flush ?headers ?error_body filename =
   Cohttp_async.Server.respond_with_file ?flush ?headers ?error_body filename
 ;;
 
-let directory_handler ?log ?directory () ~body:_ inet req =
+let directory_handler ?log ?headers ?directory () ~body:_ inet req =
   let directory = Option.value directory ~default:Filename.current_dir_name in
   let path = request_path req in
   log_request ?log inet path;
   let filename = directory ^/ Canonicalize.path path in
-  respond_with_file_or_gzipped ?log filename
+  respond_with_file_or_gzipped ?log ?headers filename
 ;;
 
-let respond_string ~content_type ?flush ?headers ?status s =
-  let headers = Cohttp.Header.add_opt headers "Content-Type" content_type in
+let respond_string ?content_type ?flush ?headers ?status s =
+  let headers =
+    match content_type with
+    | None -> Option.value headers ~default:(Cohttp.Header.init ())
+    | Some content_type -> Cohttp.Header.add_opt headers "Content-Type" content_type
+  in
   Cohttp_async.Server.respond_string ?flush ~headers ?status s
 ;;
 
@@ -98,70 +108,98 @@ module Asset = struct
       | Embedded of
           { filename : string option
           ; contents : string
+          ; headers : Header.t option
           }
       | File of
           { path : string
           ; serve_as : string option
+          ; serve_as_query_params : string option
+          ; headers : Header.t option
           }
     [@@deriving sexp_of]
 
     let my_location = lazy (Filename.dirname (Core_unix.readlink "/proc/self/exe"))
 
-    let file' ~relative_to ~path ~serve_as =
+    let file' ?headers ?serve_as ~path ~relative_to () =
+      let serve_as, serve_as_query_params =
+        Option.value_map serve_as ~default:(None, None) ~f:(fun serve_as ->
+          match String.split ~on:'?' serve_as with
+          | [] -> None, None
+          | [ serve_as ] -> Some serve_as, None
+          | serve_as :: rest -> Some serve_as, Some (String.concat ~sep:"?" rest))
+      in
       match relative_to with
       | `Exe when Filename.is_relative path ->
         let exe = force my_location in
-        File { path = Filename.concat exe path; serve_as }
-      | `Cwd | `Exe -> File { path; serve_as }
+        File { path = Filename.concat exe path; serve_as; serve_as_query_params; headers }
+      | `Cwd | `Exe -> File { path; serve_as; serve_as_query_params; headers }
     ;;
 
-    let file ~relative_to ~path = file' ~relative_to ~path ~serve_as:None
-
-    let file_serve_as ~relative_to ~path ~serve_as =
-      file' ~relative_to ~path ~serve_as:(Some serve_as)
-    ;;
+    let file ~relative_to ~path = file' ~relative_to ~path ()
 
     let embedded_with_filename ~filename ~contents =
-      Embedded { filename = Some filename; contents }
+      Embedded { filename = Some filename; contents; headers = None }
     ;;
 
-    let embedded ~contents = Embedded { filename = None; contents }
+    let embedded ~contents = Embedded { filename = None; contents; headers = None }
 
-    let filename = function
-      | Embedded { filename; contents = _ } -> filename
-      | File { serve_as = None; path } -> Some path
-      | File { serve_as = Some serve_as; path = _ } -> Some serve_as
+    let filename ~(for_ : [ `Html | `Asset_map ]) = function
+      | Embedded { filename; contents = _; headers = _ } -> filename
+      | File { serve_as = None; path; serve_as_query_params = _; headers = _ } ->
+        Some path
+      | File { serve_as = Some serve_as; serve_as_query_params; path = _; headers = _ } ->
+        (match for_, serve_as_query_params with
+         | `Asset_map, _ | `Html, None -> Some serve_as
+         | `Html, Some params -> Some [%string "%{serve_as}?%{params}"])
     ;;
   end
 
   module Link_attrs = struct
     type t =
       { rel : string
-      ; type_ : string
+      ; type_ : string option
       ; title : string option
           (* here be dragons https://developer.mozilla.org/en-US/docs/Archive/Web_Standards/Correctly_Using_Titles_With_External_Stylesheets *)
+      ; attrs : (string * string) list
       }
     [@@deriving sexp_of]
+
+    let create ~rel ?type_ ?title ?(attrs = []) () = { rel; type_; title; attrs }
   end
 
   module Kind = struct
     type t =
       | Javascript
+      | Wasm
+      | Async_javascript
       | Linked of Link_attrs.t
-      | Hosted of { type_ : string }
+      | Hosted of { type_ : string option }
     [@@deriving sexp_of]
 
-    let css = Linked { rel = "stylesheet"; type_ = "text/css"; title = None }
-    let favicon = Linked { rel = "icon"; type_ = "image/x-icon"; title = None }
-    let favicon_svg = Linked { rel = "icon"; type_ = "image/svg+xml"; title = None }
-    let sourcemap = Hosted { type_ = "application/octet-stream" }
+    let css = Linked (Link_attrs.create ~rel:"stylesheet" ~type_:"text/css" ())
+    let favicon = Linked (Link_attrs.create ~rel:"icon" ~type_:"image/x-icon" ())
+    let favicon_svg = Linked (Link_attrs.create ~rel:"icon" ~type_:"image/svg+xml" ())
+    let sourcemap = Hosted { type_ = Some "application/octet-stream" }
     let javascript = Javascript
-    let file ~rel ~type_ = Linked { rel; type_; title = None }
-    let in_server ~type_ = Hosted { type_ }
+    let async_javascript = Async_javascript
+    let wasm = Wasm
+    let file ~rel ~type_ = Linked (Link_attrs.create ~rel ~type_ ())
+
+    let linked ~rel ?type_ ?title ?attrs () =
+      Linked (Link_attrs.create ~rel ?type_ ?title ?attrs ())
+    ;;
+
+    let in_server ~type_ = Hosted { type_ = Some type_ }
 
     let content_type = function
-      | Javascript -> "application/javascript"
-      | Linked { rel = (_ : string); type_; title = (_ : string option) }
+      | Javascript | Async_javascript -> Some "application/javascript"
+      | Wasm -> Some "application/wasm"
+      | Linked
+          { rel = (_ : string)
+          ; type_
+          ; title = (_ : string option)
+          ; attrs = (_ : (string * string) list)
+          }
       | Hosted { type_ } -> type_
     ;;
   end
@@ -185,11 +223,12 @@ module Asset = struct
     ;;
 
     let handler (t : t) =
+      let content_type = Kind.content_type t.kind in
       match t.location with
-      | File { path; serve_as = _ } -> stage (fun () -> respond_with_file_or_gzipped path)
-      | Embedded { filename = _; contents } ->
-        let content_type = Kind.content_type t.kind in
-        stage (fun () -> respond_string ~content_type contents)
+      | File { path; serve_as = _; serve_as_query_params = _; headers } ->
+        stage (fun () -> respond_with_file_or_gzipped ?headers ?content_type path)
+      | Embedded { filename = _; contents; headers } ->
+        stage (fun () -> respond_string ?headers ?content_type contents)
     ;;
   end
 
@@ -204,31 +243,37 @@ module Asset = struct
     | External_ of External.t
   [@@deriving sexp_of, variants]
 
-  let asset_name_at_index ~what_to_serve ~index =
-    match What_to_serve.filename what_to_serve with
+  let asset_name_at_index ~what_to_serve ~index ~(for_ : [ `Html | `Asset_map ]) =
+    match What_to_serve.filename ~for_ what_to_serve with
     | Some filename -> Filename.basename filename
     | None -> [%string "auto-generated-%{index#Int}"]
   ;;
 
   let to_html_lines t =
-    let make_link ~title ~rel ~type_ ~filename =
+    let make_link ~filename link_attrs =
+      let { Link_attrs.rel; type_; title; attrs } = link_attrs in
+      let type_attr = Option.value_map ~default:"" ~f:(sprintf {| type="%s"|}) type_ in
       let title_attr = Option.value_map ~default:"" ~f:(sprintf {| title="%s"|}) title in
-      sprintf {|<link rel="%s" type="%s" href="%s"%s>|} rel type_ filename title_attr
+      let attrs =
+        List.map attrs ~f:(fun (key, value) -> sprintf {| %s="%s"|} key value)
+        |> String.concat
+      in
+      sprintf {|<link rel="%s"%s href="%s"%s%s>|} rel type_attr filename title_attr attrs
     in
     List.mapi t ~f:(fun index asset ->
       match asset with
       | Local local_resource ->
         Asset.map_location local_resource ~f:(fun what_to_serve ->
-          asset_name_at_index ~what_to_serve ~index)
+          asset_name_at_index ~for_:`Html ~what_to_serve ~index)
       | External_ external_resource ->
         Asset.map_location external_resource ~f:Uri.to_string)
     |> List.filter_map ~f:(fun asset ->
-         let filename = Asset.location asset in
-         match Asset.kind asset with
-         | Linked { rel; type_; title } -> Some (make_link ~title ~rel ~type_ ~filename)
-         | Hosted { type_ = _ } -> None
-         | Javascript ->
-           (* From the HTML5 spec 4.12.1, regarding the [type] attribute:
+      let filename = Asset.location asset in
+      match Asset.kind asset with
+      | Linked link_attrs -> Some (make_link ~filename link_attrs)
+      | Hosted { type_ = _ } | Wasm -> None
+      | Javascript ->
+        (* From the HTML5 spec 4.12.1, regarding the [type] attribute:
            https://www.w3.org/TR/html5/semantics-scripting.html#elementdef-script
            ------------------
            The type attribute allows customization of the type of script represented:
@@ -252,7 +297,8 @@ module Asset = struct
 
            As such, we do not include the [type] attribute.
         *)
-           Some (sprintf {|<script defer src="%s"></script>|} filename))
+        Some (sprintf {|<script defer src="%s"></script>|} filename)
+      | Async_javascript -> Some (sprintf {|<script async src="%s"></script>|} filename))
   ;;
 
   let to_map_with_handlers t =
@@ -261,7 +307,10 @@ module Asset = struct
       | External_ (_ : External.t) -> None
       | Local asset ->
         let asset_name =
-          asset_name_at_index ~index ~what_to_serve:(Asset.location asset)
+          asset_name_at_index
+            ~for_:`Asset_map
+            ~index
+            ~what_to_serve:(Asset.location asset)
         in
         Some (asset_name, Local.handler asset))
     |> String.Map.of_alist_exn
@@ -302,10 +351,11 @@ module Asset = struct
     let create ~template ~short_name ~description =
       let kind =
         Kind.Linked
-          { rel = "search"
-          ; type_ = "application/opensearchdescription+xml"
-          ; title = Some short_name
-          }
+          (Link_attrs.create
+             ~rel:"search"
+             ~type_:"application/opensearchdescription+xml"
+             ~title:short_name
+             ())
       in
       What_to_serve.embedded ~contents:(content ~short_name ~description ~template)
       |> local kind
@@ -319,15 +369,19 @@ module Single_page_handler = struct
   (* This represents the body of the html page. *)
   type t = string
 
-  let default = {|  <body>
+  let default =
+    {|  <body>
   </body>|}
+  ;;
 
   let default_with_body_div ~div_id =
-    sprintf {|
+    sprintf
+      {|
   <body>
     <div id="%s">
     </div>
-  </body>|} div_id
+  </body>|}
+      div_id
   ;;
 
   let create ~body = body

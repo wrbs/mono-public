@@ -1,5 +1,14 @@
 export XDG_CACHE_HOME="$PWD/.cache"
 
+# Set the default platform for the purposes of solving dependencies so that the
+# output of tests is platform-independent.
+export DUNE_CONFIG__OS=linux
+export DUNE_CONFIG__ARCH=x86_64
+export DUNE_CONFIG__OS_FAMILY=debian
+export DUNE_CONFIG__OS_DISTRIBUTION=ubuntu
+export DUNE_CONFIG__OS_VERSION=24.11
+export DUNE_CONFIG__SYS_OCAML_VERSION=5.4.0+fake
+
 dune="dune"
 
 pkg_root="_build/_private/default/.pkg"
@@ -44,6 +53,9 @@ mkpkg() {
 }
 
 add_mock_repo_if_needed() {
+  # default, but can be overridden, e.g. if git is required
+  repo="${1:-file://$(pwd)/mock-opam-repository}"
+
   if [ ! -e dune-workspace ]
   then
       cat >dune-workspace <<EOF
@@ -52,7 +64,7 @@ add_mock_repo_if_needed() {
  (repositories mock))
 (repository
  (name mock)
- (source "file://$(pwd)/mock-opam-repository"))
+ (url "${repo}"))
 EOF
   else
     if ! grep '(name mock)' > /dev/null dune-workspace
@@ -61,7 +73,7 @@ EOF
       cat >>dune-workspace <<EOF
 (repository
  (name mock)
- (source "file://$(pwd)/mock-opam-repository"))
+ (url "${repo}"))
 EOF
  
       # reference the repo

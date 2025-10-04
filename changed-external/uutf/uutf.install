@@ -1,0 +1,22 @@
+lib: [
+  "_build/install/default/lib/uutf/META"
+  "_build/install/default/lib/uutf/dune-package"
+  "_build/install/default/lib/uutf/opam"
+  "_build/install/default/lib/uutf/uutf.a"
+  "_build/install/default/lib/uutf/uutf.cma"
+  "_build/install/default/lib/uutf/uutf.cmi"
+  "_build/install/default/lib/uutf/uutf.cmt"
+  "_build/install/default/lib/uutf/uutf.cmti"
+  "_build/install/default/lib/uutf/uutf.cmx"
+  "_build/install/default/lib/uutf/uutf.cmxa"
+  "_build/install/default/lib/uutf/uutf.ml"
+  "_build/install/default/lib/uutf/uutf.mli"
+]
+libexec: [
+  "_build/install/default/lib/uutf/uutf.cmxs"
+]
+doc: [
+  "_build/install/default/doc/uutf/CHANGES.md"
+  "_build/install/default/doc/uutf/LICENSE.md"
+  "_build/install/default/doc/uutf/README.md"
+]

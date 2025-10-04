@@ -2,8 +2,7 @@ open! Core
 open! Import
 open! Month
 
-let%test_module "Month.V1" =
-  (module Stable_unit_test.Make (struct
+module%test [@name "Month.V1"] _ = Stable_unit_test.Make (struct
     include Stable.V1
 
     let equal t1 t2 = Int.( = ) 0 (compare t1 t2)
@@ -29,8 +28,7 @@ let%test_module "Month.V1" =
         ~nov:(c 10 "Nov" "\010")
         ~dec:(c 11 "Dec" "\011")
     ;;
-  end))
-;;
+  end)
 
 let%test _ = Int.( = ) (List.length all) 12
 
@@ -53,8 +51,18 @@ let%test _ = shift Jan (-16) = Sep
 let%test _ = shift Sep 1 = Oct
 let%test _ = shift Sep (-1) = Aug
 
+let%expect_test "of_string" =
+  List.iter Month.all ~f:(fun month ->
+    let string = Month.to_string month in
+    let test string = require_equal (module Month) (Month.of_string string) month in
+    test string;
+    test (String.lowercase string);
+    test (String.uppercase string));
+  [%expect {| |}]
+;;
+
 let%expect_test "validate sexp grammar" =
-  Sexp_grammar_validation.validate_grammar (module Month) |> require_ok [%here];
+  Sexp_grammar_validation.validate_grammar (module Month) |> require_ok;
   [%expect
     {|
     (Variant

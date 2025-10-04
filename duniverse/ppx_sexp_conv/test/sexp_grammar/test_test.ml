@@ -7,7 +7,7 @@ module _ = struct
   let (t_sexp_grammar : t Sexplib0.Sexp_grammar.t) = int_sexp_grammar
   let _ = t_sexp_grammar
 
-  [@@@deriving.end]
+  [@@@end]
 end
 
 module _ = struct
@@ -59,7 +59,7 @@ module _ = struct
 
   let _ = u_sexp_grammar
 
-  [@@@deriving.end]
+  [@@@end]
 
   (* Avoid unused constructor warnings. *)
   let _ = T ()
@@ -71,11 +71,11 @@ module _ = struct
 
   let _ = fun (_ : ('a, 'b) t) -> ()
 
-  let t_sexp_grammar :
-        'a 'b.
-        'a Sexplib0.Sexp_grammar.t
-        -> 'b Sexplib0.Sexp_grammar.t
-        -> ('a, 'b) t Sexplib0.Sexp_grammar.t
+  let t_sexp_grammar
+    : 'a 'b.
+    'a Sexplib0.Sexp_grammar.t
+    -> 'b Sexplib0.Sexp_grammar.t
+    -> ('a, 'b) t Sexplib0.Sexp_grammar.t
     =
     fun _'a_sexp_grammar _'b_sexp_grammar -> Sexplib0.Sexp_conv.fun_sexp_grammar
   ;;

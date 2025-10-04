@@ -1,14 +1,16 @@
 open Core
 open Ppxlib
 open Ppx_css
-open Css_jane
 open Test_util
 
-let loc = Location.none
+let loc = Test_util.loc_with_mock_name
+let () = Ppx_css_syntax.Preprocess_arguments.set_lazy_loading_optimization (Some true)
 
 let%expect_test "basic class" =
   test_struct
-    [%expr stylesheet {|
+    [%expr
+      stylesheet
+        {|
      .foo {
        background-color: red;
      }
@@ -17,10 +19,8 @@ let%expect_test "basic class" =
     {xxx|
     [@@@ocaml.warning "-32"]
     let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
+      ?dont_hash:string list -> ?dont_hash_prefixes:string list -> string -> unit
+      = fun ?dont_hash:_  ?dont_hash_prefixes:_  _ -> ()
     module type S  =
       sig
         module For_referencing : sig val foo : string end
@@ -29,19 +29,31 @@ let%expect_test "basic class" =
     type t = (module S)
     module Default : S =
       struct
-        module For_referencing = struct let foo = {|foo_hash_33d98f18fa|} end
-        let foo = Virtual_dom.Vdom.Attr.class_ {|foo_hash_33d98f18fa|}
+        module For_referencing = struct let foo = {|foo_hash_48f0d5a990|} end
+        let foo =
+          Virtual_dom.Vdom.Attr.lazy_
+            (lazy
+               (Inline_css.Ppx_css_runtime.force
+                  Ppx_css_hoister_do_not_collide.update_sheet_lazy_fn_x__001___48f0d5a990__group_0;
+                Virtual_dom.Vdom.Attr.class_ {|foo_hash_48f0d5a990|}))
       end
     include Default
     let default : t = (module Default)
-    let () =
-      Inline_css.Private.append
-        {|
-    /* _none_ */
 
-    *.foo_hash_33d98f18fa {
-     background-color:red
-    }|}
+    Hoisted module:
+
+    let sheet_x__001___48f0d5a990__0 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let update_sheet_lazy_fn_x__001___48f0d5a990__group_0 =
+      lazy
+        (Inline_css.Private.update_stylesheet sheet_x__001___48f0d5a990__0
+           {|
+    /* app/foo/foo.ml */
+
+    .foo_hash_48f0d5a990 {
+      background-color: red;
+    }|})
     |xxx}]
 ;;
 
@@ -51,19 +63,25 @@ let%expect_test "charset" =
     {xxx|
     [@@@ocaml.warning "-32"]
     let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
+      ?dont_hash:string list -> ?dont_hash_prefixes:string list -> string -> unit
+      = fun ?dont_hash:_  ?dont_hash_prefixes:_  _ -> ()
     module type S  = sig module For_referencing : sig  end end
     type t = (module S)
     module Default : S = struct module For_referencing = struct  end end
     include Default
     let default : t = (module Default)
-    let () = Inline_css.Private.append {|
-    /* _none_ */
 
-    @charset" UTF-8";|}
+    Hoisted module:
+
+    let sheet_x__002___ec8e944011__0 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let () =
+      Inline_css.Private.update_stylesheet sheet_x__002___ec8e944011__0
+        {|
+    /* app/foo/foo.ml */
+
+    @charset "UTF-8";|}
     |xxx}]
 ;;
 
@@ -89,10 +107,8 @@ let%expect_test "nested at rule" =
     {xxx|
     [@@@ocaml.warning "-32"]
     let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
+      ?dont_hash:string list -> ?dont_hash_prefixes:string list -> string -> unit
+      = fun ?dont_hash:_  ?dont_hash_prefixes:_  _ -> ()
     module type S  =
       sig
         module For_referencing : sig val bar : string val my_foo : string end
@@ -104,32 +120,34 @@ let%expect_test "nested at rule" =
       struct
         module For_referencing =
           struct
-            let bar = {|bar_hash_9b00fea12b|}
-            let my_foo = {|my_foo_hash_9b00fea12b|}
+            let bar = {|bar_hash_47750ccc00|}
+            let my_foo = {|my_foo_hash_47750ccc00|}
           end
-        let bar = Virtual_dom.Vdom.Attr.id {|bar_hash_9b00fea12b|}
-        let my_foo = Virtual_dom.Vdom.Attr.class_ {|my_foo_hash_9b00fea12b|}
+        let bar = Virtual_dom.Vdom.Attr.id {|bar_hash_47750ccc00|}
+        let my_foo = Virtual_dom.Vdom.Attr.class_ {|my_foo_hash_47750ccc00|}
       end
     include Default
     let default : t = (module Default)
+
+    Hoisted module:
+
+    let sheet_x__003___47750ccc00__0 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
     let () =
-      Inline_css.Private.append
+      Inline_css.Private.update_stylesheet sheet_x__003___47750ccc00__0
         {|
-    /* _none_ */
+    /* app/foo/foo.ml */
 
-    @media screen and (min-width:900px){
-     div#bar_hash_9b00fea12b {
-      color:red
-     }
-
-     @media screen and (min-width:900px){
-      article.my_foo_hash_9b00fea12b {
-       padding:1rem 3rem
+    @media screen and (min-width: 900px) {
+      div#bar_hash_47750ccc00 {
+        color: red;
       }
-
-     }
-
-
+      @media screen and (min-width: 900px) {
+        article.my_foo_hash_47750ccc00 {
+          padding: 1rem 3rem;
+        }
+      }
     }|}
     |xxx}]
 ;;
@@ -149,10 +167,8 @@ let%expect_test "at rule" =
     {xxx|
     [@@@ocaml.warning "-32"]
     let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
+      ?dont_hash:string list -> ?dont_hash_prefixes:string list -> string -> unit
+      = fun ?dont_hash:_  ?dont_hash_prefixes:_  _ -> ()
     module type S  =
       sig
         module For_referencing : sig val my_foo : string end
@@ -162,21 +178,26 @@ let%expect_test "at rule" =
     module Default : S =
       struct
         module For_referencing =
-          struct let my_foo = {|my_foo_hash_89c052f1ae|} end
-        let my_foo = Virtual_dom.Vdom.Attr.class_ {|my_foo_hash_89c052f1ae|}
+          struct let my_foo = {|my_foo_hash_a834a8e1e6|} end
+        let my_foo = Virtual_dom.Vdom.Attr.class_ {|my_foo_hash_a834a8e1e6|}
       end
     include Default
     let default : t = (module Default)
+
+    Hoisted module:
+
+    let sheet_x__004___a834a8e1e6__0 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
     let () =
-      Inline_css.Private.append
+      Inline_css.Private.update_stylesheet sheet_x__004___a834a8e1e6__0
         {|
-    /* _none_ */
+    /* app/foo/foo.ml */
 
-    @media screen and (min-width:900px){
-     article.my_foo_hash_89c052f1ae {
-      padding:1rem 3rem
-     }
-
+    @media screen and (min-width: 900px) {
+      article.my_foo_hash_a834a8e1e6 {
+        padding: 1rem 3rem;
+      }
     }|}
     |xxx}]
 ;;
@@ -184,18 +205,20 @@ let%expect_test "at rule" =
 let%expect_test "no mention of stylesheet function" =
   test_struct [%expr {| .a { }|}];
   [%expect
-    {xxx| %css must contain a call to [?rewrite:(string * string) list -> ?dont_hash:string list -> dont_hash_prefixes:string list -> string -> unit] |xxx}]
+    {xxx| %css must contain a call to [?dont_hash:string list -> dont_hash_prefixes:string list -> string -> unit] |xxx}]
 ;;
 
 let%expect_test "not a string" =
   test_struct [%expr stylesheet 5];
   [%expect
-    {xxx| ppx_css found unexpected arguments. %css must contain a call to [?rewrite:(string * string) list -> ?dont_hash:string list -> dont_hash_prefixes:string list -> string -> unit] |xxx}]
+    {xxx| ppx_css found unexpected arguments. %css must contain a call to [?dont_hash:string list -> dont_hash_prefixes:string list -> string -> unit] |xxx}]
 ;;
 
 let%expect_test "basic id" =
   test_struct
-    [%expr stylesheet {|
+    [%expr
+      stylesheet
+        {|
      #foo {
        background-color: red;
      }
@@ -204,10 +227,8 @@ let%expect_test "basic id" =
     {xxx|
     [@@@ocaml.warning "-32"]
     let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
+      ?dont_hash:string list -> ?dont_hash_prefixes:string list -> string -> unit
+      = fun ?dont_hash:_  ?dont_hash_prefixes:_  _ -> ()
     module type S  =
       sig
         module For_referencing : sig val foo : string end
@@ -216,32 +237,48 @@ let%expect_test "basic id" =
     type t = (module S)
     module Default : S =
       struct
-        module For_referencing = struct let foo = {|foo_hash_734bfa5411|} end
-        let foo = Virtual_dom.Vdom.Attr.id {|foo_hash_734bfa5411|}
+        module For_referencing = struct let foo = {|foo_hash_c4c785a1c3|} end
+        let foo =
+          Virtual_dom.Vdom.Attr.lazy_
+            (lazy
+               (Inline_css.Ppx_css_runtime.force
+                  Ppx_css_hoister_do_not_collide.update_sheet_lazy_fn_x__005___c4c785a1c3__group_0;
+                Virtual_dom.Vdom.Attr.id {|foo_hash_c4c785a1c3|}))
       end
     include Default
     let default : t = (module Default)
-    let () =
-      Inline_css.Private.append
-        {|
-    /* _none_ */
 
-    *#foo_hash_734bfa5411 {
-     background-color:red
-    }|}
+    Hoisted module:
+
+    let sheet_x__005___c4c785a1c3__0 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let update_sheet_lazy_fn_x__005___c4c785a1c3__group_0 =
+      lazy
+        (Inline_css.Private.update_stylesheet sheet_x__005___c4c785a1c3__0
+           {|
+    /* app/foo/foo.ml */
+
+    #foo_hash_c4c785a1c3 {
+      background-color: red;
+    }|})
     |xxx}]
 ;;
 
 let%expect_test "missing closing brace" =
-  test_struct [%expr stylesheet {|
+  test_struct
+    [%expr
+      stylesheet
+        {|
      #foo {
        background-color: red;
       |}];
-  [%expect {xxx| Parse error while reading token 'EOF' |xxx}]
+  [%expect {xxx| Error while parsing style block. Expected closing right brace |xxx}]
 ;;
 
 let%expect_test "listed identifiers" =
-  test_sig {|
+  test_sig
+    {|
     .a {}
     #b {}
     .c {}
@@ -268,7 +305,8 @@ let%expect_test "listed identifiers" =
 ;;
 
 let%expect_test "duplicates sig" =
-  test_sig {|
+  test_sig
+    {|
     .a {}
     #a {}
     .b {}
@@ -316,7 +354,8 @@ let%expect_test "politicians example" =
 ;;
 
 let%expect_test "variables on signature generation" =
-  test_sig {|
+  test_sig
+    {|
 :root {
   --bg-color: black;
 }
@@ -382,10 +421,8 @@ let%expect_test "animation" =
     {xxx|
     [@@@ocaml.warning "-32"]
     let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
+      ?dont_hash:string list -> ?dont_hash_prefixes:string list -> string -> unit
+      = fun ?dont_hash:_  ?dont_hash_prefixes:_  _ -> ()
     module type S  =
       sig
         module For_referencing : sig val spinner : string end
@@ -395,33 +432,50 @@ let%expect_test "animation" =
     module Default : S =
       struct
         module For_referencing =
-          struct let spinner = {|spinner_hash_89c1bc2218|} end
-        let spinner = Virtual_dom.Vdom.Attr.class_ {|spinner_hash_89c1bc2218|}
+          struct let spinner = {|spinner_hash_dfd410041d|} end
+        let spinner =
+          Virtual_dom.Vdom.Attr.lazy_
+            (lazy
+               (Inline_css.Ppx_css_runtime.force
+                  Ppx_css_hoister_do_not_collide.update_sheet_lazy_fn_x__006___dfd410041d__group_0;
+                Virtual_dom.Vdom.Attr.class_ {|spinner_hash_dfd410041d|}))
       end
     include Default
     let default : t = (module Default)
+
+    Hoisted module:
+
+    let sheet_x__006___dfd410041d__0 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__006___dfd410041d__1 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
     let () =
-      Inline_css.Private.append
+      Inline_css.Private.update_stylesheet sheet_x__006___dfd410041d__1
         {|
-    /* _none_ */
+    /* app/foo/foo.ml */
 
-    *.spinner_hash_89c1bc2218 {
-     animation-name:spin;
-     animation-duration:5000ms;
-     animation-iteration-count:infinite;
-     animation-timing-function:linear
-    }
-
-    @keyframes spin{
-     from {
-      transform:rotate(0deg)
-     }
-
-     to {
-      transform:rotate(360deg)
-     }
-
+    @keyframes spin {
+      from {
+        transform: rotate(0deg);
+      }
+      to {
+        transform: rotate(360deg);
+      }
     }|}
+    let update_sheet_lazy_fn_x__006___dfd410041d__group_0 =
+      lazy
+        (Inline_css.Private.update_stylesheet sheet_x__006___dfd410041d__0
+           {|
+    /* app/foo/foo.ml */
+
+    .spinner_hash_dfd410041d {
+      animation-name: spin;
+      animation-duration: 5000ms;
+      animation-iteration-count: infinite;
+      animation-timing-function: linear;
+    }|})
     |xxx}]
 ;;
 
@@ -446,15 +500,13 @@ let%expect_test "dont hash flag" =
   color: white;
 }
 |}
-        ~rewrite:[ "dont-hash-me", "dont-hash-me"; "dont-hash-me-id", "dont-hash-me-id" ]];
+        ~dont_hash:[ "dont-hash-me"; "dont-hash-me-id" ]];
   [%expect
     {xxx|
     [@@@ocaml.warning "-32"]
     let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
+      ?dont_hash:string list -> ?dont_hash_prefixes:string list -> string -> unit
+      = fun ?dont_hash:_  ?dont_hash_prefixes:_  _ -> ()
     module type S  =
       sig
         module For_referencing :
@@ -474,121 +526,119 @@ let%expect_test "dont hash flag" =
       struct
         module For_referencing =
           struct
-            let hash_me_id = {|hash-me-id_hash_1e8ab0f0e7|}
-            let hash_me = {|hash-me_hash_1e8ab0f0e7|}
-            let dont_hash_me_id = {|dont-hash-me-id|}
             let dont_hash_me = {|dont-hash-me|}
+            let dont_hash_me_id = {|dont-hash-me-id|}
+            let hash_me = {|hash-me_hash_151702aef0|}
+            let hash_me_id = {|hash-me-id_hash_151702aef0|}
           end
-        let hash_me_id = Virtual_dom.Vdom.Attr.id {|hash-me-id_hash_1e8ab0f0e7|}
-        let hash_me = Virtual_dom.Vdom.Attr.class_ {|hash-me_hash_1e8ab0f0e7|}
-        let dont_hash_me_id = Virtual_dom.Vdom.Attr.id {|dont-hash-me-id|}
         let dont_hash_me = Virtual_dom.Vdom.Attr.class_ {|dont-hash-me|}
+        let dont_hash_me_id = Virtual_dom.Vdom.Attr.id {|dont-hash-me-id|}
+        let hash_me =
+          Virtual_dom.Vdom.Attr.lazy_
+            (lazy
+               (Inline_css.Ppx_css_runtime.force
+                  Ppx_css_hoister_do_not_collide.update_sheet_lazy_fn_x__007___151702aef0__group_1;
+                Virtual_dom.Vdom.Attr.class_ {|hash-me_hash_151702aef0|}))
+        let hash_me_id =
+          Virtual_dom.Vdom.Attr.lazy_
+            (lazy
+               (Inline_css.Ppx_css_runtime.force
+                  Ppx_css_hoister_do_not_collide.update_sheet_lazy_fn_x__007___151702aef0__group_0;
+                Virtual_dom.Vdom.Attr.id {|hash-me-id_hash_151702aef0|}))
       end
     include Default
     let default : t = (module Default)
+
+    Hoisted module:
+
+    let sheet_x__007___151702aef0__0 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__007___151702aef0__1 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__007___151702aef0__2 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__007___151702aef0__3 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
     let () =
-      Inline_css.Private.append
+      Inline_css.Private.update_stylesheet sheet_x__007___151702aef0__1
         {|
-    /* _none_ */
+    /* app/foo/foo.ml */
 
-    *.hash-me_hash_1e8ab0f0e7 {
-     color:black
-    }
+    .dont-hash-me {
+      color: green;
+    }|};
+      Inline_css.Private.update_stylesheet sheet_x__007___151702aef0__3
+        {|
+    /* app/foo/foo.ml */
 
-    *.dont-hash-me {
-     color:green
-    }
-
-    *#hash-me-id_hash_1e8ab0f0e7 {
-     color:red
-    }
-
-    *#dont-hash-me-id {
-     color:white
+    #dont-hash-me-id {
+      color: white;
     }|}
+    let update_sheet_lazy_fn_x__007___151702aef0__group_0 =
+      lazy
+        (Inline_css.Private.update_stylesheet sheet_x__007___151702aef0__2
+           {|
+    /* app/foo/foo.ml */
+
+    #hash-me-id_hash_151702aef0 {
+      color: red;
+    }|})
+    let update_sheet_lazy_fn_x__007___151702aef0__group_1 =
+      lazy
+        (Inline_css.Private.update_stylesheet sheet_x__007___151702aef0__0
+           {|
+    /* app/foo/foo.ml */
+
+    .hash-me_hash_151702aef0 {
+      color: black;
+    }|})
     |xxx}]
 ;;
 
-let%expect_test "rewrite malformed syntax" =
+let%expect_test "rewrite deprecated" =
   test_struct [%expr stylesheet {||} ~rewrite:[ "dont-hash-me"; 1 ]];
   [%expect
     {xxx|
-    The rewrite argument to 'stylesheet' must be called with a list literal containing tuple literals,
-    where the first element of the tuple must be a string literal (the second element in the tuple can be
-    any expression which evaluates to a string.)
-
-    examples:
-      stylesheet ~rewrite:[ "foo_bar", "foo-bar" ] (* Rewrites instances of "foo_bar" in the css string to "foo-bar" *)
-      stylesheet ~rewrite:[ "foo-bar", "foo-bar" ] (* Prevents the "foo-bar" identifier from being hashed for uniqueness *)
-      stylesheet ~rewrite:[ "my_table", My_table_component.table ] (* References an identifier defined in another module *)
+    The use of ~rewrite is deprecated, please use ~dont_hash or ~dont_hash_prefixes
+           instead. Alternatively, consider writing all of your CSS in the same %css
+           stylesheet incantation. Deprecating ~rewrite allows for more optimiztions in ppx_css,
+           at the expense of expressibility. We've audited bonsai apps and believe this expressibility
+           was unused so we've removed it. If this conflicts with your use case please reach out.
     |xxx}];
   test_struct [%expr stylesheet {||} ~rewrite];
   [%expect
     {xxx|
-    The rewrite argument to 'stylesheet' must be called with a list literal containing tuple literals,
-    where the first element of the tuple must be a string literal (the second element in the tuple can be
-    any expression which evaluates to a string.)
-
-    examples:
-      stylesheet ~rewrite:[ "foo_bar", "foo-bar" ] (* Rewrites instances of "foo_bar" in the css string to "foo-bar" *)
-      stylesheet ~rewrite:[ "foo-bar", "foo-bar" ] (* Prevents the "foo-bar" identifier from being hashed for uniqueness *)
-      stylesheet ~rewrite:[ "my_table", My_table_component.table ] (* References an identifier defined in another module *)
+    The use of ~rewrite is deprecated, please use ~dont_hash or ~dont_hash_prefixes
+           instead. Alternatively, consider writing all of your CSS in the same %css
+           stylesheet incantation. Deprecating ~rewrite allows for more optimiztions in ppx_css,
+           at the expense of expressibility. We've audited bonsai apps and believe this expressibility
+           was unused so we've removed it. If this conflicts with your use case please reach out.
     |xxx}];
   test_struct [%expr stylesheet {||} ~rewrite:foo];
   [%expect
     {|
-    The rewrite argument to 'stylesheet' must be called with a list literal containing tuple literals,
-    where the first element of the tuple must be a string literal (the second element in the tuple can be
-    any expression which evaluates to a string.)
-
-    examples:
-      stylesheet ~rewrite:[ "foo_bar", "foo-bar" ] (* Rewrites instances of "foo_bar" in the css string to "foo-bar" *)
-      stylesheet ~rewrite:[ "foo-bar", "foo-bar" ] (* Prevents the "foo-bar" identifier from being hashed for uniqueness *)
-      stylesheet ~rewrite:[ "my_table", My_table_component.table ] (* References an identifier defined in another module *)
+    The use of ~rewrite is deprecated, please use ~dont_hash or ~dont_hash_prefixes
+           instead. Alternatively, consider writing all of your CSS in the same %css
+           stylesheet incantation. Deprecating ~rewrite allows for more optimiztions in ppx_css,
+           at the expense of expressibility. We've audited bonsai apps and believe this expressibility
+           was unused so we've removed it. If this conflicts with your use case please reach out.
     |}];
   test_struct [%expr stylesheet {||} ~rewrite:[ function_call "hi" ]];
   [%expect
     {|
-    The rewrite argument to 'stylesheet' must be called with a list literal containing tuple literals,
-    where the first element of the tuple must be a string literal (the second element in the tuple can be
-    any expression which evaluates to a string.)
-
-    examples:
-      stylesheet ~rewrite:[ "foo_bar", "foo-bar" ] (* Rewrites instances of "foo_bar" in the css string to "foo-bar" *)
-      stylesheet ~rewrite:[ "foo-bar", "foo-bar" ] (* Prevents the "foo-bar" identifier from being hashed for uniqueness *)
-      stylesheet ~rewrite:[ "my_table", My_table_component.table ] (* References an identifier defined in another module *)
+    The use of ~rewrite is deprecated, please use ~dont_hash or ~dont_hash_prefixes
+           instead. Alternatively, consider writing all of your CSS in the same %css
+           stylesheet incantation. Deprecating ~rewrite allows for more optimiztions in ppx_css,
+           at the expense of expressibility. We've audited bonsai apps and believe this expressibility
+           was unused so we've removed it. If this conflicts with your use case please reach out.
     |}];
   test_struct [%expr stylesheet {||} ?rewrite:None];
   [%expect
-    {| ppx_css found unexpected arguments. %css must contain a call to [?rewrite:(string * string) list -> ?dont_hash:string list -> dont_hash_prefixes:string list -> string -> unit] |}]
-;;
-
-let%expect_test "empty rewrite" =
-  test_struct [%expr stylesheet {||} ~rewrite:[]];
-  [%expect
-    {xxx|
-    [@@@ocaml.warning "-32"]
-    let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
-    module type S  = sig module For_referencing : sig  end end
-    type t = (module S)
-    module Default : S = struct module For_referencing = struct  end end
-    include Default
-    let default : t = (module Default)
-    let () = Inline_css.Private.append {|
-    /* _none_ */
-
-    |}
-    |xxx}]
-;;
-
-let%expect_test "extra args" =
-  test_struct [%expr stylesheet {||} ~rewrite:[] extra];
-  [%expect
-    {xxx| ppx_css found unexpected arguments. %css must contain a call to [?rewrite:(string * string) list -> ?dont_hash:string list -> dont_hash_prefixes:string list -> string -> unit] |xxx}]
+    {| ppx_css found unexpected arguments. %css must contain a call to [?dont_hash:string list -> dont_hash_prefixes:string list -> string -> unit] |}]
 ;;
 
 let%expect_test "Unsafe identifier collision through already existing identifier" =
@@ -604,7 +654,7 @@ let%expect_test "Unsafe identifier collision through already existing identifier
     color: green;
   }|}];
   [%expect
-    {xxx| Unsafe collision of names. Cannot rename 'hello-world' to 'hello_world' because 'hello_world' already exists |xxx}]
+    {xxx| Unsafe collisions of names. Two different css identifiers map to the same ocaml identifier which might lead to unintended results. Both 'hello_world' and 'hello-world' map to 'hello_world' |xxx}]
 ;;
 
 let%expect_test "Unsafe identifier collision through newly minted identifiers" =
@@ -620,7 +670,7 @@ let%expect_test "Unsafe identifier collision through newly minted identifiers" =
     color: green;
   }|}];
   [%expect
-    {xxx| Unsafe collisions of names. Two different unsafe names map to the same fixed name which might lead to unintended results. Both 'hello-world_1' and 'hello_world-1' map to 'hello_world_1' |xxx}];
+    {xxx| Unsafe collisions of names. Two different css identifiers map to the same ocaml identifier which might lead to unintended results. Both 'hello-world_1' and 'hello_world-1' map to 'hello_world_1' |xxx}];
   test_struct
     [%expr
       stylesheet
@@ -634,7 +684,7 @@ let%expect_test "Unsafe identifier collision through newly minted identifiers" =
   }
   |}];
   [%expect
-    {xxx| Unsafe collisions of names. Two different unsafe names map to the same fixed name which might lead to unintended results. Both '--hello-world-1' and 'hello-world_1' map to 'hello_world_1' |xxx}];
+    {xxx| Unsafe collisions of names. Two different css identifiers map to the same ocaml identifier which might lead to unintended results. Both '--hello-world-1' and 'hello-world_1' map to 'hello_world_1' |xxx}];
   test_sig
     {|
   :root {
@@ -646,239 +696,65 @@ let%expect_test "Unsafe identifier collision through newly minted identifiers" =
   }
   |};
   [%expect
-    {xxx| Unsafe collisions of names. Two different unsafe names map to the same fixed name which might lead to unintended results. Both '--hello-world-1' and 'hello-world_1' map to 'hello_world_1' |xxx}]
-;;
-
-let%expect_test "collisions between [~rewrite] keys." =
-  test_struct [%expr stylesheet {|
-    .a { }
-  |} ~rewrite:[ "a", "a"; "a", "b" ]];
-  [%expect {xxx| Found duplicate key "a" inside of [rewrite]. |xxx}]
-;;
-
-let%expect_test "simple use of [~rewrite]." =
-  test_struct [%expr stylesheet {|
-    .a { }
-  |} ~rewrite:[ "a", M.a ]];
-  [%expect
     {xxx|
-    [@@@ocaml.warning "-32"]
-    let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
-    module type S  =
-      sig
-        module For_referencing : sig val a : string end
-        val a : Virtual_dom.Vdom.Attr.t
-      end
-    type t = (module S)
-    module Default : S =
-      struct
-        module For_referencing = struct let a = M.a end
-        let a = Virtual_dom.Vdom.Attr.class_ M.a
-      end
-    include Default
-    let default : t = (module Default)
-    let () =
-      Inline_css.Private.append
-        (Base.Printf.sprintf {|
-    /* _none_ */
-
-    *.%s {
-
-    }|} M.a)
-    |xxx}]
-;;
-
-let%expect_test "simple use of [~rewrite] through a string constant." =
-  test_struct [%expr stylesheet {| .a { color: green;
-    }
-  |} ~rewrite:[ "a", "a" ]];
-  [%expect
-    {xxx|
-    [@@@ocaml.warning "-32"]
-    let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
-    module type S  =
-      sig
-        module For_referencing : sig val a : string end
-        val a : Virtual_dom.Vdom.Attr.t
-      end
-    type t = (module S)
-    module Default : S =
-      struct
-        module For_referencing = struct let a = {|a|} end
-        let a = Virtual_dom.Vdom.Attr.class_ {|a|}
-      end
-    include Default
-    let default : t = (module Default)
-    let () = Inline_css.Private.append {|
-    /* _none_ */
-
-    *.a {
-     color:green
-    }|}
-    |xxx}]
-;;
-
-let%expect_test "weirder ordering of [~rewrite]." =
-  test_struct
-    [%expr
-      stylesheet
-        ~rewrite:[ "a", M.a; "b", M.b; "c", c; "d", "d" ]
-        {|
-    .a {}
-    .other {}
-    .c::before {}
-    .d {}
-    .c {}
-    .b {}
-    .a {}
-  |}];
-  [%expect
-    {xxx|
-    [@@@ocaml.warning "-32"]
-    let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
-    module type S  =
-      sig
-        module For_referencing :
+    sig
+      module type S  =
         sig
-          val a : string
-          val b : string
-          val c : string
-          val d : string
-          val other : string
-        end
-        val a : Virtual_dom.Vdom.Attr.t
-        val b : Virtual_dom.Vdom.Attr.t
-        val c : Virtual_dom.Vdom.Attr.t
-        val d : Virtual_dom.Vdom.Attr.t
-        val other : Virtual_dom.Vdom.Attr.t
-      end
-    type t = (module S)
-    module Default : S =
-      struct
-        module For_referencing =
-          struct
-            let c = c
-            let other = {|other_hash_46adddeee6|}
-            let b = M.b
-            let d = {|d|}
-            let a = M.a
+          module Variables :
+          sig
+            val set : ?hello_world_1:string -> unit -> Virtual_dom.Vdom.Attr.t
+            val set_all : hello_world_1:string -> Virtual_dom.Vdom.Attr.t
           end
-        let c = Virtual_dom.Vdom.Attr.class_ c
-        let other = Virtual_dom.Vdom.Attr.class_ {|other_hash_46adddeee6|}
-        let b = Virtual_dom.Vdom.Attr.class_ M.b
-        let d = Virtual_dom.Vdom.Attr.class_ {|d|}
-        let a = Virtual_dom.Vdom.Attr.class_ M.a
+          module For_referencing : sig val hello_world_1 : string end
+          val hello_world_1 : Virtual_dom.Vdom.Attr.t
+        end
+      type t = (module S)
+      val default : t
+      module Variables :
+      sig
+        val set : ?hello_world_1:string -> unit -> Virtual_dom.Vdom.Attr.t
+        val set_all : hello_world_1:string -> Virtual_dom.Vdom.Attr.t
       end
-    include Default
-    let default : t = (module Default)
-    let () =
-      Inline_css.Private.append
-        (Base.Printf.sprintf
-           {|
-    /* _none_ */
-
-    *.%s {
-
-    }
-
-    *.other_hash_46adddeee6 {
-
-    }
-
-    *.%s::before {
-
-    }
-
-    *.d {
-
-    }
-
-    *.%s {
-
-    }
-
-    *.%s {
-
-    }
-
-    *.%s {
-
-    }|}
-           M.a c c M.b M.a)
+      module For_referencing : sig val hello_world_1 : string end
+      val hello_world_1 : Virtual_dom.Vdom.Attr.t
     |xxx}]
 ;;
 
-let%expect_test "both use of string constants and arbitrary expressions in use." =
+let%expect_test "rewrite will work and turn into ~dont_hash if it's two constants that \
+                 are the same"
+  =
   test_struct
     [%expr
       stylesheet
-        {|
-    .a { }
-    .b { }
-    .c { }
+        {| .a { color: green;
+    }
   |}
-        ~rewrite:[ "a", f M.a; "b", "b_but_unhashed" ]];
+        ~rewrite:[ "a", "a" ]];
   [%expect
     {xxx|
-    [@@@ocaml.warning "-32"]
-    let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
-    module type S  =
-      sig
-        module For_referencing :
-        sig val a : string val b : string val c : string end
-        val a : Virtual_dom.Vdom.Attr.t
-        val b : Virtual_dom.Vdom.Attr.t
-        val c : Virtual_dom.Vdom.Attr.t
-      end
-    type t = (module S)
-    module Default : S =
-      struct
-        module For_referencing =
-          struct
-            let c = {|c_hash_0c073e40ac|}
-            let b = {|b_but_unhashed|}
-            let a = f M.a
-          end
-        let c = Virtual_dom.Vdom.Attr.class_ {|c_hash_0c073e40ac|}
-        let b = Virtual_dom.Vdom.Attr.class_ {|b_but_unhashed|}
-        let a = Virtual_dom.Vdom.Attr.class_ (f M.a)
-      end
-    include Default
-    let default : t = (module Default)
-    let () =
-      Inline_css.Private.append
-        (Base.Printf.sprintf
-           {|
-    /* _none_ */
+    The use of ~rewrite is deprecated, please use ~dont_hash or ~dont_hash_prefixes
+           instead. Alternatively, consider writing all of your CSS in the same %css
+           stylesheet incantation. Deprecating ~rewrite allows for more optimiztions in ppx_css,
+           at the expense of expressibility. We've audited bonsai apps and believe this expressibility
+           was unused so we've removed it. If this conflicts with your use case please reach out.
+    |xxx}]
+;;
 
-    *.%s {
-
+let%expect_test "will rewrite if all values are same" =
+  test_struct
+    [%expr
+      stylesheet
+        {| .a { color: green;
     }
-
-    *.b_but_unhashed {
-
-    }
-
-    *.c_hash_0c073e40ac {
-
-    }|}
-           (f M.a))
+  |}
+        ~rewrite:[ "a", "a"; "b", "b"; "c", "c"; "d", "different" ]];
+  [%expect
+    {xxx|
+    The use of ~rewrite is deprecated, please use ~dont_hash or ~dont_hash_prefixes
+           instead. Alternatively, consider writing all of your CSS in the same %css
+           stylesheet incantation. Deprecating ~rewrite allows for more optimiztions in ppx_css,
+           at the expense of expressibility. We've audited bonsai apps and believe this expressibility
+           was unused so we've removed it. If this conflicts with your use case please reach out.
     |xxx}]
 ;;
 
@@ -900,16 +776,20 @@ let%test_unit "ordering of mapping iteration is the same as the css string." =
         ~sep:"\n"
         (List.map ids ~f:(fun identifier -> [%string ".%{identifier} {  }"]))
     in
-    let style_sheet = Stylesheet.of_string css_string in
+    let style_sheet =
+      Css_parser.(
+        parse_stylesheet
+          ~parsing_config:Parsing_config.raise_on_recoverable_errors
+          css_string)
+      |> Ppx_css.Stable_stylesheet.of_stylesheet
+    in
     let traversed_ids = ref Reversed_list.[] in
     Ppx_css.For_testing.map_style_sheet
-      ~rewrite:String.Map.empty
-      ~dont_hash_prefixes:[]
       style_sheet
-      ~f:(fun (`Variable id | `Class id | `Id id) _ ->
-      (traversed_ids := Reversed_list.(id :: !traversed_ids));
-      id)
-    |> (ignore : Stylesheet.t -> unit);
+      ~f:(fun (Css_identifier.Variable id | Class id | Id id) _ ->
+        (traversed_ids := Reversed_list.(id :: !traversed_ids));
+        id)
+    |> (ignore : Ppx_css.Stable_stylesheet.t -> unit);
     let traversed_ids = Reversed_list.rev !traversed_ids in
     match List.equal String.equal traversed_ids ids with
     | true -> ()
@@ -921,33 +801,38 @@ let%test_unit "ordering of mapping iteration is the same as the css string." =
       assert false)
 ;;
 
-let%expect_test "unused [~rewrite] target warning" =
-  test_struct [%expr stylesheet {|
+let%expect_test "unused [~dont_hash] target warning" =
+  test_struct
+    [%expr
+      stylesheet
+        {|
   .a { }
-  |} ~rewrite:[ "b", "b" ]];
+  |}
+        ~dont_hash:[ "b" ]];
   [%expect {xxx| Unused keys: (b) |xxx}]
 ;;
 
-let%test_module "css_inliner_tests" =
-  (module struct
-    let test_sig_and_struct s =
-      let struct_ =
-        For_css_inliner.gen_struct
-          ~rewrite:String.Map.empty
-          ~css_string:s
-          ~dont_hash_prefixes:[]
-          ~stylesheet_location:Location.none
-      in
-      let sig_ = For_css_inliner.gen_sig s in
-      print_endline "==struct==";
-      print_endline struct_;
-      print_endline "==sig==";
-      print_endline sig_
-    ;;
+module%test [@name "css_inliner_tests"] _ = struct
+  let test_sig_and_struct s =
+    let%tydi { ml_file = struct_; css_string_for_testing = _ } =
+      For_css_inliner.gen_struct
+        ~dont_hash:String.Set.empty
+        ~css_string:s
+        ~dont_hash_prefixes:[]
+        ~stylesheet_location:loc
+        ~lazy_loading_optimization:Ppx_css_syntax.Preprocess_arguments.Lazy_graph
+        ~disable_hashing:false
+    in
+    let sig_ = For_css_inliner.gen_sig ~stylesheet_location:loc s in
+    print_endline "==struct==";
+    print_endline struct_;
+    print_endline "==sig==";
+    print_endline sig_
+  ;;
 
-    let%expect_test "basic generation" =
-      test_sig_and_struct
-        {|
+  let%expect_test "basic generation" =
+    test_sig_and_struct
+      {|
         .a {
           color: green;
         }
@@ -955,64 +840,94 @@ let%test_module "css_inliner_tests" =
         .b {
           color: white;
         } |};
-      [%expect
-        {xxx|
-        ==struct==
-        struct
-          let () =
-            Inline_css.Private.append
-              {|
-        /* _none_ */
+    [%expect
+      {xxx|
+      ==struct==
+      struct
+        open
+          struct
+            [@@@ocaml.warning "-60"]
+            module Ppx_css_hoister_do_not_collide =
+              struct
+                let sheet_x__008___414385fefe__0 =
+                  let sheet = Inline_css.Private.create_stylesheet () in
+                  Inline_css.Private.append_stylesheet sheet; sheet
+                let sheet_x__008___414385fefe__1 =
+                  let sheet = Inline_css.Private.create_stylesheet () in
+                  Inline_css.Private.append_stylesheet sheet; sheet
+                let update_sheet_lazy_fn_x__008___414385fefe__group_0 =
+                  lazy
+                    (Inline_css.Private.update_stylesheet
+                       sheet_x__008___414385fefe__0
+                       {|
+      /* app/foo/foo.ml */
 
-        *.a_hash_0c732ee1e6 {
-         color:green
-        }
+      .a_hash_414385fefe {
+        color: green;
+      }|})
+                let update_sheet_lazy_fn_x__008___414385fefe__group_1 =
+                  lazy
+                    (Inline_css.Private.update_stylesheet
+                       sheet_x__008___414385fefe__1
+                       {|
+      /* app/foo/foo.ml */
 
-        *.b_hash_0c732ee1e6 {
-         color:white
-        }|}
-          [@@@ocaml.warning "-32"]
-          let __type_info_for_ppx_css :
-            ?rewrite:(string * string) list ->
-              ?dont_hash:string list ->
-                ?dont_hash_prefixes:string list -> string -> unit
-            = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
-          module type S  =
-            sig
-              module For_referencing : sig val a : string val b : string end
-              val a : Virtual_dom.Vdom.Attr.t
-              val b : Virtual_dom.Vdom.Attr.t
-            end
-          type t = (module S)
-          module Default : S =
-            struct
-              module For_referencing =
-                struct let b = {|b_hash_0c732ee1e6|}
-                       let a = {|a_hash_0c732ee1e6|} end
-              let b = Virtual_dom.Vdom.Attr.class_ {|b_hash_0c732ee1e6|}
-              let a = Virtual_dom.Vdom.Attr.class_ {|a_hash_0c732ee1e6|}
-            end
-          include Default
-          let default : t = (module Default)
-        ==sig==
-        sig
-          module type S  =
-            sig
-              module For_referencing : sig val a : string val b : string end
-              val a : Virtual_dom.Vdom.Attr.t
-              val b : Virtual_dom.Vdom.Attr.t
-            end
-          type t = (module S)
-          val default : t
-          module For_referencing : sig val a : string val b : string end
-          val a : Virtual_dom.Vdom.Attr.t
-          val b : Virtual_dom.Vdom.Attr.t
-        |xxx}]
-    ;;
+      .b_hash_414385fefe {
+        color: white;
+      }|})
+              end
+          end
+        [@@@ocaml.warning "-32"]
+        let __type_info_for_ppx_css :
+          ?dont_hash:string list ->
+            ?dont_hash_prefixes:string list -> string -> unit
+          = fun ?dont_hash:_  ?dont_hash_prefixes:_  _ -> ()
+        module type S  =
+          sig
+            module For_referencing : sig val a : string val b : string end
+            val a : Virtual_dom.Vdom.Attr.t
+            val b : Virtual_dom.Vdom.Attr.t
+          end
+        type t = (module S)
+        module Default : S =
+          struct
+            module For_referencing =
+              struct let a = {|a_hash_414385fefe|}
+                     let b = {|b_hash_414385fefe|} end
+            let a =
+              Virtual_dom.Vdom.Attr.lazy_
+                (lazy
+                   (Inline_css.Ppx_css_runtime.force
+                      Ppx_css_hoister_do_not_collide.update_sheet_lazy_fn_x__008___414385fefe__group_0;
+                    Virtual_dom.Vdom.Attr.class_ {|a_hash_414385fefe|}))
+            let b =
+              Virtual_dom.Vdom.Attr.lazy_
+                (lazy
+                   (Inline_css.Ppx_css_runtime.force
+                      Ppx_css_hoister_do_not_collide.update_sheet_lazy_fn_x__008___414385fefe__group_1;
+                    Virtual_dom.Vdom.Attr.class_ {|b_hash_414385fefe|}))
+          end
+        include Default
+        let default : t = (module Default)
+      ==sig==
+      sig
+        module type S  =
+          sig
+            module For_referencing : sig val a : string val b : string end
+            val a : Virtual_dom.Vdom.Attr.t
+            val b : Virtual_dom.Vdom.Attr.t
+          end
+        type t = (module S)
+        val default : t
+        module For_referencing : sig val a : string val b : string end
+        val a : Virtual_dom.Vdom.Attr.t
+        val b : Virtual_dom.Vdom.Attr.t
+      |xxx}]
+  ;;
 
-    let%expect_test "generation with duplicate names." =
-      test_sig_and_struct
-        {|
+  let%expect_test "generation with duplicate names." =
+    test_sig_and_struct
+      {|
         .a {
           color: green;
         }
@@ -1021,137 +936,156 @@ let%test_module "css_inliner_tests" =
           color: white;
         }
         |};
-      [%expect
-        {xxx|
-        ==struct==
-        struct
-          let () =
-            Inline_css.Private.append
-              {|
-        /* _none_ */
+    [%expect
+      {xxx|
+      ==struct==
+      struct
+        open
+          struct
+            [@@@ocaml.warning "-60"]
+            module Ppx_css_hoister_do_not_collide =
+              struct
+                let sheet_x__008___414385fefe__0 =
+                  let sheet = Inline_css.Private.create_stylesheet () in
+                  Inline_css.Private.append_stylesheet sheet; sheet
+                let sheet_x__008___414385fefe__1 =
+                  let sheet = Inline_css.Private.create_stylesheet () in
+                  Inline_css.Private.append_stylesheet sheet; sheet
+                let update_sheet_lazy_fn_x__008___414385fefe__group_0 =
+                  lazy
+                    (Inline_css.Private.update_stylesheet
+                       sheet_x__008___414385fefe__0
+                       {|
+      /* app/foo/foo.ml */
 
-        *.a_hash_7dfc841c58 {
-         color:green
-        }
+      .a_hash_414385fefe {
+        color: green;
+      }|})
+                let update_sheet_lazy_fn_x__008___414385fefe__group_1 =
+                  lazy
+                    (Inline_css.Private.update_stylesheet
+                       sheet_x__008___414385fefe__1
+                       {|
+      /* app/foo/foo.ml */
 
-        *.a_hash_7dfc841c58 {
-         color:white
-        }|}
-          [@@@ocaml.warning "-32"]
-          let __type_info_for_ppx_css :
-            ?rewrite:(string * string) list ->
-              ?dont_hash:string list ->
-                ?dont_hash_prefixes:string list -> string -> unit
-            = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
-          module type S  =
-            sig
-              module For_referencing : sig val a : string end
-              val a : Virtual_dom.Vdom.Attr.t
-            end
-          type t = (module S)
-          module Default : S =
-            struct
-              module For_referencing = struct let a = {|a_hash_7dfc841c58|} end
-              let a = Virtual_dom.Vdom.Attr.class_ {|a_hash_7dfc841c58|}
-            end
-          include Default
-          let default : t = (module Default)
-        ==sig==
-        sig
-          module type S  =
-            sig
-              module For_referencing : sig val a : string end
-              val a : Virtual_dom.Vdom.Attr.t
-            end
-          type t = (module S)
-          val default : t
-          module For_referencing : sig val a : string end
-          val a : Virtual_dom.Vdom.Attr.t
-        |xxx}]
-    ;;
-  end)
-;;
+      .b_hash_414385fefe {
+        color: white;
+      }|})
+                let sheet_x__009___c9570a2a37__0 =
+                  let sheet = Inline_css.Private.create_stylesheet () in
+                  Inline_css.Private.append_stylesheet sheet; sheet
+                let sheet_x__009___c9570a2a37__1 =
+                  let sheet = Inline_css.Private.create_stylesheet () in
+                  Inline_css.Private.append_stylesheet sheet; sheet
+                let update_sheet_lazy_fn_x__009___c9570a2a37__group_0 =
+                  lazy
+                    (Inline_css.Private.update_stylesheet
+                       sheet_x__009___c9570a2a37__0
+                       {|
+      /* app/foo/foo.ml */
 
-let%test_module "Variable setter creation" =
-  (module struct
-    let%expect_test "two variables variable creation" =
-      test_sig {|
+      .a_hash_c9570a2a37 {
+        color: green;
+      }|};
+                     Inline_css.Private.update_stylesheet
+                       sheet_x__009___c9570a2a37__1
+                       {|
+      /* app/foo/foo.ml */
+
+      .a_hash_c9570a2a37 {
+        color: white;
+      }|})
+              end
+          end
+        [@@@ocaml.warning "-32"]
+        let __type_info_for_ppx_css :
+          ?dont_hash:string list ->
+            ?dont_hash_prefixes:string list -> string -> unit
+          = fun ?dont_hash:_  ?dont_hash_prefixes:_  _ -> ()
+        module type S  =
+          sig
+            module For_referencing : sig val a : string end
+            val a : Virtual_dom.Vdom.Attr.t
+          end
+        type t = (module S)
+        module Default : S =
+          struct
+            module For_referencing = struct let a = {|a_hash_c9570a2a37|} end
+            let a =
+              Virtual_dom.Vdom.Attr.lazy_
+                (lazy
+                   (Inline_css.Ppx_css_runtime.force
+                      Ppx_css_hoister_do_not_collide.update_sheet_lazy_fn_x__009___c9570a2a37__group_0;
+                    Virtual_dom.Vdom.Attr.class_ {|a_hash_c9570a2a37|}))
+          end
+        include Default
+        let default : t = (module Default)
+      ==sig==
+      sig
+        module type S  =
+          sig
+            module For_referencing : sig val a : string end
+            val a : Virtual_dom.Vdom.Attr.t
+          end
+        type t = (module S)
+        val default : t
+        module For_referencing : sig val a : string end
+        val a : Virtual_dom.Vdom.Attr.t
+      |xxx}]
+  ;;
+end
+
+module%test [@name "Variable setter creation"] _ = struct
+  let%expect_test "two variables variable creation" =
+    test_sig
+      {|
 .a-class {
   --bg-color: white;
-  --fg-color: black
+  --fg-color: black;
 }
         |};
-      [%expect
-        {|
-        sig
-          module type S  =
-            sig
-              module Variables :
-              sig
-                val set :
-                  ?bg_color:string ->
-                    ?fg_color:string -> unit -> Virtual_dom.Vdom.Attr.t
-                val set_all :
-                  bg_color:string -> fg_color:string -> Virtual_dom.Vdom.Attr.t
-              end
-              module For_referencing :
-              sig val a_class : string val bg_color : string val fg_color : string
-              end
-              val a_class : Virtual_dom.Vdom.Attr.t
-            end
-          type t = (module S)
-          val default : t
-          module Variables :
-          sig
-            val set :
-              ?bg_color:string -> ?fg_color:string -> unit -> Virtual_dom.Vdom.Attr.t
-            val set_all :
-              bg_color:string -> fg_color:string -> Virtual_dom.Vdom.Attr.t
-          end
-          module For_referencing :
-          sig val a_class : string val bg_color : string val fg_color : string end
-          val a_class : Virtual_dom.Vdom.Attr.t
-        |}]
-    ;;
-  end)
-;;
-
-let%expect_test "rewrite on identifier which would eventually get unkebab'ed" =
-  test_struct [%expr stylesheet {| .a-b { } |} ~rewrite:[ "a-b", "a_b" ]];
-  [%expect
-    {xxx|
-    [@@@ocaml.warning "-32"]
-    let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
-    module type S  =
+    [%expect
+      {|
       sig
-        module For_referencing : sig val a_b : string end
-        val a_b : Virtual_dom.Vdom.Attr.t
-      end
-    type t = (module S)
-    module Default : S =
-      struct
-        module For_referencing = struct let a_b = {|a_b|} end
-        let a_b = Virtual_dom.Vdom.Attr.class_ {|a_b|}
-      end
-    include Default
-    let default : t = (module Default)
-    let () = Inline_css.Private.append {|
-    /* _none_ */
+        module type S  =
+          sig
+            module Variables :
+            sig
+              val set :
+                ?bg_color:string ->
+                  ?fg_color:string -> unit -> Virtual_dom.Vdom.Attr.t
+              val set_all :
+                bg_color:string -> fg_color:string -> Virtual_dom.Vdom.Attr.t
+            end
+            module For_referencing :
+            sig val a_class : string val bg_color : string val fg_color : string
+            end
+            val a_class : Virtual_dom.Vdom.Attr.t
+          end
+        type t = (module S)
+        val default : t
+        module Variables :
+        sig
+          val set :
+            ?bg_color:string -> ?fg_color:string -> unit -> Virtual_dom.Vdom.Attr.t
+          val set_all :
+            bg_color:string -> fg_color:string -> Virtual_dom.Vdom.Attr.t
+        end
+        module For_referencing :
+        sig val a_class : string val bg_color : string val fg_color : string end
+        val a_class : Virtual_dom.Vdom.Attr.t
+      |}]
+  ;;
+end
 
-    *.a_b {
-
-    }|}
-    |xxx}]
-;;
-
-let%expect_test "unused [~rewrite] target warning" =
-  test_struct [%expr stylesheet {|
+let%expect_test "unused [~dont_hash] target warning" =
+  test_struct
+    [%expr
+      stylesheet
+        {|
     .a { }
-  |} ~rewrite:[ "b", "b" ]];
+  |}
+        ~dont_hash:[ "b" ]];
   [%expect {xxx| Unused keys: (b) |xxx}]
 ;;
 
@@ -1171,10 +1105,8 @@ let%expect_test "apostrophe syntax" =
     {xxx|
     [@@@ocaml.warning "-32"]
     let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
+      ?dont_hash:string list -> ?dont_hash_prefixes:string list -> string -> unit
+      = fun ?dont_hash:_  ?dont_hash_prefixes:_  _ -> ()
     module type S  =
       sig
         module For_referencing :
@@ -1189,43 +1121,75 @@ let%expect_test "apostrophe syntax" =
       struct
         module For_referencing =
           struct
-            let bb = {|bb_hash_267f25fb39|}
-            let b = {|b|}
             let a = {|a|}
             let aa = {|aa|}
+            let b = {|b|}
+            let bb = {|bb_hash_70849e24af|}
           end
-        let bb = Virtual_dom.Vdom.Attr.class_ {|bb_hash_267f25fb39|}
-        let b = Virtual_dom.Vdom.Attr.class_ {|b|}
         let a = Virtual_dom.Vdom.Attr.class_ {|a|}
         let aa = Virtual_dom.Vdom.Attr.class_ {|aa|}
+        let b = Virtual_dom.Vdom.Attr.class_ {|b|}
+        let bb =
+          Virtual_dom.Vdom.Attr.lazy_
+            (lazy
+               (Inline_css.Ppx_css_runtime.force
+                  Ppx_css_hoister_do_not_collide.update_sheet_lazy_fn_x__010___70849e24af__group_0;
+                Virtual_dom.Vdom.Attr.class_ {|bb_hash_70849e24af|}))
       end
     include Default
     let default : t = (module Default)
+
+    Hoisted module:
+
+    let sheet_x__010___70849e24af__0 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__010___70849e24af__1 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__010___70849e24af__2 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__010___70849e24af__3 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
     let () =
-      Inline_css.Private.append
+      (Inline_css.Private.update_stylesheet sheet_x__010___70849e24af__0
+         {|
+    /* app/foo/foo.ml */
+
+    .b {
+    }|};
+       Inline_css.Private.update_stylesheet sheet_x__010___70849e24af__2
+         {|
+    /* app/foo/foo.ml */
+
+    .a {
+    }|});
+      Inline_css.Private.update_stylesheet sheet_x__010___70849e24af__3
         {|
-    /* _none_ */
+    /* app/foo/foo.ml */
 
-    *.b {
-
-    }
-
-    *.bb_hash_267f25fb39 {
-
-    }
-
-    *.a {
-
-    }
-
-    *.aa {
-
+    .aa {
     }|}
+    let update_sheet_lazy_fn_x__010___70849e24af__group_0 =
+      lazy
+        (Inline_css.Private.update_stylesheet sheet_x__010___70849e24af__1
+           {|
+    /* app/foo/foo.ml */
+
+    .bb_hash_70849e24af {
+    }|})
     |xxx}]
 ;;
 
 let%expect_test "Both don't_hash and dont_hash are used" =
-  test_struct [%expr stylesheet ~don't_hash:[ "b" ] ~dont_hash:[ "b" ] {|
+  test_struct
+    [%expr
+      stylesheet
+        ~don't_hash:[ "b" ]
+        ~dont_hash:[ "b" ]
+        {|
     .b { }
   |}];
   [%expect
@@ -1241,7 +1205,7 @@ let%expect_test "ppx_css hashes variables" =
    }
 
     .a {
-      background-color: var(--my-variable, default)
+      background-color: var(--my-variable, default);
 
     }
   |}];
@@ -1249,10 +1213,8 @@ let%expect_test "ppx_css hashes variables" =
     {xxx|
     [@@@ocaml.warning "-32"]
     let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
+      ?dont_hash:string list -> ?dont_hash_prefixes:string list -> string -> unit
+      = fun ?dont_hash:_  ?dont_hash_prefixes:_  _ -> ()
     module type S  =
       sig
         module Variables :
@@ -1268,39 +1230,58 @@ let%expect_test "ppx_css hashes variables" =
       struct
         module Variables =
           struct
-            let ppx_css_variable_set__003_ ?my_variable () =
-              let ppx_css_acc__001_ = [] in
-              let ppx_css_acc__001_ =
+            let ppx_css_variable_set__014_ ?my_variable () =
+              let ppx_css_acc__012_ = [] in
+              let ppx_css_acc__012_ =
                 match my_variable with
-                | None -> ppx_css_acc__001_
-                | Some ppx_css_value__002_ ->
-                    ({|--my-variable_hash_b519a9dc79|}, ppx_css_value__002_) ::
-                    ppx_css_acc__001_ in
-              Virtual_dom.Vdom.Attr.__css_vars_no_kebabs ppx_css_acc__001_
-            let set = ppx_css_variable_set__003_
-            let set_all ~my_variable = ppx_css_variable_set__003_ () ~my_variable
+                | None -> ppx_css_acc__012_
+                | Some ppx_css_value__013_ ->
+                    ({|--my-variable_hash_66b0c989aa|}, ppx_css_value__013_) ::
+                    ppx_css_acc__012_ in
+              Virtual_dom.Vdom.Attr.__css_vars_no_kebabs ppx_css_acc__012_
+            let set = ppx_css_variable_set__014_
+            let set_all ~my_variable = ppx_css_variable_set__014_ () ~my_variable
           end
         module For_referencing =
           struct
-            let a = {|a_hash_b519a9dc79|}
-            let my_variable = {|--my-variable_hash_b519a9dc79|}
+            let a = {|a_hash_66b0c989aa|}
+            let my_variable = {|--my-variable_hash_66b0c989aa|}
           end
-        let a = Virtual_dom.Vdom.Attr.class_ {|a_hash_b519a9dc79|}
+        let a =
+          Virtual_dom.Vdom.Attr.lazy_
+            (lazy
+               (Inline_css.Ppx_css_runtime.force
+                  Ppx_css_hoister_do_not_collide.update_sheet_lazy_fn_x__011___66b0c989aa__group_0;
+                Virtual_dom.Vdom.Attr.class_ {|a_hash_66b0c989aa|}))
       end
     include Default
     let default : t = (module Default)
+
+    Hoisted module:
+
+    let sheet_x__011___66b0c989aa__0 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__011___66b0c989aa__1 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
     let () =
-      Inline_css.Private.append
+      Inline_css.Private.update_stylesheet sheet_x__011___66b0c989aa__0
         {|
-    /* _none_ */
+    /* app/foo/foo.ml */
 
-    *:root {
-     --my-variable_hash_b519a9dc79:green
-    }
-
-    *.a_hash_b519a9dc79 {
-     background-color:var(--my-variable_hash_b519a9dc79,default)
+    :root {
+      --my-variable_hash_66b0c989aa: green;
     }|}
+    let update_sheet_lazy_fn_x__011___66b0c989aa__group_0 =
+      lazy
+        (Inline_css.Private.update_stylesheet sheet_x__011___66b0c989aa__1
+           {|
+    /* app/foo/foo.ml */
+
+    .a_hash_66b0c989aa {
+      background-color: var(--my-variable_hash_66b0c989aa, default);
+    }|})
     |xxx}]
 ;;
 
@@ -1315,17 +1296,15 @@ let%expect_test "nested variables" =
    }
 
     .navbar {
-      background-color: var(--a, var(--b, (var(--c))))
+      background-color: var(--a, var(--b, (var(--c))));
     }
   |}];
   [%expect
     {xxx|
     [@@@ocaml.warning "-32"]
     let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
+      ?dont_hash:string list -> ?dont_hash_prefixes:string list -> string -> unit
+      = fun ?dont_hash:_  ?dont_hash_prefixes:_  _ -> ()
     module type S  =
       sig
         module Variables :
@@ -1345,330 +1324,74 @@ let%expect_test "nested variables" =
       struct
         module Variables =
           struct
-            let ppx_css_variable_set__006_ ?a ?b ?c () =
-              let ppx_css_acc__004_ = [] in
-              let ppx_css_acc__004_ =
+            let ppx_css_variable_set__018_ ?a ?b ?c () =
+              let ppx_css_acc__016_ = [] in
+              let ppx_css_acc__016_ =
                 match a with
-                | None -> ppx_css_acc__004_
-                | Some ppx_css_value__005_ ->
-                    ({|--a_hash_0ac8471275|}, ppx_css_value__005_) ::
-                    ppx_css_acc__004_ in
-              let ppx_css_acc__004_ =
+                | None -> ppx_css_acc__016_
+                | Some ppx_css_value__017_ ->
+                    ({|--a_hash_577da54a4b|}, ppx_css_value__017_) ::
+                    ppx_css_acc__016_ in
+              let ppx_css_acc__016_ =
                 match b with
-                | None -> ppx_css_acc__004_
-                | Some ppx_css_value__005_ ->
-                    ({|--b_hash_0ac8471275|}, ppx_css_value__005_) ::
-                    ppx_css_acc__004_ in
-              let ppx_css_acc__004_ =
+                | None -> ppx_css_acc__016_
+                | Some ppx_css_value__017_ ->
+                    ({|--b_hash_577da54a4b|}, ppx_css_value__017_) ::
+                    ppx_css_acc__016_ in
+              let ppx_css_acc__016_ =
                 match c with
-                | None -> ppx_css_acc__004_
-                | Some ppx_css_value__005_ ->
-                    ({|--c_hash_0ac8471275|}, ppx_css_value__005_) ::
-                    ppx_css_acc__004_ in
-              Virtual_dom.Vdom.Attr.__css_vars_no_kebabs ppx_css_acc__004_
-            let set = ppx_css_variable_set__006_
-            let set_all ~a ~b ~c = ppx_css_variable_set__006_ () ~a ~b ~c
+                | None -> ppx_css_acc__016_
+                | Some ppx_css_value__017_ ->
+                    ({|--c_hash_577da54a4b|}, ppx_css_value__017_) ::
+                    ppx_css_acc__016_ in
+              Virtual_dom.Vdom.Attr.__css_vars_no_kebabs ppx_css_acc__016_
+            let set = ppx_css_variable_set__018_
+            let set_all ~a ~b ~c = ppx_css_variable_set__018_ () ~a ~b ~c
           end
         module For_referencing =
           struct
-            let navbar = {|navbar_hash_0ac8471275|}
-            let c = {|--c_hash_0ac8471275|}
-            let b = {|--b_hash_0ac8471275|}
-            let a = {|--a_hash_0ac8471275|}
+            let a = {|--a_hash_577da54a4b|}
+            let b = {|--b_hash_577da54a4b|}
+            let c = {|--c_hash_577da54a4b|}
+            let navbar = {|navbar_hash_577da54a4b|}
           end
-        let navbar = Virtual_dom.Vdom.Attr.class_ {|navbar_hash_0ac8471275|}
+        let navbar =
+          Virtual_dom.Vdom.Attr.lazy_
+            (lazy
+               (Inline_css.Ppx_css_runtime.force
+                  Ppx_css_hoister_do_not_collide.update_sheet_lazy_fn_x__015___577da54a4b__group_0;
+                Virtual_dom.Vdom.Attr.class_ {|navbar_hash_577da54a4b|}))
       end
     include Default
     let default : t = (module Default)
+
+    Hoisted module:
+
+    let sheet_x__015___577da54a4b__0 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__015___577da54a4b__1 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
     let () =
-      Inline_css.Private.append
+      Inline_css.Private.update_stylesheet sheet_x__015___577da54a4b__0
         {|
-    /* _none_ */
+    /* app/foo/foo.ml */
 
-    *:root {
-     --a_hash_0ac8471275:green;
-     --b_hash_0ac8471275:green;
-     --c_hash_0ac8471275:green
-    }
-
-    *.navbar_hash_0ac8471275 {
-     background-color:var(--a_hash_0ac8471275,var(--b_hash_0ac8471275,(var(--c_hash_0ac8471275))))
+    :root {
+      --a_hash_577da54a4b: green;
+      --b_hash_577da54a4b: green;
+      --c_hash_577da54a4b: green;
     }|}
-    |xxx}]
-;;
-
-let%expect_test "css variables still respect [~rewrite]" =
-  test_struct
-    [%expr
-      stylesheet
-        ~rewrite:[ "--a", "--a"; "--b", Other_library.b ]
-        {| :root {
-    --a: green;
-    --b: green;
-    --c: green;
-   }
-
-    .navbar {
-      background-color: var(--a, var(--b, (var(--c))))
-    }
-  |}];
-  [%expect
-    {xxx|
-    [@@@ocaml.warning "-32"]
-    let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
-    module type S  =
-      sig
-        module Variables :
-        sig
-          val set :
-            ?a:string ->
-              ?b:string -> ?c:string -> unit -> Virtual_dom.Vdom.Attr.t
-          val set_all :
-            a:string -> b:string -> c:string -> Virtual_dom.Vdom.Attr.t
-        end
-        module For_referencing :
-        sig val a : string val b : string val c : string val navbar : string end
-        val navbar : Virtual_dom.Vdom.Attr.t
-      end
-    type t = (module S)
-    module Default : S =
-      struct
-        module Variables =
-          struct
-            let ppx_css_variable_set__009_ ?a ?b ?c () =
-              let ppx_css_acc__007_ = [] in
-              let ppx_css_acc__007_ =
-                match a with
-                | None -> ppx_css_acc__007_
-                | Some ppx_css_value__008_ -> ({|--a|}, ppx_css_value__008_) ::
-                    ppx_css_acc__007_ in
-              let ppx_css_acc__007_ =
-                match b with
-                | None -> ppx_css_acc__007_
-                | Some ppx_css_value__008_ ->
-                    (Other_library.b, ppx_css_value__008_) :: ppx_css_acc__007_ in
-              let ppx_css_acc__007_ =
-                match c with
-                | None -> ppx_css_acc__007_
-                | Some ppx_css_value__008_ ->
-                    ({|--c_hash_0ac8471275|}, ppx_css_value__008_) ::
-                    ppx_css_acc__007_ in
-              Virtual_dom.Vdom.Attr.__css_vars_no_kebabs ppx_css_acc__007_
-            let set = ppx_css_variable_set__009_
-            let set_all ~a ~b ~c = ppx_css_variable_set__009_ () ~a ~b ~c
-          end
-        module For_referencing =
-          struct
-            let navbar = {|navbar_hash_0ac8471275|}
-            let c = {|--c_hash_0ac8471275|}
-            let b = Other_library.b
-            let a = {|--a|}
-          end
-        let navbar = Virtual_dom.Vdom.Attr.class_ {|navbar_hash_0ac8471275|}
-      end
-    include Default
-    let default : t = (module Default)
-    let () =
-      Inline_css.Private.append
-        (Base.Printf.sprintf
+    let update_sheet_lazy_fn_x__015___577da54a4b__group_0 =
+      lazy
+        (Inline_css.Private.update_stylesheet sheet_x__015___577da54a4b__1
            {|
-    /* _none_ */
+    /* app/foo/foo.ml */
 
-    *:root {
-     --a:green;
-     %s:green;
-     --c_hash_0ac8471275:green
-    }
-
-    *.navbar_hash_0ac8471275 {
-     background-color:var(--a,var(%s,(var(--c_hash_0ac8471275))))
-    }|}
-           Other_library.b Other_library.b)
-    |xxx}]
-;;
-
-let%expect_test "css variables still hashed under pseudo-selectors" =
-  test_struct
-    [%expr stylesheet {|
-    :not(.navbar) { }
-  |} ~rewrite:[ "navbar", "navbar_hash" ]];
-  [%expect
-    {xxx|
-    [@@@ocaml.warning "-32"]
-    let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
-    module type S  =
-      sig
-        module For_referencing : sig val navbar : string end
-        val navbar : Virtual_dom.Vdom.Attr.t
-      end
-    type t = (module S)
-    module Default : S =
-      struct
-        module For_referencing = struct let navbar = {|navbar_hash|} end
-        let navbar = Virtual_dom.Vdom.Attr.class_ {|navbar_hash|}
-      end
-    include Default
-    let default : t = (module Default)
-    let () =
-      Inline_css.Private.append {|
-    /* _none_ */
-
-    *:not(.navbar_hash) {
-
-    }|}
-    |xxx}]
-;;
-
-let%expect_test "enumeration of supported selector functions" =
-  test_struct
-    [%expr
-      stylesheet
-        {|
-    :has(.has) { }
-
-    :not(.not) { }
-
-    :where(.where) { }
-  |}
-        ~rewrite:[ "has", "has_hash"; "where", "where_hash"; "not", "not_hash" ]];
-  [%expect
-    {xxx|
-    [@@@ocaml.warning "-32"]
-    let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
-    module type S  =
-      sig
-        module For_referencing :
-        sig val has : string val not : string val where : string end
-        val has : Virtual_dom.Vdom.Attr.t
-        val not : Virtual_dom.Vdom.Attr.t
-        val where : Virtual_dom.Vdom.Attr.t
-      end
-    type t = (module S)
-    module Default : S =
-      struct
-        module For_referencing =
-          struct
-            let has = {|has_hash|}
-            let not = {|not_hash|}
-            let where = {|where_hash|}
-          end
-        let has = Virtual_dom.Vdom.Attr.class_ {|has_hash|}
-        let not = Virtual_dom.Vdom.Attr.class_ {|not_hash|}
-        let where = Virtual_dom.Vdom.Attr.class_ {|where_hash|}
-      end
-    include Default
-    let default : t = (module Default)
-    let () =
-      Inline_css.Private.append
-        {|
-    /* _none_ */
-
-    *:has(.has_hash) {
-
-    }
-
-    *:not(.not_hash) {
-
-    }
-
-    *:where(.where_hash) {
-
-    }|}
-    |xxx}]
-;;
-
-let%expect_test "demonstrate support of hashing for :is" =
-  test_struct [%expr stylesheet {| :is(.is) {} |} ~rewrite:[ "is", "is_hash" ]];
-  [%expect
-    {xxx|
-    [@@@ocaml.warning "-32"]
-    let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
-    module type S  =
-      sig
-        module For_referencing : sig val is : string end
-        val is : Virtual_dom.Vdom.Attr.t
-      end
-    type t = (module S)
-    module Default : S =
-      struct
-        module For_referencing = struct let is = {|is_hash|} end
-        let is = Virtual_dom.Vdom.Attr.class_ {|is_hash|}
-      end
-    include Default
-    let default : t = (module Default)
-    let () = Inline_css.Private.append {|
-    /* _none_ */
-
-    *:is(.is_hash) {
-
-    }|}
-    |xxx}]
-;;
-
-let%expect_test "more complicated nested identifiers within selector functions" =
-  test_struct
-    [%expr
-      stylesheet
-        {|
-    :not(.a > :dir(.d) > .c:has(.navbar)) { }
-  |}
-        ~rewrite:[ "a", "a_hash"; "c", "c_hash"; "navbar", "navbar_hash" ]];
-  (* Notice that ".d" is not hashed because it is placed in invalid places. *)
-  [%expect
-    {xxx|
-    [@@@ocaml.warning "-32"]
-    let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
-    module type S  =
-      sig
-        module For_referencing :
-        sig val a : string val c : string val navbar : string end
-        val a : Virtual_dom.Vdom.Attr.t
-        val c : Virtual_dom.Vdom.Attr.t
-        val navbar : Virtual_dom.Vdom.Attr.t
-      end
-    type t = (module S)
-    module Default : S =
-      struct
-        module For_referencing =
-          struct
-            let c = {|c_hash|}
-            let navbar = {|navbar_hash|}
-            let a = {|a_hash|}
-          end
-        let c = Virtual_dom.Vdom.Attr.class_ {|c_hash|}
-        let navbar = Virtual_dom.Vdom.Attr.class_ {|navbar_hash|}
-        let a = Virtual_dom.Vdom.Attr.class_ {|a_hash|}
-      end
-    include Default
-    let default : t = (module Default)
-    let () =
-      Inline_css.Private.append
-        {|
-    /* _none_ */
-
-    *:not(.a_hash>:dir(.d)>.c_hash:has(.navbar_hash)) {
-
-    }|}
+    .navbar_hash_577da54a4b {
+      background-color: var(--a_hash_577da54a4b, var(--b_hash_577da54a4b, (var(--c_hash_577da54a4b))));
+    }|})
     |xxx}]
 ;;
 
@@ -1683,32 +1406,14 @@ let%expect_test "Does not hash invalid places for selectors." =
     }
   |}];
   [%expect
-    {xxx|
-    [@@@ocaml.warning "-32"]
-    let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
-    module type S  = sig module For_referencing : sig  end end
-    type t = (module S)
-    module Default : S = struct module For_referencing = struct  end end
-    include Default
-    let default : t = (module Default)
-    let () =
-      Inline_css.Private.append
-        {|
-    /* _none_ */
-
-    has(.a) {
-     background-color::has(.a);
-     background-color:has(.a)
-    }|}
-    |xxx}]
+    {xxx| Error while parsing selector. Expected start of type selector but got FUNCTION(has) |xxx}]
 ;;
 
 let%expect_test "collision of names between ids and classes results in an alert." =
-  test_struct [%expr stylesheet {|
+  test_struct
+    [%expr
+      stylesheet
+        {|
 #foo {}
 .foo {}
   |}];
@@ -1716,10 +1421,8 @@ let%expect_test "collision of names between ids and classes results in an alert.
     {xxx|
     [@@@ocaml.warning "-32"]
     let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
+      ?dont_hash:string list -> ?dont_hash_prefixes:string list -> string -> unit
+      = fun ?dont_hash:_  ?dont_hash_prefixes:_  _ -> ()
     module type S  =
       sig
         module For_referencing : sig val foo : string end
@@ -1732,32 +1435,58 @@ let%expect_test "collision of names between ids and classes results in an alert.
     type t = (module S)
     module Default : S =
       struct
-        module For_referencing = struct let foo = {|foo_hash_ba79671496|} end
+        module For_referencing = struct let foo = {|foo_hash_b313a0854a|} end
         let foo = Virtual_dom.Vdom.Attr.empty
-        let foo_class = Virtual_dom.Vdom.Attr.class_ {|foo_hash_ba79671496|}
-        let foo_id = Virtual_dom.Vdom.Attr.id {|foo_hash_ba79671496|}
+        let foo_class =
+          Virtual_dom.Vdom.Attr.lazy_
+            (lazy
+               (Inline_css.Ppx_css_runtime.force
+                  Ppx_css_hoister_do_not_collide.update_sheet_lazy_fn_x__019___b313a0854a__group_1;
+                Virtual_dom.Vdom.Attr.class_ {|foo_hash_b313a0854a|}))
+        let foo_id =
+          Virtual_dom.Vdom.Attr.lazy_
+            (lazy
+               (Inline_css.Ppx_css_runtime.force
+                  Ppx_css_hoister_do_not_collide.update_sheet_lazy_fn_x__019___b313a0854a__group_0;
+                Virtual_dom.Vdom.Attr.id {|foo_hash_b313a0854a|}))
       end
     include Default
     let default : t = (module Default)
-    let () =
-      Inline_css.Private.append
-        {|
-    /* _none_ */
 
-    *#foo_hash_ba79671496 {
+    Hoisted module:
 
-    }
+    let sheet_x__019___b313a0854a__0 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__019___b313a0854a__1 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let update_sheet_lazy_fn_x__019___b313a0854a__group_0 =
+      lazy
+        (Inline_css.Private.update_stylesheet sheet_x__019___b313a0854a__0
+           {|
+    /* app/foo/foo.ml */
 
-    *.foo_hash_ba79671496 {
+    #foo_hash_b313a0854a {
+    }|})
+    let update_sheet_lazy_fn_x__019___b313a0854a__group_1 =
+      lazy
+        (Inline_css.Private.update_stylesheet sheet_x__019___b313a0854a__1
+           {|
+    /* app/foo/foo.ml */
 
-    }|}
+    .foo_hash_b313a0854a {
+    }|})
     |xxx}]
 ;;
 
 let%expect_test "collision of names between ids and classes colliding with a third party \
                  identifier elsewhere results in an error"
   =
-  test_struct [%expr stylesheet {|
+  test_struct
+    [%expr
+      stylesheet
+        {|
 #foo {}
 .foo {}
 .foo_class {}
@@ -1768,7 +1497,10 @@ let%expect_test "collision of names between ids and classes colliding with a thi
 ;;
 
 let%expect_test "behavior on sharing of id and class names" =
-  test_struct [%expr stylesheet {|
+  test_struct
+    [%expr
+      stylesheet
+        {|
     .a {}
     #a {}
                     |}];
@@ -1776,10 +1508,8 @@ let%expect_test "behavior on sharing of id and class names" =
     {xxx|
     [@@@ocaml.warning "-32"]
     let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
+      ?dont_hash:string list -> ?dont_hash_prefixes:string list -> string -> unit
+      = fun ?dont_hash:_  ?dont_hash_prefixes:_  _ -> ()
     module type S  =
       sig
         module For_referencing : sig val a : string end
@@ -1792,27 +1522,51 @@ let%expect_test "behavior on sharing of id and class names" =
     type t = (module S)
     module Default : S =
       struct
-        module For_referencing = struct let a = {|a_hash_b7f7689df5|} end
+        module For_referencing = struct let a = {|a_hash_ff77223dd5|} end
         let a = Virtual_dom.Vdom.Attr.empty
-        let a_class = Virtual_dom.Vdom.Attr.class_ {|a_hash_b7f7689df5|}
-        let a_id = Virtual_dom.Vdom.Attr.id {|a_hash_b7f7689df5|}
+        let a_class =
+          Virtual_dom.Vdom.Attr.lazy_
+            (lazy
+               (Inline_css.Ppx_css_runtime.force
+                  Ppx_css_hoister_do_not_collide.update_sheet_lazy_fn_x__021___ff77223dd5__group_1;
+                Virtual_dom.Vdom.Attr.class_ {|a_hash_ff77223dd5|}))
+        let a_id =
+          Virtual_dom.Vdom.Attr.lazy_
+            (lazy
+               (Inline_css.Ppx_css_runtime.force
+                  Ppx_css_hoister_do_not_collide.update_sheet_lazy_fn_x__021___ff77223dd5__group_0;
+                Virtual_dom.Vdom.Attr.id {|a_hash_ff77223dd5|}))
       end
     include Default
     let default : t = (module Default)
-    let () =
-      Inline_css.Private.append
-        {|
-    /* _none_ */
 
-    *.a_hash_b7f7689df5 {
+    Hoisted module:
 
-    }
+    let sheet_x__021___ff77223dd5__0 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__021___ff77223dd5__1 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let update_sheet_lazy_fn_x__021___ff77223dd5__group_0 =
+      lazy
+        (Inline_css.Private.update_stylesheet sheet_x__021___ff77223dd5__1
+           {|
+    /* app/foo/foo.ml */
 
-    *#a_hash_b7f7689df5 {
+    #a_hash_ff77223dd5 {
+    }|})
+    let update_sheet_lazy_fn_x__021___ff77223dd5__group_1 =
+      lazy
+        (Inline_css.Private.update_stylesheet sheet_x__021___ff77223dd5__0
+           {|
+    /* app/foo/foo.ml */
 
-    }|}
+    .a_hash_ff77223dd5 {
+    }|})
     |xxx}];
-  test_sig {|
+  test_sig
+    {|
     .a {}
     #a {}
                     |};
@@ -1855,10 +1609,8 @@ let%expect_test "dont_hash" =
     {xxx|
     [@@@ocaml.warning "-32"]
     let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
+      ?dont_hash:string list -> ?dont_hash_prefixes:string list -> string -> unit
+      = fun ?dont_hash:_  ?dont_hash_prefixes:_  _ -> ()
     module type S  =
       sig
         module Variables :
@@ -1876,39 +1628,50 @@ let%expect_test "dont_hash" =
       struct
         module Variables =
           struct
-            let ppx_css_variable_set__012_ ?a_variable () =
-              let ppx_css_acc__010_ = [] in
-              let ppx_css_acc__010_ =
+            let ppx_css_variable_set__025_ ?a_variable () =
+              let ppx_css_acc__023_ = [] in
+              let ppx_css_acc__023_ =
                 match a_variable with
-                | None -> ppx_css_acc__010_
-                | Some ppx_css_value__011_ ->
-                    ({|--a-variable|}, ppx_css_value__011_) :: ppx_css_acc__010_ in
-              Virtual_dom.Vdom.Attr.__css_vars_no_kebabs ppx_css_acc__010_
-            let set = ppx_css_variable_set__012_
-            let set_all ~a_variable = ppx_css_variable_set__012_ () ~a_variable
+                | None -> ppx_css_acc__023_
+                | Some ppx_css_value__024_ ->
+                    ({|--a-variable|}, ppx_css_value__024_) :: ppx_css_acc__023_ in
+              Virtual_dom.Vdom.Attr.__css_vars_no_kebabs ppx_css_acc__023_
+            let set = ppx_css_variable_set__025_
+            let set_all ~a_variable = ppx_css_variable_set__025_ () ~a_variable
           end
         module For_referencing =
           struct
-            let an_id = {|an_id|}
             let a_class = {|a-class|}
             let a_variable = {|--a-variable|}
+            let an_id = {|an_id|}
           end
-        let an_id = Virtual_dom.Vdom.Attr.id {|an_id|}
         let a_class = Virtual_dom.Vdom.Attr.class_ {|a-class|}
+        let an_id = Virtual_dom.Vdom.Attr.id {|an_id|}
       end
     include Default
     let default : t = (module Default)
+
+    Hoisted module:
+
+    let sheet_x__022___a5675496ea__0 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__022___a5675496ea__1 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
     let () =
-      Inline_css.Private.append
+      Inline_css.Private.update_stylesheet sheet_x__022___a5675496ea__0
         {|
-    /* _none_ */
+    /* app/foo/foo.ml */
 
-    *.a-class {
-     --a-variable:red
-    }
+    .a-class {
+      --a-variable: red;
+    }|};
+      Inline_css.Private.update_stylesheet sheet_x__022___a5675496ea__1
+        {|
+    /* app/foo/foo.ml */
 
-    *#an_id {
-
+    #an_id {
     }|}
     |xxx}]
 ;;
@@ -1918,22 +1681,17 @@ let%expect_test "Clashes caused by the rename to snake case from kebab case trig
   =
   test_struct [%expr stylesheet {| .a-a {}  .a_a {} |}];
   [%expect
-    {xxx| Unsafe collision of names. Cannot rename 'a-a' to 'a_a' because 'a_a' already exists |xxx}]
+    {xxx| Unsafe collisions of names. Two different css identifiers map to the same ocaml identifier which might lead to unintended results. Both 'a-a' and 'a_a' map to 'a_a' |xxx}]
 ;;
 
 let%expect_test "Unused warnings also apply to [dont_hash]" =
   test_struct [%expr stylesheet {| .a {} |} ~dont_hash:[ "b" ]];
-  [%expect {| Unused keys: (b) |}]
+  [%expect {xxx| Unused keys: (b) |xxx}]
 ;;
 
 let%expect_test "Duplicate values given to [dont_hash]" =
   test_struct [%expr stylesheet {| .a-a {}  |} ~dont_hash:[ "a-a"; "a-a" ]];
   [%expect {| Found duplicate values (a-a) inside of [dont_hash]. |}]
-;;
-
-let%expect_test "Duplicate values between [dont_hash] and [rewrite]" =
-  test_struct [%expr stylesheet {| .a {}  |} ~dont_hash:[ "a" ] ~rewrite:[ "a", "a2" ]];
-  [%expect {| Found duplicate value \"a\" between [dont_hash] and [rewrite]. |}]
 ;;
 
 let%expect_test "[dont_hash] syntax error" =
@@ -1975,10 +1733,8 @@ let%expect_test "dont_hash_prefixes" =
     {xxx|
     [@@@ocaml.warning "-32"]
     let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
+      ?dont_hash:string list -> ?dont_hash_prefixes:string list -> string -> unit
+      = fun ?dont_hash:_  ?dont_hash_prefixes:_  _ -> ()
     module type S  =
       sig
         module Variables :
@@ -1998,43 +1754,55 @@ let%expect_test "dont_hash_prefixes" =
       struct
         module Variables =
           struct
-            let ppx_css_variable_set__015_ ?bg_color ?fg_color () =
-              let ppx_css_acc__013_ = [] in
-              let ppx_css_acc__013_ =
+            let ppx_css_variable_set__029_ ?bg_color ?fg_color () =
+              let ppx_css_acc__027_ = [] in
+              let ppx_css_acc__027_ =
                 match bg_color with
-                | None -> ppx_css_acc__013_
-                | Some ppx_css_value__014_ ->
-                    ({|--bg-color|}, ppx_css_value__014_) :: ppx_css_acc__013_ in
-              let ppx_css_acc__013_ =
+                | None -> ppx_css_acc__027_
+                | Some ppx_css_value__028_ ->
+                    ({|--bg-color|}, ppx_css_value__028_) :: ppx_css_acc__027_ in
+              let ppx_css_acc__027_ =
                 match fg_color with
-                | None -> ppx_css_acc__013_
-                | Some ppx_css_value__014_ ->
-                    ({|--fg-color_hash_785a41f00f|}, ppx_css_value__014_) ::
-                    ppx_css_acc__013_ in
-              Virtual_dom.Vdom.Attr.__css_vars_no_kebabs ppx_css_acc__013_
-            let set = ppx_css_variable_set__015_
+                | None -> ppx_css_acc__027_
+                | Some ppx_css_value__028_ ->
+                    ({|--fg-color_hash_853e9b013a|}, ppx_css_value__028_) ::
+                    ppx_css_acc__027_ in
+              Virtual_dom.Vdom.Attr.__css_vars_no_kebabs ppx_css_acc__027_
+            let set = ppx_css_variable_set__029_
             let set_all ~bg_color ~fg_color =
-              ppx_css_variable_set__015_ () ~bg_color ~fg_color
+              ppx_css_variable_set__029_ () ~bg_color ~fg_color
           end
         module For_referencing =
           struct
-            let a = {|a_hash_785a41f00f|}
-            let fg_color = {|--fg-color_hash_785a41f00f|}
+            let a = {|a_hash_853e9b013a|}
             let bg_color = {|--bg-color|}
+            let fg_color = {|--fg-color_hash_853e9b013a|}
           end
-        let a = Virtual_dom.Vdom.Attr.class_ {|a_hash_785a41f00f|}
+        let a =
+          Virtual_dom.Vdom.Attr.lazy_
+            (lazy
+               (Inline_css.Ppx_css_runtime.force
+                  Ppx_css_hoister_do_not_collide.update_sheet_lazy_fn_x__026___853e9b013a__group_0;
+                Virtual_dom.Vdom.Attr.class_ {|a_hash_853e9b013a|}))
       end
     include Default
     let default : t = (module Default)
-    let () =
-      Inline_css.Private.append
-        {|
-    /* _none_ */
 
-    *.a_hash_785a41f00f {
-     --bg-color:red;
-     --fg-color_hash_785a41f00f:blue
-    }|}
+    Hoisted module:
+
+    let sheet_x__026___853e9b013a__0 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let update_sheet_lazy_fn_x__026___853e9b013a__group_0 =
+      lazy
+        (Inline_css.Private.update_stylesheet sheet_x__026___853e9b013a__0
+           {|
+    /* app/foo/foo.ml */
+
+    .a_hash_853e9b013a {
+      --bg-color: red;
+      --fg-color_hash_853e9b013a: blue;
+    }|})
     |xxx}]
 ;;
 
@@ -2054,9 +1822,12 @@ let%expect_test "dont_hash_prefixes accidental shadowing" =
 
 let%expect_test "dont_hash_prefixes no mention of prefixes" =
   test_struct
-    [%expr stylesheet {|
+    [%expr
+      stylesheet
+        {|
     .a { }
-                    |} ~dont_hash_prefixes:[ "--" ]];
+                    |}
+        ~dont_hash_prefixes:[ "--" ]];
   [%expect {xxx| Unused prefixes: (--) |xxx}]
 ;;
 
@@ -2080,10 +1851,8 @@ let%expect_test "dont_hash_prefixes two different prefixes" =
     {xxx|
     [@@@ocaml.warning "-32"]
     let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
+      ?dont_hash:string list -> ?dont_hash_prefixes:string list -> string -> unit
+      = fun ?dont_hash:_  ?dont_hash_prefixes:_  _ -> ()
     module type S  =
       sig
         module Variables :
@@ -2101,113 +1870,72 @@ let%expect_test "dont_hash_prefixes two different prefixes" =
       struct
         module Variables =
           struct
-            let ppx_css_variable_set__018_ ?aa ?bb () =
-              let ppx_css_acc__016_ = [] in
-              let ppx_css_acc__016_ =
+            let ppx_css_variable_set__033_ ?aa ?bb () =
+              let ppx_css_acc__031_ = [] in
+              let ppx_css_acc__031_ =
                 match aa with
-                | None -> ppx_css_acc__016_
-                | Some ppx_css_value__017_ -> ({|--aa|}, ppx_css_value__017_) ::
-                    ppx_css_acc__016_ in
-              let ppx_css_acc__016_ =
+                | None -> ppx_css_acc__031_
+                | Some ppx_css_value__032_ -> ({|--aa|}, ppx_css_value__032_) ::
+                    ppx_css_acc__031_ in
+              let ppx_css_acc__031_ =
                 match bb with
-                | None -> ppx_css_acc__016_
-                | Some ppx_css_value__017_ -> ({|--bb|}, ppx_css_value__017_) ::
-                    ppx_css_acc__016_ in
-              Virtual_dom.Vdom.Attr.__css_vars_no_kebabs ppx_css_acc__016_
-            let set = ppx_css_variable_set__018_
-            let set_all ~aa ~bb = ppx_css_variable_set__018_ () ~aa ~bb
+                | None -> ppx_css_acc__031_
+                | Some ppx_css_value__032_ -> ({|--bb|}, ppx_css_value__032_) ::
+                    ppx_css_acc__031_ in
+              Virtual_dom.Vdom.Attr.__css_vars_no_kebabs ppx_css_acc__031_
+            let set = ppx_css_variable_set__033_
+            let set_all ~aa ~bb = ppx_css_variable_set__033_ () ~aa ~bb
           end
         module For_referencing =
           struct
-            let b = {|b_hash_db3c8256c8|}
-            let a = {|a_hash_db3c8256c8|}
-            let bb = {|--bb|}
+            let a = {|a_hash_908634fc45|}
             let aa = {|--aa|}
+            let b = {|b_hash_908634fc45|}
+            let bb = {|--bb|}
           end
-        let b = Virtual_dom.Vdom.Attr.class_ {|b_hash_db3c8256c8|}
-        let a = Virtual_dom.Vdom.Attr.class_ {|a_hash_db3c8256c8|}
+        let a =
+          Virtual_dom.Vdom.Attr.lazy_
+            (lazy
+               (Inline_css.Ppx_css_runtime.force
+                  Ppx_css_hoister_do_not_collide.update_sheet_lazy_fn_x__030___908634fc45__group_0;
+                Virtual_dom.Vdom.Attr.class_ {|a_hash_908634fc45|}))
+        let b =
+          Virtual_dom.Vdom.Attr.lazy_
+            (lazy
+               (Inline_css.Ppx_css_runtime.force
+                  Ppx_css_hoister_do_not_collide.update_sheet_lazy_fn_x__030___908634fc45__group_1;
+                Virtual_dom.Vdom.Attr.class_ {|b_hash_908634fc45|}))
       end
     include Default
     let default : t = (module Default)
-    let () =
-      Inline_css.Private.append
-        {|
-    /* _none_ */
 
-    *.a_hash_db3c8256c8 {
-     --aa:red
-    }
+    Hoisted module:
 
-    *.b_hash_db3c8256c8 {
-     --bb:blue
-    }|}
+    let sheet_x__030___908634fc45__0 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__030___908634fc45__1 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let update_sheet_lazy_fn_x__030___908634fc45__group_0 =
+      lazy
+        (Inline_css.Private.update_stylesheet sheet_x__030___908634fc45__0
+           {|
+    /* app/foo/foo.ml */
+
+    .a_hash_908634fc45 {
+      --aa: red;
+    }|})
+    let update_sheet_lazy_fn_x__030___908634fc45__group_1 =
+      lazy
+        (Inline_css.Private.update_stylesheet sheet_x__030___908634fc45__1
+           {|
+    /* app/foo/foo.ml */
+
+    .b_hash_908634fc45 {
+      --bb: blue;
+    }|})
     |xxx}]
-;;
-
-let%expect_test "[~rewrite] takes priority over [~dont_hash_prefixes]." =
-  test_struct
-    [%expr
-      stylesheet
-        {|
-    .abcde { }
-    .abc {}
-                    |}
-        ~rewrite:[ "abcde", "i-take-priority" ]
-        ~dont_hash_prefixes:[ "ab" ]];
-  [%expect
-    {xxx|
-    [@@@ocaml.warning "-32"]
-    let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
-    module type S  =
-      sig
-        module For_referencing : sig val abc : string val abcde : string end
-        val abc : Virtual_dom.Vdom.Attr.t
-        val abcde : Virtual_dom.Vdom.Attr.t
-      end
-    type t = (module S)
-    module Default : S =
-      struct
-        module For_referencing =
-          struct let abcde = {|i-take-priority|}
-                 let abc = {|abc|} end
-        let abcde = Virtual_dom.Vdom.Attr.class_ {|i-take-priority|}
-        let abc = Virtual_dom.Vdom.Attr.class_ {|abc|}
-      end
-    include Default
-    let default : t = (module Default)
-    let () =
-      Inline_css.Private.append
-        {|
-    /* _none_ */
-
-    *.i-take-priority {
-
-    }
-
-    *.abc {
-
-    }|}
-    |xxx}]
-;;
-
-let%expect_test "Unused/possibly redundant/clashing [~dont_hash_prefixes] reuslts in a \
-                 static warning"
-  =
-  test_struct
-    [%expr
-      stylesheet
-        {|
-    .abcde { }
-    .a12345 { }
-                    |}
-        ~rewrite:[ "abcde", "i-take-priority" ]
-          (* "ab" is shadowed by rewrite's "abcde", and both "a12345" and "a123" apply to "a123456" so the longest one of them is rendundant. *)
-        ~dont_hash_prefixes:[ "ab"; "a12345"; "a123" ]];
-  [%expect {xxx| Unused prefixes: (a12345 ab) |xxx}]
 ;;
 
 let%expect_test "[dont_hash_prefixes] syntax error" =
@@ -2249,10 +1977,8 @@ let%expect_test "Unsafe hashing warning is also blocked by [~dont_hash_prefixes]
     {xxx|
     [@@@ocaml.warning "-32"]
     let __type_info_for_ppx_css :
-      ?rewrite:(string * string) list ->
-        ?dont_hash:string list ->
-          ?dont_hash_prefixes:string list -> string -> unit
-      = fun ?rewrite:_ ?dont_hash:_ ?dont_hash_prefixes:_ _ -> ()
+      ?dont_hash:string list -> ?dont_hash_prefixes:string list -> string -> unit
+      = fun ?dont_hash:_  ?dont_hash_prefixes:_  _ -> ()
     module type S  =
       sig
         module Variables :
@@ -2267,28 +1993,576 @@ let%expect_test "Unsafe hashing warning is also blocked by [~dont_hash_prefixes]
       struct
         module Variables =
           struct
-            let ppx_css_variable_set__021_ ?cm_bg_color () =
-              let ppx_css_acc__019_ = [] in
-              let ppx_css_acc__019_ =
+            let ppx_css_variable_set__037_ ?cm_bg_color () =
+              let ppx_css_acc__035_ = [] in
+              let ppx_css_acc__035_ =
                 match cm_bg_color with
-                | None -> ppx_css_acc__019_
-                | Some ppx_css_value__020_ ->
-                    ({|--cm-bg-color|}, ppx_css_value__020_) :: ppx_css_acc__019_ in
-              Virtual_dom.Vdom.Attr.__css_vars_no_kebabs ppx_css_acc__019_
-            let set = ppx_css_variable_set__021_
-            let set_all ~cm_bg_color = ppx_css_variable_set__021_ () ~cm_bg_color
+                | None -> ppx_css_acc__035_
+                | Some ppx_css_value__036_ ->
+                    ({|--cm-bg-color|}, ppx_css_value__036_) :: ppx_css_acc__035_ in
+              Virtual_dom.Vdom.Attr.__css_vars_no_kebabs ppx_css_acc__035_
+            let set = ppx_css_variable_set__037_
+            let set_all ~cm_bg_color = ppx_css_variable_set__037_ () ~cm_bg_color
           end
         module For_referencing = struct let cm_bg_color = {|--cm-bg-color|} end
       end
     include Default
     let default : t = (module Default)
-    let () =
-      Inline_css.Private.append
-        {|
-    /* _none_ */
 
-    *:root {
-     color:var(--cm-bg-color)
+    Hoisted module:
+
+    let sheet_x__034___d115ed8389__0 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let () =
+      Inline_css.Private.update_stylesheet sheet_x__034___d115ed8389__0
+        {|
+    /* app/foo/foo.ml */
+
+    :root {
+      color: var(--cm-bg-color);
+    }|}
+    |xxx}]
+;;
+
+let%expect_test "Scary attributes shouldn't be hashed even if they look like selectors" =
+  test_struct
+    [%expr
+      stylesheet
+        {|
+        div:asdf(".m .n .o") {}
+        div:asdf(.d .e .f) {}
+        div:qwerty(.t .q .r) {}
+       |}];
+  [%expect
+    {xxx|
+    [@@@ocaml.warning "-32"]
+    let __type_info_for_ppx_css :
+      ?dont_hash:string list -> ?dont_hash_prefixes:string list -> string -> unit
+      = fun ?dont_hash:_  ?dont_hash_prefixes:_  _ -> ()
+    module type S  = sig module For_referencing : sig  end end
+    type t = (module S)
+    module Default : S = struct module For_referencing = struct  end end
+    include Default
+    let default : t = (module Default)
+
+    Hoisted module:
+
+    let sheet_x__038___2e70e65706__0 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__038___2e70e65706__1 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__038___2e70e65706__2 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let () =
+      (Inline_css.Private.update_stylesheet sheet_x__038___2e70e65706__0
+         {|
+    /* app/foo/foo.ml */
+
+    div:asdf(".m .n .o") {
+    }|};
+       Inline_css.Private.update_stylesheet sheet_x__038___2e70e65706__1
+         {|
+    /* app/foo/foo.ml */
+
+    div:asdf(.d .e .f) {
+    }|});
+      Inline_css.Private.update_stylesheet sheet_x__038___2e70e65706__2
+        {|
+    /* app/foo/foo.ml */
+
+    div:qwerty(.t .q .r) {
+    }|}
+    |xxx}]
+;;
+
+let%expect_test "Scary attributes shouldn't be hashed" =
+  test_struct
+    [%expr
+      stylesheet
+        {|
+        div[has=".x .y .z"] {}
+        div[attr='.a .b .c'] {}
+        div[href=#] {}
+       |}];
+  [%expect
+    {xxx|
+    [@@@ocaml.warning "-32"]
+    let __type_info_for_ppx_css :
+      ?dont_hash:string list -> ?dont_hash_prefixes:string list -> string -> unit
+      = fun ?dont_hash:_  ?dont_hash_prefixes:_  _ -> ()
+    module type S  = sig module For_referencing : sig  end end
+    type t = (module S)
+    module Default : S = struct module For_referencing = struct  end end
+    include Default
+    let default : t = (module Default)
+
+    Hoisted module:
+
+    let sheet_x__039___30526555a5__0 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__039___30526555a5__1 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__039___30526555a5__2 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let () =
+      (Inline_css.Private.update_stylesheet sheet_x__039___30526555a5__0
+         {|
+    /* app/foo/foo.ml */
+
+    div[has=".x .y .z"] {
+    }|};
+       Inline_css.Private.update_stylesheet sheet_x__039___30526555a5__1
+         {|
+    /* app/foo/foo.ml */
+
+    div[attr='.a .b .c'] {
+    }|});
+      Inline_css.Private.update_stylesheet sheet_x__039___30526555a5__2
+        {|
+    /* app/foo/foo.ml */
+
+    div[href=#] {
+    }|}
+    |xxx}]
+;;
+
+let%expect_test "classname and id's with the same name, but different auto-forcing \
+                 behaviors"
+  =
+  test_struct
+    [%expr
+      stylesheet
+        {|
+    :not(#a) {}
+    .a {}
+    :not(.b) {}
+    #b {}
+ |}];
+  [%expect
+    {xxx|
+    [@@@ocaml.warning "-32"]
+    let __type_info_for_ppx_css :
+      ?dont_hash:string list -> ?dont_hash_prefixes:string list -> string -> unit
+      = fun ?dont_hash:_  ?dont_hash_prefixes:_  _ -> ()
+    module type S  =
+      sig
+        module For_referencing : sig val a : string val b : string end
+        val a : Virtual_dom.Vdom.Attr.t[@@alert
+                                         unsafe
+                                           "An id and a class both share the name \"a\" which is ambiguous. Please use \"a_id\" or \"a_class\" instead."]
+        val a_id : Virtual_dom.Vdom.Attr.t
+        val a_class : Virtual_dom.Vdom.Attr.t
+        val b : Virtual_dom.Vdom.Attr.t[@@alert
+                                         unsafe
+                                           "An id and a class both share the name \"b\" which is ambiguous. Please use \"b_id\" or \"b_class\" instead."]
+        val b_id : Virtual_dom.Vdom.Attr.t
+        val b_class : Virtual_dom.Vdom.Attr.t
+      end
+    type t = (module S)
+    module Default : S =
+      struct
+        module For_referencing =
+          struct let a = {|a_hash_34f4bb1372|}
+                 let b = {|b_hash_34f4bb1372|} end
+        let a = Virtual_dom.Vdom.Attr.empty
+        let a_class =
+          Virtual_dom.Vdom.Attr.lazy_
+            (lazy
+               (Inline_css.Ppx_css_runtime.force
+                  Ppx_css_hoister_do_not_collide.update_sheet_lazy_fn_x__040___34f4bb1372__group_1;
+                Virtual_dom.Vdom.Attr.class_ {|a_hash_34f4bb1372|}))
+        let a_id = Virtual_dom.Vdom.Attr.id {|a_hash_34f4bb1372|}
+        let b = Virtual_dom.Vdom.Attr.empty
+        let b_class = Virtual_dom.Vdom.Attr.class_ {|b_hash_34f4bb1372|}
+        let b_id =
+          Virtual_dom.Vdom.Attr.lazy_
+            (lazy
+               (Inline_css.Ppx_css_runtime.force
+                  Ppx_css_hoister_do_not_collide.update_sheet_lazy_fn_x__040___34f4bb1372__group_0;
+                Virtual_dom.Vdom.Attr.id {|b_hash_34f4bb1372|}))
+      end
+    include Default
+    let default : t = (module Default)
+
+    Hoisted module:
+
+    let sheet_x__040___34f4bb1372__0 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__040___34f4bb1372__1 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__040___34f4bb1372__2 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__040___34f4bb1372__3 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let () =
+      Inline_css.Private.update_stylesheet sheet_x__040___34f4bb1372__0
+        {|
+    /* app/foo/foo.ml */
+
+    :not(#a_hash_34f4bb1372) {
+    }|};
+      Inline_css.Private.update_stylesheet sheet_x__040___34f4bb1372__2
+        {|
+    /* app/foo/foo.ml */
+
+    :not(.b_hash_34f4bb1372) {
+    }|}
+    let update_sheet_lazy_fn_x__040___34f4bb1372__group_0 =
+      lazy
+        (Inline_css.Private.update_stylesheet sheet_x__040___34f4bb1372__3
+           {|
+    /* app/foo/foo.ml */
+
+    #b_hash_34f4bb1372 {
+    }|})
+    let update_sheet_lazy_fn_x__040___34f4bb1372__group_1 =
+      lazy
+        (Inline_css.Private.update_stylesheet sheet_x__040___34f4bb1372__1
+           {|
+    /* app/foo/foo.ml */
+
+    .a_hash_34f4bb1372 {
+    }|})
+    |xxx}]
+;;
+
+let%expect_test "classnames and items - transitive" =
+  test_struct
+    [%expr
+      stylesheet
+        {|
+      .a       .b {}
+      :not(.a) .b {}
+      :not(#a) #b {}
+  |}];
+  [%expect
+    {xxx|
+    [@@@ocaml.warning "-32"]
+    let __type_info_for_ppx_css :
+      ?dont_hash:string list -> ?dont_hash_prefixes:string list -> string -> unit
+      = fun ?dont_hash:_  ?dont_hash_prefixes:_  _ -> ()
+    module type S  =
+      sig
+        module For_referencing : sig val a : string val b : string end
+        val a : Virtual_dom.Vdom.Attr.t[@@alert
+                                         unsafe
+                                           "An id and a class both share the name \"a\" which is ambiguous. Please use \"a_id\" or \"a_class\" instead."]
+        val a_id : Virtual_dom.Vdom.Attr.t
+        val a_class : Virtual_dom.Vdom.Attr.t
+        val b : Virtual_dom.Vdom.Attr.t[@@alert
+                                         unsafe
+                                           "An id and a class both share the name \"b\" which is ambiguous. Please use \"b_id\" or \"b_class\" instead."]
+        val b_id : Virtual_dom.Vdom.Attr.t
+        val b_class : Virtual_dom.Vdom.Attr.t
+      end
+    type t = (module S)
+    module Default : S =
+      struct
+        module For_referencing =
+          struct let a = {|a_hash_dba1924c19|}
+                 let b = {|b_hash_dba1924c19|} end
+        let a = Virtual_dom.Vdom.Attr.empty
+        let a_class =
+          Virtual_dom.Vdom.Attr.lazy_
+            (lazy
+               (Inline_css.Ppx_css_runtime.force
+                  Ppx_css_hoister_do_not_collide.update_sheet_lazy_fn_x__041___dba1924c19__group_1;
+                Virtual_dom.Vdom.Attr.class_ {|a_hash_dba1924c19|}))
+        let a_id = Virtual_dom.Vdom.Attr.id {|a_hash_dba1924c19|}
+        let b = Virtual_dom.Vdom.Attr.empty
+        let b_class =
+          Virtual_dom.Vdom.Attr.lazy_
+            (lazy
+               (Inline_css.Ppx_css_runtime.force
+                  Ppx_css_hoister_do_not_collide.update_sheet_lazy_fn_x__041___dba1924c19__group_1;
+                Virtual_dom.Vdom.Attr.class_ {|b_hash_dba1924c19|}))
+        let b_id =
+          Virtual_dom.Vdom.Attr.lazy_
+            (lazy
+               (Inline_css.Ppx_css_runtime.force
+                  Ppx_css_hoister_do_not_collide.update_sheet_lazy_fn_x__041___dba1924c19__group_0;
+                Virtual_dom.Vdom.Attr.id {|b_hash_dba1924c19|}))
+      end
+    include Default
+    let default : t = (module Default)
+
+    Hoisted module:
+
+    let sheet_x__041___dba1924c19__0 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__041___dba1924c19__1 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__041___dba1924c19__2 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let update_sheet_lazy_fn_x__041___dba1924c19__group_0 =
+      lazy
+        (Inline_css.Private.update_stylesheet sheet_x__041___dba1924c19__2
+           {|
+    /* app/foo/foo.ml */
+
+    :not(#a_hash_dba1924c19) #b_hash_dba1924c19 {
+    }|})
+    let update_sheet_lazy_fn_x__041___dba1924c19__group_1 =
+      lazy
+        (Inline_css.Private.update_stylesheet sheet_x__041___dba1924c19__0
+           {|
+    /* app/foo/foo.ml */
+
+    .a_hash_dba1924c19 .b_hash_dba1924c19 {
+    }|};
+         Inline_css.Private.update_stylesheet sheet_x__041___dba1924c19__1
+           {|
+    /* app/foo/foo.ml */
+
+    :not(.a_hash_dba1924c19) .b_hash_dba1924c19 {
+    }|})
+    |xxx}]
+;;
+
+let%expect_test "String attrs with identifiers should not be hashed" =
+  test_struct
+    [%expr
+      stylesheet
+        {|
+                div:asdf('.a .b .c') { }
+                div:asdf(".a .b .c") { }
+                div[foo=".a .b .c"] { }
+                div[bar='.a .b .c'] { }
+       |}];
+  [%expect
+    {xxx|
+    [@@@ocaml.warning "-32"]
+    let __type_info_for_ppx_css :
+      ?dont_hash:string list -> ?dont_hash_prefixes:string list -> string -> unit
+      = fun ?dont_hash:_  ?dont_hash_prefixes:_  _ -> ()
+    module type S  = sig module For_referencing : sig  end end
+    type t = (module S)
+    module Default : S = struct module For_referencing = struct  end end
+    include Default
+    let default : t = (module Default)
+
+    Hoisted module:
+
+    let sheet_x__042___d29657b04e__0 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__042___d29657b04e__1 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__042___d29657b04e__2 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__042___d29657b04e__3 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let () =
+      ((Inline_css.Private.update_stylesheet sheet_x__042___d29657b04e__0
+          {|
+    /* app/foo/foo.ml */
+
+    div:asdf('.a .b .c') {
+    }|};
+        Inline_css.Private.update_stylesheet sheet_x__042___d29657b04e__1
+          {|
+    /* app/foo/foo.ml */
+
+    div:asdf(".a .b .c") {
+    }|});
+       Inline_css.Private.update_stylesheet sheet_x__042___d29657b04e__2
+         {|
+    /* app/foo/foo.ml */
+
+    div[foo=".a .b .c"] {
+    }|});
+      Inline_css.Private.update_stylesheet sheet_x__042___d29657b04e__3
+        {|
+    /* app/foo/foo.ml */
+
+    div[bar='.a .b .c'] {
+    }|}
+    |xxx}]
+;;
+
+let%expect_test "Known  css functions with identifiers should hash" =
+  test_struct
+    [%expr
+      stylesheet
+        {|
+                div:has(.a .b) {
+
+                }
+                div:not(.c + .d) {
+
+                }
+                div:where(.e ~ .f) {
+
+                }
+                div:is(.g > .h) {
+
+                }
+       |}];
+  [%expect
+    {xxx|
+    [@@@ocaml.warning "-32"]
+    let __type_info_for_ppx_css :
+      ?dont_hash:string list -> ?dont_hash_prefixes:string list -> string -> unit
+      = fun ?dont_hash:_  ?dont_hash_prefixes:_  _ -> ()
+    module type S  =
+      sig
+        module For_referencing :
+        sig
+          val a : string
+          val b : string
+          val c : string
+          val d : string
+          val e : string
+          val f : string
+          val g : string
+          val h : string
+        end
+        val a : Virtual_dom.Vdom.Attr.t
+        val b : Virtual_dom.Vdom.Attr.t
+        val c : Virtual_dom.Vdom.Attr.t
+        val d : Virtual_dom.Vdom.Attr.t
+        val e : Virtual_dom.Vdom.Attr.t
+        val f : Virtual_dom.Vdom.Attr.t
+        val g : Virtual_dom.Vdom.Attr.t
+        val h : Virtual_dom.Vdom.Attr.t
+      end
+    type t = (module S)
+    module Default : S =
+      struct
+        module For_referencing =
+          struct
+            let a = {|a_hash_686651dd8b|}
+            let b = {|b_hash_686651dd8b|}
+            let c = {|c_hash_686651dd8b|}
+            let d = {|d_hash_686651dd8b|}
+            let e = {|e_hash_686651dd8b|}
+            let f = {|f_hash_686651dd8b|}
+            let g = {|g_hash_686651dd8b|}
+            let h = {|h_hash_686651dd8b|}
+          end
+        let a =
+          Virtual_dom.Vdom.Attr.lazy_
+            (lazy
+               (Inline_css.Ppx_css_runtime.force
+                  Ppx_css_hoister_do_not_collide.update_sheet_lazy_fn_x__043___686651dd8b__group_0;
+                Virtual_dom.Vdom.Attr.class_ {|a_hash_686651dd8b|}))
+        let b =
+          Virtual_dom.Vdom.Attr.lazy_
+            (lazy
+               (Inline_css.Ppx_css_runtime.force
+                  Ppx_css_hoister_do_not_collide.update_sheet_lazy_fn_x__043___686651dd8b__group_0;
+                Virtual_dom.Vdom.Attr.class_ {|b_hash_686651dd8b|}))
+        let c = Virtual_dom.Vdom.Attr.class_ {|c_hash_686651dd8b|}
+        let d = Virtual_dom.Vdom.Attr.class_ {|d_hash_686651dd8b|}
+        let e = Virtual_dom.Vdom.Attr.class_ {|e_hash_686651dd8b|}
+        let f = Virtual_dom.Vdom.Attr.class_ {|f_hash_686651dd8b|}
+        let g = Virtual_dom.Vdom.Attr.class_ {|g_hash_686651dd8b|}
+        let h = Virtual_dom.Vdom.Attr.class_ {|h_hash_686651dd8b|}
+      end
+    include Default
+    let default : t = (module Default)
+
+    Hoisted module:
+
+    let sheet_x__043___686651dd8b__0 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__043___686651dd8b__1 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__043___686651dd8b__2 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__043___686651dd8b__3 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let () =
+      (Inline_css.Private.update_stylesheet sheet_x__043___686651dd8b__1
+         {|
+    /* app/foo/foo.ml */
+
+    div:not(.c_hash_686651dd8b + .d_hash_686651dd8b) {
+    }|};
+       Inline_css.Private.update_stylesheet sheet_x__043___686651dd8b__2
+         {|
+    /* app/foo/foo.ml */
+
+    div:where(.e_hash_686651dd8b ~ .f_hash_686651dd8b) {
+    }|});
+      Inline_css.Private.update_stylesheet sheet_x__043___686651dd8b__3
+        {|
+    /* app/foo/foo.ml */
+
+    div:is(.g_hash_686651dd8b > .h_hash_686651dd8b) {
+    }|}
+    let update_sheet_lazy_fn_x__043___686651dd8b__group_0 =
+      lazy
+        (Inline_css.Private.update_stylesheet sheet_x__043___686651dd8b__0
+           {|
+    /* app/foo/foo.ml */
+
+    div:has(.a_hash_686651dd8b .b_hash_686651dd8b) {
+    }|})
+    |xxx}]
+;;
+
+let%expect_test "Doesn't throw on pseudoclasses without selectors" =
+  test_struct
+    [%expr
+      stylesheet
+        {|
+                div:asdf() { }
+                div:bar { }
+       |}];
+  [%expect
+    {xxx|
+    [@@@ocaml.warning "-32"]
+    let __type_info_for_ppx_css :
+      ?dont_hash:string list -> ?dont_hash_prefixes:string list -> string -> unit
+      = fun ?dont_hash:_  ?dont_hash_prefixes:_  _ -> ()
+    module type S  = sig module For_referencing : sig  end end
+    type t = (module S)
+    module Default : S = struct module For_referencing = struct  end end
+    include Default
+    let default : t = (module Default)
+
+    Hoisted module:
+
+    let sheet_x__044___60b0c55bdb__0 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let sheet_x__044___60b0c55bdb__1 =
+      let sheet = Inline_css.Private.create_stylesheet () in
+      Inline_css.Private.append_stylesheet sheet; sheet
+    let () =
+      Inline_css.Private.update_stylesheet sheet_x__044___60b0c55bdb__0
+        {|
+    /* app/foo/foo.ml */
+
+    div:asdf() {
+    }|};
+      Inline_css.Private.update_stylesheet sheet_x__044___60b0c55bdb__1
+        {|
+    /* app/foo/foo.ml */
+
+    div:bar {
     }|}
     |xxx}]
 ;;

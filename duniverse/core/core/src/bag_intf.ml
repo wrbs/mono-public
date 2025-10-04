@@ -7,20 +7,20 @@
     - Addition and removal are constant time operations.
 
     It is an error to modify a bag ([add], [remove], [remove_one], ...) during iteration
-    ([fold], [iter], ...).  *)
+    ([fold], [iter], ...). *)
 
 open! Import
 
 module type S = sig
   module Elt : sig
-    type 'a t
+    type 'a t : mutable_data with 'a
 
     val equal : 'a t -> 'a t -> bool
     val sexp_of_t : ('a -> Sexp.t) -> 'a t -> Sexp.t
     val value : 'a t -> 'a
   end
 
-  type 'a t [@@deriving sexp]
+  type 'a t : mutable_data with 'a [@@deriving sexp, sexp_grammar]
 
   (** Much of a bag's interface comes from the generic {!Base.Container} module. *)
   include Container.S1 with type 'a t := 'a t
@@ -30,19 +30,19 @@ module type S = sig
   (** [create ()] returns an empty bag. *)
   val create : unit -> 'a t
 
-  (** [add t v] adds [v] to the bag [t], returning an element that can
-      later be removed from the bag.  [add] runs in constant time. *)
+  (** [add t v] adds [v] to the bag [t], returning an element that can later be removed
+      from the bag. [add] runs in constant time. *)
   val add : 'a t -> 'a -> 'a Elt.t
 
   val add_unit : 'a t -> 'a -> unit
 
-  (** [mem_elt t elt] returns whether or not [elt] is in [t].  It is like [mem] (included
-      from [Container]), but it takes an ['a Elt.t] instead of an ['a] and runs in constant
-      time instead of linear time. *)
+  (** [mem_elt t elt] returns whether or not [elt] is in [t]. It is like [mem] (included
+      from [Container]), but it takes an ['a Elt.t] instead of an ['a] and runs in
+      constant time instead of linear time. *)
   val mem_elt : 'a t -> 'a Elt.t -> bool
 
-  (** [remove t elt] removes [elt] from the bag [t], raising an exception if [elt]
-      is not in the bag.  [remove] runs in constant time. *)
+  (** [remove t elt] removes [elt] from the bag [t], raising an exception if [elt] is not
+      in the bag. [remove] runs in constant time. *)
   val remove : 'a t -> 'a Elt.t -> unit
 
   (** [choose t] returns some element in the bag. *)
@@ -52,25 +52,24 @@ module type S = sig
       [remove_one] runs in constant time. *)
   val remove_one : 'a t -> 'a option
 
-  (** [clear t] removes all elements from the bag.  [clear] runs in constant time. *)
+  (** [clear t] removes all elements from the bag. [clear] runs in constant time. *)
   val clear : 'a t -> unit
 
   (** [filter_inplace t ~f] removes all the elements from [t] that don't satisfy [f]. *)
-  val filter_inplace : 'a t -> f:('a -> bool) -> unit
+  val filter_inplace : 'a t -> f:local_ ('a -> bool) -> unit
 
   (** [iter_elt t ~f] calls [f] on each element of the bag. *)
   val iter_elt : 'a t -> f:('a Elt.t -> unit) -> unit
 
-  (** [find_elt t ~f] returns the first element in the bag satisfying [f], returning [None]
-      if none is found. *)
+  (** [find_elt t ~f] returns the first element in the bag satisfying [f], returning
+      [None] if none is found. *)
   val find_elt : 'a t -> f:('a -> bool) -> 'a Elt.t option
 
   (** [until_empty t f] repeatedly removes values [v] from [t], running [f v] on each one,
-      until [t] is empty.  Running [f] may add elements to [t] if it wants. *)
+      until [t] is empty. Running [f] may add elements to [t] if it wants. *)
   val until_empty : 'a t -> ('a -> unit) -> unit
 
-  (** [transfer ~src ~dst] moves all of the elements from [src] to [dst] in constant
-      time. *)
+  (** [transfer ~src ~dst] moves all of the elements from [src] to [dst] in constant time. *)
   val transfer : src:'a t -> dst:'a t -> unit
 
   val of_list : 'a list -> 'a t
@@ -83,7 +82,7 @@ module type S = sig
   val unchecked_iter : 'a t -> f:('a -> unit) -> unit
 end
 
-module type Bag = sig
+module type Bag = sig @@ portable
   (** The module type of the Bag module.
 
       Example usage:
@@ -91,8 +90,7 @@ module type Bag = sig
         module My_bag : Bag.S = Bag
       ]}
 
-      Now [My_bag.Elt.t] can't be used with any other [Bag.t] type.
-  *)
+      Now [My_bag.Elt.t] can't be used with any other [Bag.t] type. *)
   module type S = S
 
   include S

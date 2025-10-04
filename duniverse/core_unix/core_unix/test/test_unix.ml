@@ -6,8 +6,9 @@ let%expect_test "[File_descr.sexp_of_t]" =
   print_s
     [%sexp
       (List.map [ -1; 0; 1; 2; 3 ] ~f:(fun i -> i, i |> File_descr.of_int)
-        : (int * File_descr.t) list)];
-  [%expect {|
+       : (int * File_descr.t) list)];
+  [%expect
+    {|
     ((-1 -1)
      (0  0)
      (1  1)
@@ -33,7 +34,7 @@ let%expect_test "[mkdir_p ~perm name] sets the permissions on [name] and all oth
   let make_require_and_remove_dir lex dir =
     let dir_perms = (stat dir).st_perm in
     let lazy_sexp = lazy (Sexp.Atom (sprintf "%s has perms %o" dir dir_perms)) in
-    require ~if_false_then_print_s:lazy_sexp lex (perm = dir_perms);
+    require ~if_false_then_print_s:lazy_sexp ~here:lex (perm = dir_perms);
     remove dir
   in
   make_require_and_remove_dir [%here] dir;
@@ -53,7 +54,6 @@ let%expect_test "[mkdtemp] dir name contains [.tmp.]" =
   let dir = mkdtemp "foo" in
   rmdir dir;
   require
-    [%here]
     (String.is_substring (Filename.basename dir) ~substring:".tmp.")
     ~if_false_then_print_s:(lazy [%message (dir : string)]);
   [%expect {| |}]
@@ -64,7 +64,6 @@ let%expect_test "[mkstemp] file name contains [.tmp.]" =
   unlink file;
   close fd;
   require
-    [%here]
     (String.is_substring (Filename.basename file) ~substring:".tmp.")
     ~if_false_then_print_s:(lazy [%message (file : string)]);
   [%expect {| |}]
@@ -85,7 +84,7 @@ let%expect_test "filename validation in [remove]" =
 ;;
 
 let%expect_test "expand ~base works" =
-  let base = lazy [ "A=1"; "B=2"; "C=3" ] in
+  let base = [ "A=1"; "B=2"; "C=3" ] in
   print_s [%sexp (Unix.Env.expand ~base (`Replace [ "C", "2" ]) : string list)];
   [%expect {| (C=2) |}];
   print_s
@@ -98,61 +97,58 @@ let%test_unit "fork_exec ~env last binding takes precedence" =
     ~finally:remove
     (Filename_unix.temp_file "test" "fork_exec.env.last-wins")
     ~f:(fun temp_file ->
-    let var_in_child env =
-      waitpid_exn
-        (fork_exec
-           ()
-           ~env
-           ~prog:"sh"
-           ~argv:[ "sh"; "-c"; "echo -n ${VAR-undefined} > " ^ temp_file ]);
-      In_channel.read_all temp_file
-    in
-    let env = [ "VAR", "first"; "VAR", "last" ] in
-    List.iter
-      [ `Replace_raw (List.map env ~f:(fun (v, s) -> v ^ "=" ^ s))
-      ; `Replace env
-      ; `Extend env
-      ; `Override (List.map env ~f:(fun (v, s) -> v, Some s))
-      ]
-      ~f:(fun env -> [%test_result: string] ~expect:"last" (var_in_child env));
-    Unix.putenv ~key:"VAR" ~data:"in-process";
-    let env = `Override [ "VAR", None ] in
-    [%test_result: string] ~expect:"undefined" (var_in_child env))
+      let var_in_child env =
+        waitpid_exn
+          (fork_exec
+             ()
+             ~env
+             ~prog:"sh"
+             ~argv:[ "sh"; "-c"; "echo -n ${VAR-undefined} > " ^ temp_file ]);
+        In_channel.read_all temp_file
+      in
+      let env = [ "VAR", "first"; "VAR", "last" ] in
+      List.iter
+        [ `Replace_raw (List.map env ~f:(fun (v, s) -> v ^ "=" ^ s))
+        ; `Replace env
+        ; `Extend env
+        ; `Override (List.map env ~f:(fun (v, s) -> v, Some s))
+        ]
+        ~f:(fun env -> [%test_result: string] ~expect:"last" (var_in_child env));
+      Unix.putenv ~key:"VAR" ~data:"in-process";
+      let env = `Override [ "VAR", None ] in
+      [%test_result: string] ~expect:"undefined" (var_in_child env))
 ;;
 
-let%test_module _ =
-  (module struct
-    open Open_flags
+module%test _ = struct
+  open Open_flags
 
-    let%test _ = can_read rdonly
-    let%test _ = can_read rdwr
-    let%test _ = not (can_read wronly)
-    let%test _ = can_write wronly
-    let%test _ = can_write rdwr
-    let%test _ = not (can_write rdonly)
+  let%test _ = can_read rdonly
+  let%test _ = can_read rdwr
+  let%test _ = not (can_read wronly)
+  let%test _ = can_write wronly
+  let%test _ = can_write rdwr
+  let%test _ = not (can_write rdonly)
 
-    let check t string =
-      let sexp1 = sexp_of_t t in
-      let sexp2 = Sexp.of_string string in
-      if Sexp.( <> ) sexp1 sexp2
-      then
-        failwiths ~here:[%here] "unequal sexps" (sexp1, sexp2) [%sexp_of: Sexp.t * Sexp.t]
-    ;;
+  let check t string =
+    let sexp1 = sexp_of_t t in
+    let sexp2 = Sexp.of_string string in
+    if Sexp.( <> ) sexp1 sexp2
+    then failwiths "unequal sexps" (sexp1, sexp2) [%sexp_of: Sexp.t * Sexp.t]
+  ;;
 
-    let%test_unit _ = check rdonly "(rdonly)"
-    let%test_unit _ = check wronly "(wronly)"
-    let%test_unit _ = check rdwr "(rdwr)"
-    let%test_unit _ = check append "(rdonly append)"
-    let%test_unit _ = check (wronly + append) "(wronly append)"
-  end)
-;;
+  let%test_unit _ = check rdonly "(rdonly)"
+  let%test_unit _ = check wronly "(wronly)"
+  let%test_unit _ = check rdwr "(rdwr)"
+  let%test_unit _ = check append "(rdonly append)"
+  let%test_unit _ = check (wronly + append) "(wronly append)"
+end
 
 let%expect_test "close-on-exec" =
   let r, w = pipe ~close_on_exec:true () in
   clear_close_on_exec r;
-  require_equal [%here] (module Bool) false (get_close_on_exec r);
+  require_equal (module Bool) false (get_close_on_exec r);
   [%expect {| |}];
-  require_equal [%here] (module Bool) true (get_close_on_exec w);
+  require_equal (module Bool) true (get_close_on_exec w);
   [%expect {| |}];
   close r;
   close w
@@ -190,6 +186,59 @@ let%test_unit "record format hasn't changed" =
        ; tm_isdst = true
        }
        "%F %T; wday=%u; yday=%j")
+;;
+
+let%test_unit "strftime with empty format string" =
+  [%test_result: string]
+    ~expect:""
+    (strftime
+       { tm_sec = 8
+       ; tm_min = 3
+       ; tm_hour = 4
+       ; tm_mday = 5
+       ; tm_mon = 6
+       ; tm_year = 7
+       ; tm_wday = 2
+       ; tm_yday = 9
+       ; tm_isdst = true
+       }
+       "")
+;;
+
+let%test_unit "strftime with long output" =
+  [%test_result: string]
+    ~expect:"Tue Jul  5 04:03:08 1907"
+    (strftime
+       { tm_sec = 8
+       ; tm_min = 3
+       ; tm_hour = 4
+       ; tm_mday = 5
+       ; tm_mon = 6
+       ; tm_year = 7
+       ; tm_wday = 2
+       ; tm_yday = 9
+       ; tm_isdst = true
+       }
+       "%c")
+;;
+
+let%test_unit "strftime with locale" =
+  Locale.with_ "de_DE" (fun locale ->
+    [%test_result: string]
+      ~expect:"Di, 05 Jul 1907 04:03:08 GMT"
+      (strftime
+         ~locale
+         { tm_sec = 8
+         ; tm_min = 3
+         ; tm_hour = 4
+         ; tm_mday = 5
+         ; tm_mon = 6
+         ; tm_year = 7
+         ; tm_wday = 2
+         ; tm_yday = 9
+         ; tm_isdst = true
+         }
+         "%a, %d %b %Y %H:%M:%S GMT"))
 ;;
 
 module Unix_tm_for_testing = struct
@@ -231,7 +280,6 @@ let%expect_test "strptime match" =
     { res with Unix.tm_wday; tm_yday }
   in
   require_equal
-    [%here]
     (module Unix_tm_for_testing)
     res
     { Unix.tm_sec = 23
@@ -247,7 +295,7 @@ let%expect_test "strptime match" =
 ;;
 
 let%expect_test "strptime match failed" =
-  require_does_raise [%here] (fun () -> strptime ~fmt:"%Y-%m-%d" "2012-05-");
+  require_does_raise (fun () -> strptime ~fmt:"%Y-%m-%d" "2012-05-");
   [%expect {| (Failure "unix_strptime: match failed") |}]
 ;;
 
@@ -255,7 +303,7 @@ let%expect_test "strptime trailing input" =
   print_s
     [%sexp
       (strptime ~allow_trailing_input:true ~fmt:"%Y-%m-%d" "2012-05-23 10:14:23"
-        : Unix_tm_for_testing.t)];
+       : Unix_tm_for_testing.t)];
   [%expect
     {|
     ((tm_sec   0)
@@ -268,8 +316,34 @@ let%expect_test "strptime trailing input" =
      (tm_yday  143)
      (tm_isdst false))
     |}];
-  require_does_raise [%here] (fun () -> strptime ~fmt:"%Y-%m-%d" "2012-05-23 10:14:23");
+  require_does_raise (fun () -> strptime ~fmt:"%Y-%m-%d" "2012-05-23 10:14:23");
   [%expect {| (Failure "unix_strptime: did not consume entire input") |}]
+;;
+
+let%test_unit "strptime with locale" =
+  let res =
+    Locale.with_ "de_DE" (fun locale ->
+      strptime ~locale ~fmt:"%a, %d %b %Y %H:%M:%S GMT" "Mi, 23 Mai 2012 10:14:23 GMT")
+  in
+  let res =
+    (* fill in optional fields if they are missing *)
+    let tm_wday = if res.Unix.tm_wday = 0 then 3 else res.Unix.tm_wday in
+    let tm_yday = if res.Unix.tm_yday = 0 then 143 else res.Unix.tm_yday in
+    { res with Unix.tm_wday; tm_yday }
+  in
+  require_equal
+    (module Unix_tm_for_testing)
+    res
+    { Unix.tm_sec = 23
+    ; tm_min = 14
+    ; tm_hour = 10
+    ; tm_mday = 23
+    ; tm_mon = 4
+    ; tm_year = 2012 - 1900
+    ; tm_wday = 3
+    ; tm_yday = 143
+    ; tm_isdst = false
+    }
 ;;
 
 module _ = struct
@@ -361,39 +435,34 @@ let%test_unit "Sexplib_unix sexp converter" =
     failwithf "sexp_of_exn (Unix_error ...) gave %s" (Sexp.to_string something_else) ()
 ;;
 
-let%test_module "" =
-  (module struct
-    open Ifaddr.Flag
-    open Ifaddr.Flag.Private
+module%test _ = struct
+  open Ifaddr.Flag
+  open Ifaddr.Flag.Private
 
-    let int_of_set =
-      Core.Set.fold ~init:0 ~f:(fun acc t -> acc lor core_unix_iff_to_int t)
-    ;;
+  let int_of_set = Core.Set.fold ~init:0 ~f:(fun acc t -> acc lor core_unix_iff_to_int t)
+  let to_int = core_unix_iff_to_int
+  let%test_unit _ = [%test_result: Set.t] (set_of_int 0) ~expect:Set.empty
 
-    let to_int = core_unix_iff_to_int
-    let%test_unit _ = [%test_result: Set.t] (set_of_int 0) ~expect:Set.empty
+  let%test_unit _ =
+    List.iter all ~f:(fun t ->
+      let x = to_int t in
+      if Int.( <> ) (Int.ceil_pow2 x) x
+      then failwiths "Flag is not a power of 2" t sexp_of_t)
+  ;;
 
-    let%test_unit _ =
-      List.iter all ~f:(fun t ->
-        let x = to_int t in
-        if Int.( <> ) (Int.ceil_pow2 x) x
-        then failwiths ~here:[%here] "Flag is not a power of 2" t sexp_of_t)
-    ;;
-
-    let%test_unit _ =
-      List.iter all ~f:(fun t ->
-        [%test_result: Set.t]
-          (set_of_int (int_of_set (Set.singleton t)))
-          ~expect:(Set.singleton t))
-    ;;
-
-    let%test_unit _ =
+  let%test_unit _ =
+    List.iter all ~f:(fun t ->
       [%test_result: Set.t]
-        (set_of_int (int_of_set (Set.of_list all)))
-        ~expect:(Set.of_list all)
-    ;;
-  end)
-;;
+        (set_of_int (int_of_set (Set.singleton t)))
+        ~expect:(Set.singleton t))
+  ;;
+
+  let%test_unit _ =
+    [%test_result: Set.t]
+      (set_of_int (int_of_set (Set.of_list all)))
+      ~expect:(Set.of_list all)
+  ;;
+end
 
 let%expect_test "[symlink] arguments are correct" =
   let dir = mkdtemp "foo" in
@@ -416,21 +485,19 @@ let%expect_test "[symlink] arguments are correct" =
     |}]
 ;;
 
-let%test_module "the search path passed to [create_process_env] has an effect" =
-  (module struct
-    let call_ls = Unix.create_process_env ~prog:"ls" ~args:[] ~env:(`Extend [])
+module%test [@name "the search path passed to [create_process_env] has an effect"] _ =
+struct
+  let call_ls = Unix.create_process_env ~prog:"ls" ~args:[] ~env:(`Extend [])
 
-    let%expect_test "default search path" =
-      require_does_not_raise [%here] (fun () -> ignore (Sys.opaque_identity (call_ls ())))
-    ;;
+  let%expect_test "default search path" =
+    require_does_not_raise (fun () -> ignore (Sys.opaque_identity (call_ls ())))
+  ;;
 
-    let%expect_test "empty search path" =
-      require_does_raise [%here] (fun () -> call_ls ~prog_search_path:[] ());
-      [%expect
-        {| (Invalid_argument "Core_unix.create_process: empty prog_search_path") |}]
-    ;;
-  end)
-;;
+  let%expect_test "empty search path" =
+    require_does_raise (fun () -> call_ls ~prog_search_path:[] ());
+    [%expect {| (Invalid_argument "Core_unix.create_process: empty prog_search_path") |}]
+  ;;
+end
 
 let%test_unit "create_process_with_fds works" =
   let str = "hello" in
@@ -492,13 +559,13 @@ let%expect_test ("Clock.get_cpuclock_for" [@tags "64-bits-only"]) =
   let gettime = ok_exn Unix.Clock.gettime in
   (* This pid is too large to be real  *)
   let bad_pid = Pid.of_int 100_000_000 in
-  require_does_raise [%here] (fun () -> get_cpuclock_for bad_pid);
+  require_does_raise (fun () -> get_cpuclock_for bad_pid);
   [%expect {| (Unix.Unix_error "No such process" clock_getcpuclockid "") |}];
   let clock = get_cpuclock_for (Unix.getpid ()) in
   let cputime = gettime (Custom clock) in
   (* Testing cpu clocks are hard, but this doesn't crash, and we've definitely accrued cpu
      time. *)
-  require [%here] Int63.(cputime > zero);
+  require Int63.(cputime > zero);
   [%expect {| |}]
 ;;
 
@@ -568,3 +635,27 @@ let%test_unit "readdir_detailed" =
      | None | Some S_DIR -> ()
      | Some _ -> assert false)
 ;;
+
+let%expect_test "makedev, major, minor" =
+  let expected_major = 240 in
+  let expected_minor = 12 in
+  let device_id = makedev ~major:expected_major ~minor:expected_minor in
+  print_s [%sexp (device_id : int)];
+  [%expect {| 61452 |}];
+  let actual_major = major ~device_id in
+  let actual_minor = minor ~device_id in
+  printf
+    "%b\n"
+    ([%equal: int * int] (expected_major, expected_minor) (actual_major, actual_minor));
+  [%expect {| true |}]
+;;
+
+[%%expect_test
+  let "simple wrapper doesn't allocate" =
+    let key = "hello" in
+    let data = "world" in
+    Expect_test_helpers_core.require_no_allocation (fun () ->
+      putenv ~key ~data;
+      unsetenv key;
+      ignore (nice 0 : int))
+  ;;]

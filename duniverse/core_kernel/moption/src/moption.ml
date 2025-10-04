@@ -7,7 +7,7 @@ module Exposed_for_use_in_stable = struct
 
      this code is duplicated in Option_array.Cheap_option, and if we find yet another
      place where we want it we should reconsider making it shared. *)
-  let none = Obj.obj (Obj.new_block Obj.abstract_tag 1)
+  let none = Obj.Expert.obj (Obj.Expert.new_block Obj.abstract_tag 1)
   let create () = ref none
   let is_none x = phys_equal !x none
   let get t = if is_none t then None else Some !t
@@ -104,6 +104,5 @@ let set t v =
 ;;
 
 let invariant invariant_a t =
-  Invariant.invariant [%here] t [%sexp_of: _ t] (fun () ->
-    Option.iter (get t) ~f:invariant_a)
+  Invariant.invariant t [%sexp_of: _ t] (fun () -> Option.iter (get t) ~f:invariant_a)
 ;;

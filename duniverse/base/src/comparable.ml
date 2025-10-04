@@ -1,39 +1,50 @@
 open! Import
-include Comparable_intf
+module Sexp = Sexp0
+include Comparable_intf.Definitions
+
+[%%template
+[@@@mode.default m = (local, global)]
 
 module With_zero (T : sig
-  type t [@@deriving_inline compare]
+    type t [@@deriving compare [@mode m]]
 
-  include Ppx_compare_lib.Comparable.S with type t := t
-
-  [@@@end]
-
-  val zero : t
-end) =
+    val zero : t
+  end) =
 struct
   open T
 
-  let is_positive t = compare t zero > 0
-  let is_non_negative t = compare t zero >= 0
-  let is_negative t = compare t zero < 0
-  let is_non_positive t = compare t zero <= 0
-  let sign t = Sign0.of_int (compare t zero)
+  let is_positive t = (compare [@mode m]) t zero > 0
+  let is_non_negative t = (compare [@mode m]) t zero >= 0
+  let is_negative t = (compare [@mode m]) t zero < 0
+  let is_non_positive t = (compare [@mode m]) t zero <= 0
+  let sign t = Sign0.of_int ((compare [@mode m]) t zero)
 end
+[@@modality nonportable]
 
-module Poly (T : sig
-  type t [@@deriving_inline sexp_of]
+module With_zero (T : sig
+  @@ portable
+    type t : value mod contended [@@deriving compare [@mode m]]
 
-  val sexp_of_t : t -> Sexplib0.Sexp.t
+    val zero : t
+  end) =
+struct
+  open T
 
-  [@@@end]
-end) =
+  let is_positive t = (compare [@mode m]) t zero > 0
+  let is_non_negative t = (compare [@mode m]) t zero >= 0
+  let is_negative t = (compare [@mode m]) t zero < 0
+  let is_non_positive t = (compare [@mode m]) t zero <= 0
+  let sign t = Sign0.of_int ((compare [@mode m]) t zero)
+end
+[@@modality portable]
+
+module%template.portable
+  [@modality p] Poly (T : sig
+    type t [@@deriving sexp_of]
+  end) =
 struct
   module Replace_polymorphic_compare = struct
-    type t = T.t [@@deriving_inline sexp_of]
-
-    let sexp_of_t = (T.sexp_of_t : t -> Sexplib0.Sexp.t)
-
-    [@@@end]
+    type t = T.t [@@deriving sexp_of]
 
     include Poly
   end
@@ -41,7 +52,7 @@ struct
   include Poly
 
   let between t ~low ~high = low <= t && t <= high
-  let clamp_unchecked t ~min ~max = if t < min then min else if t <= max then t else max
+  let clamp_unchecked t ~min:min_ ~max:max_ = max min_ (min max_ t)
 
   let clamp_exn t ~min ~max =
     assert (min <= max);
@@ -60,28 +71,40 @@ struct
 
   module C = struct
     include T
-    include Comparator.Make (Replace_polymorphic_compare)
+    include Comparator.Make [@modality p] (Replace_polymorphic_compare)
   end
 
   include C
-end
+end]
 
 let gt cmp a b = cmp a b > 0
 let lt cmp a b = cmp a b < 0
+let not_equal cmp a b = cmp a b <> 0
+
+[%%template
+[@@@mode.default m = (global, local)]
+[@@@kind.default k = (value, float64, bits32, bits64, word)]
+
 let geq cmp a b = cmp a b >= 0
 let leq cmp a b = cmp a b <= 0
 let equal cmp a b = cmp a b = 0
-let not_equal cmp a b = cmp a b <> 0
-let min cmp t t' = if leq cmp t t' then t else t'
-let max cmp t t' = if geq cmp t t' then t else t'
 
-module Infix (T : sig
-  type t [@@deriving_inline compare]
+let min cmp t t' =
+  let is_leq = (leq [@mode m] [@kind k]) cmp t t' in
+  (Bool0.select [@mode m] [@kind k]) is_leq t t' [@exclave_if_local m]
+;;
 
-  include Ppx_compare_lib.Comparable.S with type t := t
+let max cmp t t' =
+  let is_geq = (geq [@mode m] [@kind k]) cmp t t' in
+  (Bool0.select [@mode m] [@kind k]) is_geq t t' [@exclave_if_local m]
+;;]
 
-  [@@@end]
-end) : Infix with type t := T.t = struct
+[%%template
+[@@@mode.default m = (local, global)]
+
+module%template.portable Infix (T : sig
+    type t [@@deriving compare [@mode m]]
+  end) : Infix with type t := T.t = struct
   let ( > ) a b = gt T.compare a b
   let ( < ) a b = lt T.compare a b
   let ( >= ) a b = geq T.compare a b
@@ -91,45 +114,45 @@ end) : Infix with type t := T.t = struct
 end
 [@@inline always]
 
-module Comparisons (T : sig
-  type t [@@deriving_inline compare]
+module%template.portable
+  [@modality p] Comparisons (T : sig
+    type t [@@deriving compare [@mode m]]
+  end) : Comparisons [@mode m] with type t := T.t = struct
+  include Infix [@mode m] [@modality p] (T)
 
-  include Ppx_compare_lib.Comparable.S with type t := t
+  let[@mode m = (global, m)] compare = (T.compare [@mode m])
 
-  [@@@end]
-end) : Comparisons with type t := T.t = struct
-  include Infix (T)
+  let[@mode m = (global, m)] [@inline] equal x y =
+    (equal [@mode m]) (T.compare [@mode m]) x y
+  ;;
 
-  let compare = T.compare
-  let equal = ( = )
   let min t t' = min compare t t'
   let max t t' = max compare t t'
 end
 [@@inline always]
 
-module Make_using_comparator (T : sig
-  type t [@@deriving_inline sexp_of]
+module%template.portable
+  [@modality p] Make_using_comparator (T : sig
+    type t [@@deriving sexp_of]
 
-  val sexp_of_t : t -> Sexplib0.Sexp.t
-
-  [@@@end]
-
-  include Comparator.S with type t := t
-end) : S with type t := T.t and type comparator_witness = T.comparator_witness = struct
+    include Using_comparator_arg [@mode m] with type t := t
+  end) :
+  S [@mode m] with type t := T.t and type comparator_witness = T.comparator_witness =
+struct
   module T = struct
     include T
 
-    let compare = comparator.compare
+    let compare = [%eta2 Comparator.compare T.comparator]
   end
 
   include T
-  module Replace_polymorphic_compare = Comparisons (T)
+  module Replace_polymorphic_compare = Comparisons [@modality p] [@mode m] (T)
   include Replace_polymorphic_compare
 
   let ascending = compare
   let descending t t' = compare t' t
   let between t ~low ~high = low <= t && t <= high
-  let clamp_unchecked t ~min ~max = if t < min then min else if t <= max then t else max
+  let clamp_unchecked t ~min:min_ ~max:max_ = max min_ (min max_ t)
 
   let clamp_exn t ~min ~max =
     assert (min <= max);
@@ -147,59 +170,49 @@ end) : S with type t := T.t and type comparator_witness = T.comparator_witness =
   ;;
 end
 
-module Make (T : sig
-  type t [@@deriving_inline compare, sexp_of]
+module%template.portable
+  [@modality p] Make (T : sig
+    type t [@@deriving (compare [@mode m]), sexp_of]
+  end) =
+Make_using_comparator [@inlined hint] [@modality p] [@mode m] (struct
+    include T
+    include Comparator.Make [@modality p] (T)
+  end)
 
-  include Ppx_compare_lib.Comparable.S with type t := t
+module%template.portable
+  [@modality p] Inherit
+    (C : sig
+       type t [@@deriving compare [@mode m]]
+     end)
+    (T : sig
+       type t [@@deriving sexp_of]
 
-  val sexp_of_t : t -> Sexplib0.Sexp.t
+       val component : t @ m -> C.t @ m
+     end) =
+Make [@modality p] [@mode m] (struct
+    type t = T.t [@@deriving sexp_of]
 
-  [@@@end]
-end) =
-Make_using_comparator [@inlined hint] (struct
-  include T
-  include Comparator.Make (T)
-end)
+    let%template compare t t' =
+      (C.compare [@mode m]) (T.component t) (T.component t') [@nontail]
+    [@@mode m' = (global, m)]
+    ;;
+  end)]
 
-module Inherit (C : sig
-  type t [@@deriving_inline compare]
+type ('a : any) reversed = 'a
 
-  include Ppx_compare_lib.Comparable.S with type t := t
-
-  [@@@end]
-end) (T : sig
-  type t [@@deriving_inline sexp_of]
-
-  val sexp_of_t : t -> Sexplib0.Sexp.t
-
-  [@@@end]
-
-  val component : t -> C.t
-end) =
-Make (struct
-  type t = T.t [@@deriving_inline sexp_of]
-
-  let sexp_of_t = (T.sexp_of_t : t -> Sexplib0.Sexp.t)
-
-  [@@@end]
-
-  let compare t t' = C.compare (T.component t) (T.component t')
-end)
+[%%template
+[@@@mode.default m = (global, local)]
+[@@@kind.default k = (value, float64, bits32, bits64, word)]
 
 (* compare [x] and [y] lexicographically using functions in the list [cmps] *)
-let lexicographic cmps x y =
-  let rec loop = function
-    | cmp :: cmps ->
-      let res = cmp x y in
-      if res = 0 then loop cmps else res
-    | [] -> 0
-  in
-  loop cmps
+let rec lexicographic cmps x y =
+  match cmps with
+  | cmp :: cmps ->
+    let res = cmp x y in
+    if res = 0 then (lexicographic [@mode m] [@kind k]) cmps x y else res
+  | [] -> 0
 ;;
 
-let lift cmp ~f x y = cmp (f x) (f y)
+let lift cmp ~f x y = cmp (f x) (f y) [@nontail]
 let reverse cmp x y = cmp y x
-
-type 'a reversed = 'a
-
-let compare_reversed cmp x y = cmp y x
+let compare_reversed cmp x y = cmp y x]

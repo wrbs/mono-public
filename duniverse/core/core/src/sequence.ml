@@ -1,28 +1,60 @@
 open! Import
 include Base.Sequence
 
-include Bin_prot.Utils.Make_binable1_without_uuid [@alert "-legacy"] (struct
-  module Binable = struct
-    type 'a t = 'a list [@@deriving bin_io]
-  end
+include%template
+  Bin_prot.Utils.Make_binable1_without_uuid [@modality portable] [@alert "-legacy"] (struct
+    module Binable = struct
+      type 'a t = 'a list [@@deriving bin_io]
+    end
 
-  type 'a t = 'a Base.Sequence.t
+    type 'a t = 'a Base.Sequence.t
 
-  let of_binable = Base.Sequence.of_list
-  let to_binable = Base.Sequence.to_list
-end)
+    let of_binable = Base.Sequence.of_list
+    let to_binable = Base.Sequence.to_list
+  end)
 
 module Step = struct
   include Step
 
-  type ('a, 's) t = ('a, 's) Step.t =
+  type (+'a : any, 's) t = ('a, 's) Base.Sequence.Step.t =
     | Done
     | Skip of { state : 's }
-    | Yield of
+    | Yield :
+        ('a : value) 's.
         { value : 'a
         ; state : 's
         }
-  [@@deriving bin_io]
+        -> ('a, 's) t
+
+  module Non_gadt = struct
+    type (+'a, 's) t =
+      | Done
+      | Skip of { state : 's }
+      | Yield of
+          { value : 'a
+          ; state : 's
+          }
+    [@@deriving bin_io]
+  end
+
+  include%template
+    Binable0.Of_binable2_without_uuid [@modality portable] [@alert "-legacy"]
+      (Non_gadt)
+      (struct
+        type nonrec ('a, 's) t = ('a, 's) t
+
+        let to_binable : _ t -> _ Non_gadt.t = function
+          | Done -> Done
+          | Skip { state } -> Skip { state }
+          | Yield { value; state } -> Yield { value; state }
+        ;;
+
+        let of_binable : _ Non_gadt.t -> _ t = function
+          | Done -> Done
+          | Skip { state } -> Skip { state }
+          | Yield { value; state } -> Yield { value; state }
+        ;;
+      end)
 end
 
 module Merge_with_duplicates_element = struct

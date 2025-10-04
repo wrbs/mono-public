@@ -1,7 +1,7 @@
-(** Contains Async's core data structures, like {{!Async_kernel.Deferred}[Deferred]},
-    {{!Async_kernel.Ivar}[Ivar]}, and {{!Async_kernel.Clock_intf.Clock}[Clock]}.
+(** Contains Async's core data structures, like {{!Async_kernel.Deferred} [Deferred]},
+    {{!Async_kernel.Ivar} [Ivar]}, and {{!Async_kernel.Clock_intf.Clock} [Clock]}.
 
-    [Async_kernel] is designed to depend only on {{!Core}[Core]} and so is more
+    [Async_kernel] is designed to depend only on {{!Core} [Core]} and so is more
     platform-independent. *)
 
 open! Core
@@ -31,7 +31,7 @@ module Throttle = Throttle
 module Throttled = Throttled
 module Time_source = Time_source
 
-(** {2 Toplevel functions }
+(** {2 Toplevel functions}
 
     The functions below are broadly useful when writing Async programs, and so are made
     available at the toplevel. *)
@@ -74,6 +74,7 @@ include Deferred.Let_syntax
     should not otherwise be used. *)
 module Async_kernel_private = struct
   module Debug = Debug
+  module Eager_deferred0 = Eager_deferred0
   module Ivar0 = Ivar0
   module Ivar_filler = Ivar_filler
   module Job = Job

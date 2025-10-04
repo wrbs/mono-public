@@ -1,77 +1,106 @@
 open! Import
 
 (* WARNING:
-   We use non-memory-safe things throughout the [Trusted] module.
+   We use non-memory-safe and non-mode-safe things throughout the [Trusted] module.
    Most of it is only safe in combination with the type signature (e.g. exposing
-   [val copy : 'a t -> 'b t] would be a big mistake). *)
-module Trusted : sig
-  type 'a t
+   [val copy : 'a t -> 'b t] would be a big mistake. Likewise, exposing
+   ['a t : immutable_data with 'a] would be a big mistake.). *)
+module Trusted : sig @@ portable
+  type 'a t : mutable_data with 'a
 
   val empty : 'a t
+  val get_empty : unit -> 'a t
   val unsafe_create_uninitialized : len:int -> 'a t
   val create_obj_array : len:int -> 'a t
   val create : len:int -> 'a -> 'a t
   val singleton : 'a -> 'a t
-  val get : 'a t -> int -> 'a
-  val set : 'a t -> int -> 'a -> unit
-  val swap : _ t -> int -> int -> unit
-  val unsafe_get : 'a t -> int -> 'a
-  val unsafe_get_local : 'a t -> int -> 'a
-  val unsafe_set : 'a t -> int -> 'a -> unit
-  val unsafe_set_omit_phys_equal_check : 'a t -> int -> 'a -> unit
-  val unsafe_set_int : 'a t -> int -> int -> unit
-  val unsafe_set_int_assuming_currently_int : 'a t -> int -> int -> unit
-  val unsafe_set_assuming_currently_int : 'a t -> int -> 'a -> unit
-  val unsafe_set_with_caml_modify : 'a t -> int -> 'a -> unit
+  val get : local_ 'a t -> int -> 'a [@@zero_alloc]
+  val set : local_ 'a t -> int -> 'a -> unit
+  val swap : local_ _ t -> int -> int -> unit
+  val unsafe_get : local_ 'a t -> int -> 'a [@@zero_alloc]
+  val unsafe_get_local : local_ 'a t -> int -> 'a [@@zero_alloc]
+  val unsafe_set : local_ 'a t -> int -> 'a -> unit
+  val unsafe_set_omit_phys_equal_check : local_ 'a t -> int -> 'a -> unit
+  val unsafe_set_int : local_ 'a t -> int -> int -> unit
+  val unsafe_set_int_assuming_currently_int : local_ 'a t -> int -> int -> unit
+  val unsafe_set_assuming_currently_int : local_ 'a t -> int -> 'a -> unit
+  val unsafe_set_with_caml_modify : local_ 'a t -> int -> 'a -> unit
   val unsafe_to_array_inplace__promise_not_a_float : 'a t -> 'a array
-  val set_with_caml_modify : 'a t -> int -> 'a -> unit
-  val length : 'a t -> int
+  val set_with_caml_modify : local_ 'a t -> int -> 'a -> unit
+  val length : local_ 'a t @ contended -> int
   val unsafe_blit : ('a t, 'a t) Blit.blit
   val copy : 'a t -> 'a t
-  val unsafe_clear_if_pointer : _ t -> int -> unit
+  val unsafe_clear_if_pointer : local_ _ t -> int -> unit
   val sub : 'a t -> pos:int -> len:int -> 'a t
 end = struct
-  type 'a t = Obj_array.t
+  (* It is safe to claim that ['a t] is mutable data as long as ['a] is mutable
+     data: we only store ['a]s (mutably).
 
-  let empty = Obj_array.empty
-  let unsafe_create_uninitialized ~len = Obj_array.create_zero ~len
-  let create_obj_array ~len = Obj_array.create_zero ~len
-  let create ~len x = Obj_array.create ~len (Stdlib.Obj.repr x)
-  let singleton x = Obj_array.singleton (Stdlib.Obj.repr x)
-  let swap t i j = Obj_array.swap t i j
-  let get arr i = Stdlib.Obj.obj (Obj_array.get arr i)
-  let set arr i x = Obj_array.set arr i (Stdlib.Obj.repr x)
-  let unsafe_get_local arr i = Stdlib.Obj.obj (Obj_array.unsafe_get arr i)
-  let unsafe_get arr i = unsafe_get_local arr i
-  let unsafe_set arr i x = Obj_array.unsafe_set arr i (Stdlib.Obj.repr x)
-  let unsafe_set_int arr i x = Obj_array.unsafe_set_int arr i x
+     Forging a mode-crossing claim requires minting a new type, so we can't
+     just say [type 'a t : mutable_data with 'a = Obj_array.t]. That's why
+     we mint an unboxed record instead.
+  *)
+  type 'a t : mutable_data with 'a = { arr : Obj_array.t }
+  [@@unboxed] [@@unsafe_allow_any_mode_crossing]
 
-  let unsafe_set_int_assuming_currently_int arr i x =
-    Obj_array.unsafe_set_int_assuming_currently_int arr i x
+  let empty = { arr = Obj_array.empty }
+  let[@inline] get_empty () = { arr = Obj_array.get_empty () }
+  let unsafe_create_uninitialized ~len = { arr = Obj_array.create_zero ~len }
+  let create_obj_array ~len = { arr = Obj_array.create_zero ~len }
+  let create ~len x = { arr = Obj_array.create ~len (Stdlib.Obj.repr x) }
+  let singleton x = { arr = Obj_array.singleton (Stdlib.Obj.repr x) }
+  let swap t i j : unit = Obj_array.swap t.arr i j
+
+  (* *)
+
+  let[@zero_alloc] get t i = Stdlib.Obj.obj (Obj_array.get t.arr i)
+  let set t i x : unit = Obj_array.set t.arr i (Stdlib.Obj.repr x)
+
+  (* We annotate the return types on this and other functions to help document the
+     fact that (i) we're trying to avoid partial application, and (ii) we've
+     successfully avoided it.
+  *)
+  let[@zero_alloc] unsafe_get_local (type a) t i : a =
+    Stdlib.Obj.obj (Obj_array.unsafe_get t.arr i)
   ;;
 
-  let unsafe_set_assuming_currently_int arr i x =
-    Obj_array.unsafe_set_assuming_currently_int arr i (Stdlib.Obj.repr x)
+  let[@zero_alloc] unsafe_get (type a) t i : a = unsafe_get_local t i
+  let unsafe_set t i x : unit = Obj_array.unsafe_set t.arr i (Stdlib.Obj.repr x)
+  let unsafe_set_int t i x : unit = Obj_array.unsafe_set_int t.arr i x
+
+  let unsafe_set_int_assuming_currently_int t i x : unit =
+    Obj_array.unsafe_set_int_assuming_currently_int t.arr i x
+  ;;
+
+  let unsafe_set_assuming_currently_int t i x : unit =
+    Obj_array.unsafe_set_assuming_currently_int t.arr i (Stdlib.Obj.repr x)
   ;;
 
   (* [t] is just an array under the hood, it just has special considerations about [t] not
      being a float. *)
-  let unsafe_to_array_inplace__promise_not_a_float arr = Stdlib.Obj.magic arr
-  let length = Obj_array.length
-  let unsafe_blit = Obj_array.unsafe_blit
-  let copy = Obj_array.copy
+  let unsafe_to_array_inplace__promise_not_a_float t : _ array = Stdlib.Obj.magic t.arr
+  let length t : int = Obj_array.length t.arr
 
-  let unsafe_set_omit_phys_equal_check t i x =
-    Obj_array.unsafe_set_omit_phys_equal_check t i (Stdlib.Obj.repr x)
+  let unsafe_blit ~src ~src_pos ~dst ~dst_pos ~len : unit =
+    Obj_array.unsafe_blit ~src:src.arr ~src_pos ~dst:dst.arr ~dst_pos ~len
   ;;
 
-  let unsafe_set_with_caml_modify t i x =
-    Obj_array.unsafe_set_with_caml_modify t i (Stdlib.Obj.repr x)
+  let copy t = { arr = Obj_array.copy t.arr }
+
+  let unsafe_set_omit_phys_equal_check t i x : unit =
+    Obj_array.unsafe_set_omit_phys_equal_check t.arr i (Stdlib.Obj.repr x)
   ;;
 
-  let set_with_caml_modify t i x = Obj_array.set_with_caml_modify t i (Stdlib.Obj.repr x)
-  let unsafe_clear_if_pointer = Obj_array.unsafe_clear_if_pointer
-  let sub = Obj_array.sub
+  let unsafe_set_with_caml_modify t i x : unit =
+    Obj_array.unsafe_set_with_caml_modify t.arr i (Stdlib.Obj.repr x)
+  ;;
+
+  let set_with_caml_modify t i x : unit =
+    Obj_array.set_with_caml_modify t.arr i (Stdlib.Obj.repr x)
+  ;;
+
+  let unsafe_clear_if_pointer t i : unit = Obj_array.unsafe_clear_if_pointer t.arr i
+  let sub t ~pos ~len = { arr = Obj_array.sub t.arr ~pos ~len }
 end
 
 include Trusted
@@ -123,7 +152,7 @@ let fold t ~init ~f =
   !r
 ;;
 
-let to_list t = List.init ~f:(get t) (length t)
+let to_list t = List.init ~f:(fun i -> get t i) (length t)
 
 let of_list l =
   let len = List.length l in
@@ -141,7 +170,10 @@ let of_list_rev l =
 
 (* It is not safe for [to_array] to be the identity function because we have code that
    relies on [float array]s being unboxed, for example in [bin_write_array]. *)
-let to_array t = Array.init (length t) ~f:(fun i -> unsafe_get t i)
+let%template[@alloc a = (heap, stack)] to_array t =
+  let n = length t in
+  (Array.init [@alloc a]) n ~f:(fun i -> unsafe_get t i) [@exclave_if_stack a]
+;;
 
 let exists t ~f =
   let i = ref (length t - 1) in
@@ -181,7 +213,7 @@ let for_alli t ~f =
 ;;
 
 let filter_mapi t ~f =
-  let r = ref empty in
+  let r = ref (get_empty ()) in
   let k = ref 0 in
   for i = 0 to length t - 1 do
     match f i (unsafe_get t i) with
@@ -191,7 +223,7 @@ let filter_mapi t ~f =
       unsafe_set !r !k a;
       incr k
   done;
-  if !k = length t then !r else if !k > 0 then sub ~pos:0 ~len:!k !r else empty
+  if !k = length t then !r else if !k > 0 then sub ~pos:0 ~len:!k !r else get_empty ()
 ;;
 
 let filteri t ~f = filter_mapi t ~f:(fun i x -> if f i x then Some x else None) [@nontail]
@@ -224,15 +256,15 @@ let concat ts =
          set res (so_far + i) (get t i)
        done;
        so_far + len)
-      : int);
+     : int);
   res
 ;;
 
-let concat_mapi t ~f = to_list t |> List.mapi ~f |> concat
-let concat_map t ~f = to_list t |> List.map ~f |> concat
+let concat_mapi t ~(local_ f) = to_list t |> List.mapi ~f |> concat
+let concat_map t ~(local_ f) = to_list t |> List.map ~f |> concat
 
-let partition_map t ~f =
-  let left, right = ref empty, ref empty in
+let partition_map t ~(local_ f) =
+  let left, right = ref (get_empty ()), ref (get_empty ()) in
   let left_idx, right_idx = ref 0, ref 0 in
   let append data idx value =
     if !idx = 0 then data := create ~len:(length t) value;
@@ -249,7 +281,7 @@ let partition_map t ~f =
     then !data
     else if !idx > 0
     then sub ~pos:0 ~len:!idx !data
-    else empty
+    else get_empty ()
   in
   trim left left_idx, trim right right_idx
 ;;
@@ -325,8 +357,8 @@ let t_sexp_grammar (type elt) (grammar : elt Sexplib0.Sexp_grammar.t)
   Sexplib0.Sexp_grammar.coerce (Array.t_sexp_grammar grammar)
 ;;
 
-include
-  Sexpable.Of_sexpable1
+include%template
+  Sexpable.Of_sexpable1 [@modality portable]
     (Array)
     (struct
       type nonrec 'a t = 'a t
@@ -335,21 +367,21 @@ include
       let of_sexpable = of_array
     end)
 
-include Blit.Make1 (struct
-  type nonrec 'a t = 'a t
+include%template Blit.Make1 [@modality portable] (struct
+    type nonrec 'a t = 'a t
 
-  let length = length
+    let length = length
 
-  let create_like ~len t =
-    if len = 0
-    then empty
-    else (
-      assert (length t > 0);
-      create ~len (get t 0))
-  ;;
+    let create_like ~len t =
+      if len = 0
+      then get_empty ()
+      else (
+        assert (length t > 0);
+        create ~len (get t 0))
+    ;;
 
-  let unsafe_blit = unsafe_blit
-end)
+    let unsafe_blit = unsafe_blit
+  end)
 
 let min_elt t ~compare = Container.min_elt ~fold t ~compare
 let max_elt t ~compare = Container.max_elt ~fold t ~compare
@@ -379,19 +411,19 @@ let compare__local compare_elt a b =
 
 let compare compare_elt a b = compare__local compare_elt a b
 
-module Sort = Array.Private.Sorter (struct
-  type nonrec 'a t = 'a t
+module%template Sort = Array.Private.Sorter [@modality portable] (struct
+    type nonrec 'a t = 'a t
 
-  let length = length
-  let get = unsafe_get
-  let set = unsafe_set
-end)
+    let length = length
+    let get t i = unsafe_get t i
+    let set t i x = unsafe_set t i x
+  end)
 
 let sort = Sort.sort
 
-include Binary_searchable.Make1 (struct
-  type nonrec 'a t = 'a t
+include%template Binary_searchable.Make1 [@modality portable] (struct
+    type nonrec 'a t = 'a t
 
-  let length = length
-  let get = unsafe_get
-end)
+    let length = length
+    let get t i = unsafe_get t i
+  end)

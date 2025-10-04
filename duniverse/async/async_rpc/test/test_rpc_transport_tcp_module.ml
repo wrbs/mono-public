@@ -21,6 +21,7 @@ let implementations =
     ~on_unknown_rpc:`Close_connection
     ~implementations:
       [ Rpc.Rpc.implement' string_string_rpc (fun state query -> state ^ " " ^ query) ]
+    ~on_exception:Log_on_background_exn
 ;;
 
 let where_to_listen = Tcp.Where_to_listen.bind_to Localhost On_port_chosen_by_os
@@ -32,7 +33,7 @@ let%expect_test "basic functionality" =
       (* [server_addr] should be correct... *)
       [%test_eq: Socket.Address.Inet.t]
         server_addr
-        (Set_once.get_exn server_listening_on_set_once [%here]);
+        (Set_once.get_exn server_listening_on_set_once);
       (* the [client_addr] should be distinct (we don't have any easy way of checking
          whether or not is correct). *)
       assert (not ([%compare.equal: Socket.Address.Inet.t] server_addr client_addr));
@@ -47,7 +48,7 @@ let%expect_test "basic functionality" =
       Rpc.Connection.close_finished connection)
   in
   let server_listening_on = Tcp.Server.listening_on_address server in
-  Set_once.set_exn server_listening_on_set_once [%here] server_listening_on;
+  Set_once.set_exn server_listening_on_set_once server_listening_on;
   (* we can connect to the server *)
   let%bind client_transport =
     Rpc.Transport.Tcp.connect (Tcp.Where_to_connect.of_inet_address server_listening_on)
@@ -83,9 +84,9 @@ let%expect_test "transport is closed when handle_transport returns #1" =
     Rpc.Transport.Tcp.serve
       ~where_to_listen
       (fun ~client_addr:_ ~server_addr:_ transport ->
-      Ivar.fill_exn server_transport transport;
-      (* if we return immediately, the transport is closed. *)
-      return ())
+         Ivar.fill_exn server_transport transport;
+         (* if we return immediately, the transport is closed. *)
+         return ())
   in
   let%bind _sock, reader, writer =
     Tcp.connect
@@ -116,15 +117,15 @@ let%expect_test "transport is closed when handle_transport returns #2" =
     Rpc.Transport.Tcp.serve
       ~where_to_listen
       (fun ~client_addr:_ ~server_addr:_ transport ->
-      let%bind connection =
-        Async_rpc_kernel.Rpc.Connection.create
-          ~implementations
-          ~connection_state:(fun _ -> "server-state")
-          transport
-      in
-      let connection = Result.ok_exn connection in
-      Ivar.fill_exn server_connection connection;
-      Ivar.read server_has_finished_with_connection)
+         let%bind connection =
+           Async_rpc_kernel.Rpc.Connection.create
+             ~implementations
+             ~connection_state:(fun _ -> "server-state")
+             transport
+         in
+         let connection = Result.ok_exn connection in
+         Ivar.fill_exn server_connection connection;
+         Ivar.read server_has_finished_with_connection)
   in
   let%bind client_connection =
     Rpc.Connection.client

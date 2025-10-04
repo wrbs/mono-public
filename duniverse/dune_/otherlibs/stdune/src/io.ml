@@ -67,15 +67,25 @@ let input_zero_separated =
 
 let copy_channels =
   let buf_len = 65536 in
-  let buf = Bytes.create buf_len in
-  let rec loop ic oc =
+  let global_buf = Bytes.create buf_len in
+  let rec loop buf ic oc =
     match input ic buf 0 buf_len with
     | 0 -> ()
     | n ->
       output oc buf 0 n;
-      loop ic oc
+      loop buf ic oc
   in
-  loop
+  let busy = ref false in
+  fun ic oc ->
+    if !busy
+    then loop (Bytes.create buf_len) ic oc
+    else (
+      busy := true;
+      match loop global_buf ic oc with
+      | () -> busy := false
+      | exception exn ->
+        busy := false;
+        Exn.reraise exn)
 ;;
 
 let setup_copy ?(chmod = Fun.id) ~src ~dst () =
@@ -201,23 +211,13 @@ module Copyfile = struct
       copy_channels ic oc)
   ;;
 
-  let copy_file_best =
+  let copy_file =
     match available with
     | `Sendfile -> sendfile_with_fallback
     | `Copyfile -> copyfile
     | `Nothing -> copy_file_portable
   ;;
-
-  let copy_file_impl = ref `Best
-
-  let copy_file ?chmod ~src ~dst () =
-    match !copy_file_impl with
-    | `Portable -> copy_file_portable ?chmod ~src ~dst ()
-    | `Best -> copy_file_best ?chmod ~src ~dst ()
-  ;;
 end
-
-let set_copy_impl m = Copyfile.copy_file_impl := m
 
 module Make (Path : sig
     type t
@@ -241,6 +241,10 @@ struct
   ;;
 
   let with_file_in ?binary fn ~f = Exn.protectx (open_in ?binary fn) ~finally:close_in ~f
+
+  let with_file_in_fd fn ~f =
+    Exn.protectx (Unix.openfile fn [ O_RDONLY; O_CLOEXEC ] 0) ~f ~finally:Unix.close
+  ;;
 
   let with_file_out ?binary ?perm p ~f =
     Exn.protectx (open_out ?binary ?perm p) ~finally:close_out ~f
@@ -273,6 +277,31 @@ struct
     let buf = Bytes.create len in
     let r = eagerly_input_acc ic buf ~pos:0 ~len 0 in
     if r = len then Bytes.unsafe_to_string buf else Bytes.sub_string buf ~pos:0 ~len:r
+  ;;
+
+  let read_all_fd =
+    let rec read fd buf pos left =
+      if left = 0
+      then `Ok
+      else (
+        match Unix.read fd buf pos left with
+        | 0 -> `Eof
+        | n -> read fd buf (pos + n) (left - n))
+    in
+    fun fd ->
+      match Unix.fstat fd with
+      | exception Unix.Unix_error (e, x, y) -> Error (`Unix (e, x, y))
+      | { Unix.st_size; _ } ->
+        if st_size = 0
+        then Ok ""
+        else if st_size > Sys.max_string_length
+        then Error `Too_big
+        else (
+          let b = Bytes.create st_size in
+          match read fd b 0 st_size with
+          | exception Unix.Unix_error (e, x, y) -> Error (`Unix (e, x, y))
+          | `Eof -> Error `Retry
+          | `Ok -> Ok (Bytes.unsafe_to_string b))
   ;;
 
   let read_all_unless_large =
@@ -321,13 +350,28 @@ struct
 
   let path_to_dyn path = String.to_dyn (Path.to_string path)
 
-  let read_file ?binary fn =
+  let read_file_chan ?binary fn =
     match with_file_in fn ~f:read_all_unless_large ?binary with
     | Ok x -> x
     | Error () ->
       Code_error.raise
         "read_file: file is larger than Sys.max_string_length"
         [ "fn", path_to_dyn fn ]
+  ;;
+
+  let read_file ?(binary = true) fn =
+    if binary
+    then
+      with_file_in_fd (Path.to_string fn) ~f:(fun fd ->
+        match read_all_fd fd with
+        | Ok s -> s
+        | Error `Retry -> read_file_chan ~binary fn
+        | Error `Too_big ->
+          Code_error.raise
+            "read_file: file is larger than Sys.max_string_length"
+            [ "fn", path_to_dyn fn ]
+        | Error (`Unix e) -> Dune_filesystem_stubs.Unix_error.Detailed.raise e)
+    else read_file_chan ~binary fn
   ;;
 
   let lines_of_file fn = with_file_in fn ~f:input_lines ~binary:false
@@ -486,8 +530,8 @@ let portable_hardlink ~src ~dst =
   | true -> copy_file ~src ~dst ()
   | false ->
     let src =
-      match Path.follow_symlink src with
-      | Ok path -> path
+      match Fpath.follow_symlink (Path.to_string src) with
+      | Ok path -> Path.of_string path
       | Error Not_a_symlink -> src
       | Error Max_depth_exceeded ->
         user_error "Too many indirections; is this a cyclic symbolic link?"

@@ -83,6 +83,17 @@ function bigstring_find(bs, chr, pos, len){
   return -1;
 }
 
+//Provides: bigstring_rfind
+//Requires: caml_ba_get_1
+function bigstring_rfind(bs, chr, pos, len){
+  var cur = pos + len - 1;
+  while(cur >= pos){
+    if(caml_ba_get_1(bs,cur) == chr) return cur;
+    cur--;
+  }
+  return -1;
+}
+
 //Provides: bigstring_memmem_bytecode
 //Requires: caml_ba_get_1
 function bigstring_memmem_bytecode(haystack, needle, haystack_pos, haystack_len, needle_pos, needle_len){
@@ -99,4 +110,19 @@ function bigstring_memmem_bytecode(haystack, needle, haystack_pos, haystack_len,
     if (matches) return (haystack_pos + i);
   }
   return -1;
+}
+
+//Provides: bigstring_strncmp
+//Requires: caml_ba_get_1
+function bigstring_strncmp(v_s1, v_s1_pos, v_s2, v_s2_pos, v_len) {
+  for (var i = 0; i < v_len; ++i) {
+    var a = caml_ba_get_1(v_s1, v_s1_pos + i);
+    var b = caml_ba_get_1(v_s2, v_s2_pos + i);
+    if (a < b) return -1;
+    if (a > b) return 1;
+
+    if (a === 0) return 0;
+  }
+
+  return 0;
 }

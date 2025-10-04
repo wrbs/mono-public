@@ -1,7 +1,7 @@
 open! Import
 module Int = Int0
+module Sexp = Sexp0
 module String = String0
-module Array = Array0
 
 (* We maintain the property that all values of type [t] do not have the tag
    [double_array_tag].  Some functions below assume this in order to avoid testing the
@@ -19,12 +19,13 @@ let sexp_of_t t =
     (String.concat ~sep:"" [ "<Obj_array.t of length "; Int.to_string (length t); ">" ])
 ;;
 
-let zero_obj = Stdlib.Obj.repr (0 : int)
+let zero_obj = Stdlib.Obj.repr (0 : int) |> Stdlib.Obj.magic_portable
 
 (* We call [Array.create] with a value that is not a float so that the array doesn't get
    tagged with [Double_array_tag]. *)
-let create_zero ~len = Array.create ~len zero_obj
-let empty = [||]
+let create_zero ~len = Array.create ~len (Stdlib.Obj.magic_uncontended zero_obj)
+let empty = [||] |> Portability_hacks.Cross.Portable.(cross (array magic))
+let get_empty () = empty |> Portability_hacks.magic_uncontended__promise_deeply_immutable
 
 type not_a_float =
   | Not_a_float_0
@@ -33,7 +34,7 @@ type not_a_float =
 let _not_a_float_0 = Not_a_float_0
 let _not_a_float_1 = Not_a_float_1 42
 
-let get t i =
+let[@zero_alloc] get (local_ t) i =
   (* Make the compiler believe [t] is an array not containing floats so it does not check
      if [t] is tagged with [Double_array_tag].  It is NOT ok to use [int array] since (if
      this function is inlined and the array contains in-heap boxed values) wrong register
@@ -41,18 +42,15 @@ let get t i =
   Stdlib.Obj.repr
     (* [Sys.opaque_identity] is required on the array because this code breaks the usual
        assumptions about array kinds that the Flambda 2 optimiser can see. *)
-    ((Sys.opaque_identity (Stdlib.Obj.magic (t : t) : not_a_float array)).(i)
-      : not_a_float)
+    ((Sys.opaque_identity (Obj.magic (t : t) : not_a_float array)).(i) : not_a_float)
 ;;
 
-let[@inline always] unsafe_get t i =
+let[@inline always] [@zero_alloc] unsafe_get t i =
   (* Make the compiler believe [t] is an array not containing floats so it does not check
      if [t] is tagged with [Double_array_tag]. *)
   Stdlib.Obj.repr
-    (Array.unsafe_get
-       (Sys.opaque_identity (Obj_local.magic (t : t) : not_a_float array))
-       i
-      : not_a_float)
+    (Array.unsafe_get (Sys.opaque_identity (Obj.magic (t : t) : not_a_float array)) i
+     : not_a_float)
 ;;
 
 let[@inline always] unsafe_set_with_caml_modify t i obj =
@@ -62,21 +60,21 @@ let[@inline always] unsafe_set_with_caml_modify t i obj =
      Obj.double_array_tag) which flambda has tried in the past (at least that's assuming
      the compiler respects Sys.opaque_identity, which is not always the case). *)
   Array.unsafe_set
-    (Sys.opaque_identity (Obj_local.magic (t : t) : not_a_float array))
+    (Sys.opaque_identity (Obj.magic (t : t) : not_a_float array))
     i
     (Stdlib.Obj.obj (Sys.opaque_identity obj) : not_a_float)
 ;;
 
 let[@inline always] set_with_caml_modify t i obj =
   (* same as unsafe_set_with_caml_modify but safe *)
-  (Sys.opaque_identity (Stdlib.Obj.magic (t : t) : not_a_float array)).(i)
-    <- (Stdlib.Obj.obj (Sys.opaque_identity obj) : not_a_float)
+  (Sys.opaque_identity (Obj.magic (t : t) : not_a_float array)).(i)
+  <- (Stdlib.Obj.obj (Sys.opaque_identity obj) : not_a_float)
 ;;
 
 let[@inline always] unsafe_set_int_assuming_currently_int t i int =
   (* This skips [caml_modify], which is OK if both the old and new values are integers. *)
   Array.unsafe_set
-    (Sys.opaque_identity (Obj_local.magic (t : t) : int array))
+    (Sys.opaque_identity (Obj.magic (t : t) : int array))
     i
     (Sys.opaque_identity int)
 ;;
@@ -160,7 +158,7 @@ let unsafe_clear_if_pointer t i =
 ;;
 
 (** [unsafe_blit] is like [Array.blit], except it uses our own for-loop to avoid
-    caml_modify when possible.  Its performance is still not comparable to a memcpy. *)
+    caml_modify when possible. Its performance is still not comparable to a memcpy. *)
 let unsafe_blit ~src ~src_pos ~dst ~dst_pos ~len =
   (* When [phys_equal src dst], we need to check whether [dst_pos < src_pos] and have the
      for loop go in the right direction so that we don't overwrite data that we still need
@@ -180,18 +178,13 @@ let unsafe_blit ~src ~src_pos ~dst ~dst_pos ~len =
     done
 ;;
 
-include Blit.Make (struct
-  type nonrec t = t
+include%template Blit.Make [@modality portable] (struct
+    type nonrec t = t
 
-  let create = create_zero
-  let length = length
-  let unsafe_blit = unsafe_blit
-end)
+    let create = create_zero
+    let length = length
+    let unsafe_blit = unsafe_blit
+  end)
 
-let copy src =
-  let dst = create_zero ~len:(length src) in
-  blito ~src ~dst ();
-  dst
-;;
-
-let sub = Array.sub
+let sub t ~pos ~len = Array.sub t ~pos ~len
+let copy = Array.copy

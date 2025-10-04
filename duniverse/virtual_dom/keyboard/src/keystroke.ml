@@ -134,6 +134,7 @@ module Keyboard_code = struct
   include T
   include Sexpable.To_stringable (T)
 
+  let to_code_string = to_string
   let unidentified = 100000
 
   let to_key_code_left = function
@@ -508,14 +509,14 @@ let keyboard_code_to_string (key : Keyboard_code.t) (key_with_prefix : With_pref
      | _ -> str)
 ;;
 
-let shift_string_and_keyboard_code_string (t : t) =
-  let shift_str, shift_combo_str =
+let shift_and_keyboard_code_string (t : t) =
+  let shift, shift_combo_str =
     match t.shift with
-    | false -> "", None
+    | false -> `Dont_display_shift, None
     | true ->
       (match shift_combo_to_string t.key with
-       | None -> "Shift+", None
-       | Some str -> "", Some str)
+       | None -> `Display_shift, None
+       | Some str -> `Dont_display_shift, Some str)
   in
   let keyboard_code_str =
     match shift_combo_str with
@@ -526,7 +527,14 @@ let shift_string_and_keyboard_code_string (t : t) =
       in
       keyboard_code_to_string t.key key_with_prefix
   in
-  shift_str, keyboard_code_str
+  shift, keyboard_code_str
+;;
+
+let shift_string_and_keyboard_code_string t =
+  shift_and_keyboard_code_string t
+  |> Tuple2.map_fst ~f:(function
+    | `Display_shift -> "Shift+"
+    | `Dont_display_shift -> "")
 ;;
 
 let to_string_hum t =
@@ -552,12 +560,14 @@ let%expect_test "" =
   [%expect {| 1 |}];
   print ~ctrl:() Digit1;
   [%expect {| Ctrl+1 |}];
+  print ~shift:() Digit1;
+  [%expect {| ! |}];
   print Numpad1;
   [%expect {| 1 |}];
   print ~ctrl:() Numpad1;
   [%expect {| Ctrl+1 |}];
-  print ~ctrl:() Numpad1;
-  [%expect {| Ctrl+1 |}];
+  print ~shift:() Numpad1;
+  [%expect {| Shift+1 |}];
   print Comma;
   [%expect {| , |}];
   print ~shift:() Comma;
@@ -565,5 +575,37 @@ let%expect_test "" =
   print ~ctrl:() Comma;
   [%expect {| Ctrl+, |}];
   print ~ctrl:() ~shift:() Comma;
-  [%expect {| Ctrl+< |}]
+  [%expect {| Ctrl+< |}];
+  print ~shift:() Equal;
+  [%expect {| + |}];
+  print ~shift:() ~alt:() Equal;
+  [%expect {| Alt++ |}]
+;;
+
+let%expect_test "to_code_string roundtrips" =
+  List.iter Keyboard_code.all ~f:(fun code ->
+    let roundtripped =
+      let code_string = Keyboard_code.to_code_string code in
+      let event =
+        object%js
+          val code = Js.string code_string
+
+          (* We need to include [keyCode] and [location], so that there's some value for
+             our [of_event] function to read. But we want to use values that wouldn't show
+             up in real events, because we're testing just the [code] property. *)
+          val location = Js.number_of_float 1000.0
+          val keyCode = Js.number_of_float 1000.0
+          val key = Js.string "not a valid key"
+        end
+      in
+      Keyboard_code.of_event (Js.Unsafe.coerce event)
+    in
+    if not (Keyboard_code.equal code roundtripped)
+    then
+      print_s
+        [%message
+          "roundtripping failed!"
+            (code : Keyboard_code.t)
+            (roundtripped : Keyboard_code.t)]);
+  [%expect {| |}]
 ;;

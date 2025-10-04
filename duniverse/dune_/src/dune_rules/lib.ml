@@ -337,7 +337,6 @@ module T = struct
     ; pps : t list Resolve.t
     ; resolved_selects : Resolved_select.t list Resolve.t
     ; implements : t Resolve.t option
-    ; lib_config : Lib_config.t
     ; project : Dune_project.t option
     ; (* these fields cannot be forced until the library is instantiated *)
       default_implementation : t Resolve.t Memo.Lazy.t option
@@ -413,7 +412,6 @@ type db =
   ; instantiate :
       (Lib_name.t -> Path.t Lib_info.t -> hidden:string option -> Status.t Memo.t) Lazy.t
   ; all : Lib_name.t list Memo.Lazy.t
-  ; lib_config : Lib_config.t
   ; instrument_with : Lib_name.t list
   }
 
@@ -427,12 +425,12 @@ and resolve_result =
   | Redirect_by_name of db * (Loc.t * Lib_name.t)
   | Redirect_by_id of db * Lib_id.t
 
-let lib_config (t : lib) = t.lib_config
 let name t = t.name
 let info t = t.info
 let project t = t.project
 let implements t = Option.map ~f:Memo.return t.implements
 let requires t = Memo.return t.requires
+let re_exports t = Memo.return t.re_exports
 let ppx_runtime_deps t = Memo.return t.ppx_runtime_deps
 let pps t = Memo.return t.pps
 
@@ -690,14 +688,14 @@ end = struct
     let add t lib =
       let virtual_ = Lib_info.virtual_ lib.info in
       match lib.implements, virtual_ with
-      | None, None -> Resolve.Memo.return t
-      | Some _, Some _ -> assert false (* can't be virtual and implement *)
-      | None, Some _ ->
+      | None, false -> Resolve.Memo.return t
+      | Some _, true -> assert false (* can't be virtual and implement *)
+      | None, true ->
         Resolve.Memo.return
           (if Set.mem t.implemented lib
            then t
            else { t with unimplemented = Set.add t.unimplemented lib })
-      | Some vlib, None ->
+      | Some vlib, false ->
         let+ vlib = Memo.return vlib in
         { implemented = Set.add t.implemented vlib
         ; unimplemented = Set.remove t.unimplemented vlib
@@ -728,10 +726,10 @@ end = struct
           | (lib, stack) :: libs ->
             let virtual_ = Lib_info.virtual_ lib.info in
             (match lib.implements, virtual_ with
-             | None, None -> loop acc libs
-             | Some _, Some _ -> assert false (* can't be virtual and implement *)
-             | None, Some _ -> loop (Map.set acc lib (No_impl stack)) libs
-             | Some vlib, None ->
+             | None, false -> loop acc libs
+             | Some _, true -> assert false (* can't be virtual and implement *)
+             | None, true -> loop (Map.set acc lib (No_impl stack)) libs
+             | Some vlib, false ->
                let* vlib = Memo.return vlib in
                (match Map.find acc vlib with
                 | None ->
@@ -922,8 +920,8 @@ end = struct
         User_error.raise
           ~loc
           [ Pp.text
-              "librarys does not exist but is automatically provided. It cannot be used \
-               in this position"
+              "library does not exist but is automatically provided. It cannot be used \
+               in this position."
           ]
     in
     let* resolved =
@@ -933,7 +931,7 @@ end = struct
           instrumentation_backend db.instrument_with resolve_forbid_ignore
         in
         Lib_info.preprocess info
-        |> Preprocess.Per_module.with_instrumentation ~instrumentation_backend
+        |> Instrumentation.with_instrumentation ~instrumentation_backend
         >>| Preprocess.Per_module.pps
       in
       let dune_version = Lib_info.dune_version info in
@@ -950,8 +948,8 @@ end = struct
           let* vlib = resolve_forbid_ignore name in
           let virtual_ = Lib_info.virtual_ vlib.info in
           match virtual_ with
-          | None -> Error.not_virtual_lib ~loc ~impl:info ~not_vlib:vlib.info
-          | Some _ -> Resolve.Memo.return vlib
+          | false -> Error.not_virtual_lib ~loc ~impl:info ~not_vlib:vlib.info
+          | true -> Resolve.Memo.return vlib
         in
         Memo.map res ~f:Option.some
     in
@@ -1069,7 +1067,6 @@ end = struct
          ; re_exports
          ; implements
          ; default_implementation
-         ; lib_config = db.lib_config
          ; project
          ; sub_systems =
              Sub_system_name.Map.mapi (Lib_info.sub_systems info) ~f:(fun name info ->
@@ -1474,11 +1471,11 @@ end = struct
   ;;
 
   let add_pp_runtime_deps
-    db
-    { Resolved.resolved; selects; re_exports }
-    ~private_deps
-    ~pps
-    ~dune_version
+        db
+        { Resolved.resolved; selects; re_exports }
+        ~private_deps
+        ~pps
+        ~dune_version
     : Resolved.t Memo.t
     =
     let { runtime_deps; pps } = pp_deps db pps ~dune_version ~private_deps in
@@ -1619,8 +1616,7 @@ end = struct
         in
         (* If the library has an implementation according to variants or
            default impl. *)
-        let virtual_ = Lib_info.virtual_ lib.info in
-        if Option.is_none virtual_
+        if not (Lib_info.virtual_ lib.info)
         then R.return ()
         else
           let* impl = R.lift (impl_for lib) in
@@ -1825,7 +1821,6 @@ module Compile = struct
     ; pps : t list Resolve.Memo.t
     ; resolved_selects : Resolved_select.t list Resolve.Memo.t
     ; sub_systems : Sub_system0.Instance.t Memo.Lazy.t Sub_system_name.Map.t
-    ; merlin_ident : Merlin_ident.t
     }
 
   let for_lib ~allow_overlaps db (t : lib) =
@@ -1849,13 +1844,11 @@ module Compile = struct
               db
               ~forbidden_libraries:Map.empty)
     in
-    let merlin_ident = Merlin_ident.for_lib t.name in
     { direct_requires = requires
     ; requires_link
     ; resolved_selects = Memo.return t.resolved_selects
     ; pps = Memo.return t.pps
     ; sub_systems = t.sub_systems
-    ; merlin_ident
     }
   ;;
 
@@ -1863,7 +1856,6 @@ module Compile = struct
   let requires_link t = t.requires_link
   let resolved_selects t = t.resolved_selects
   let pps t = t.pps
-  let merlin_ident t = t.merlin_ident
 
   let sub_systems t =
     Sub_system_name.Map.values t.sub_systems
@@ -1912,14 +1904,13 @@ module DB = struct
 
   type t = db
 
-  let create ~parent ~resolve ~resolve_lib_id ~all ~lib_config ~instrument_with () =
+  let create ~parent ~resolve ~resolve_lib_id ~all ~instrument_with () =
     let rec t =
       lazy
         { parent
         ; resolve
         ; resolve_lib_id
         ; all = Memo.lazy_ all
-        ; lib_config
         ; instrument_with
         ; instantiate
         }
@@ -1929,7 +1920,7 @@ module DB = struct
 
   let create_from_findlib =
     let bigarray = Lib_name.of_string "bigarray" in
-    fun findlib ~has_bigarray_library ~lib_config ->
+    fun findlib ~has_bigarray_library ->
       let resolve name =
         let open Memo.O in
         Findlib.find findlib name
@@ -1954,7 +1945,6 @@ module DB = struct
       create
         ()
         ~parent:None
-        ~lib_config
         ~resolve
         ~resolve_lib_id:(fun lib_id ->
           let open Memo.O in
@@ -1962,6 +1952,18 @@ module DB = struct
         ~all:(fun () ->
           let open Memo.O in
           Findlib.all_packages findlib >>| List.map ~f:Dune_package.Entry.name)
+  ;;
+
+  let with_parent t ~parent = { t with parent }
+
+  let of_paths context ~paths =
+    let open Memo.O in
+    let+ ocaml = Context.ocaml context
+    and+ findlib = Findlib.create_with_paths (Context.name context) ~paths in
+    create_from_findlib
+      findlib
+      ~has_bigarray_library:(Ocaml.Version.has_bigarray_library ocaml.version)
+      ~instrument_with:(Context.instrument_with context)
   ;;
 
   let installed (context : Context.t) =
@@ -1972,7 +1974,6 @@ module DB = struct
       findlib
       ~has_bigarray_library:(Ocaml.Version.has_bigarray_library ocaml.version)
       ~instrument_with:(Context.instrument_with context)
-      ~lib_config:ocaml.lib_config
   ;;
 
   let find t name =
@@ -2042,14 +2043,13 @@ module DB = struct
   ;;
 
   let resolve_user_written_deps
-    t
-    targets
-    ~allow_overlaps
-    ~forbidden_libraries
-    deps
-    ~pps
-    ~dune_version
-    ~merlin_ident
+        t
+        targets
+        ~allow_overlaps
+        ~forbidden_libraries
+        deps
+        ~pps
+        ~dune_version
     =
     let resolved =
       Memo.lazy_ (fun () ->
@@ -2083,20 +2083,20 @@ module DB = struct
         in
         Resolve.Memo.push_stack_frame
           (fun () ->
-            Resolve_names.linking_closure_with_overlap_checks
-              (Option.some_if (not allow_overlaps) t)
-              ~forbidden_libraries
-              res)
+             Resolve_names.linking_closure_with_overlap_checks
+               (Option.some_if (not allow_overlaps) t)
+               ~forbidden_libraries
+               res)
           ~human_readable_description:(fun () ->
             match targets with
             | `Melange_emit name -> Pp.textf "melange target %s" name
-            | `Exe [ (loc, name) ] ->
+            | `Exe Nonempty_list.[ (loc, name) ] ->
               Pp.textf "executable %s in %s" name (Loc.to_file_colon_line loc)
-            | `Exe names ->
-              let loc, _ = List.hd names in
+            | `Exe (Nonempty_list.((loc, _) :: _) as names) ->
               Pp.textf
                 "executables %s in %s"
-                (String.enumerate_and (List.map ~f:snd names))
+                (String.enumerate_and
+                   (Nonempty_list.map ~f:snd names |> Nonempty_list.to_list))
                 (Loc.to_file_colon_line loc)))
     in
     let pps =
@@ -2119,7 +2119,6 @@ module DB = struct
     ; pps
     ; resolved_selects = resolved_selects |> Memo.map ~f:Resolve.return
     ; sub_systems = Sub_system_name.Map.empty
-    ; merlin_ident
     }
   ;;
 
@@ -2149,12 +2148,12 @@ module DB = struct
 end
 
 let to_dune_lib
-  ({ info; _ } as lib)
-  ~modules
-  ~foreign_objects
-  ~melange_runtime_deps
-  ~public_headers
-  ~dir
+      ({ info; _ } as lib)
+      ~modules
+      ~foreign_objects
+      ~melange_runtime_deps
+      ~public_headers
+      ~dir
   : Dune_package.Lib.t Resolve.Memo.t
   =
   let loc = Lib_info.loc info in

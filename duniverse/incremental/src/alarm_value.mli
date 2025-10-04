@@ -1,4 +1,6 @@
-(** A module internal to Incremental.  Users should see {!Incremental_intf}.
+@@ portable
+
+(** A module internal to Incremental. Users should see {!Incremental_intf}.
 
     An alarm value is stored in the timing wheel and is used to implement time-based
     functions: [at], [at_interval], [snapshot], [step_function]. *)

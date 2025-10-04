@@ -1,0 +1,8 @@
+(library
+ (name ui_metrics)
+ (public_name bonsai_concrete.metrics)
+ (libraries core core_kernel.nonempty_list
+   prometheus_instrumentation_collector_histogram_buckets time_now
+   ui_metrics_quantile_calc)
+ (preprocess
+  (pps ppx_jane)))

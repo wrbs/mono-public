@@ -1,5 +1,6 @@
 open Import
 open Dune_lang.Decoder
+module Ocaml_flags = Dune_lang.Ocaml_flags
 
 type for_ =
   | Executable
@@ -17,7 +18,7 @@ type t =
   ; preprocessor_deps : Dep_conf.t list
   ; lint : Preprocess.Without_instrumentation.t Preprocess.Per_module.t
   ; flags : Ocaml_flags.Spec.t
-  ; js_of_ocaml : Js_of_ocaml.In_buildable.t
+  ; js_of_ocaml : Js_of_ocaml.In_buildable.t Js_of_ocaml.Mode.Pair.t
   ; allow_overlapping_dependencies : bool
   ; ctypes : Ctypes_field.t option
   }
@@ -29,19 +30,19 @@ let decode (for_ : for_) =
       (2, 0)
       ~extra_info:"Use the (foreign_stubs ...) field instead."
   in
-  let only_in_library decode =
+  let in_library =
     match for_ with
-    | Executable -> return None
-    | Library _ -> decode
+    | Library _ -> true
+    | Executable -> false
   in
+  let only_in_library decode = if in_library then decode else return None in
   let add_stubs language ~loc ~names ~flags foreign_stubs =
     match names with
     | None -> foreign_stubs
     | Some names ->
       let names = Ordered_set_lang.replace_standard_with_empty names in
       let flags = Option.value ~default:Ordered_set_lang.Unexpanded.standard flags in
-      Foreign.Stubs.make ~loc ~language ~names ~mode:Mode.Select.All ~flags
-      :: foreign_stubs
+      Foreign.Stubs.make ~loc ~language ~names ~flags :: foreign_stubs
   in
   let+ loc = loc
   and+ preprocess, preprocessor_deps = Preprocess.preprocess_fields
@@ -56,9 +57,10 @@ let decode (for_ : for_) =
       (Dune_lang.Syntax.since Stanza.syntax (2, 0)
        >>> repeat (located Foreign.Archive.decode))
   and+ extra_objects =
-    field_o
+    field
       "extra_objects"
       (Dune_lang.Syntax.since Stanza.syntax (3, 5) >>> Foreign.Objects.decode)
+      ~default:Foreign.Objects.empty
   and+ c_flags =
     only_in_library
       (field_o "c_flags" (use_foreign >>> Ordered_set_lang.Unexpanded.decode))
@@ -84,17 +86,18 @@ let decode (for_ : for_) =
                ~extra_info:"Use the (foreign_archives ...) field instead."
              >>> enter (maybe string))))
   and+ libraries =
-    let allow_re_export =
-      match for_ with
-      | Library _ -> true
-      | Executable -> false
-    in
-    field "libraries" (Lib_dep.L.decode ~allow_re_export) ~default:[]
+    field "libraries" (Lib_dep.L.decode ~allow_re_export:in_library) ~default:[]
   and+ flags = Ocaml_flags.Spec.decode
   and+ js_of_ocaml =
     field
       "js_of_ocaml"
-      Js_of_ocaml.In_buildable.decode
+      (Js_of_ocaml.In_buildable.decode ~in_library ~mode:JS)
+      ~default:Js_of_ocaml.In_buildable.default
+  and+ wasm_of_ocaml =
+    field
+      "wasm_of_ocaml"
+      (Dune_lang.Syntax.since Stanza.syntax (3, 17)
+       >>> Js_of_ocaml.In_buildable.decode ~in_library ~mode:Wasm)
       ~default:Js_of_ocaml.In_buildable.default
   and+ allow_overlapping_dependencies = field_b "allow_overlapping_dependencies"
   and+ version = Dune_lang.Syntax.get_exn Stanza.syntax
@@ -130,9 +133,10 @@ let decode (for_ : for_) =
   in
   let foreign_archives =
     let foreign_archives = Option.value ~default:[] foreign_archives in
-    if version < (2, 0)
-       && List.is_non_empty foreign_stubs
-       && Option.is_some self_build_stubs_archive
+    if
+      version < (2, 0)
+      && List.is_non_empty foreign_stubs
+      && Option.is_some self_build_stubs_archive
     then
       User_error.raise
         ~loc:self_build_stubs_archive_loc
@@ -154,7 +158,6 @@ let decode (for_ : for_) =
          the "lib" prefix, however, since standard linkers require it). *)
       | Some name -> (loc, Foreign.Archive.stubs name) :: foreign_archives)
   in
-  let extra_objects = Option.value ~default:Foreign.Objects.empty extra_objects in
   { loc
   ; preprocess
   ; preprocessor_deps
@@ -166,7 +169,7 @@ let decode (for_ : for_) =
   ; extra_objects
   ; libraries
   ; flags
-  ; js_of_ocaml
+  ; js_of_ocaml = { js = js_of_ocaml; wasm = wasm_of_ocaml }
   ; allow_overlapping_dependencies
   ; ctypes
   }

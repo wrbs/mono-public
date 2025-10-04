@@ -5,30 +5,22 @@
    [../test/test_conversions.ml]
 *)
 
+type ('a : any_non_null) builtin_array = 'a array
+
 open! Import
 module List = Base.List
-module Hash_set = Base.Hash_set
 
 let sprintf = Printf.sprintf
 
-module Key = struct
-  type t = int [@@deriving compare, sexp_of]
-
-  (* The integers here are the values underlying the polymorphic variants, they already
-     are hashes of constructor names, and hence are expected to be uniformly
-     distributed. *)
-  let hash x = x
-end
-
 module Allowed_ints = struct
-  type t =
+  type t : immutable_data =
     | None
     | All
-    | Hash_set of Hash_set.M(Key).t
+    | Set of (int, Int.comparator_witness) Set.Tree.t
     | From_zero_to of int
 
   let _invariant = function
-    | None | All | Hash_set _ -> ()
+    | None | All | Set _ -> ()
     | From_zero_to n -> assert (n >= 0)
   ;;
 
@@ -36,7 +28,7 @@ module Allowed_ints = struct
     match t with
     | None -> false
     | All -> true
-    | Hash_set hash_set -> Hash_set.mem hash_set i
+    | Set set -> Set.Tree.mem ~comparator:Int.comparator set i
     | From_zero_to n -> 0 <= i && i <= n
   ;;
 end
@@ -47,7 +39,7 @@ module Immediacy = struct
     | Sometimes
     | Never
     | Unknown
-  [@@deriving compare]
+  [@@deriving compare ~localize]
 
   let equal = [%compare.equal: t]
 
@@ -62,35 +54,44 @@ end
 open Immediacy
 
 module T : sig
-  type 'a t
+  type ('a : any) t : immutable_data
 
-  val create : 'a Typename.t -> Immediacy.t -> Allowed_ints.t -> 'a t
-  val create_with_name : string -> Immediacy.t -> Allowed_ints.t -> _ t
-  val immediacy : _ t -> Immediacy.t
-  val allowed_ints : _ t -> Allowed_ints.t
-  val typename : _ t -> string
+  val create : ('a : any). 'a Typename.t -> Immediacy.t -> Allowed_ints.t -> 'a t
+  val create_with_name : ('a : any). string -> Immediacy.t -> Allowed_ints.t -> 'a t
+  val immediacy : ('a : any). 'a t -> Immediacy.t
+  val allowed_ints : ('a : any). 'a t -> Allowed_ints.t
+  val typename : ('a : any). 'a t -> string
 
   module Never_values : sig
     val int32 : int32 t
+    val int32_u : int32# t
     val int64 : int64 t
+    val int64_u : int64# t
     val nativeint : nativeint t
+    val nativeint_u : nativeint# t
     val float : float t
+    val float_u : float# t
     val string : string t
     val bytes : bytes t
-    val array : _ array t
+    val array : (_ : any_non_null) builtin_array t
     val ref_ : _ ref t
     val tuple2 : (_ * _) t
     val tuple3 : (_ * _ * _) t
     val tuple4 : (_ * _ * _ * _) t
     val tuple5 : (_ * _ * _ * _ * _) t
-    val function_ : (_ -> _) t
+    val tuple2_u : #((_ : any) * (_ : any)) t
+    val tuple3_u : #((_ : any) * (_ : any) * (_ : any)) t
+    val tuple4_u : #((_ : any) * (_ : any) * (_ : any) * (_ : any)) t
+    val tuple5_u : #((_ : any) * (_ : any) * (_ : any) * (_ : any) * (_ : any)) t
+    val function_ : ((_ : any) -> (_ : any)) t
   end
 
-  val never : 'a Typename.t -> 'a t
-  val unknown : 'a Typename.t -> 'a t
-  val option : _ t
-  val list : _ t
-  val magic : _ t -> _ t
+  val never : ('a : any). 'a Typename.t -> 'a t
+  val unknown : ('a : any). 'a Typename.t -> 'a t
+  val option : _ option t
+  val or_null : ('a : value_or_null). 'a t
+  val list : _ list t
+  val magic : ('a : any) ('b : any). 'a t -> 'b t
 end = struct
   type t_ =
     { immediacy : Immediacy.t
@@ -98,7 +99,7 @@ end = struct
     ; typename : string
     }
 
-  type 'a t = t_
+  type ('a : any) t = t_
 
   let create_with_name typename immediacy allowed_ints =
     { immediacy; allowed_ints; typename }
@@ -116,14 +117,19 @@ end = struct
   let never typename = create typename Never None
   let unknown typename = create typename Unknown None
   let option = create_with_name "option" Sometimes (Allowed_ints.From_zero_to 0)
+  let or_null = create_with_name "or_null" Sometimes Allowed_ints.None
   let list = create_with_name "list" Sometimes (Allowed_ints.From_zero_to 0)
 
   module Never_values = struct
     (* int32 is boxed even on 64b platform at the moment. *)
     let int32 = never typename_of_int32
+    let int32_u = never typename_of_int32_u
     let int64 = never typename_of_int64
+    let int64_u = never typename_of_int64_u
     let nativeint = never typename_of_nativeint
+    let nativeint_u = never typename_of_nativeint_u
     let float = never typename_of_float
+    let float_u = never typename_of_float_u
     let string = never typename_of_string
     let bytes = never typename_of_bytes
     let array = never_with_name "array"
@@ -132,6 +138,10 @@ end = struct
     let tuple3 = never_with_name "tuple3"
     let tuple4 = never_with_name "tuple4"
     let tuple5 = never_with_name "tuple5"
+    let tuple2_u = never_with_name "tuple2_u"
+    let tuple3_u = never_with_name "tuple3_u"
+    let tuple4_u = never_with_name "tuple4_u"
+    let tuple5_u = never_with_name "tuple5_u"
     let function_ = never_with_name "function"
   end
 end
@@ -144,26 +154,31 @@ let bool = create typename_of_bool Always (Allowed_ints.From_zero_to 1)
 let char = create typename_of_char Always (Allowed_ints.From_zero_to 255)
 
 module Computation_impl = struct
-  type nonrec 'a t = 'a t
+  type nonrec ('a : any) t = 'a t
 
   include Type_generic.Variant_and_record_intf.M (struct
-    type nonrec 'a t = 'a t
-  end)
+      type nonrec ('a : any) t = 'a t
+    end)
 
   include Never_values
 
   let ref_ _ = ref_
-  let array _ = array
+  let array _ _ = array
   let tuple2 _ _ = tuple2
   let tuple3 _ _ _ = tuple3
   let tuple4 _ _ _ _ = tuple4
   let tuple5 _ _ _ _ _ = tuple5
-  let function_ _ _ = function_
+  let tuple2_u _ _ _ = tuple2_u
+  let tuple3_u _ _ _ _ = tuple3_u
+  let tuple4_u _ _ _ _ _ = tuple4_u
+  let tuple5_u _ _ _ _ _ _ = tuple5_u
+  let function_ _ _ _ = function_
   let int = int
   let char = char
   let bool = bool
   let unit = unit
   let option _ = option
+  let or_null _ = or_null
   let list _ = list
 
   (* An [a Lazy.t] might be a boxed closure, so must have immediacy either [Never] or
@@ -222,13 +237,13 @@ module Computation_impl = struct
       let allowed_ints =
         if not (Variant.is_polymorphic variant)
         then Allowed_ints.From_zero_to (no_arg_count - 1)
-        else (
-          let hash_set = Hash_set.create (module Key) ~size:(no_arg_count * 2) in
-          List.iter no_arg_list ~f:(fun (Tag tag) ->
+        else
+          List.map no_arg_list ~f:(fun (Tag tag) ->
             match Tag.create tag with
-            | Tag.Const _ -> Hash_set.add hash_set (Tag.ocaml_repr tag)
-            | Tag.Args _ -> assert false);
-          Allowed_ints.Hash_set hash_set)
+            | Tag.Const _ -> Tag.ocaml_repr tag
+            | Tag.Args _ -> assert false)
+          |> Set.Tree.of_list ~comparator:Int.comparator
+          |> Allowed_ints.Set
       in
       let immediacy =
         if List.is_empty one_arg_list && List.is_empty more_arg_list
@@ -248,7 +263,7 @@ module Computation_impl = struct
       let create () = ()
     end
 
-    type nonrec 'a t = 'a t ref
+    type nonrec ('a : any) t = 'a t ref
 
     (* The default witness - which is created by calling [init] and recovered at any later
        point by calling [get_wip_computation] - can only be used in a recursive type.
@@ -274,8 +289,8 @@ let of_typerep typerep =
 ;;
 
 module For_all_parameters (M : sig
-  val immediacy : Immediacy.t
-end) =
+    val immediacy : Immediacy.t
+  end) =
 struct
   let witness typerep1 typerep2 =
     let t1 = of_typerep typerep1 in
@@ -361,11 +376,11 @@ let value_as_int (type a) (_ : a t) a =
 let value_is_int (type a) (_ : a t) a = Obj.is_int (Obj.repr a)
 
 module Always = struct
-  type nonrec 'a t = 'a t
+  type nonrec ('a : any) t = 'a t
 
   include For_all_parameters (struct
-    let immediacy = Always
-  end)
+      let immediacy = Always
+    end)
 
   let of_typerep typerep =
     let t = of_typerep typerep in
@@ -374,7 +389,10 @@ module Always = struct
     | Unknown | Never | Sometimes -> None
   ;;
 
-  let of_typerep_exn here typerep = Option.value_exn ~here (of_typerep typerep)
+  let of_typerep_exn ~(here : [%call_pos]) typerep =
+    Option.value_exn ~here (of_typerep typerep)
+  ;;
+
   let int_as_value = int_as_value
   let int_as_value_exn = int_as_value_exn
   let int_is_value = int_is_value
@@ -386,11 +404,11 @@ module Always = struct
 end
 
 module Sometimes = struct
-  type nonrec 'a t = 'a t
+  type nonrec ('a : any) t = 'a t
 
   include For_all_parameters (struct
-    let immediacy = Sometimes
-  end)
+      let immediacy = Sometimes
+    end)
 
   let of_typerep typerep =
     let t = of_typerep typerep in
@@ -399,7 +417,10 @@ module Sometimes = struct
     | Unknown | Always | Never -> None
   ;;
 
-  let of_typerep_exn here typerep = Option.value_exn ~here (of_typerep typerep)
+  let of_typerep_exn ~(here : [%call_pos]) typerep =
+    Option.value_exn ~here (of_typerep typerep)
+  ;;
+
   let int_as_value = int_as_value
   let int_as_value_exn = int_as_value_exn
   let int_is_value = int_is_value
@@ -411,11 +432,11 @@ module Sometimes = struct
 end
 
 module Never = struct
-  type nonrec 'a t = 'a t
+  type nonrec ('a : any) t = 'a t
 
   include For_all_parameters (struct
-    let immediacy = Never
-  end)
+      let immediacy = Never
+    end)
 
   let of_typerep typerep =
     let t = of_typerep typerep in
@@ -424,12 +445,14 @@ module Never = struct
     | Unknown | Always | Sometimes -> None
   ;;
 
-  let of_typerep_exn here typerep = Option.value_exn ~here (of_typerep typerep)
+  let of_typerep_exn ~(here : [%call_pos]) typerep =
+    Option.value_exn ~here (of_typerep typerep)
+  ;;
 
   include Never_values
 end
 
-type 'a dest =
+type ('a : any) dest =
   | Always of 'a Always.t
   | Sometimes of 'a Sometimes.t
   | Never of 'a Never.t

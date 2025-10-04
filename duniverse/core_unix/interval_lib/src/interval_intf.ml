@@ -3,9 +3,9 @@ open! Core
 module type Gen = sig
   type 'a t
 
-  (** [bound] is the type of points in the interval (and therefore of the bounds).
-      [bound] is instantiated in two different ways below: in [module type S] as a
-      monotype and in [module type S1] as ['a]. *)
+  (** [bound] is the type of points in the interval (and therefore of the bounds). [bound]
+      is instantiated in two different ways below: in [module type S] as a monotype and in
+      [module type S1] as ['a]. *)
   type 'a bound
 
   (** [create l u] returns the interval with lower bound [l] and upper bound [u], unless
@@ -40,8 +40,7 @@ module type Gen = sig
           hull:  (           )
       v}
 
-      In this case the hull goes from [lbound_exn a] to [ubound_exn c].
-  *)
+      In this case the hull goes from [lbound_exn a] to [ubound_exn c]. *)
   val convex_hull : 'a t list -> 'a t
 
   val contains : 'a t -> 'a bound -> bool
@@ -51,25 +50,24 @@ module type Gen = sig
     -> 'a bound
     -> [ `Below | `Within | `Above | `Interval_is_empty ]
 
-  (** [bound t x] returns [None] iff [is_empty t].  If [bounds t = Some (a, b)], then
-      [bound] returns [Some y] where [y] is the element of [t] closest to [x].  I.e.:
+  (** [bound t x] returns [None] iff [is_empty t]. If [bounds t = Some (a, b)], then
+      [bound] returns [Some y] where [y] is the element of [t] closest to [x]. I.e.:
 
       {v
         y = a  if x < a
         y = x  if a <= x <= b
         y = b  if x > b
-      v}
-  *)
+      v} *)
   val bound : 'a t -> 'a bound -> 'a bound option
 
-  (** [is_superset i1 of_:i2] is whether i1 contains i2. The empty interval is
-      contained in every interval. *)
+  (** [is_superset i1 of_:i2] is whether i1 contains i2. The empty interval is contained
+      in every interval. *)
   val is_superset : 'a t -> of_:'a t -> bool
 
   val is_subset : 'a t -> of_:'a t -> bool
 
   (** [map t ~f] returns [create (f l) (f u)] if [bounds t = Some (l, u)], and [empty] if
-      [t] is empty.  Note that if [f l > f u], the result of [map] is [empty], by the
+      [t] is empty. Note that if [f l > f u], the result of [map] is [empty], by the
       definition of [create].
 
       If you think of an interval as a set of points, rather than a pair of its bounds,
@@ -86,28 +84,27 @@ module type Gen = sig
       function. *)
   val are_disjoint_as_open_intervals : 'a t list -> bool
 
-  (** Assuming that [ilist1] and [ilist2] are lists of disjoint intervals, [list_intersect
-      ilist1 ilist2] considers the intersection [(intersect i1 i2)] of every pair of
-      intervals [(i1, i2)], with [i1] drawn from [ilist1] and [i2] from [ilist2],
-      returning just the non-empty intersections. By construction these intervals will be
-      disjoint, too. For example:
+  (** Assuming that [ilist1] and [ilist2] are lists of disjoint intervals,
+      [list_intersect ilist1 ilist2] considers the intersection [(intersect i1 i2)] of
+      every pair of intervals [(i1, i2)], with [i1] drawn from [ilist1] and [i2] from
+      [ilist2], returning just the non-empty intersections. By construction these
+      intervals will be disjoint, too. For example:
 
       {[
         let i = Interval.create;;
-        list_intersect [i 4 7; i 9 15] [i 2 4; i 5 10; i 14 20];;
-        [(4, 4), (5, 7), (9, 10), (14, 15)]
+
+        list_intersect [ i 4 7; i 9 15 ] [ i 2 4; i 5 10; i 14 20 ];;
+        [ (4, 4), (5, 7), (9, 10), (14, 15) ]
       ]}
 
-      Raises an exception if either input list is non-disjoint.
-  *)
+      Raises an exception if either input list is non-disjoint. *)
   val list_intersect : 'a t list -> 'a t list -> 'a t list
 
   (** Returns true if the intervals, when considered as half-open intervals, nestle up
-      cleanly one to the next. I.e., if you sort the intervals by the lower bound,
-      then the upper bound of the [n]th interval is equal to the lower bound of the
-      [n+1]th interval. The intervals do not need to partition the entire space, they just
-      need to partition their union.
-  *)
+      cleanly one to the next. I.e., if you sort the intervals by the lower bound, then
+      the upper bound of the [n]th interval is equal to the lower bound of the [n+1]th
+      interval. The intervals do not need to partition the entire space, they just need to
+      partition their union. *)
   val half_open_intervals_are_a_partition : 'a t list -> bool
 end
 
@@ -118,23 +115,21 @@ module type Gen_set = sig
   (** An interval set is a set of nonempty disjoint intervals. *)
   type 'a interval
 
-  (** [create_exn] creates an interval set containing intervals whose lower and upper bounds
-      are given by the pairs passed to the function. Raises if the pairs overlap.
-  *)
+  (** [create_exn] creates an interval set containing intervals whose lower and upper
+      bounds are given by the pairs passed to the function. Raises if the pairs overlap. *)
   val create_exn : ('a bound * 'a bound) list -> 'a t
 
-  (** [create_from_intervals_exn] creates an interval set. Empty intervals are
-      dropped. Raises if the nonempty intervals are not disjoint. *)
+  (** [create_from_intervals_exn] creates an interval set. Empty intervals are dropped.
+      Raises if the nonempty intervals are not disjoint. *)
   val create_from_intervals_exn : 'a interval list -> 'a t
 
   val contains : 'a t -> 'a bound -> bool
 
   (** [contains_set] returns true iff for every interval in the contained set, there
-      exists an interval in the container set that is its superset.
-  *)
+      exists an interval in the container set that is its superset. *)
   val contains_set : container:'a t -> contained:'a t -> bool
 
-  (** The largest and smallest element of the interval set, respectively.  Raises
+  (** The largest and smallest element of the interval set, respectively. Raises
       Invalid_argument on empty sets. *)
   val ubound_exn : 'a t -> 'a bound
 
@@ -155,8 +150,13 @@ module type Gen_set = sig
   val union_list : 'a t list -> 'a t
 end
 
+[%%template
+[@@@mode.default m = (global, local)]
+
 module type S = sig
-  type t [@@deriving bin_io, sexp, compare, hash]
+  type t
+  [@@deriving (bin_io [@mode m]), sexp, (compare [@mode m]), (equal [@mode m]), hash]
+
   type bound
 
   include Gen with type 'a t := t with type 'a bound := bound (** @inline *)
@@ -172,63 +172,62 @@ module type S = sig
   type 'a poly_set
 
   module Set : sig
-    type t [@@deriving bin_io, sexp]
+      type t [@@deriving bin_io, sexp]
 
-    include Gen_set with type 'a t := t with type 'a bound := bound (** @inline *)
+      include Gen_set with type 'a t := t with type 'a bound := bound (** @inline *)
 
-    val to_poly : t -> bound poly_set
+      val to_poly : t -> bound poly_set
 
-    (** [to_list] will return a list of non-overlapping intervals defining the set, in
-        ascending order.  *)
-    val to_list : t -> bound interval list
-  end
-  with type 'a interval := t
+      (** [to_list] will return a list of non-overlapping intervals defining the set, in
+          ascending order. *)
+      val to_list : t -> bound interval list
+    end
+    with type 'a interval := t
 end
 
 module type S1 = sig
   (** This type [t] supports bin-io and sexp conversion by way of the
       [[@@deriving bin_io, sexp]] extensions, which inline the relevant function
       signatures (like [bin_read_t] and [t_of_sexp]). *)
-  type 'a t [@@deriving bin_io, sexp, compare, hash]
+  type 'a t
+  [@@deriving (bin_io [@mode m]), sexp, (compare [@mode m]), (equal [@mode m]), hash]
 
   include Gen with type 'a t := 'a t with type 'a bound := 'a (** @inline *)
 
   module Set : sig
-    type 'a t [@@deriving bin_io, sexp]
+      type 'a t [@@deriving bin_io, sexp]
 
-    include Gen_set with type 'a t := 'a t with type 'a bound := 'a (** @inline *)
-  end
-  with type 'a interval := 'a t
+      include Gen_set with type 'a t := 'a t with type 'a bound := 'a (** @inline *)
+    end
+    with type 'a interval := 'a t
 end
 
 module type S_stable = sig
-  type t [@@deriving sexp_grammar]
+  type t [@@deriving (equal [@mode m]), hash, sexp_grammar]
 
-  include Stable_with_witness with type t := t
-end
+  include Stable_with_witness [@mode m] with type t := t
+end]
 
 (** Module for simple closed intervals over arbitrary types. Used by calling the
-    {{!module:Core.Interval.Make}[Make]} functor with a type that satisfies
-    {{!module:Base.Comparable}[Comparable]} (for correctly ordering elements).
+    {{!module:Core.Interval.Make} [Make]} functor with a type that satisfies
+    {{!module:Base.Comparable} [Comparable]} (for correctly ordering elements).
 
     Note that the actual interface for intervals is in
-    {{!modtype:Core__.Interval_intf.Gen}[Interval_intf.Gen]}, following a Core pattern of
+    {{!modtype:Core__.Interval_intf.Gen} [Interval_intf.Gen]}, following a Core pattern of
     defining an interface once in a [Gen] module, then reusing it across monomorphic ([S])
     and polymorphic ([S1], [S2], ... [SN]) variants, where [SN] denotes a signature of N
     parameters. Here, [S1] is included in this module because the signature of one ['a]
     parameter is the default.
 
-    See the documentation of {{!module:Core.Interval.Make}[Interval.Make]} for a more
+    See the documentation of {{!module:Core.Interval.Make} [Interval.Make]} for a more
     detailed usage example. *)
-module type Interval = sig
-  (**
-     {2 Intervals using polymorphic compare}
+module type%template Interval = sig
+  (** {2 Intervals using polymorphic compare}
 
-     This part of the interface is for polymorphic intervals, which are well ordered by
-     polymorphic compare. Using this with types that are not (like sets) will lead to crazy
-     results.
-  *)
-  include S1
+      This part of the interface is for polymorphic intervals, which are well ordered by
+      polymorphic compare. Using this with types that are not (like sets) will lead to
+      crazy results. *)
+  include S1 [@mode local]
   (** @inline *)
 
   (** {2 Type-specialized intervals}
@@ -239,33 +238,37 @@ module type Interval = sig
 
       Note the heavy use of destructive substitution, which removes the redefined type or
       module from the signature. This allows for clean type constraints in codebases, like
-      Core's, where there are lots of types going by the same name (e.g., "t").
-  *)
+      Core's, where there are lots of types going by the same name (e.g., "t"). *)
 
-  (** {3 Signatures }
+  (** {3 Signatures}
 
       The following signatures are used for specifying the types of the type-specialized
-      intervals.
+      intervals. *)
 
-  *)
+  module type [@mode m = (global, local)] S1 = S1 [@mode m]
 
-  module type S1 = S1
-  module type S = S with type 'a poly_t := 'a t with type 'a poly_set := 'a Set.t
+  module type [@mode m = (global, local)] S =
+    S [@mode m] with type 'a poly_t := 'a t with type 'a poly_set := 'a Set.t
+
   module type S_time = sig end [@@deprecated "[since 2021-08] Use [Interval_unix]"]
 
   (** {3 Specialized interval types} *)
 
-  module Ofday : S with type bound = Time_float.Ofday.t and type t = Time_float.Ofday.t t
-  module Ofday_ns : S with type bound = Time_ns.Ofday.t and type t = Time_ns.Ofday.t t
+  module Ofday :
+    S [@mode local] with type bound = Time_float.Ofday.t and type t = Time_float.Ofday.t t
+
+  module Ofday_ns :
+    S [@mode local] with type bound = Time_ns.Ofday.t and type t = Time_ns.Ofday.t t
+
   module Time : sig end [@@deprecated "[since 2021-08] Use [Interval_unix]"]
   module Time_ns : sig end [@@deprecated "[since 2021-08] Use [Interval_unix]"]
-  module Float : S with type bound = Float.t and type t = Float.t t
+  module Float : S [@mode local] with type bound = Float.t and type t = Float.t t
 
   module Int : sig
-    include S with type bound = Int.t (** @open *)
+    include S [@mode local] with type bound = Int.t (** @open *)
 
     include Container.S0 with type t := t with type elt := bound
-    include Binary_searchable.S with type t := t with type elt := bound
+    include Binary_searchable.S [@mode local] with type t := t with type elt := bound
 
     (**/**)
 
@@ -277,60 +280,71 @@ module type Interval = sig
     end
   end
 
-  (** [Interval.Make] is a functor that takes a type that you'd like to create intervals for
-      and returns a module with functions over intervals of that type.
+  (** [Interval.Make] is a functor that takes a type that you'd like to create intervals
+      for and returns a module with functions over intervals of that type.
 
-      For example, suppose you had a [Percent.t] type and wanted to work with intervals over
-      it, i.e., inclusive ranges like 40-50% or 0-100%. You would create your
+      For example, suppose you had a [Percent.t] type and wanted to work with intervals
+      over it, i.e., inclusive ranges like 40-50% or 0-100%. You would create your
       [Percent_interval] module by calling:
 
-      {[module Percent_interval = Interval.Make(Percent)]}
+      {[
+        module Percent_interval = Interval.Make (Percent)
+      ]}
 
-      You now have a module with lots of functionality ready to use. For instance you could
-      call [Percent_interval.empty] to create an empty interval, or:
+      You now have a module with lots of functionality ready to use. For instance you
+      could call [Percent_interval.empty] to create an empty interval, or:
 
-      {[Percent_interval.create (Percent.of_percentage 3) (Percent.of_percentage 30)]}
+      {[
+        Percent_interval.create (Percent.of_percentage 3) (Percent.of_percentage 30)
+      ]}
 
       to get an actual interval that ranges from [3%] to [30%]. You can then ask questions
-      of this interval, like whether it's a {{!val:is_subset} subset} of another interval or
-      whether it {!val:contains} a particular value.
+      of this interval, like whether it's a {{!val:is_subset} subset} of another interval
+      or whether it {!val:contains} a particular value.
 
-      NB. In order to use the [Interval.Make] functor, your type must satisfy
-      Comparable and support bin-io and s-expression conversion. At a minimum, then,
-      [Percent] must look like this:
+      NB. In order to use the [Interval.Make] functor, your type must satisfy Comparable
+      and support bin-io and s-expression conversion. At a minimum, then, [Percent] must
+      look like this:
 
       {[
         module Percent = struct
           module T = struct
-            type t = float [@@deriving bin_io, compare, sexp]
+            type t = float [@@deriving bin_io, compare, equal, hash, sexp]
           end
+
           include T
-          include Comparable.Make_binable(T)
+          include Comparable.Make_binable (T)
         end
-      ]}
-  *)
-  module Make (Bound : sig
-    type t [@@deriving bin_io, sexp, hash]
+      ]} *)
+  module
+    [@mode m = (global, local)] Make (Bound : sig
+      type t
+      [@@deriving (bin_io [@mode m]), (compare [@mode m]), (equal [@mode m]), hash, sexp]
 
-    include Comparable.S with type t := t
-  end) : S with type bound = Bound.t and type t = Bound.t t
+      include Comparable.S [@mode m] with type t := t
+    end) : S [@mode m] with type bound = Bound.t and type t = Bound.t t
 
-  (**
-     [Stable] is used to build stable protocols. It ensures backwards compatibility by
-     checking the sexp and bin-io representations of a given module. Here it's also applied
-     to the [Float], [Int], [Time], [Time_ns], and [Ofday] intervals.
-  *)
+  (** [Stable] is used to build stable protocols. It ensures backwards compatibility by
+      checking the sexp and bin-io representations of a given module. Here it's also
+      applied to the [Float], [Int], [Time], [Time_ns], and [Ofday] intervals. *)
   module Stable : sig
     module V1 : sig
       type nonrec 'a t = 'a t
-      [@@deriving bin_io, compare, hash, sexp, sexp_grammar, stable_witness]
+      [@@deriving
+        bin_io ~localize
+        , compare ~localize
+        , equal ~localize
+        , hash
+        , sexp
+        , sexp_grammar
+        , stable_witness]
 
-      module Float : S_stable with type t = Float.t
-      module Int : S_stable with type t = Int.t
+      module Float : S_stable [@mode local] with type t = Float.t
+      module Int : S_stable [@mode local] with type t = Int.t
       module Time : sig end [@@deprecated "[since 2021-08] Use [Interval_unix]"]
       module Time_ns : sig end [@@deprecated "[since 2021-08] Use [Interval_unix]"]
-      module Ofday : S_stable with type t = Ofday.t
-      module Ofday_ns : S_stable with type t = Ofday_ns.t
+      module Ofday : S_stable [@mode local] with type t = Ofday.t
+      module Ofday_ns : S_stable [@mode local] with type t = Ofday_ns.t
 
       (**/**)
 
@@ -343,14 +357,14 @@ module type Interval = sig
         type 'a t =
           | Interval of 'a * 'a
           | Empty
-        [@@deriving compare, variants]
+        [@@deriving compare ~localize, equal ~localize, hash, variants]
 
         val to_float : float t -> Float.t
         val to_int : int t -> Int.t
         val to_ofday : Core.Time_float.Ofday.t t -> Ofday.t
 
-        (** Used in testing Interval_unix.Time.t. Using Core.Time.t interval is
-            fine because it is equal to Interval_unix.Time.t. *)
+        (** Used in testing Interval_unix.Time.t. Using Core.Time.t interval is fine
+            because it is equal to Interval_unix.Time.t. *)
         val to_time : Core.Time_float.t t -> Core.Time_float.t interval
       end
     end
@@ -362,10 +376,11 @@ module type Interval = sig
 
     https://opensource.janestreet.com/standards/#private-submodules *)
   module Private : sig
-    module Make (Bound : sig
-      type t [@@deriving bin_io, sexp, hash]
+    module
+      [@mode m = (global, local)] Make (Bound : sig
+        type t [@@deriving (bin_io [@mode m]), sexp, hash]
 
-      include Comparable.S with type t := t
-    end) : S with type bound = Bound.t and type t = Bound.t t
+        include Comparable.S [@mode m] with type t := t
+      end) : S [@mode m] with type bound = Bound.t and type t = Bound.t t
   end
 end

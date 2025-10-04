@@ -3,70 +3,29 @@
    adding new dependencies. *)
 
 open! Import
-include Info_intf
+include Info_intf.Definitions
+module Sexp = Sexp0
 module String = String0
 
 module Message = struct
   type t =
     | Could_not_construct of Sexp.t
     | String of string
-    | Exn of exn
+    | Exn of exn Modes.Contended_via_portable.t Modes.Global.t
     | Sexp of Sexp.t
     | Tag_sexp of string * Sexp.t * Source_code_position0.t option
     | Tag_t of string * t
     | Tag_arg of string * Sexp.t * t
     | Of_list of int option * t list
     | With_backtrace of t * string (* backtrace *)
-  [@@deriving_inline sexp_of]
-
-  let rec sexp_of_t =
-    (function
-     | Could_not_construct arg0__001_ ->
-       let res0__002_ = Sexp.sexp_of_t arg0__001_ in
-       Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom "Could_not_construct"; res0__002_ ]
-     | String arg0__003_ ->
-       let res0__004_ = sexp_of_string arg0__003_ in
-       Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom "String"; res0__004_ ]
-     | Exn arg0__005_ ->
-       let res0__006_ = sexp_of_exn arg0__005_ in
-       Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom "Exn"; res0__006_ ]
-     | Sexp arg0__007_ ->
-       let res0__008_ = Sexp.sexp_of_t arg0__007_ in
-       Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom "Sexp"; res0__008_ ]
-     | Tag_sexp (arg0__009_, arg1__010_, arg2__011_) ->
-       let res0__012_ = sexp_of_string arg0__009_
-       and res1__013_ = Sexp.sexp_of_t arg1__010_
-       and res2__014_ = sexp_of_option Source_code_position0.sexp_of_t arg2__011_ in
-       Sexplib0.Sexp.List
-         [ Sexplib0.Sexp.Atom "Tag_sexp"; res0__012_; res1__013_; res2__014_ ]
-     | Tag_t (arg0__015_, arg1__016_) ->
-       let res0__017_ = sexp_of_string arg0__015_
-       and res1__018_ = sexp_of_t arg1__016_ in
-       Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom "Tag_t"; res0__017_; res1__018_ ]
-     | Tag_arg (arg0__019_, arg1__020_, arg2__021_) ->
-       let res0__022_ = sexp_of_string arg0__019_
-       and res1__023_ = Sexp.sexp_of_t arg1__020_
-       and res2__024_ = sexp_of_t arg2__021_ in
-       Sexplib0.Sexp.List
-         [ Sexplib0.Sexp.Atom "Tag_arg"; res0__022_; res1__023_; res2__024_ ]
-     | Of_list (arg0__025_, arg1__026_) ->
-       let res0__027_ = sexp_of_option sexp_of_int arg0__025_
-       and res1__028_ = sexp_of_list sexp_of_t arg1__026_ in
-       Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom "Of_list"; res0__027_; res1__028_ ]
-     | With_backtrace (arg0__029_, arg1__030_) ->
-       let res0__031_ = sexp_of_t arg0__029_
-       and res1__032_ = sexp_of_string arg1__030_ in
-       Sexplib0.Sexp.List [ Sexplib0.Sexp.Atom "With_backtrace"; res0__031_; res1__032_ ]
-      : t -> Sexplib0.Sexp.t)
-  ;;
-
-  [@@@end]
+  [@@deriving sexp_of]
 
   let rec to_sexps_hum t ac =
     match t with
     | Could_not_construct _ as t -> sexp_of_t t :: ac
     | String string -> Atom string :: ac
-    | Exn exn -> Exn.sexp_of_t exn :: ac
+    | Exn { global = exn } ->
+      Exn.sexp_of_t (Modes.Contended_via_portable.unwrap exn) :: ac
     | Sexp sexp -> sexp :: ac
     | Tag_sexp (tag, sexp, here) ->
       List
@@ -101,9 +60,15 @@ module Computed = struct
   (* Memoized, lazily-computed representation of messages. Maintains its own state to
      avoid stack overflow from nested [Lazy.t]. *)
 
-  (* We use a global [state ref] so we can mutate [state], but still [globalize] with no
-     cost and without duplicating state. *)
-  type info = { state : state ref } [@@unboxed]
+  (* We use a [Modes.Global.t] wrapper around mutable state so we can mutate the state,
+     but still [globalize] with no cost and without duplicating state. *)
+  type info = unstaged_info Modes.Global.t
+
+  and unstaged_info =
+    | Constant of Message.t
+    | Staged of staged_info
+
+  and staged_info = { state : state ref Modes.Contended_via_portable.t } [@@unboxed]
 
   (* An [info] starts as a [constructor]. When forced, it is marked [Computing] to avoid
      cycles. When finished, the final [message] is recorded. *)
@@ -119,12 +84,9 @@ module Computed = struct
     | Cons_tag_arg of string * Sexp.t * info
     | Cons_tag_t of string * info
 
-  (* This is a no-op, since [info] is unboxed. *)
-  let globalize_info { state } = { state }
-
   (* We keep a list of stack_frames while computing, rather than using the call stack. *)
   type stack_frame =
-    | In_info of info
+    | In_info of staged_info
     | In_tag_arg of string * Sexp.t
     | In_tag_t of string
     | In_list of
@@ -136,13 +98,19 @@ module Computed = struct
      All calls below are tail calls: we want to avoid using the call stack in favor
      of our own manual stack. *)
   let rec compute_info info stack =
-    match !(info.state) with
-    | Initial cons ->
-      info.state := Computing;
-      compute_constructor cons (In_info info :: stack)
-    | Computing ->
-      compute_message (Could_not_construct (Atom "cycle while computing message")) stack
-    | Final message -> compute_message message stack
+    match Modes.Global.unwrap info with
+    | Constant message -> compute_message message stack
+    | Staged info ->
+      let state = Modes.Contended_via_portable.unwrap info.state in
+      (match !state with
+       | Initial cons ->
+         state := Computing;
+         compute_constructor cons (In_info info :: stack)
+       | Computing ->
+         compute_message
+           (Could_not_construct (Atom "cycle while computing message"))
+           stack
+       | Final message -> compute_message message stack)
 
   and compute_info_list ~fwd_prefix ~rev_suffix stack =
     match fwd_prefix with
@@ -164,13 +132,13 @@ module Computed = struct
     | Cons_lazy_info lazy_info ->
       (match Lazy.force lazy_info with
        | info -> compute_info info stack
-       | exception exn -> compute_message (Could_not_construct (Exn.sexp_of_t exn)) stack)
+       | exception exn -> compute_message (Could_not_construct (sexp_of_exn exn)) stack)
 
   and compute_message message stack =
     match stack with
     | [] -> message
     | In_info info :: stack ->
-      info.state := Final message;
+      Modes.Contended_via_portable.unwrap info.state := Final message;
       compute_message message stack
     | In_tag_arg (tag, arg) :: stack ->
       compute_message (Tag_arg (tag, arg, message)) stack
@@ -182,15 +150,27 @@ module Computed = struct
   (* Helper functions for converting and constructing [info]. *)
 
   let to_message info = compute_info info []
-  let of_message message = { state = ref (Final message) }
 
-  let is_computed info =
-    match !(info.state) with
-    | Initial _ | Computing -> false
-    | Final _ -> true
+  let%template of_message (message @ p) : info = { global = Constant message }
+  [@@mode p = (portable, nonportable)]
   ;;
 
-  let of_cons cons = { state = ref (Initial cons) }
+  let is_computed : info -> bool =
+    fun t ->
+    match t.global with
+    | Constant _ -> true
+    | Staged info ->
+      let state = Modes.Contended_via_portable.unwrap info.state in
+      (match !state with
+       | Initial _ | Computing -> false
+       | Final _ -> true)
+  ;;
+
+  let of_cons cons =
+    Staged { state = ref (Initial cons) |> Modes.Contended_via_portable.wrap }
+    |> Modes.Global.wrap
+  ;;
+
   let of_lazy_info lazy_info = of_cons (Cons_lazy_info lazy_info)
 
   let of_lazy_cons lazy_cons =
@@ -206,7 +186,7 @@ open Computed
 
 type t = Computed.info
 
-let globalize = Computed.globalize_info
+let globalize x = x
 let invariant _ = ()
 
 (* It is OK to use [Message.to_sexp_hum], which is not stable, because [t_of_sexp] below
@@ -231,17 +211,17 @@ let to_string_mach t = Sexp.to_string_mach (sexp_of_t t)
 let of_lazy l = of_lazy_message (lazy (String (Lazy.force l)))
 let of_lazy_sexp l = of_lazy_message (lazy (Sexp (Lazy.force l)))
 let of_lazy_t lazy_t = of_lazy_info lazy_t
-let of_string message = of_message (String message)
+let%template of_string message = (of_message [@mode portable]) (String message)
 let createf format = Printf.ksprintf of_string format
 let of_thunk f = of_lazy_message (lazy (String (f ())))
 
-let create ?here ?strict tag x sexp_of_x =
+let%template[@kind k = (bits64, float64, value)] create ?here ?strict tag x sexp_of_x =
   match strict with
   | None -> of_lazy_message (lazy (Tag_sexp (tag, sexp_of_x x, here)))
   | Some () -> of_message (Tag_sexp (tag, sexp_of_x x, here))
 ;;
 
-let create_s sexp = of_message (Sexp sexp)
+let%template create_s sexp = (of_message [@mode portable]) (Sexp sexp)
 let tag t ~tag = of_cons (Cons_tag_t (tag, t))
 let tag_s_lazy t ~tag = of_lazy_cons (lazy (Cons_tag_arg ("", Lazy.force tag, t)))
 let tag_s t ~tag = of_cons (Cons_tag_arg ("", tag, t))
@@ -252,7 +232,7 @@ exception Exn of t
 
 let () =
   (* We install a custom exn-converter rather than use
-     [exception Exn of t [@@deriving_inline sexp] ... [@@@end]] to eliminate the extra
+     [exception Exn of t [@@deriving sexp]] to eliminate the extra
      wrapping of "(Exn ...)". *)
   Sexplib0.Sexp_conv.Exn_converter.add [%extension_constructor Exn] (function
     | Exn t -> sexp_of_t t
@@ -266,7 +246,7 @@ let to_exn t =
   then Exn t
   else (
     match to_message t with
-    | Message.Exn exn -> exn
+    | Message.Exn { global = exn } -> Modes.Contended_via_portable.unwrap exn
     | _ -> Exn t)
 ;;
 
@@ -281,17 +261,17 @@ let of_exn ?backtrace exn =
   | Exn t, None -> t
   | Exn t, Some backtrace ->
     of_lazy_message (lazy (With_backtrace (to_message t, backtrace)))
-  | _, None -> of_message (Message.Exn exn)
+  | _, None -> of_message (Message.Exn { global = Modes.Contended_via_portable.wrap exn })
   | _, Some backtrace ->
     of_lazy_message (lazy (With_backtrace (Sexp (Exn.sexp_of_t exn), backtrace)))
 ;;
 
-include Pretty_printer.Register_pp (struct
-  type nonrec t = t
+include%template Pretty_printer.Register_pp [@mode portable] (struct
+    type nonrec t = t
 
-  let module_name = "Base.Info"
-  let pp ppf t = Stdlib.Format.pp_print_string ppf (to_string_hum t)
-end)
+    let module_name = "Base.Info"
+    let pp ppf t = Stdlib.Format.pp_print_string ppf (to_string_hum t)
+  end)
 
 module Internal_repr = struct
   include Message

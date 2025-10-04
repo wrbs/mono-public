@@ -1,3 +1,5 @@
+@@ portable
+
 open! Import
 
 include module type of struct
@@ -5,3 +7,4 @@ include module type of struct
 end
 
 include Binable.S1 with type 'a t := 'a t
+include Quickcheckable.S1 with type 'a t := 'a t

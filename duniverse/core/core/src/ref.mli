@@ -1,4 +1,6 @@
-(** This module extends {{!Base.Ref}[Base.Ref]}. *)
+@@ portable
+
+(** This module extends {{!Base.Ref} [Base.Ref]}. *)
 
 open! Import
 open Perms.Export
@@ -13,7 +15,7 @@ include module type of struct
   with type 'a t := 'a t
 
 module Permissioned : sig
-  type (!'a, -'perms) t [@@deriving sexp, bin_io ~localize]
+  type (!'a, -'perms) t [@@deriving sexp, sexp_grammar, bin_io ~localize]
 
   val create : 'a -> ('a, [< _ perms ]) t
   val read_only : ('a, [> read ]) t -> ('a, read) t
@@ -30,6 +32,6 @@ module Permissioned : sig
   val of_ref : 'a ref -> ('a, [< read_write ]) t
   val to_ref : ('a, [> read_write ]) t -> 'a ref
   val swap : ('a, [> read_write ]) t -> ('a, [> read_write ]) t -> unit
-  val replace : ('a, [> read_write ]) t -> ('a -> 'a) -> unit
-  val set_temporarily : ('a, [> read_write ]) t -> 'a -> f:(unit -> 'b) -> 'b
+  val replace : ('a, [> read_write ]) t -> local_ ('a -> 'a) -> unit
+  val set_temporarily : ('a, [> read_write ]) t -> 'a -> f:local_ (unit -> 'b) -> 'b
 end

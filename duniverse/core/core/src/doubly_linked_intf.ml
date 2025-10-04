@@ -3,8 +3,8 @@
     Compared to other doubly-linked lists, in this one:
 
     1. Calls to modification functions ([insert*], [move*], ...) detect if the list is
-    being iterated over ([iter], [fold], ...), and if so raise an exception.  For example,
-    a use like the following would raise:
+       being iterated over ([iter], [fold], ...), and if so raise an exception. For
+       example, a use like the following would raise:
 
     {[
       iter t ~f:(fun _ -> ... remove t e ...)
@@ -17,8 +17,8 @@
     takes a [t], first checks that the [Elt] belongs to the [t], and if not, raises.
 
     4. Related to (3), lists cannot be split, though a sort of splicing is available as
-    [transfer]. In other words, no operation will cause one list to become two. This
-    makes this module unsuitable for maintaining the faces of a planar graph under edge
+    [transfer]. In other words, no operation will cause one list to become two. This makes
+    this module unsuitable for maintaining the faces of a planar graph under edge
     insertion and deletion, for example.
 
     5. Another property permitted by (3) and (4) is that [length] is O(1). *)
@@ -27,7 +27,7 @@ open! Import
 
 module type S = sig
   module Elt : sig
-    type 'a t
+    type 'a t : mutable_data with 'a
 
     val value : 'a t -> 'a
 
@@ -38,7 +38,8 @@ module type S = sig
     val sexp_of_t : ('a -> Base.Sexp.t) -> 'a t -> Base.Sexp.t
   end
 
-  type 'a t [@@deriving compare, sexp, sexp_grammar]
+  type 'a t : mutable_data with 'a
+  [@@deriving compare ~localize, quickcheck, sexp, sexp_grammar]
 
   include Container.S1 with type 'a t := 'a t
   include Invariant.S1 with type 'a t := 'a t
@@ -101,8 +102,8 @@ module type S = sig
   val iteri : 'a t -> f:(int -> 'a -> unit) -> unit
   val foldi : 'a t -> init:'acc -> f:(int -> 'acc -> 'a -> 'acc) -> 'acc
 
-  (** [fold_elt t ~init ~f] is the same as fold, except [f] is called with the ['a
-      Elt.t]'s from the list instead of the contained ['a] values.
+  (** [fold_elt t ~init ~f] is the same as fold, except [f] is called with the
+      ['a Elt.t]'s from the list instead of the contained ['a] values.
 
       Note that like other iteration functions, it is an error to mutate [t] inside the
       fold. If you'd like to call [remove] on any of the ['a Elt.t]'s, use
@@ -160,7 +161,7 @@ module type S = sig
   val mapi_inplace : 'a t -> f:(int -> 'a -> 'a) -> unit
 
   (** [filter_inplace t ~f] removes all elements of [t] that don't satisfy [f]. *)
-  val filter_inplace : 'a t -> f:('a -> bool) -> unit
+  val filter_inplace : 'a t -> f:local_ ('a -> bool) -> unit
 
   val filteri_inplace : 'a t -> f:(int -> 'a -> bool) -> unit
 
@@ -184,7 +185,7 @@ module type S = sig
   val to_sequence : 'a t -> 'a Sequence.t
 end
 
-module type Doubly_linked = sig
+module type Doubly_linked = sig @@ portable
   module type S = S
 
   include S

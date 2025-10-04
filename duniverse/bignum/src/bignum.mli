@@ -1,19 +1,22 @@
+@@ portable
+
 (** Arbitrary-precision rational numbers. *)
 open! Core
 
-type t [@@deriving compare ~localize, equal ~localize, globalize, hash, sexp_grammar]
+type t : immutable_data
+[@@deriving compare ~localize, equal ~localize, globalize, hash, sexp_grammar]
 
 (** Sexp conversions represent values as decimals if possible, or defaults to [(x + y/z)]
-    where [x] is decimal and [y] and [z] are integers.  So for example, 1/3 <->
-    (0.333333333 + 1/3000000000).  In string and sexp conversions, values with denominator
+    where [x] is decimal and [y] and [z] are integers. So for example, 1/3 <->
+    (0.333333333 + 1/3000000000). In string and sexp conversions, values with denominator
     of zero are special-cased: 0/0 <-> "nan", 1/0 <-> "inf", and -1/0 <-> "-inf". *)
 include Sexpable.S with type t := t
 
-include Comparable.S with type t := t
+include Comparable.S [@mode portable] with type t := t
 include Hashable.S with type t := t
 
 (** [gen] produces values with an order of magnitude (roughly the number of digits) in the
-    numerator and denominator proportional to [Quickcheck.Generator.size].  Also includes
+    numerator and denominator proportional to [Quickcheck.Generator.size]. Also includes
     values with zero in the denominator. *)
 include Quickcheckable.S with type t := t
 
@@ -39,14 +42,14 @@ val ( - ) : t -> t -> t
 (** Note that division by zero will not raise, but will return inf, -inf, or nan. *)
 val ( / ) : t -> t -> t
 
-(** [m // n] is equivalent to [of_int m / of_int n].  Example: [Bigint.O.(2 // 3)]. *)
+(** [m // n] is equivalent to [of_int m / of_int n]. Example: [Bigint.O.(2 // 3)]. *)
 val ( // ) : int -> int -> t
 
 val ( * ) : t -> t -> t
 
-(** Beware: [2 ** 8_000_000] will take at least a megabyte to store the result,
-    and multiplying numbers a megabyte long is slow no matter how clever your algorithm.
-    Be careful to ensure the second argument is reasonably-sized. *)
+(** Beware: [2 ** 8_000_000] will take at least a megabyte to store the result, and
+    multiplying numbers a megabyte long is slow no matter how clever your algorithm. Be
+    careful to ensure the second argument is reasonably-sized. *)
 val ( ** ) : t -> int -> t
 
 val abs : t -> t
@@ -60,8 +63,8 @@ val sum : t list -> t
 (** Round toward zero to an integer. *)
 val truncate : t -> t
 
-(** Default rounding direction is [`Nearest].
-    [to_multiple_of] defaults to [one] and must not be [zero]. *)
+(** Default rounding direction is [`Nearest]. [to_multiple_of] defaults to [one] and must
+    not be [zero]. *)
 val round
   :  ?dir:[< `Down | `Up | `Nearest | `Zero | `Bankers ]
   -> ?to_multiple_of:t
@@ -94,18 +97,24 @@ val round_as_bigint_exn
   -> t
   -> Bigint.t
 
-(** Convenience wrapper around [round] to round to the specified number
-    of decimal digits.  This raises if the number is infinite or undefined. *)
+(** Convenience wrapper around [round] to round to the specified number of decimal digits.
+    This raises if the number is infinite or undefined. *)
 val round_decimal
   :  ?dir:[< `Down | `Up | `Nearest | `Zero | `Bankers ]
   -> digits:int
   -> t
   -> t
 
+(** For non-negative [digits], [round_decimal_to_nearest_half_to_even ~digits t] is
+    equivalent to, but somewhat more efficient than,
+    [round_decimal ~dir:`Bankers ~digits t].
+
+    @param digits must be non-negative. *)
 val round_decimal_to_nearest_half_to_even : digits:int -> t -> t
+
 val to_float : t -> float
 
-(** Accurate if possible.  If this number is not representable as a finite decimal
+(** Accurate if possible. If this number is not representable as a finite decimal
     fraction, it raises instead. *)
 val to_string_decimal_accurate_exn : t -> string
 
@@ -136,9 +145,10 @@ val is_integer : t -> bool
 (** Returns [Some bigint] if [is_integer t] would return [true]. *)
 val to_bigint_opt : t -> Bigint.t option
 
-(** Pretty print bignum in an approximate decimal form or print inf, -inf, nan.  For
-    example [to_string_hum ~delimiter:',' ~decimals:3 ~strip_zero:false 1234.1999 =
-    "1,234.200"].  No delimiters are inserted to the right of the decimal. *)
+(** Pretty print bignum in an approximate decimal form or print inf, -inf, nan. For
+    example
+    [to_string_hum ~delimiter:',' ~decimals:3 ~strip_zero:false 1234.1999 = "1,234.200"].
+    No delimiters are inserted to the right of the decimal. *)
 val to_string_hum
   :  ?delimiter:char (** defaults to no delimiter *)
   -> ?decimals:int (** defaults to [9] *)
@@ -146,15 +156,15 @@ val to_string_hum
   -> t
   -> string
 
-(** Always accurate.  If the number is representable as a finite decimal, it will return
-    this decimal string.  If the denomiator is zero, it would return "nan", "inf" or
-    "-inf".  Finally, if the bignum is a rational non representable as a decimal,
+(** Always accurate. If the number is representable as a finite decimal, it will return
+    this decimal string. If the denomiator is zero, it would return "nan", "inf" or
+    "-inf". Finally, if the bignum is a rational non representable as a decimal,
     [to_string_accurate t] returns an expression that evaluates to the right value.
-    Example: [to_string_accurate (Bignum.of_string "1/3") = "(0.333333333 +
-    1/3000000000)"].
+    Example:
+    [to_string_accurate (Bignum.of_string "1/3") = "(0.333333333 + 1/3000000000)"].
 
     Since the introduction of that function in the API, [of_string] is able to read any
-    value returned by this function, and would yield the original bignum.  That is:
+    value returned by this function, and would yield the original bignum. That is:
 
     {[
       fun bignum -> bignum |> to_string_accurate |> of_string
@@ -163,19 +173,20 @@ val to_string_hum
     is the identity in [Bignum]. *)
 val to_string_accurate : t -> string
 
-(** Transforming a [float] into a [Bignum.t] needs to be done with care.  Most rationals
+(** Transforming a [float] into a [Bignum.t] needs to be done with care. Most rationals
     and decimals are not exactly representable as floats, thus their float representation
     includes some small imprecision at the end of their decimal form (typically after the
-    17th digits).  It is very likely that when transforming a [float] into a [Bignum.t],
-    it is best to try to determine which was the original value and retrieve it instead of
+    17th digits). It is very likely that when transforming a [float] into a [Bignum.t], it
+    is best to try to determine which was the original value and retrieve it instead of
     honoring the noise coming from its imprecise float representation.
 
     Given that the original value is not available in the context of a function whose type
     is [float -> Bignum.t], it is not possible to solve that problem in a principled way.
     However, a very reasonable approximation is to build the [Bignum] from a short
-    string-representation of the float that guarantees the round-trip [float |> to_string
-    |> of_string].  In particular, if the float was obtained from a short decimal string,
-    this heuristic in practice succeeds at retrieving the original value.
+    string-representation of the float that guarantees the round-trip
+    [float |> to_string |> of_string]. In particular, if the float was obtained from a
+    short decimal string, this heuristic in practice succeeds at retrieving the original
+    value.
 
     In the context where it is assumed that a float is a perfect representative of the
     value meant to be modelled, the actual [Bignum.t] value for it may be built using
@@ -186,7 +197,7 @@ val to_string_accurate : t -> string
     [3.14] is not a representable decimal, thus:
 
     {[
-      of_float_dyadic (Float.of_string "3.14") = (3.14 + 7/56294995342131200)
+      of_float_dyadic (Float.of_string "3.14") = 3.14 + (7 / 56294995342131200)
     ]}
 
     {[
@@ -204,7 +215,7 @@ val of_float_decimal : float -> t
 val of_float_dyadic : float -> t
 
 val of_float : float -> t
-  [@@deprecated "[since 2017-03]: Use [of_float_decimal] or [of_float_dyadic]"]
+[@@deprecated "[since 2017-03]: Use [of_float_decimal] or [of_float_dyadic]"]
 
 (** Rounds toward zero. [None] if the conversion would overflow *)
 val to_int : t -> int option
@@ -218,7 +229,7 @@ val is_zero : t -> bool
     oversight, [sign nan] = -1. *)
 val sign : t -> int
 
-(** The sign of a Bignum.  Raises on nan. *)
+(** The sign of a Bignum. Raises on nan. *)
 val sign_exn : t -> Sign.t
 
 val sign_or_nan : t -> Sign_or_nan.t
@@ -263,7 +274,14 @@ module Stable : sig
     end
 
     type nonrec t = t
-    [@@deriving bin_io, compare, hash, sexp, sexp_grammar, stable_witness]
+    [@@deriving
+      bin_io ~localize
+      , compare ~localize
+      , equal ~localize
+      , hash
+      , sexp
+      , sexp_grammar
+      , stable_witness]
 
     (** Unlike [Bignum.{equal,compare}] and the [compare] function in this submodule, this
         [equal] follows IEEE float semantics: [nan] <> [nan]. *)
@@ -281,7 +299,14 @@ module Stable : sig
     end
 
     type nonrec t = t
-    [@@deriving bin_io, compare, hash, sexp, sexp_grammar, stable_witness]
+    [@@deriving
+      bin_io ~localize
+      , compare ~localize
+      , equal ~localize
+      , hash
+      , sexp
+      , sexp_grammar
+      , stable_witness]
 
     (** Unlike [Bignum.{equal,compare}] and the [compare] function in this submodule, this
         [equal] follows IEEE float semantics: [nan] <> [nan]. *)
@@ -299,20 +324,31 @@ module Stable : sig
     end
 
     type nonrec t = t
-    [@@deriving bin_io, compare, equal, hash, sexp, sexp_grammar, stable_witness]
+    [@@deriving
+      bin_io ~localize
+      , compare ~localize
+      , equal ~localize
+      , hash
+      , sexp
+      , sexp_grammar
+      , stable_witness]
 
     (** Unlike [Bignum.{equal,compare}] and the [compare] function in this submodule, this
-        [equal] follows IEEE float semantics:  [nan] <> [nan]. *)
+        [equal] follows IEEE float semantics: [nan] <> [nan]. *)
     val equal : t -> t -> bool
   end
 end
 
 module Unstable : sig
-  type nonrec t = t [@@deriving bin_io, compare, hash, sexp, sexp_grammar]
+  type nonrec t = t
+  [@@deriving
+    bin_io ~localize, compare ~localize, equal ~localize, hash, sexp, sexp_grammar]
 
-  (** Unlike [Bignum.{equal,compare}] and the [compare] function in this submodule, this
-      [equal] follows IEEE float semantics:  [nan] <> [nan]. *)
-  val equal : t -> t -> bool
+  (** All [Comparisons] in this module match [Float] semantics w.r.t [nan]. So explicitly:
+      - [nan] always propagates through [min] and [max].
+      - [>=], [<=], [=], [>], and [<] always return [false] if either operand is [nan].
+      - [<>] always returns [true] if either operand is [nan]. *)
+  include Comparisons.S with type t := t
 end
 
 module O : sig
@@ -353,10 +389,10 @@ module O : sig
 end
 
 val to_string : t -> string
-  [@@deprecated "[since 2018-02]: Use [to_string_hum] or another [to_string_*] function"]
+[@@deprecated "[since 2018-02]: Use [to_string_hum] or another [to_string_*] function"]
 
 val pp : Format.formatter -> t -> unit
-  [@@deprecated "[since 2018-02]: Use [pp_hum] or [pp_accurate]"]
+[@@deprecated "[since 2018-02]: Use [pp_hum] or [pp_accurate]"]
 
 module For_testing : sig
   val of_string_internal : string -> t
@@ -368,22 +404,22 @@ module For_testing : sig
 end
 
 val bin_size_t : t Bin_prot.Size.sizer
-  [@@deprecated "[since 2019-10] use module V2 or Unstable instead"]
+[@@deprecated "[since 2019-10] use module V2 or Unstable instead"]
 
 val bin_write_t : t Bin_prot.Write.writer
-  [@@deprecated "[since 2019-10] use module V2 or Unstable instead"]
+[@@deprecated "[since 2019-10] use module V2 or Unstable instead"]
 
 val bin_read_t : t Bin_prot.Read.reader
-  [@@deprecated "[since 2019-10] use module V2 or Unstable instead"]
+[@@deprecated "[since 2019-10] use module V2 or Unstable instead"]
 
-val __bin_read_t__ : (int -> t) Bin_prot.Read.reader
-  [@@deprecated "[since 2019-10] use module V2 or Unstable instead"]
+val __bin_read_t__ : t Bin_prot.Read.vtag_reader
+[@@deprecated "[since 2019-10] use module V2 or Unstable instead"]
 
 val bin_writer_t : t Bin_prot.Type_class.writer
-  [@@deprecated "[since 2019-10] use module V2 or Unstable instead"]
+[@@deprecated "[since 2019-10] use module V2 or Unstable instead"]
 
 val bin_reader_t : t Bin_prot.Type_class.reader
-  [@@deprecated "[since 2019-10] use module V2 or Unstable instead"]
+[@@deprecated "[since 2019-10] use module V2 or Unstable instead"]
 
 val bin_t : t Bin_prot.Type_class.t
-  [@@deprecated "[since 2019-10] use module V2 or Unstable instead"]
+[@@deprecated "[since 2019-10] use module V2 or Unstable instead"]

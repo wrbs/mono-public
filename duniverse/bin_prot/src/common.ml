@@ -98,6 +98,10 @@ let safe_get_pos buf pos_ref =
 
 let check_next (buf : buf) next = if next > Array1.dim buf then raise Buffer_short
 
+let check_next_check_overflow (buf : buf) pos next =
+  if next < pos || next > Array1.dim buf then raise Buffer_short
+;;
+
 let get_opt_pos ~loc ~var = function
   | Some pos ->
     if pos < 0 then invalid_arg (sprintf "Bin_prot.Common.%s: %s < 0" loc var);
@@ -112,6 +116,7 @@ external unsafe_blit_buf
   -> dst:buf
   -> len:int
   -> unit
+  @@ portable
   = "bin_prot_blit_buf_stub"
 
 let blit_buf ?src_pos ~src ?dst_pos ~dst len =
@@ -140,8 +145,9 @@ external unsafe_blit_string_buf
   -> buf
   -> len:int
   -> unit
+  @@ portable
   = "bin_prot_blit_string_buf_stub"
-  [@@noalloc]
+[@@noalloc]
 
 external unsafe_blit_bytes_buf
   :  src_pos:int
@@ -150,8 +156,9 @@ external unsafe_blit_bytes_buf
   -> buf
   -> len:int
   -> unit
+  @@ portable
   = "bin_prot_blit_bytes_buf_stub"
-  [@@noalloc]
+[@@noalloc]
 
 let blit_string_buf ?src_pos str ?dst_pos buf ~len =
   let loc = "blit_string_buf" in
@@ -195,21 +202,23 @@ external unsafe_blit_buf_string
   :  src_pos:int
   -> buf
   -> dst_pos:int
-  -> bytes
+  -> (bytes[@local_opt])
   -> len:int
   -> unit
+  @@ portable
   = "bin_prot_blit_buf_bytes_stub"
-  [@@noalloc]
+[@@noalloc]
 
 external unsafe_blit_buf_bytes
   :  src_pos:int
   -> buf
   -> dst_pos:int
-  -> bytes
+  -> (bytes[@local_opt])
   -> len:int
   -> unit
+  @@ portable
   = "bin_prot_blit_buf_bytes_stub"
-  [@@noalloc]
+[@@noalloc]
 
 let blit_buf_bytes ?src_pos buf ?dst_pos str ~len =
   let loc = "blit_buf_string" in
@@ -259,8 +268,9 @@ external unsafe_blit_float_array_buf
   -> buf
   -> len:int
   -> unit
+  @@ portable
   = "bin_prot_blit_float_array_buf_stub"
-  [@@noalloc]
+[@@noalloc]
 
 external unsafe_blit_buf_float_array
   :  src_pos:int
@@ -269,8 +279,9 @@ external unsafe_blit_buf_float_array
   -> float array
   -> len:int
   -> unit
+  @@ portable
   = "bin_prot_blit_buf_float_array_stub"
-  [@@noalloc]
+[@@noalloc]
 
 external unsafe_blit_floatarray_buf
   :  src_pos:int
@@ -279,8 +290,9 @@ external unsafe_blit_floatarray_buf
   -> buf
   -> len:int
   -> unit
+  @@ portable
   = "bin_prot_blit_float_array_buf_stub"
-  [@@noalloc]
+[@@noalloc]
 
 external unsafe_blit_buf_floatarray
   :  src_pos:int
@@ -289,8 +301,9 @@ external unsafe_blit_buf_floatarray
   -> floatarray
   -> len:int
   -> unit
+  @@ portable
   = "bin_prot_blit_buf_float_array_stub"
-  [@@noalloc]
+[@@noalloc]
 
 (***)
 

@@ -69,8 +69,7 @@ type t =
   ; mutable reader_close_started : bool
   ; reader_close_finished : unit Ivar.t
   ; messages : Bigstring.t Deque.t
-  ; mutable
-      read_forever_state :
+  ; mutable read_forever_state :
       [ `None
       | `Running
       | `Waiting of unit Deferred.t
@@ -204,7 +203,7 @@ module Reader : Rpc.Transport.Reader.S with type t = t = struct
           | hd :: tl ->
             (match
                (on_message hd ~pos:0 ~len:(Bigstring.length hd)
-                 : _ Rpc.Transport.Handler_result.t)
+                : _ Rpc.Transport.Handler_result.t)
              with
              | Continue -> handle_batch to_wait continue tl
              | Stop x ->
@@ -369,15 +368,22 @@ let write ?don't_read_yet t writer x =
   write_bigstring ?don't_read_yet t bigstring
 ;;
 
-let write_handshake t handshake =
-  match handshake with
-  | `v3 ->
-    let header = Test_helpers.Header.v3 in
-    write t [%bin_writer: Test_helpers.Header.t] header;
-    write
-      t
-      [%bin_writer: Protocol.Message.nat0_t]
-      (Metadata { identification = None; menu = None })
+let write_handshake ?don't_read_yet t handshake =
+  let header =
+    match handshake with
+    | `v3 -> Test_helpers.Header.v3
+    | `v4 -> Test_helpers.Header.v4
+    | `v5 -> Test_helpers.Header.v5
+    | `v6 -> Test_helpers.Header.v6
+    | `v7 -> Test_helpers.Header.v7
+    | `latest -> Test_helpers.Header.latest
+  in
+  write ?don't_read_yet t [%bin_writer: Test_helpers.Header.t] header;
+  write
+    ?don't_read_yet
+    t
+    [%bin_writer: Protocol.Message.nat0_t]
+    (Metadata { identification = None; menu = None })
 ;;
 
 let write_message ?don't_read_yet t writer (message : _ Protocol.Message.t) =
@@ -389,11 +395,15 @@ let write_message ?don't_read_yet t writer (message : _ Protocol.Message.t) =
   in
   let nat0 =
     match message with
-    | (Heartbeat | Metadata _) as x -> x
+    | (Heartbeat | Metadata _ | Metadata_v2 _ | Close_reason _ | Close_reason_duplicated _)
+      as x -> x
     | Query_v1 x -> Query_v1 { x with data = length x.data }
-    | Response { data = Error _; _ } as x -> x
-    | Response ({ data = Ok data; _ } as x) -> Response { x with data = Ok (length data) }
-    | Query x -> Query { x with data = length x.data }
+    | (Response_v1 { data = Error _; _ } | Response_v2 { data = Error _; _ }) as x -> x
+    | Response_v1 ({ data = Ok data; _ } as x) ->
+      Response_v1 { x with data = Ok (length data) }
+    | Response_v2 ({ data = Ok data; _ } as x) ->
+      Response_v2 { x with data = Ok (length data) }
+    | Query_v2 x -> Query_v2 { x with data = length x.data }
   in
   let first_part =
     Bin_prot.Writer.to_bigstring [%bin_writer: Protocol.Message.nat0_t] nat0
@@ -430,15 +440,15 @@ let expect_message ?later t reader sexp_of =
     (Protocol.Message.sexp_of_t sexp_of)
 ;;
 
-let connect ?implementations ?(send_handshake = Some `v3) t =
+let connect ?implementations ?(send_handshake = Some `latest) t =
   let transport = transport t in
   let r =
     Rpc.Connection.create
       ?implementations
       transport
       ~connection_state:(fun conn ->
-        let bus = Connection.events conn in
-        Bus.iter_exn bus [%here] ~f:(fun event ->
+        let bus = Connection.tracing_events conn in
+        Bus.subscribe_permanently_exn bus ~f:(fun event ->
           let event = [%globalize: Tracing_event.t] event in
           emit t (Tracing_event event));
         t)
@@ -449,10 +459,10 @@ let connect ?implementations ?(send_handshake = Some `v3) t =
     | Ok conn ->
       upon (Rpc.Connection.close_reason ~on_close:`started conn) (fun reason ->
         let reason =
-          let old_elide = !Backtrace.elide in
-          Backtrace.elide := true;
+          let old_elide = Dynamic.get Backtrace.elide in
+          Dynamic.set_root Backtrace.elide true;
           let r = [%sexp_of: Info.t] reason in
-          Backtrace.elide := old_elide;
+          Dynamic.set_root Backtrace.elide old_elide;
           r
         in
         emit t (Close_started reason));

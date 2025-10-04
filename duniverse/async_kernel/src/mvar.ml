@@ -13,7 +13,7 @@ let value_available t = Ivar.read t.value_available
 let is_empty t = Moption.is_none t.current_value
 
 let invariant invariant_a _ (t : _ t) =
-  Invariant.invariant [%here] t [%sexp_of: (_, _) t] (fun () ->
+  Invariant.invariant t [%sexp_of: (_, _) t] (fun () ->
     let check f = Invariant.check_field t f in
     Fields.iter
       ~current_value:(check (Moption.invariant invariant_a))
@@ -85,8 +85,23 @@ let set t v =
   Ivar.fill_if_empty t.value_available ()
 ;;
 
-let update t ~f = set t (f (peek t))
+let update_and_return t ~f =
+  let v = f (peek t) in
+  set t v;
+  v
+;;
+
+let update t ~f = ignore (update_and_return t ~f : _)
 let update_exn t ~f = set t (f (peek_exn t))
+
+let change t ~f =
+  match f (peek t) with
+  | Some v -> set t v
+  | None ->
+    (match take_now t with
+     | None | Some _ -> ())
+;;
+
 let taken t = Bvar.wait t.taken
 
 let rec put t v =
@@ -98,6 +113,18 @@ let rec put t v =
     let%bind () = taken t in
     put t v)
 ;;
+
+let rec put_taken' t v =
+  if is_empty t
+  then (
+    set t v;
+    return (taken t))
+  else (
+    let%bind () = taken t in
+    put_taken' t v)
+;;
+
+let put_taken t v = Deferred.join (put_taken' t v)
 
 let pipe_when_ready t =
   let r, w = Pipe.create () in

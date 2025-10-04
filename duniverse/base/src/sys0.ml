@@ -9,7 +9,7 @@
 
 open! Import0
 
-type backend_type = Stdlib.Sys.backend_type =
+type backend_type : value mod contended portable = Stdlib.Sys.backend_type =
   | Native
   | Bytecode
   | Other of string
@@ -34,8 +34,8 @@ let enable_runtime_warnings = Stdlib.Sys.enable_runtime_warnings
 let runtime_warnings_enabled = Stdlib.Sys.runtime_warnings_enabled
 
 module Make_immediate64
-  (Imm : Stdlib.Sys.Immediate64.Immediate)
-  (Non_imm : Stdlib.Sys.Immediate64.Non_immediate) =
+    (Imm : Stdlib.Sys.Immediate64.Immediate)
+    (Non_imm : Stdlib.Sys.Immediate64.Non_immediate) =
   Stdlib.Sys.Immediate64.Make (Imm) (Non_imm)
 
 let getenv_exn var =
@@ -50,7 +50,19 @@ let getenv var =
   | exception Stdlib.Not_found -> None
 ;;
 
-external opaque_identity : ('a[@local_opt]) -> ('a[@local_opt]) = "%opaque"
-external opaque_identity_global : 'a -> 'a = "%opaque"
+external%template opaque_identity
+  : ('a : any).
+  ('a[@local_opt]) @ c o p u -> ('a[@local_opt]) @ c o p u
+  @@ portable
+  = "%opaque"
+[@@layout_poly]
+[@@mode
+  c = (uncontended, shared, contended)
+  , o = (many, once)
+  , p = (nonportable, portable)
+  , u = (aliased, unique)]
+
+external opaque_identity_global : ('a : any). 'a -> 'a @@ portable = "%opaque"
+[@@layout_poly]
 
 exception Break = Stdlib.Sys.Break
