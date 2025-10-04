@@ -1,0 +1,18 @@
+(executable
+ (name main)
+ (libraries bonsai_synth_example)
+ (preprocess
+  (pps ppx_jane)))
+
+(subdir
+ output
+ (rule
+  (target big-ben.wav)
+  (mode promote)
+  (action
+   (run %{exe:../main.exe} big-ben %{target})))
+ (rule
+  (target middle-c.wav)
+  (mode promote)
+  (action
+   (run %{exe:../main.exe} middle-c %{target}))))

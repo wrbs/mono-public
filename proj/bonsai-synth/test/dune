@@ -1,0 +1,6 @@
+(library
+ (name test_noisy)
+ (libraries core textutils.ascii_table bonsai_synth)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane)))

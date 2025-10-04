@@ -1,0 +1,6 @@
+(library
+ (name bonsai_synth)
+ (libraries core bonsai bonsai_synth_core)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane bonsai.ppx_bonsai)))

@@ -1,0 +1,6 @@
+(library
+ (name bonsai_synth_core)
+ (libraries core async bonsai bonsai.driver core_unix)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane bonsai.ppx_bonsai)))

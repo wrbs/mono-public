@@ -1,0 +1,6 @@
+(library
+ (name bonsai_synth_example)
+ (libraries core async bonsai_synth core_unix.command_unix)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane bonsai.ppx_bonsai)))
