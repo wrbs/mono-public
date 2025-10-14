@@ -9,6 +9,8 @@ val zero : t
 val const : float -> t
 val make : (int -> float) -> t
 val get : t -> int -> float
+val first : t -> float
+val last : t -> float
 
 module O : sig
   val ( + ) : t -> t -> t
@@ -40,3 +42,8 @@ val fold : t -> init:'acc -> f:('acc -> float -> 'acc) -> 'acc
 val foldi : t -> init:'acc -> f:('acc -> int -> float -> 'acc) -> 'acc
 val fold_map : t -> init:'acc -> f:('acc -> float -> 'acc * float) -> 'acc * t
 val fold_mapi : t -> init:'acc -> f:('acc -> int -> float -> 'acc * float) -> 'acc * t
+
+(** unfolds *)
+
+val unfold : 'state -> f:('state -> 'state * float) -> 'state * t
+val unfoldi : 'state -> f:('state -> int -> 'state * float) -> 'state * t

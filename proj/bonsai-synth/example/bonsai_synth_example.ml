@@ -13,17 +13,13 @@ let example_command name computation =
   name, command
 ;;
 
-let mono_time value ~length_sec graph =
-  let stop =
-    match%arr
-      Uptime.at
-        (Bonsai.return (Time_ns.Span.of_int_sec length_sec |> Uptime.of_span_since_start))
-        graph
-    with
-    | Before -> Driver.Stop_or_continue.Continue
-    | After -> Stop
+let mono_time value ~length ~stop_output graph =
+  let on_startup =
+    let%arr sleep = Uptime.sleep graph in
+    let%bind.Effect () = sleep length in
+    stop_output
   in
-  [ value ], stop
+  Driver.Session.create [ value ] ~on_startup
 ;;
 
 let play_sequence graph =
@@ -35,20 +31,24 @@ let play_sequence graph =
   sequence gets fired so it's self correcting if timestamps drift, or make some
   custom thing that fires every tick dispatching events based on elapsed samples. *)
   let%arr sleep = Bonsai.Clock.sleep graph in
-  fun sequence ~bpm ~handle_event ~finish ->
+  fun sequence ~bpm ~handle_event ->
     let beat_secs = 60. /. bpm in
-    List.fold_right sequence ~init:finish ~f:(fun (event, rest) rest_of_sequence ->
-      Effect.Many
-        [ handle_event event
-        ; (let%bind.Effect () = sleep (Time_ns.Span.of_sec (beat_secs *. rest)) in
-           rest_of_sequence)
-        ])
+    List.fold_right
+      sequence
+      ~init:(Effect.return ())
+      ~f:(fun (event, rest) rest_of_sequence ->
+        Effect.Many
+          [ handle_event event
+          ; (let%bind.Effect () = sleep (Time_ns.Span.of_sec (beat_secs *. rest)) in
+             rest_of_sequence)
+          ])
 ;;
 
 module Mono_sequence_event = struct
   type t =
     | Note of Note.t
     | Stop
+    | Effect of unit Effect.t
 end
 
 let sin_sequence sequence graph =
@@ -63,45 +63,34 @@ let sin_sequence sequence graph =
     match%sub envelope with
     | None -> Bonsai.return Block.zero
     | Some env ->
-      let wave = Osc.sin ~freq:(note >>| Note.frequency) graph in
+      let wave = Osc.sin ~freq:(note >>| Note.frequency >>| Block.const) graph in
       env *| wave
   in
-  let stopped, set_stopped = Bonsai.state false graph in
   let start_sequence =
     let%arr play_sequence = play_sequence graph
-    and send_envelope_event = send_envelope_event
-    and set_note = set_note
-    and set_stopped = set_stopped in
-    play_sequence
-      sequence
-      ~bpm:120.
-      ~handle_event:(function
-        | Mono_sequence_event.Note note ->
-          Effect.Many [ set_note note; send_envelope_event Start ]
-        | Stop -> send_envelope_event Stop)
-      ~finish:(set_stopped true)
+    and set_note
+    and send_envelope_event in
+    play_sequence sequence ~bpm:120. ~handle_event:(function
+      | Mono_sequence_event.Note note ->
+        Effect.Many [ set_note note; send_envelope_event Start ]
+      | Stop -> send_envelope_event Stop
+      | Effect effect -> effect)
   in
-  Bonsai.Edge.lifecycle ~on_activate:start_sequence graph;
-  let stop_or_continue =
-    match%arr stopped with
-    | false -> Driver.Stop_or_continue.Continue
-    | true -> Stop
-  in
-  [ output ], stop_or_continue
+  Driver.Session.create [ output ] ~on_startup:start_sequence
 ;;
 
 let command =
   Command.group
     ~summary:"bonsai synth example"
-    [ example_command "middle-c" (fun graph ->
-        let channels =
-          mono_time
-            ~length_sec:2
-            (Osc.sin ~freq:(Bonsai.return (Note.middle_c |> Note.frequency)) graph)
-            graph
-        in
-        channels)
-    ; example_command "big-ben" (fun graph ->
+    [ example_command "middle-c" (fun ~stop_output graph ->
+        mono_time
+          ~length:(Time_ns.Span.of_int_sec 2)
+          ~stop_output
+          (Osc.sin
+             ~freq:(Bonsai.return (Note.middle_c |> Note.frequency |> Block.const))
+             graph)
+          graph)
+    ; example_command "big-ben" (fun ~stop_output graph ->
         sin_sequence
           [ (* change 2 *)
             Note (E, 4), 1.
@@ -129,6 +118,7 @@ let command =
           ; Note (E, 3), 4.
           ; Note (E, 3), 4.
           ; Stop, 1.
+          ; Effect stop_output, 0.
           ]
           graph)
     ]

@@ -1,0 +1,6 @@
+(library
+ (name iterator_async)
+ (libraries core async iterator unique)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane)))

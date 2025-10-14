@@ -2,12 +2,6 @@ open! Core
 open! Async
 open! Import
 
-module Stop_or_continue = struct
-  type t =
-    | Stop
-    | Continue
-end
-
 module Wav_writer : sig
   type t
 
@@ -136,28 +130,56 @@ let mock_time ~sample_rate_hz ~num_samples =
     (Time_ns.Span.of_sec (Float.of_int num_samples /. Float.of_int sample_rate_hz))
 ;;
 
-let map_wav_computation ~wav ~computation ~sample_rate_hz =
-  let open Bonsai.Let_syntax in
-  Bonsai.Dynamic_scope.set
-    Sample_rate.Expert.dynamic_scope
-    (Bonsai.return sample_rate_hz)
-    ~inside:(fun graph ->
-      let signals, stop_or_continue = computation graph in
-      Wav_writer.write_header wav ~sample_rate_hz ~num_channels:(List.length signals);
-      let blocks = Bonsai.all signals in
-      let write_samples =
-        let%arr blocks = blocks in
-        fun () ->
-          for idx = 0 to Block.size - 1 do
-            List.iter blocks ~f:(fun block ->
-              let sample = Block.get block idx in
-              Wav_writer.write_sample wav sample)
-          done
-      in
-      let%arr write_samples = write_samples
-      and stop_or_continue = stop_or_continue in
-      write_samples, stop_or_continue)
-;;
+module Action = struct
+  type t =
+    | Startup of unit Effect.t
+    | Tick of (unit -> unit)
+    | Stop
+end
+
+module Session = struct
+  type t =
+    { on_startup : unit Effect.t Bonsai.t
+    ; channels : Block.t Bonsai.t list
+    }
+
+  let create ?(on_startup = Bonsai.return Effect.Ignore) channels =
+    { on_startup; channels }
+  ;;
+
+  let wrap computation ~wav ~sample_rate_hz =
+    let open Bonsai.Let_syntax in
+    let stopped = Bonsai.Expert.Var.create false in
+    Bonsai.Dynamic_scope.set
+      Sample_rate.Expert.dynamic_scope
+      (Bonsai.return sample_rate_hz)
+      ~inside:(fun graph ->
+        let t =
+          computation
+            ~stop_output:(Effect.of_thunk (fun () -> Bonsai.Expert.Var.set stopped true))
+            graph
+        in
+        Wav_writer.write_header wav ~sample_rate_hz ~num_channels:(List.length t.channels);
+        let is_initialized, set_initialized = Bonsai.state false graph in
+        match%sub is_initialized with
+        | false ->
+          let%arr on_startup = t.on_startup
+          and set_initialized in
+          Action.Startup (Effect.Many [ on_startup; set_initialized true ])
+        | true ->
+          (match%sub Bonsai.Expert.Var.value stopped with
+           | true -> return Action.Stop
+           | false ->
+             let%arr blocks = Bonsai.all t.channels in
+             Action.Tick
+               (fun () ->
+                 for idx = 0 to Block.size - 1 do
+                   List.iter blocks ~f:(fun block ->
+                     let sample = Block.get block idx in
+                     Wav_writer.write_sample wav sample)
+                 done)))
+  ;;
+end
 
 let render_to_wav_file ?(sample_rate_hz = 44_100) ~filename computation =
   Deferred.Or_error.try_with
@@ -170,15 +192,17 @@ let render_to_wav_file ?(sample_rate_hz = 44_100) ~filename computation =
       Bonsai_driver.create
         ~time_source:clock
         ~instrumentation:(Bonsai_driver.Instrumentation.default_for_test_handles ())
-        (map_wav_computation ~wav ~computation ~sample_rate_hz)
+        (Session.wrap computation ~wav ~sample_rate_hz)
     in
     Deferred.repeat_until_finished 0 (fun num_samples ->
       Bonsai_driver.flush driver;
-      let write_samples, stop_or_continue = Bonsai_driver.result driver in
-      match (stop_or_continue : Stop_or_continue.t) with
+      match Bonsai_driver.result driver with
       | Stop -> return (`Finished ())
-      | Continue ->
-        write_samples ();
+      | Startup effect ->
+        Bonsai_driver.schedule_event driver effect;
+        return (`Repeat 0)
+      | Tick f ->
+        f ();
         let num_samples = num_samples + Block.size in
         Bonsai.Time_source.advance_clock
           clock

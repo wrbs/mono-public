@@ -40,11 +40,11 @@ module ADSR = struct
   ;;
 
   let create
-        ?(attack = Bonsai.return (Time_ns.Span.of_int_ms 10))
-        ?(decay = Bonsai.return Time_ns.Span.zero)
-        ?(sustain = Bonsai.return 1.)
-        ?(release = Bonsai.return Time_ns.Span.zero)
-        graph
+    ?(attack = Bonsai.return (Time_ns.Span.of_int_ms 10))
+    ?(decay = Bonsai.return Time_ns.Span.zero)
+    ?(sustain = Bonsai.return 1.)
+    ?(release = Bonsai.return Time_ns.Span.zero)
+    graph
     =
     let state, set_state = Bonsai.state State.Inactive graph in
     let attack = attack >>| Time_ns.Span.to_sec in
@@ -56,10 +56,10 @@ module ADSR = struct
       | Inactive -> return None
       | Active { start } ->
         let%arr now = Uptime.current graph
-        and start = start
-        and attack = attack
-        and decay = decay
-        and sustain = sustain
+        and start
+        and attack
+        and decay
+        and sustain
         and sample_length = Sample_rate.sample_length_sec graph in
         let t0 = Time_ns.Span.to_sec (Uptime.sub now start) in
         Some
@@ -67,20 +67,10 @@ module ADSR = struct
              let t = t0 +. (Float.of_int idx *. sample_length) in
              active_value t ~attack ~decay ~sustain))
       | Releasing { stop_value; stop } ->
-        (* Make the note inactive when release finished *)
-        after_tick
-          (let%arr set_state = set_state
-           and get_now = get_now
-           and release = release
-           and stop = stop in
-           let%bind.Effect now = get_now in
-           let t = Uptime.sub now stop |> Time_ns.Span.to_sec in
-           if Float.O.(t >= release) then set_state Inactive else Effect.return ())
-          graph;
         let%arr now = Uptime.current graph
-        and release = release
-        and stop = stop
-        and stop_value = stop_value
+        and release
+        and stop
+        and stop_value
         and sample_length = Sample_rate.sample_length_sec graph in
         let t0 = Time_ns.Span.to_sec (Uptime.sub now stop) in
         Some
@@ -88,11 +78,17 @@ module ADSR = struct
              let t = t0 +. (Float.of_int idx *. sample_length) in
              releasing_value t ~stop_value ~release))
     in
+    let reset_if_silent =
+      let%arr value and set_state in
+      let%bind.Option block = value in
+      let last_sample = Block.last block in
+      if Float.O.(abs last_sample <= 0.00001) then Some (set_state Inactive) else None
+    in
+    after_tick' reset_if_silent graph;
     let handle_event =
       match%sub state with
       | Inactive | Releasing _ ->
-        let%arr get_now = get_now
-        and set_state = set_state in
+        let%arr get_now and set_state in
         fun event ->
           (match (event : Event.t) with
            | Stop -> Effect.return ()
@@ -100,13 +96,13 @@ module ADSR = struct
              let%bind.Effect now = get_now in
              set_state (Active { start = now }))
       | Active { start } ->
-        let%arr start = start
-        and get_now = get_now
-        and set_state = set_state
-        and attack = attack
-        and decay = decay
-        and sustain = sustain
-        and release = release in
+        let%arr start
+        and get_now
+        and set_state
+        and attack
+        and decay
+        and sustain
+        and release in
         fun event ->
           let%bind.Effect now = get_now in
           (match (event : Event.t) with

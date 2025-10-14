@@ -32,6 +32,15 @@ val stateful
   -> local_ Bonsai.graph
   -> 'a Bonsai.t
 
+(** inflix float comparison operators, very useful in audio code *)
+
+val ( =. ) : float -> float -> bool
+val ( <>. ) : float -> float -> bool
+val ( <. ) : float -> float -> bool
+val ( >. ) : float -> float -> bool
+val ( <=. ) : float -> float -> bool
+val ( >=. ) : float -> float -> bool
+
 (** infix operators for basic signal combination *)
 
 val ( +| ) : here:[%call_pos] -> Block.t Bonsai.t -> Block.t Bonsai.t -> Block.t Bonsai.t

@@ -4,38 +4,77 @@ open Bonsai.Let_syntax
 
 let two_pi = 2. *. Float.pi
 
-let sin ~freq graph =
-  (* state = initial phase. By storing the phase, we allow the frequency to
-     change smoothly without any jumps -- the frequency only affects the
-     delta of the next sample in angle space rather than anything absolute. *)
+module Basic_waveform = struct
+  let sin x = Float.sin (x *. two_pi)
+  let saw x = 1. -. (2. *. x)
+  let square x = if x <=. 0.5 then 1. else -1.
+
+  let triangle x =
+    let value = -.saw x in
+    2. *. (Float.abs value -. 0.5)
+  ;;
+
+  let poly_blep x ~dx =
+    if x <. dx
+    then (
+      let y = x /. dx in
+      y +. y -. (y *. y) -. 1.)
+    else if x >. 1. -. dx
+    then (
+      let y = (x -. 1.) /. dx in
+      y +. y +. (y *. y) +. 1.)
+    else 0.
+  ;;
+
+  let saw_blep x ~dx = saw x -. poly_blep x ~dx
+  let square_blep x ~dx = square x +. poly_blep x ~dx -. poly_blep ((x +. 0.5) %. 1.) ~dx
+
+  let triangle_blep x ~dx ~last_output =
+    let s = square_blep x ~dx in
+    (dx *. s) +. ((1. -. dx) *. last_output)
+  ;;
+end
+
+(* For now for simplicity, just support audio-rate frequencies *)
+
+let make_osc ~freq ~init ~next_sample graph =
+  let dx = freq *.| Sample_rate.sample_length_sec graph in
   stateful
-    ~init:0.
-    (let%arr freq = freq
-     and sample_length = Sample_rate.sample_length_sec graph in
-     let sample_omega = sample_length *. two_pi *. freq in
-     fun phase ->
-       let block =
-         Block.make (fun idx ->
-           let omega = phase +. (Float.of_int idx *. sample_omega) in
-           Float.sin omega)
-       in
-       let next_phase = (phase +. (sample_omega *. Float.of_int Block.size)) %. two_pi in
-       next_phase, block)
+    ~init
+    (let%arr dx and next_sample in
+     fun state -> Block.fold_map dx ~init:state ~f:(fun state dx -> next_sample state ~dx))
     graph
 ;;
 
-let sin' ~freq graph =
-  (* using the above idea to actually allow pretty dynamic frequency switching *)
-  stateful
-    ~init:0.
-    (let%arr freq = freq
-     and sample_length = Sample_rate.sample_length_sec graph in
-     fun init_phase ->
-       let next_phase, block =
-         Block.fold_map freq ~init:init_phase ~f:(fun phase freq ->
-           let phase' = phase +. (sample_length *. two_pi *. freq) in
-           phase', Float.sin phase)
-       in
-       next_phase %. two_pi, block)
+let make_osc_x_dx f =
+  stage (fun ~freq graph ->
+    make_osc
+      ~freq
+      ~init:0.
+      ~next_sample:
+        (Bonsai.return (fun x ~dx ->
+           let value = f x ~dx in
+           let x' = (x +. dx) %. 1. in
+           x', value))
+      graph)
+;;
+
+let make_osc_x_only f = make_osc_x_dx (fun x ~dx:_ -> f x)
+let sin = unstage (make_osc_x_only Basic_waveform.sin)
+let saw = unstage (make_osc_x_only Basic_waveform.saw)
+let saw_blep = unstage (make_osc_x_dx Basic_waveform.saw_blep)
+let square = unstage (make_osc_x_only Basic_waveform.square)
+let square_blep = unstage (make_osc_x_dx Basic_waveform.square_blep)
+let triangle = unstage (make_osc_x_only Basic_waveform.triangle)
+
+let triangle_blep ~freq graph =
+  make_osc
+    ~freq
+    ~init:(~x:0., ~last_output:0.)
+    ~next_sample:
+      (Bonsai.return (fun (~x, ~last_output) ~dx ->
+         let value = Basic_waveform.triangle_blep x ~dx ~last_output in
+         let x' = (x +. dx) %. 1. in
+         (~x:x', ~last_output:value), value))
     graph
 ;;
