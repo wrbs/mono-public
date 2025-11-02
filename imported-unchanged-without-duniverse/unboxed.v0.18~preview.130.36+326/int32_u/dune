@@ -1,6 +1,0 @@
-(library
- (name int32_u)
- (public_name unboxed.int32_u)
- (libraries core bin_prot_unboxed_numbers ocaml_intrinsics_kernel int64_u)
- (preprocess
-  (pps ppx_jane)))

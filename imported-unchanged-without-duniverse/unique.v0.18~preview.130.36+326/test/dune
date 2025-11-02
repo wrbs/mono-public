@@ -1,6 +1,0 @@
-(library
- (name unique_test)
- (public_name unique.test)
- (libraries core unique)
- (preprocess
-  (pps ppx_jane)))

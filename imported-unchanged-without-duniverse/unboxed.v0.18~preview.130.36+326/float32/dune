@@ -1,6 +1,0 @@
-(library
- (name float32)
- (public_name unboxed.float32)
- (libraries base bin_prot stdlib_stable)
- (preprocess
-  (pps ppx_jane)))

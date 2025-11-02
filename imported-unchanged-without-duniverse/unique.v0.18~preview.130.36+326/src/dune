@@ -1,5 +1,0 @@
-(library
- (name unique)
- (public_name unique)
- (libraries basement)
- (preprocess no_preprocessing))

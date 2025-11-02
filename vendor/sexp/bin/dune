@@ -1,0 +1,8 @@
+(executables
+ (modes byte exe)
+ (names main)
+ (public_names sexp)
+ (libraries sexp_cmds async core core_unix.command_unix)
+ (flags :standard -g)
+ (preprocess
+  (pps ppx_jane)))

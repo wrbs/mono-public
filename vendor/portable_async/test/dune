@@ -1,0 +1,7 @@
+(library
+ (name portable_async_test)
+ (libraries async core expect_test_helpers_async parallel
+   parallel.scheduler.work_stealing portable_async portable.test_helpers
+   threads)
+ (preprocess
+  (pps ppx_jane)))

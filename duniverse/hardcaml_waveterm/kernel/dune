@@ -1,6 +1,0 @@
-(library
- (name hardcaml_waveterm_kernel)
- (public_name hardcaml_waveterm.kernel)
- (libraries base hardcaml bignum.bigint re stdio)
- (preprocess
-  (pps ppx_jane)))

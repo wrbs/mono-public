@@ -1,6 +1,0 @@
-(library
- (name validate)
- (public_name core.validate)
- (preprocess
-  (pps ppx_jane))
- (libraries base))
