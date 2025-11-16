@@ -1,0 +1,431 @@
+/* Reset and Base Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    width: 100%;
+    min-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    background: #f5f5f5;
+    color: #333;
+    position: relative;
+}
+
+/* Screen Management */
+.screen {
+    display: none;
+    width: 100%;
+    min-height: 100vh;
+    padding: 20px 0;
+}
+
+.screen.active {
+    display: block;
+}
+
+/* ===== CORPORATE AGE VERIFICATION SCREEN ===== */
+#age-verification-screen.active {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f5f5f5;
+}
+
+.corporate-container {
+    background: white;
+    padding: 40px;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    max-width: 500px;
+    width: 90%;
+    transition: max-width 0.5s ease, width 0.5s ease;
+}
+
+.corporate-container.expanded {
+    max-width: 1200px;
+}
+
+.corporate-header h1 {
+    font-size: 24px;
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 10px;
+}
+
+.corporate-text {
+    color: #666;
+    font-size: 14px;
+    margin-bottom: 30px;
+}
+
+.verification-form {
+    margin-top: 20px;
+}
+
+.form-group {
+    margin-bottom: 0;
+}
+
+.form-group label {
+    display: block;
+    font-size: 14px;
+    font-weight: 500;
+    color: #444;
+    margin-bottom: 8px;
+}
+
+.datepicker-input {
+    width: 100%;
+    padding: 10px 36px 10px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 16px;
+    background: white url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="%23666" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>') no-repeat right 10px center;
+    cursor: pointer;
+    transition: border-color 0.2s, font-family 0s;
+    color: #333;
+}
+
+.datepicker-input::placeholder {
+    color: #999;
+}
+
+.datepicker-input.expanded {
+    font-family: 'Courier New', monospace;
+    background-image: none;
+    padding: 10px;
+}
+
+.datepicker-input:hover {
+    border-color: #999;
+}
+
+.datepicker-input:focus {
+    outline: none;
+    border-color: #5b9dd9;
+}
+
+.datepicker-input.invalid {
+    border-color: #d63638;
+    color: #d63638;
+}
+
+.datepicker-input.valid {
+    border-color: #27ae60;
+    color: #27ae60;
+}
+
+.validation-indicator {
+    display: block;
+    font-size: 13px;
+    margin-top: 5px;
+    color: #d63638;
+    line-height: 1.4;
+    min-height: calc(13px * 1.4);
+    margin-bottom: 0;
+}
+
+.validation-indicator.error {
+    color: #d63638;
+}
+
+.corporate-button {
+    width: 100%;
+    padding: 12px;
+    background: #0073aa;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    margin-top: 10px;
+    transition: background 0.2s;
+}
+
+.corporate-button:hover:not(:disabled) {
+    background: #005a87;
+}
+
+.corporate-button:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+}
+
+.corporate-disclaimer {
+    margin-top: 20px;
+    font-size: 11px;
+    color: #999;
+    line-height: 1.5;
+}
+
+/* ===== EXPANDABLE PUZZLE AREA ===== */
+.puzzle-area {
+    margin-top: 0;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+    border-top: 1px solid #ddd;
+    padding-top: 0;
+}
+
+.puzzle-area.collapsed {
+    max-height: 0;
+}
+
+.puzzle-area.expanded {
+    max-height: 600px;
+    padding-top: 20px;
+}
+
+#blockly-workspace {
+    width: 100%;
+    height: 500px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: #fafafa;
+}
+
+/* Info Bar */
+#info-bar {
+    margin-top: 10px;
+    padding: 10px;
+    background: #f9f9f9;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+#current-numbers {
+    color: #555;
+}
+
+#numbers-display {
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+/* Debug Controls Footer */
+#controls-panel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #f5f5f5;
+    border-top: 2px solid #ccc;
+    padding: 8px 12px;
+    font-family: 'Courier New', 'Consolas', monospace;
+    font-size: 13px;
+    display: none;
+    align-items: center;
+    gap: 12px;
+    z-index: 1000;
+}
+
+#controls-panel.visible {
+    display: flex;
+}
+
+#controls-panel .note {
+    color: #666;
+    margin-right: 8px;
+}
+
+#controls-panel .footer-label {
+    color: #666;
+}
+
+#controls-panel input[type="date"] {
+    padding: 4px 8px;
+    border: 1px solid #ccc;
+    font-family: 'Courier New', 'Consolas', monospace;
+    font-size: 13px;
+}
+
+#controls-panel button {
+    padding: 4px 10px;
+    background: #fff;
+    border: 1px solid #ccc;
+    font-family: 'Courier New', 'Consolas', monospace;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+#controls-panel button:hover {
+    background: #e0e0e0;
+}
+
+#controls-panel select {
+    padding: 4px 8px;
+    border: 1px solid #ccc;
+    font-family: 'Courier New', 'Consolas', monospace;
+    font-size: 13px;
+    background: #fff;
+}
+
+#controls-panel input[type="checkbox"] {
+    margin-right: 4px;
+    cursor: pointer;
+}
+
+/* ===== SUCCESS SCREEN ===== */
+#success-screen.active,
+#failure-screen.active {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f5f5f5;
+}
+
+.result-container {
+    background: white;
+    padding: 40px;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    max-width: 600px;
+    width: 90%;
+    text-align: center;
+}
+
+.result-container h1 {
+    font-size: 32px;
+    margin-bottom: 20px;
+}
+
+.success h1 {
+    color: #27ae60;
+}
+
+.failure h1 {
+    color: #d63638;
+}
+
+.result-date {
+    font-size: 16px;
+    color: #555;
+    margin-bottom: 30px;
+}
+
+.result-date strong {
+    color: #2c3e50;
+    font-size: 18px;
+}
+
+.result-expressions {
+    text-align: left;
+    margin: 20px 0;
+    padding: 20px;
+    background: #f9f9f9;
+    border-radius: 4px;
+}
+
+.expression-result {
+    display: grid;
+    grid-template-columns: 80px 1fr auto auto;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 15px;
+    font-size: 14px;
+}
+
+.expression-result:last-child {
+    margin-bottom: 0;
+}
+
+.expression-result label {
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.expression-result code {
+    background: #e8e8e8;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    overflow-x: auto;
+}
+
+.expression-result span {
+    font-weight: 600;
+    color: #27ae60;
+}
+
+#success-continue {
+    margin-top: 20px;
+}
+
+/* ===== FAILURE SCREEN ===== */
+.failure-message {
+    font-size: 16px;
+    color: #555;
+    margin-bottom: 30px;
+    line-height: 1.6;
+}
+
+.failure-actions {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+}
+
+.failure-actions button {
+    padding: 12px 30px;
+    border: none;
+    border-radius: 4px;
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.failure-actions .primary {
+    background: #0073aa;
+    color: white;
+    flex: 1;
+}
+
+.failure-actions .primary:hover {
+    background: #005a87;
+}
+
+.failure-actions .secondary {
+    background: #e8e8e8;
+    color: #555;
+    flex: 0.7;
+    font-size: 14px;
+}
+
+.failure-actions .secondary:hover {
+    background: #d5d5d5;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    #instructions-panel,
+    .controls-content {
+        max-width: 90%;
+        width: calc(100% - 40px);
+    }
+
+    .expression-result {
+        grid-template-columns: 1fr;
+        gap: 5px;
+    }
+
+    .failure-actions {
+        flex-direction: column;
+    }
+
+    .failure-actions button {
+        width: 100%;
+    }
+}

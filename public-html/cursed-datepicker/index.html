@@ -1,0 +1,125 @@
+<!-- 
+
+  DISCLAIMER! 100% LLM SLOP.
+
+  Everything in this 'datepicker' was written by claude code + asking it to fix
+  or change things or try out ideas.
+
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Age Verification</title>
+    <link rel="stylesheet" href="styles.css">
+
+    <!-- Blockly from CDN -->
+    <script src="https://unpkg.com/blockly@11.1.1/blockly_compressed.js"></script>
+    <script src="https://unpkg.com/blockly@11.1.1/blocks_compressed.js"></script>
+    <script src="https://unpkg.com/blockly@11.1.1/javascript_compressed.js"></script>
+    <script src="https://unpkg.com/blockly@11.1.1/msg/en.js"></script>
+</head>
+<body>
+    <!-- Age Verification Screen (stays visible) -->
+    <div id="age-verification-screen" class="screen active">
+        <div class="corporate-container">
+            <div class="corporate-header">
+                <h1>Age Verification Required</h1>
+                <p class="corporate-text">Please enter your date of birth to continue.</p>
+            </div>
+
+            <form class="verification-form">
+                <div class="form-group">
+                    <label for="dob-input">Date of Birth:</label>
+                    <input type="text"
+                           id="dob-input"
+                           placeholder="Click to select date"
+                           readonly
+                           class="datepicker-input">
+                    <div class="validation-indicator" id="validation-indicator"></div>
+                </div>
+            </form>
+
+            <!-- Expandable Puzzle Area -->
+            <div id="puzzle-area" class="puzzle-area collapsed">
+                <!-- Blockly Workspace -->
+                <div id="blockly-workspace"></div>
+            </div>
+
+            <!-- Continue Button (below puzzle) -->
+            <div id="continue-section" style="margin-top: 20px; text-align: center;">
+                <button type="submit" class="corporate-button" id="continue-button" disabled>Continue</button>
+                <p class="corporate-disclaimer" style="margin-top: 15px;">
+                    By continuing, you agree to our Terms of Service and Privacy Policy.
+                    We collect and process this information in accordance with applicable
+                    data protection regulations.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Success Screen -->
+    <div id="success-screen" class="screen">
+        <div class="result-container success">
+            <h1>✓ Date Verified</h1>
+            <p class="result-date">Your date of birth: <strong id="success-date"></strong></p>
+            <div class="result-expressions">
+                <div class="expression-result">
+                    <label>Year:</label>
+                    <code id="success-year-expr"></code>
+                    <span>=</span>
+                    <span id="success-year-value"></span>
+                </div>
+                <div class="expression-result">
+                    <label>Month:</label>
+                    <code id="success-month-expr"></code>
+                    <span>=</span>
+                    <span id="success-month-value"></span>
+                </div>
+                <div class="expression-result">
+                    <label>Day:</label>
+                    <code id="success-day-expr"></code>
+                    <span>=</span>
+                    <span id="success-day-value"></span>
+                </div>
+            </div>
+            <button id="success-continue" class="corporate-button">Continue to Site</button>
+        </div>
+    </div>
+
+    <!-- Failure Screen -->
+    <div id="failure-screen" class="screen">
+        <div class="result-container failure">
+            <h1>✗ Invalid Date</h1>
+            <p class="failure-message" id="failure-message"></p>
+            <div class="failure-actions">
+                <button id="try-again-button" class="corporate-button primary">Try Again</button>
+                <button id="keep-going-button" class="corporate-button secondary">Continue Anyway</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Debug Controls Footer -->
+    <footer id="controls-panel">
+        <span class="note">(at least) every date 1950-2030 is solvable</span>
+        <input type="date" id="date-picker" min="1950-01-01" max="2030-12-31">
+        <button id="show-solution-button">show solution</button>
+        <button id="show-random-solution-button">random</button>
+        <button id="reset-solution-button">reset</button>
+        <label for="difficulty-select" class="footer-label">number set:</label>
+        <select id="difficulty-select">
+            <option value="solutions/no_1_2_no_50.csv" selected>tricky no 1/2/50, 3-11,13,25</option>
+            <option value="solutions/beta_12nums.csv">easier, 1-5,7,10,12,13,25,50,100</option>
+            <option value="solutions/countdown_consecutive_1to10.csv">every solution uses every number, 1-10,25,50,100</option>
+            <option value="solutions/palindromic.csv">palindromes</option>
+        </select>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="game-logic.js"></script>
+    <script src="blockly-setup.js"></script>
+    <script src="controls.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>
