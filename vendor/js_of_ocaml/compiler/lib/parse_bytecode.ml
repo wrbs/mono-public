@@ -33,9 +33,6 @@ type bytecode = string
 let predefined_exceptions =
   Runtimedef.builtin_exceptions |> Array.to_list |> List.mapi ~f:(fun i name -> i, name)
 
-let crc_name v = Import_info.name v |> Compilation_unit.Name.to_string
-let crc_crc v = Import_info.crc v
-
 (* Read and manipulate debug section *)
 module Debug : sig
   type t
@@ -73,11 +70,11 @@ module Debug : sig
     -> unit
 
   val read :
-    t -> crcs:Import_info.t list -> includes:string list -> in_channel -> unit
+    t -> crcs:(string * string option) list -> includes:string list -> in_channel -> unit
 
   val read_event_list :
        t
-    -> crcs:Import_info.t list
+    -> crcs:(string * string option) list
     -> includes:string list
     -> orig:int
     -> in_channel
@@ -155,7 +152,6 @@ end = struct
     | Some _ as x -> x
     | None -> Fs.find_in_path paths (name ^ ".ml")
 
-
   let read_event
       ~paths
       ~crcs
@@ -226,7 +222,7 @@ end = struct
     fun debug ~crcs ~includes ~orig ic ->
       let crcs =
         let t = String.Hashtbl.create 17 in
-        List.iter crcs ~f:(fun i -> String.Hashtbl.add t (crc_name i) (crc_crc i));
+        List.iter crcs ~f:(fun (m, crc) -> String.Hashtbl.add t m crc);
         t
       in
       let evl : debug_event list = input_value ic in
@@ -2566,7 +2562,7 @@ module Toc : sig
 
   val read_data : t -> in_channel -> Obj.t array
 
-  val read_crcs : t -> in_channel -> Import_info.t array
+  val read_crcs : t -> in_channel -> (string * Digest.t option) list
 
   val read_prim : t -> in_channel -> string
 
@@ -2616,10 +2612,9 @@ end = struct
   let read_crcs toc ic =
     ignore (seek_section toc ic "CRCS");
     let orig_crcs : Import_info.t array = input_value ic in
-    orig_crcs
-    (* List.map (Array.to_list orig_crcs) ~f:(fun import -> *)
-    (*   Import_info.name import |> Compilation_unit.Name.to_string, *)
-    (*   Import_info.crc import) *)
+    List.map (Array.to_list orig_crcs) ~f:(fun import ->
+      Import_info.name import |> Compilation_unit.Name.to_string,
+      Import_info.crc import)
 
   let read_prim toc ic =
     let prim_size = seek_section toc ic "PRIM" in
@@ -2634,12 +2629,11 @@ let read_primitives toc ic =
 
 type bytesections =
   { symb : Ocaml_compiler.Symtable.GlobalMap.t
-  ; crcs : Import_info.t array
+  ; crcs : (string * Digest.t option) list
   ; prim : string list
   ; dlpt : string list
   }
 [@@ocaml.warning "-unused-field"]
-
 
 let from_exe
     ?(includes = [])
@@ -2673,7 +2667,7 @@ let from_exe
         in
         String.Hashtbl.mem keeps
   in
-  let crcs = List.filter ~f:(fun info -> keep (crc_name info)) (Array.to_list orig_crcs) in
+  let crcs = List.filter ~f:(fun (unit, _crc) -> keep unit) orig_crcs in
   let symbols =
     Ocaml_compiler.Symtable.GlobalMap.filter
       (function
@@ -2730,7 +2724,7 @@ let from_exe
         |> Array.of_list
       in
       (* Include linking information *)
-      let sections = { symb = symbols; crcs = Array.of_list crcs; prim = primitives; dlpt = [] } in
+      let sections = { symb = symbols; crcs; prim = primitives; dlpt = [] } in
       let gdata = Var.fresh () in
       let need_gdata = ref false in
       let aliases = Primitive.aliases () in

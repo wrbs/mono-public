@@ -12,11 +12,6 @@
     by native programs and vice versa.
 */
 
-//Provides: caml_is_boot_compiler
-function caml_is_boot_compiler(x) {
-  return 0;
-}
-
 //Provides: caml_float_of_float32 const
 function caml_float_of_float32(x) {
     return x;

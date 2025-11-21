@@ -421,7 +421,7 @@ let link
                 List.iter u.aliases ~f:(fun (a, b) -> Primitive.alias a b);
                 StringSet.union acc (StringSet.of_list u.primitives))
           in
-          let code = Parse_bytecode.link_info ~symbols:!sym ~primitives ~crcs:[||] in
+          let code = Parse_bytecode.link_info ~symbols:!sym ~primitives ~crcs:[] in
           let b = Buffer.create 100 in
           let fmt = Pretty_print.to_buffer b in
           Driver.configure fmt;

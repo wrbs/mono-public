@@ -4,7 +4,7 @@ module J = Jsoo_runtime.Js
 
 type bytecode_sections =
   { symb : Ocaml_compiler.Symtable.GlobalMap.t
-  ; crcs : Import_info.t array
+  ; crcs : (string * Digest.t option) list
   ; prim : string list
   ; dlpt : string list
   }

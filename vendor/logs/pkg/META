@@ -1,5 +1,5 @@
 description = "Logging infrastructure for OCaml"
-version = "0.9.0+dune2"
+version = "0.10.0+dune"
 requires = ""
 archive(byte) = "logs.cma"
 archive(native) = "logs.cmxa"
@@ -10,7 +10,7 @@ exists_if = "logs.cma logs.cmxa"
 package "browser" (
   directory = "browser"
   description = "The logs.browser library"
-  version = "0.9.0+dune2"
+  version = "0.10.0+dune"
   requires = "logs js_of_ocaml-compiler.runtime"
   exports = "logs"
   archive(byte) = "logs_browser.cma"
@@ -23,7 +23,7 @@ package "browser" (
 package "cli" (
   directory = "cli"
   description = "The logs.cli library"
-  version = "0.9.0+dune2"
+  version = "0.10.0+dune"
   requires = "logs cmdliner"
   exports = "logs"
   archive(byte) = "logs_cli.cma"
@@ -36,7 +36,7 @@ package "cli" (
 package "fmt" (
   directory = "fmt"
   description = "The logs.fmt library"
-  version = "0.9.0+dune2"
+  version = "0.10.0+dune"
   requires = "logs fmt"
   exports = "logs"
   archive(byte) = "logs_fmt.cma"
@@ -49,7 +49,7 @@ package "fmt" (
 package "lwt" (
   directory = "lwt"
   description = "The logs.lwt library"
-  version = "0.9.0+dune2"
+  version = "0.10.0+dune"
   requires = "logs lwt"
   exports = "logs"
   archive(byte) = "logs_lwt.cma"
@@ -62,7 +62,7 @@ package "lwt" (
 package "threaded" (
   directory = "threaded"
   description = "The logs.threaded library"
-  version = "0.9.0+dune2"
+  version = "0.10.0+dune"
   requires = "logs threads.posix"
   exports = "logs"
   archive(byte) = "logs_threaded.cma"
@@ -75,7 +75,7 @@ package "threaded" (
 package "top" (
   directory = "top"
   description = "The logs.top library"
-  version = "0.9.0+dune2"
+  version = "0.10.0+dune"
   requires = "logs"
   archive(byte) = "logs_top.cma"
   archive(native) = "logs_top.cmxa"

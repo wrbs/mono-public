@@ -103,7 +103,7 @@ function jsoo_toplevel_init_reloc(f) {
 //Requires: caml_callback
 //Requires: caml_string_of_uint8_array, caml_ba_to_typed_array
 //Requires: jsoo_toplevel_compile, caml_failwith
-//Version: >= 5.3
+//Version: >= 5.2
 function caml_reify_bytecode(code, debug, _digest) {
   if (!jsoo_toplevel_compile) {
     caml_failwith("Toplevel not initialized (jsoo_toplevel_compile)");
@@ -116,7 +116,7 @@ function caml_reify_bytecode(code, debug, _digest) {
 //Requires: caml_callback
 //Requires: caml_string_of_uint8_array, caml_uint8_array_of_bytes
 //Requires: jsoo_toplevel_compile, caml_failwith
-//Version: < 5.3
+//Version: < 5.2
 function caml_reify_bytecode(code, debug, _digest) {
   if (!jsoo_toplevel_compile) {
     caml_failwith("Toplevel not initialized (jsoo_toplevel_compile)");

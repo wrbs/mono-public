@@ -80,6 +80,9 @@ let test_multi =
 let test_threaded =
   test ~/"test/test_threaded.ml" ~requires:[logs_fmt; logs_threaded; threads]
 
+let test_mutext_safe =
+  test ~/"test/test_mutex_safe.ml" ~requires:[logs_fmt; logs_threaded; threads]
+
 let test_lwt =
   let requires = [b0_std; logs_fmt; logs_lwt; fmt; fmt_tty; lwt; lwt_unix] in
   test ~/"test/test_lwt.ml" ~requires
@@ -121,7 +124,7 @@ let default =
       [ "ocaml", {|>= "4.14.0"|};
         "ocamlfind", {|build|};
         "ocamlbuild", {|build|};
-        "topkg", {|build & >= "1.0.3"|};
+        "topkg", {|build & >= "1.1.0"|};
         "mtime", {|with-test|};]
   in
   B0_pack.make "default" ~doc:"logs package" ~meta ~locked:true @@
