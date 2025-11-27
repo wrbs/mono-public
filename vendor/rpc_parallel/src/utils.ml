@@ -5,8 +5,8 @@ open Async
 module Worker_id = struct
   let create = Uuid_unix.create
 
-  (* If we do not use the stable sexp serialization, when running
-     inline tests, we will create UUIDs that fail tests *)
+  (* If we do not use the stable sexp serialization, when running inline tests, we will
+     create UUIDs that fail tests *)
   module T = Uuid.Stable.V1
 
   type t = T.t [@@deriving sexp, bin_io]
@@ -45,18 +45,10 @@ let try_within_exn ~monitor f =
   | Error e -> Error.raise e
 ;;
 
-(* Use /proc/PID/exe to get the currently running executable.
-   - argv[0] might have been deleted (this is quite common with jenga)
-   - `cp /proc/PID/exe dst` works as expected while `cp /proc/self/exe dst` does not *)
-let our_binary =
-  let our_binary_lazy = lazy (Unix.getpid () |> Pid.to_int |> sprintf "/proc/%d/exe") in
-  fun () -> Lazy.force our_binary_lazy
-;;
-
 let our_md5 =
   let our_md5_lazy =
     lazy
-      (Process.run ~prog:"md5sum" ~args:[ our_binary () ] ()
+      (Process.run ~prog:"md5sum" ~args:[ Current_exe.get_path () ] ()
        >>|? fun our_md5 ->
        let our_md5, _ = String.lsplit2_exn ~on:' ' our_md5 in
        our_md5)
@@ -85,8 +77,8 @@ let validate_env env =
 ;;
 
 (* Don't run tests in the worker if we are running an expect test. A call to
-   [Rpc_parallel.For_testing.initialize] will initialize the worker and start the
-   Async scheduler. *)
+   [Rpc_parallel.For_testing.initialize] will initialize the worker and start the Async
+   scheduler. *)
 let force_drop_inline_test =
   if Core.am_running_test then [ "FORCE_DROP_INLINE_TEST", "" ] else []
 ;;

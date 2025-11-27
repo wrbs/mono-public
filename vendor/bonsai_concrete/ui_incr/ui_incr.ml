@@ -1,8 +1,8 @@
 open! Core
 module Incr = Incremental.Make ()
 
-(* This is the default clock for running clients, but bonsai tests have their
-   own separate clocks *)
+(* This is the default clock for running clients, but bonsai tests have their own separate
+   clocks *)
 let clock = Incr.Clock.create ~start:(Time_ns.now ()) ()
 
 include Incr

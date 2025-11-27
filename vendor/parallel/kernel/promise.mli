@@ -7,22 +7,36 @@ include module type of struct
   include Parallel_kernel0.Promise
 end
 
+exception Out_of_fibers
+
 val start : unit -> 'a t
 
-(** [fiber t job ~scheduler ~tokens] attaches [t] to [job] and returns a fiber [f] that
-    may be executed on another domain. [f] starts with [tokens] promotion tokens.
+(** [fiber_exn t job ~scheduler ~tokens] attaches [t] to [job] and allocates a fiber [f]
+    that may be executed on another domain. [f] starts with [tokens] promotion tokens.
 
     Applying [f] returns after one of three conditions are met.
 
     - If [t] has already been awaited, [f] returns immediately. Otherwise, [f] applies
-      [job] with a fresh [Parallel.t] created from [scheduler].
+      [job] with a fresh [Parallel.t] using [scheduler] and [tokens].
 
-    - If applying [job] suspends the current fiber, [f] returns immediately. When the
-      awaited fiber completes, it will resume [f].
+    - If applying [job] suspends the current fiber, [f] returns immediately. This occurs
+      if [job] awaits another promise or an [Await.Trigger.t]. When the promise is filled
+      or the trigger is signaled, [f] is resubmitted to [scheduler].
 
-    - If [job] returns a result and another fiber is awaiting [t], [f] resumes the awaiter
-      with the result. Otherwise, [f] stores the result in [t] and returns. *)
-val fiber
+    - If [job] returns a result and another fiber is awaiting [t], [f] resubmits the
+      awaiter to [scheduler]. Otherwise, [f] stores the result in [t].
+
+    @raise Out_of_fibers if unable to allocate a fiber. *)
+val fiber_exn
+  :  'a t
+  -> 'a Parallel_kernel1.Job.t @ once portable
+  -> scheduler:Parallel_kernel0.Scheduler.t
+  -> tokens:int
+  -> (unit -> unit) @ once portable
+
+(** Like [fiber], but does not attempt to allocate the fiber until [f] is applied. If [f]
+    fails to allocate the fiber, it returns without executing [job] or claiming [t]. *)
+val try_fiber
   :  'a t
   -> 'a Parallel_kernel1.Job.t @ once portable
   -> scheduler:Parallel_kernel0.Scheduler.t

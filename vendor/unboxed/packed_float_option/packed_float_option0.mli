@@ -20,7 +20,7 @@ include%template
   with type t := t
    and type value := float
 
-include Comparable_binable with type t := t
+include Comparable.Map_and_set_binable with type t := t
 
 module Array : sig
   type elt := t
@@ -32,7 +32,7 @@ module Array : sig
     Float_array.Permissioned with type permissionless := t and type float_elt := elt
 
   (** Like [of_float_nan_as_none], except it reinterprets the array. Note that this is a
-      view into the array, and no copy is created. **)
+      view into the array, and no copy is created. *)
   val view_of_float_array_nan_as_none : Float_array.t -> t
 
   (** Like [to_float_none_as_nan], except it reinterprets the array. Note that this is a
@@ -41,6 +41,11 @@ module Array : sig
 end
 
 val zero : t
+
+(** Orders [none] before anything else *)
+val compare : t -> t -> int
+
+val between : t -> low:t -> high:t -> bool
 
 (** Unlike polymorphic compare, [none=none]. *)
 val equal : t -> t -> bool
@@ -71,46 +76,39 @@ val exp : t -> t
     [false]: otherwise, including when operand is [none] *)
 val is_inf : t -> bool
 
-(* Returns:
-   [true]: if operand is [some val], such that [Float.is_positive val]
-   [false]:  otherwise, including when operand is [none]
+(* Returns: [true]: if operand is [some val], such that [Float.is_positive val] [false]:
+   otherwise, including when operand is [none]
 *)
 val is_positive : t -> bool
 
-(* Returns:
-   [true]: if operand is [some val], such that [Float.is_non_positive val]
+(* Returns: [true]: if operand is [some val], such that [Float.is_non_positive val]
    [false]: otherwise, including when operand is [none]
 *)
 val is_non_positive : t -> bool
 
-(* Returns:
-   [true]: if operand is [some val], such that [Float.is_negative val]
-   [false]:  otherwise, including when operand is [none]
+(* Returns: [true]: if operand is [some val], such that [Float.is_negative val] [false]:
+   otherwise, including when operand is [none]
 *)
 val is_negative : t -> bool
 
-(* Returns:
-   [true]: if operand is [some val], such that [Float.is_non_negative val]
+(* Returns: [true]: if operand is [some val], such that [Float.is_non_negative val]
    [false]: otherwise, including when operand is [none]
 *)
 val is_non_negative : t -> bool
 
-(* Returns:
-   [true]: if operand is [some val], such that [Float.is_integer val]
-   [false]:  otherwise, including when operand is [none]
+(* Returns: [true]: if operand is [some val], such that [Float.is_integer val] [false]:
+   otherwise, including when operand is [none]
 *)
 val is_integer : t -> bool
 
-(* Returns:
-   [true]: if operand is [some val], such that [Float.is_finite val]
-   [false]: otherwise, including when operand is [none]
+(* Returns: [true]: if operand is [some val], such that [Float.is_finite val] [false]:
+   otherwise, including when operand is [none]
 *)
 val is_finite : t -> bool
 
-(** The result of [min] and [max] will be [none] if either operand is. *)
+(** The result of [min] will be [none] if either operand is. *)
 val min : t -> t -> t
 
-val max : t -> t -> t
 val inv : t -> t
 val scale : t -> float -> t
 
@@ -147,17 +145,33 @@ module Infix : sig
   val ( / ) : t -> t -> t
   val ( ** ) : t -> t -> t
 
-  (** Returns [false] if either operand is [none]. *)
-
-  val ( < ) : t -> t -> bool
-  val ( <= ) : t -> t -> bool
-  val ( > ) : t -> t -> bool
-  val ( >= ) : t -> t -> bool
-
   (** Returns true if both operands are [none] or (not [none] and equal). *)
 
   val ( = ) : t -> t -> bool
   val ( <> ) : t -> t -> bool
+end
+
+(** Operations where we use NaN semantics even though they are inconsistent with the
+    remaining operators, e.g., [>=] violates the equivalance [a >= b <-> a > b || a = b]
+    because it returns [false] for two [none] inputs. *)
+module Ieee_nan : sig
+  module Infix : sig
+    (** Returns [false] if either operand is none *)
+
+    val ( < ) : t -> t -> bool [@@zero_alloc]
+    val ( <= ) : t -> t -> bool [@@zero_alloc]
+    val ( > ) : t -> t -> bool [@@zero_alloc]
+    val ( >= ) : t -> t -> bool [@@zero_alloc]
+  end
+
+  include module type of Infix
+
+  (** The result of [max] will be [none] if either operand is. This is inconsistent with
+      [compare], which considers [none] values "smaller" than everything else *)
+  val max : t -> t -> t
+
+  (** Returns [none] if any argument is [none]. *)
+  val clamp_exn : t -> min:t -> max:t -> t
 end
 
 module Local : sig
@@ -175,10 +189,6 @@ module Local : sig
     val ( - ) : local_ t -> local_ t -> local_ t
     val ( * ) : local_ t -> local_ t -> local_ t
     val ( / ) : local_ t -> local_ t -> local_ t
-    val ( < ) : local_ t -> local_ t -> bool
-    val ( <= ) : local_ t -> local_ t -> bool
-    val ( > ) : local_ t -> local_ t -> bool
-    val ( >= ) : local_ t -> local_ t -> bool
     val ( = ) : local_ t -> local_ t -> bool
     val ( <> ) : local_ t -> local_ t -> bool
   end
@@ -215,14 +225,14 @@ end
     choice and more we haven't implemented everything. Feel free to add!) *)
 module Unboxed : sig
   type boxed := t
-  type t : float64 mod everything = private float# [@@deriving quickcheck]
+  type t : float64 mod everything = private float# [@@deriving quickcheck, typerep]
 
   val globalize : local_ t -> t
   val to_string : t -> string
   val sexp_of_t : t -> Sexp.t
   val t_of_sexp : Sexp.t -> t
 
-  include%template Bin_prot.Binable.S_any [@mode local] with type t := t
+  include%template Bin_prot.Binable.S [@mode local] with type t := t
 
   include Ppx_hash_lib.Hashable.S_any with type t := t
 
@@ -258,11 +268,10 @@ module Unboxed : sig
   val of_option : float option @ m -> t
   val to_option : t -> float option @ m]
 
-  (** The result of [min] and [max] will be [none] if either operand is. *)
+  (** The result of [min] will be [none] if either operand is. *)
   val min : t -> t -> t
   [@@zero_alloc]
 
-  val max : t -> t -> t [@@zero_alloc]
   val select : bool -> t -> t -> t [@@zero_alloc]
   val some_if : bool -> float# -> t [@@zero_alloc]
 
@@ -297,26 +306,56 @@ module Unboxed : sig
   val value_exn : t -> Float_u.t [@@zero_alloc]
   val compare : t -> t -> int [@@zero_alloc]
 
+  (** Returns [false] if [t] is [none] *)
+
+  val is_finite : t -> bool [@@zero_alloc]
+  val is_inf : t -> bool [@@zero_alloc]
+  val is_positive : t -> bool [@@zero_alloc]
+  val is_non_negative : t -> bool [@@zero_alloc]
+  val is_negative : t -> bool [@@zero_alloc]
+  val is_non_positive : t -> bool [@@zero_alloc]
+  val is_integer : t -> bool [@@zero_alloc]
+
   module Infix : sig
     val ( + ) : t -> t -> t [@@zero_alloc]
     val ( - ) : t -> t -> t [@@zero_alloc]
     val ( * ) : t -> t -> t [@@zero_alloc]
     val ( / ) : t -> t -> t [@@zero_alloc]
     val ( ** ) : t -> t -> t [@@zero_alloc]
-    val ( < ) : t -> t -> bool [@@zero_alloc]
-    val ( <= ) : t -> t -> bool [@@zero_alloc]
-    val ( > ) : t -> t -> bool [@@zero_alloc]
-    val ( >= ) : t -> t -> bool [@@zero_alloc]
     val ( = ) : t -> t -> bool [@@zero_alloc]
     val ( <> ) : t -> t -> bool [@@zero_alloc]
   end
 
-  module O = Infix
+  (** See [Ieee_nan] of the boxed type *)
+  module Ieee_nan : sig
+    module Infix : sig
+      val ( < ) : t -> t -> bool [@@zero_alloc]
+      val ( <= ) : t -> t -> bool [@@zero_alloc]
+      val ( > ) : t -> t -> bool [@@zero_alloc]
+      val ( >= ) : t -> t -> bool [@@zero_alloc]
+    end
+
+    include module type of Infix
+
+    val max : t -> t -> t [@@zero_alloc]
+  end
+
+  include module type of Infix
+
+  module O : sig
+    val%template box : t @ m -> boxed @ m
+    [@@zero_alloc_if_local m] [@@mode m = (global, local)]
+
+    val unbox : boxed @ local -> t [@@zero_alloc]
+
+    include module type of Infix
+
+    val abs : t -> t [@@zero_alloc]
+    val neg : t -> t [@@zero_alloc]
+  end
 
   module Array : sig
     include Float_u.Array with type elt := t
-
-    val sexp_of_t : t -> Sexp.t
   end
 
   val merge : t -> t -> f:(float# -> float# -> float#) -> t
@@ -332,11 +371,12 @@ module Unboxed : sig
       val sexp_of_t : t -> Sexp.t
       val t_of_sexp : Sexp.t -> t
 
-      include%template Bin_prot.Binable.S_any [@mode local] with type t := t
+      include%template Bin_prot.Binable.S [@mode local] with type t := t
 
       include Ppx_hash_lib.Hashable.S_any with type t := t
 
       val typerep_of_t : t Typerep.t
+      val typename_of_t : t Typerep_lib.Typename.t
       val equal : t -> t -> bool
       val compare : t -> t -> int
     end

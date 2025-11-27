@@ -1,6 +1,0 @@
-(library
- (name portable_async)
- (public_name portable_async)
- (libraries async_kernel await concurrent core parallel.kernel)
- (preprocess
-  (pps ppx_jane)))

@@ -88,21 +88,31 @@ module Itoa = struct
      least-significant digits, left-padded with '0', prefixed by the sign ('-').
 
      E.g. for [len = 3]:
-     -    5 -> "005"
-     -   -5 -> "-05"
-     -   50 -> "050"
-     -  -50 -> "-50"
-     -  500 -> "500"
+     - 5 -> "005"
+     - -5 -> "-05"
+     - 50 -> "050"
+     - -50 -> "-50"
+     - 500 -> "500"
      - -500 -> "-00"
 
-     The publicly-exposed functions compute the necessary [len] to prevent any digits
-     from being truncated, but this function is used internally in cases where we are
-     already confident the decimal will fit and can thus skip the extra work. *)
+     The publicly-exposed functions compute the necessary [len] to prevent any digits from
+     being truncated, but this function is used internally in cases where we are already
+     confident the decimal will fit and can thus skip the extra work. *)
   let[@inline] gen_poke_padded_decimal_trunc ~buf_pos t ~pos ~len int =
     let pos = (buf_pos [@inlined hint]) t ~pos ~len in
     if int < 0
-    then unsafe_poke_negative_decimal (buf t) ~pos ~len int
-    else unsafe_poke_negative_decimal_without_sign (buf t) ~pos ~len (-int)
+    then
+      unsafe_poke_negative_decimal
+        ([%template buf [@mode local]] t)
+        ~pos
+        ~len
+        int [@nontail]
+    else
+      unsafe_poke_negative_decimal_without_sign
+        ([%template buf [@mode local]] t)
+        ~pos
+        ~len
+        (-int) [@nontail]
   ;;
 
   (* See [gen_poke_padded_decimal_trunc] re: truncation. *)
@@ -163,15 +173,23 @@ module Date_string = struct
 
   let[@inline] gen_poke_iso8601_extended ~buf_pos t ~pos date =
     let pos = (buf_pos [@inlined hint]) t ~pos ~len:len_iso8601_extended in
-    Itoa.unsafe_poke_negative_decimal_without_sign (buf t) ~pos ~len:4 (-Date.year date);
+    Itoa.unsafe_poke_negative_decimal_without_sign
+      ([%template buf [@mode local]] t)
+      ~pos
+      ~len:4
+      (-Date.year date);
     let pos = pos + 4 in
     Itoa.unsafe_poke_negative_decimal
-      (buf t)
+      ([%template buf [@mode local]] t)
       ~pos
       ~len:3
       (-Month.to_int (Date.month date));
     let pos = pos + 3 in
-    Itoa.unsafe_poke_negative_decimal (buf t) ~pos ~len:3 (-Date.day date)
+    Itoa.unsafe_poke_negative_decimal
+      ([%template buf [@mode local]] t)
+      ~pos
+      ~len:3
+      (-Date.day date) [@nontail]
   ;;
 
   let poke_iso8601_extended t ~pos date =

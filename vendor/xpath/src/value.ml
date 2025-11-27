@@ -138,10 +138,9 @@ module Xpath_comparison = struct
     | Node_set, Node_set ->
       let min1, max1 = node_set_min_and_max value1 in
       let min2, max2 = node_set_min_and_max value2 in
-      (* Nan will always be false for these functions.
-         if operation is <, then we care about min1 < max2.
-         if operation is >, then we care about max1 > min2.
-         Same things apply if equality is included.
+      (* Nan will always be false for these functions. if operation is <, then we care
+         about min1 < max2. if operation is >, then we care about max1 > min2. Same things
+         apply if equality is included.
       *)
       (match op with
        | Less_than -> Float.(min1 < max2)

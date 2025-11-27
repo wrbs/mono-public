@@ -282,6 +282,7 @@ let%expect_test "record with sexp types" =
       ; b : int list
       ; c : int array
       ; d : bool
+      ; e : int Or_null.t
       }
     [@@deriving equal, sexp_of]
 
@@ -305,7 +306,17 @@ let%expect_test "record with sexp types" =
                          ; conv = int_of_sexp
                          ; rest =
                              Field
-                               { name = "d"; kind = Sexp_bool; conv = (); rest = Empty }
+                               { name = "d"
+                               ; kind = Sexp_bool
+                               ; conv = ()
+                               ; rest =
+                                   Field
+                                     { name = "e"
+                                     ; kind = Sexp_or_null
+                                     ; conv = int_of_sexp
+                                     ; rest = Empty
+                                     }
+                               }
                          }
                    }
              })
@@ -314,43 +325,44 @@ let%expect_test "record with sexp types" =
           | "b" -> 1
           | "c" -> 2
           | "d" -> 3
+          | "e" -> 4
           | _ -> -1)
         ~allow_extra_fields:false
-        ~create:(fun (a, (b, (c, (d, ())))) -> { a; b; c; d })
+        ~create:(fun (a, (b, (c, (d, (e, ()))))) -> { a; b; c; d; e })
     ;;
   end
   in
   let test = test (module M) in
   (* in order *)
   test "((a 1) (b (2 3)) (c (4 5)) (d))";
-  [%expect {| (Ok ((a (1)) (b (2 3)) (c (4 5)) (d true))) |}];
+  [%expect {| (Ok ((a (1)) (b (2 3)) (c (4 5)) (d true) (e ()))) |}];
   (* reverse order *)
   test "((d) (c ()) (b ()) (a 1))";
-  [%expect {| (Ok ((a (1)) (b ()) (c ()) (d true))) |}];
+  [%expect {| (Ok ((a (1)) (b ()) (c ()) (d true) (e ()))) |}];
   (* missing field d *)
   test "((a 1) (b (2 3)) (c (4 5)))";
-  [%expect {| (Ok ((a (1)) (b (2 3)) (c (4 5)) (d false))) |}];
+  [%expect {| (Ok ((a (1)) (b (2 3)) (c (4 5)) (d false) (e ()))) |}];
   (* missing field c *)
   test "((a 1) (b (2 3)) (d))";
-  [%expect {| (Ok ((a (1)) (b (2 3)) (c ()) (d true))) |}];
+  [%expect {| (Ok ((a (1)) (b (2 3)) (c ()) (d true) (e ()))) |}];
   (* missing field b *)
   test "((a 1) (c (2 3)) (d))";
-  [%expect {| (Ok ((a (1)) (b ()) (c (2 3)) (d true))) |}];
+  [%expect {| (Ok ((a (1)) (b ()) (c (2 3)) (d true) (e ()))) |}];
   (* missing field a *)
   test "((b (1 2)) (c (3 4)) (d))";
-  [%expect {| (Ok ((a ()) (b (1 2)) (c (3 4)) (d true))) |}];
+  [%expect {| (Ok ((a ()) (b (1 2)) (c (3 4)) (d true) (e ()))) |}];
   (* extra field *)
-  test "((a 1) (b (2 3)) (c (4 5)) (d) (e (6 7)))";
+  test "((a 1) (b (2 3)) (c (4 5)) (d) (e 6) (f (7 8)))";
   [%expect
     {|
     (Error
      (Of_sexp_error
-      "M.t_of_sexp: extra fields: e"
-      (invalid_sexp ((a 1) (b (2 3)) (c (4 5)) (d) (e (6 7))))))
+      "M.t_of_sexp: extra fields: f"
+      (invalid_sexp ((a 1) (b (2 3)) (c (4 5)) (d) (e 6) (f (7 8))))))
     |}];
   (* all fields missing *)
   test "()";
-  [%expect {| (Ok ((a ()) (b ()) (c ()) (d false))) |}];
+  [%expect {| (Ok ((a ()) (b ()) (c ()) (d false) (e ()))) |}];
   ()
 ;;
 
@@ -537,18 +549,27 @@ let%expect_test "simple [to_string__stack] test" =
   (Sexp.to_string [@alloc stack]) sexp |> print_local;
   [%expect {| (atom-at-0(atom-at-1-a atom-at-1-b)) |}];
   (Sexp.to_string_mach [@alloc stack]) sexp |> print_local;
-  [%expect {| (atom-at-0(atom-at-1-a atom-at-1-b)) |}]
+  [%expect {| (atom-at-0(atom-at-1-a atom-at-1-b)) |}];
+  (Sexp.to_string_hum [@alloc stack]) sexp |> print_local;
+  [%expect {| (atom-at-0 (atom-at-1-a atom-at-1-b)) |}]
 ;;
 
-let%expect_test _ =
+let%expect_test "round-trip [__stack] versions of [to_string]" =
   Base_quickcheck.Test.run_exn
     (module struct
-      include Sexp
+      open Base_quickcheck
 
-      let quickcheck_generator = Base_quickcheck.Generator.sexp
-      let quickcheck_shrinker = Base_quickcheck.Shrinker.sexp
+      module Sexp = struct
+        include Sexp
+
+        let quickcheck_generator = Generator.sexp
+        let quickcheck_shrinker = Shrinker.sexp
+      end
+
+      type t = Sexp.t * int option * int option
+      [@@deriving quickcheck ~generator ~shrinker, sexp_of]
     end)
-    ~f:(fun sexp ->
+    ~f:(fun (sexp, indent, max_width) ->
       let str = Sexp.to_string sexp in
       let stack_allocated_str =
         (Sexp.to_string [@alloc stack]) sexp |> String.globalize
@@ -558,42 +579,47 @@ let%expect_test _ =
       let stack_allocated_str_mach =
         (Sexp.to_string_mach [@alloc stack]) sexp |> String.globalize
       in
-      require_equal (module String) str_mach stack_allocated_str_mach)
+      require_equal (module String) str_mach stack_allocated_str_mach;
+      let str_hum = Sexp.to_string_hum ?indent ?max_width sexp in
+      let stack_allocated_str_hum =
+        (Sexp.to_string_hum [@alloc stack]) ?indent ?max_width sexp |> String.globalize
+      in
+      require_equal (module String) str_hum stack_allocated_str_hum)
 ;;
 
 (* Assert that the module types defined by sexplib0 are equivalent to those derived by
    ppx_sexp_conv. *)
 module _ = struct
   module type S = sig
-    type t [@@deriving sexp]
+    type t : any [@@deriving sexp]
   end
 
   module type S1 = sig
-    type 'a t [@@deriving sexp]
+    type 'a t : any [@@deriving sexp]
   end
 
   module type S2 = sig
-    type ('a, 'b) t [@@deriving sexp]
+    type ('a, 'b) t : any [@@deriving sexp]
   end
 
   module type S3 = sig
-    type ('a, 'b, 'c) t [@@deriving sexp]
+    type ('a, 'b, 'c) t : any [@@deriving sexp]
   end
 
   module type S_with_grammar = sig
-    type t [@@deriving sexp, sexp_grammar]
+    type t : any [@@deriving sexp, sexp_grammar]
   end
 
   module type S1_with_grammar = sig
-    type 'a t [@@deriving sexp, sexp_grammar]
+    type 'a t : any [@@deriving sexp, sexp_grammar]
   end
 
   module type S2_with_grammar = sig
-    type ('a, 'b) t [@@deriving sexp, sexp_grammar]
+    type ('a, 'b) t : any [@@deriving sexp, sexp_grammar]
   end
 
   module type S3_with_grammar = sig
-    type ('a, 'b, 'c) t [@@deriving sexp, sexp_grammar]
+    type ('a, 'b, 'c) t : any [@@deriving sexp, sexp_grammar]
   end
 
   let (T : ((module Sexpable.S), (module S)) Type_equal.t) = T
@@ -619,10 +645,7 @@ module%test Illegal_chars = struct
     List.init num_tests ~f:(( + ) start)
     |> List.iter ~f:(fun (c : int) ->
       let c : char = Stdlib.Obj.magic c in
-      Expect_test_helpers_base.require_equal
-        (module Sexp)
-        (sexp_of_char c)
-        (sexp_of_char' c))
+      require_equal (module Sexp) (sexp_of_char c) (sexp_of_char' c))
   ;;
 
   let%expect_test _ =

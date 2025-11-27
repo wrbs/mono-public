@@ -9,12 +9,11 @@
    v}
 
    Characters are stored in reverse order (first character in the lowest order bits),
-   right-justified, and 0-padded.  This is intended both for efficient manipulation and to
+   right-justified, and 0-padded. This is intended both for efficient manipulation and to
    push entropy toward low-order bits so that the identity hash function is reasonable.
 
-   Conveniently, this also makes the int values relatively easy to read in hex form.  For
-   example, "abc" is 0x0300_0000_0063_6261 (note ASCII codes a=0x61, b=0x62, and
-   c=0x63). *)
+   Conveniently, this also makes the int values relatively easy to read in hex form. For
+   example, "abc" is 0x0300_0000_0063_6261 (note ASCII codes a=0x61, b=0x62, and c=0x63). *)
 
 open Core.Core_stable
 
@@ -169,7 +168,8 @@ module Stable = struct
     end
 
     include T_stringable
-    include Sexpable.Of_stringable.V1 [@modality portable] (T_stringable)
+
+    include%template Sexpable.Of_stringable.V1 [@modality portable] (T_stringable)
 
     let rec lexicographic_compare_from t1 t2 ~len1 ~len2 ~min_len ~pos =
       if pos >= min_len
@@ -393,8 +393,8 @@ module%test [@name "Stable.V1"] _ = struct
   let%test _ = Exn.does_raise (fun () -> of_int_exn 0x0067_6665_6463_6261)
 end
 
-(* This code is very delicate with all the bit banging.  We're relying heavily on the
-   tests in immediate_unit_tests.ml. *)
+(* This code is very delicate with all the bit banging. We're relying heavily on the tests
+   in immediate_unit_tests.ml. *)
 
 include Stable.V1
 include (Int : Typerep_lib.Typerepable.S with type t := t)
@@ -434,8 +434,7 @@ module For_mem = struct
     (* Finally, by ANDing [x2] and [x3] the result is the high bits set of any byte in [x]
        which was zero, since the high bits set due to a value greater than 0x80 in the
        first sub-expression are masked off by the second (again modulo the 0x8100
-       exception, which always leaves at least the rightmost equal byte to witness
-       [mem]). *)
+       exception, which always leaves at least the rightmost equal byte to witness [mem]). *)
     x2 land x3 <> 0
   ;;
 
@@ -452,8 +451,8 @@ end
 
 let[@zero_alloc] mem t char =
   let open For_mem in
-  (* Since [mem] is usually called with a constant search [char], only one version of
-       this code is typically inlined. *)
+  (* Since [mem] is usually called with a constant search [char], only one version of this
+     code is typically inlined. *)
   if Char.equal char '\000' then has_zero_char t else has_non_zero_char t char
 ;;
 
@@ -501,7 +500,7 @@ let%test_unit "append_exn" =
   assert (does_raise (fun () -> append_exn (of_string "123456") (of_string "654321")))
 ;;
 
-include Identifiable.Make [@modality portable] (struct
+include%template Identifiable.Make [@modality portable] (struct
     include Stable.V1
 
     let module_name = "Immediate.Short_string"
@@ -536,7 +535,7 @@ end
 module Lexicographic = struct
   type nonrec t = t
 
-  include Identifiable.Make [@modality portable] (struct
+  include%template Identifiable.Make [@modality portable] (struct
       type nonrec t = t [@@deriving bin_io, hash, sexp]
 
       let of_string = of_string
@@ -589,7 +588,7 @@ module Option = struct
     end
   end
 
-  include Identifiable.Make [@modality portable] (struct
+  include%template Identifiable.Make [@modality portable] (struct
       include Stable.V1
       include Sexpable.To_stringable [@modality portable] (Stable.V1)
 
@@ -600,7 +599,9 @@ end
 let quickcheck_shrinker = Quickcheck.Shrinker.empty ()
 
 let quickcheck_observer =
-  (Quickcheck.Observer.unmap [@mode portable]) String.quickcheck_observer ~f:to_string
+  [%template Quickcheck.Observer.unmap [@mode portable]]
+    String.quickcheck_observer
+    ~f:to_string
 ;;
 
 let%template gen_with_length len char_gen =
@@ -616,7 +617,7 @@ let%template gen' char_gen =
 [@@mode p = (portable, nonportable)]
 ;;
 
-let quickcheck_generator = (gen' [@mode portable]) Char.quickcheck_generator
+let quickcheck_generator = [%template gen' [@mode portable]] Char.quickcheck_generator
 
 let[@inline] unsafe_of_bigstring ~pos ~len buf =
   let t = ref (unsafe_create len) in
@@ -627,7 +628,10 @@ let[@inline] unsafe_of_bigstring ~pos ~len buf =
 ;;
 
 let[@inline] unsafe_of_iobuf_peek ~pos ~len buf =
-  unsafe_of_bigstring (Iobuf.Expert.buf buf) ~pos:(Iobuf.Expert.lo buf + pos) ~len
+  unsafe_of_bigstring
+    ([%template Iobuf.Expert.buf [@mode local]] buf)
+    ~pos:(Iobuf.Expert.lo buf + pos)
+    ~len [@nontail]
 ;;
 
 let unsafe_of_iobuf_consume ~len buf =
@@ -794,7 +798,7 @@ end
 (* It is not possible to test with [Base_for_tests.Test_blit.Test_distinct] in
    [../test/test_imm_strings.ml] because that requires the source sequence to be mutable.
    However, this is still tested via [Immediate.String.Stable.V2.bin_write_t]. *)
-module To_bigstring =
+module%template To_bigstring =
   Blit.Make_distinct [@modality portable]
     (struct
       type nonrec t = t

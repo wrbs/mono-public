@@ -23,7 +23,12 @@ module Sig_generate_of_sexp = struct
     [%type: Sexplib0.Sexp.t -> [%t t]]
   ;;
 
-  let mk_type td = Ppx_helpers.combinator_type_of_type_declaration td ~f:type_of_of_sexp
+  let mk_type td =
+    Ppx_helpers.combinator_type_of_type_declaration
+      td
+      ~f:type_of_of_sexp
+      ~phantom_attr:Attrs.phantom
+  ;;
 
   let sig_of_td ~poly ~portable td =
     let of_sexp_type =
@@ -39,7 +44,8 @@ module Sig_generate_of_sexp = struct
            ~loc
            ~name:(Located.map of_sexp_function_for_type td.ptype_name)
            ~type_:of_sexp_type
-           ~modalities:(if portable then [ Ppxlib_jane.Modality "portable" ] else [])
+           ~modalities:
+             (if portable then Ppxlib_jane.Shim.Modalities.portable ~loc else [])
            ~prim:[])
     in
     match poly, is_polymorphic_variant td ~sig_:true with
@@ -57,7 +63,8 @@ module Sig_generate_of_sexp = struct
              ~loc
              ~name:(Located.map (of_sexp_function_for_type ~internal:true) td.ptype_name)
              ~type_:of_sexp_type
-             ~modalities:(if portable then [ Modality "portable" ] else [])
+             ~modalities:
+               (if portable then Ppxlib_jane.Shim.Modalities.portable ~loc else [])
              ~prim:[])
       ]
   ;;
@@ -120,8 +127,8 @@ module Str_generate_of_sexp = struct
     [ [%pat? Sexplib0.Sexp_conv_error.No_variant_match] --> expr ]
   ;;
 
-  (* Generate code depending on whether to generate a match for the last
-     case of matching a variant *)
+  (* Generate code depending on whether to generate a match for the last case of matching
+     a variant *)
   let handle_variant_match_last loc ~match_last ~fresh_atom matches =
     match match_last, matches with
     | true, [ { pc_lhs = _; pc_guard = None; pc_rhs = expr } ]
@@ -153,9 +160,9 @@ module Str_generate_of_sexp = struct
     List.fold_left ~f:coll_structs ~init:[ exc_no_variant_match ] rev_els
   ;;
 
-  (* Split the row fields of a variant type into lists of atomic variants,
-     structured variants, atomic variants + included variant types,
-     and structured variants + included variant types. *)
+  (* Split the row fields of a variant type into lists of atomic variants, structured
+     variants, atomic variants + included variant types, and structured variants +
+     included variant types. *)
   let split_row_field ~loc (atoms, structs, ainhs, sinhs) row_field =
     match row_field.prf_desc with
     | Rtag ({ txt = cnstr; _ }, true, []) ->
@@ -263,7 +270,8 @@ module Str_generate_of_sexp = struct
            [%expr Sexplib0.Sexp_conv.array_of_sexp [%e arg1]]
        | _ ->
          let args =
-           List.map args ~f:(fun arg ->
+           List.filter args ~f:include_param_in_combinator
+           |> List.map ~f:(fun arg ->
              Conversion.to_expression
                ~loc
                (type_of_sexp ~error_source ~typevars arg)
@@ -313,7 +321,6 @@ module Str_generate_of_sexp = struct
         alist
         ~init:[%expr Empty]
         ~f:(fun (label_option, core_type) rest_expr ->
-          let (None | Some ()) = Attribute.get Attrs.non_value_type core_type in
           let name_expr = estring ~loc (Labeled_tuple.atom_of_label label_option) in
           let conv_expr =
             type_of_sexp ~error_source ~typevars core_type
@@ -325,7 +332,7 @@ module Str_generate_of_sexp = struct
             [%expr
               fun [%p Fresh_name.pattern sexp] ->
                 let [%p Fresh_name.pattern value] =
-                  [%e conv_expr] [%e Fresh_name.expression sexp]
+                  ([%e conv_expr] [@inlined never]) [%e Fresh_name.expression sexp]
                 in
                 fun () -> [%e Fresh_name.expression value]]
           in
@@ -576,8 +583,8 @@ module Str_generate_of_sexp = struct
     ( handle_variant_match_last loc ~match_last ~fresh_atom match_structs_inhs
     , !has_structs_ref )
 
-  (* Generate code for handling atomic and structured variants (i.e. not
-     included variant types) *)
+  (* Generate code for handling atomic and structured variants (i.e. not included variant
+     types) *)
   and handle_variant_tag ~error_source ~typevars loc full_type row_field_list =
     let fresh_atom = Fresh_name.create "atom" ~loc in
     let fresh_sexp = Fresh_name.create "sexp" ~loc in
@@ -749,7 +756,8 @@ module Str_generate_of_sexp = struct
         type_of_sexp ~error_source ~typevars field.pld_type
         |> Conversion.to_expression ~loc ~stackify:false
       in
-      fresh_lambda ~loc (fun ~arg -> close_over_non_value ~loc [%expr [%e conv] [%e arg]])
+      fresh_lambda ~loc (fun ~arg ->
+        close_over_non_value ~loc [%expr ([%e conv] [@inlined never]) [%e arg]])
     | Some { type_and_field_name; params; body } ->
       let fresh_sexp = Fresh_name.create "sexp" ~loc in
       let fresh_params =
@@ -877,6 +885,19 @@ module Str_generate_of_sexp = struct
                 ; kind = Sexp_option
                 ; conv = [%e conv_expr]
                 ; rest = [%e rest_expr]
+                }]
+        | Sexp_or_null core_type ->
+          let conv_expr =
+            type_of_sexp ~error_source ~typevars core_type
+            |> Conversion.to_expression ~loc ~stackify:false
+          in
+          Lifted.return
+            [%expr
+              Field
+                { name = [%e label_expr]
+                ; kind = Sexp_or_null
+                ; conv = [%e conv_expr]
+                ; rest = [%e rest_expr]
                 }])
   ;;
 
@@ -919,7 +940,8 @@ module Str_generate_of_sexp = struct
             match attrs with
             | Specific (Required | Default _) | Omit_nil ->
               pvar, Some (pat, [%expr [%e evar] ()]), evar
-            | Sexp_bool | Sexp_array _ | Sexp_list _ | Sexp_option _ -> pat, None, evar
+            | Sexp_bool | Sexp_array _ | Sexp_list _ | Sexp_option _ | Sexp_or_null _ ->
+              pat, None, evar
           in
           pat, rebind, (Located.map_lident field.pld_name, expr))
     in
@@ -991,6 +1013,7 @@ module Str_generate_of_sexp = struct
             ~kind:(Ptype_record [ fresh_field ])
             ~private_:Public
             ~manifest:None
+            ()
         in
         Some
           { type_decl with
@@ -1019,7 +1042,6 @@ module Str_generate_of_sexp = struct
     let allow_extra_fields_expr = ebool ~loc allow_extra_fields in
     let fields =
       List.map fields ~f:(fun field ->
-        let (None | Some ()) = Attribute.get Attrs.non_value_field field in
         record_poly_type field, field, Record_field_attrs.Of_sexp.create ~loc field)
     in
     let index_of_field_expr = index_of_field_arg_for_record_of_sexp fields ~loc in
@@ -1148,8 +1170,7 @@ module Str_generate_of_sexp = struct
         |> Lifted.return)
   ;;
 
-  (* Generate matching code for malformed S-expressions with good tags
-     wrt. sum types *)
+  (* Generate matching code for malformed S-expressions with good tags wrt. sum types *)
   let mk_bad_sum_matches ~error_source (loc, cds) =
     let fresh_sexp = Fresh_name.create "sexp" ~loc in
     let no_payload, yes_payload =
@@ -1161,7 +1182,7 @@ module Str_generate_of_sexp = struct
         cds
     in
     let or_constructors list =
-      (* "constructor1" | "Constructor1" | "constructor2" | "Constructor2" | ... *)
+      (*="constructor1" | "Constructor1" | "constructor2" | "Constructor2" | ... *)
       match
         List.concat_map list ~f:(fun constructor ->
           [ Loc.map constructor ~f:String.uncapitalize_ascii
@@ -1250,7 +1271,10 @@ module Str_generate_of_sexp = struct
 
   let td_of_sexp ~typevars ~loc:_ ~poly ~path ~rec_flag ~values_being_defined ~portable td
     =
-    let tps = List.map td.ptype_params ~f:Ppxlib_jane.get_type_param_name_and_jkind in
+    let tps =
+      List.filter td.ptype_params ~f:(fun (p, _) -> include_param_in_combinator p)
+      |> List.map ~f:Ppxlib_jane.get_type_param_name_and_jkind
+    in
     let { ptype_name = { txt = type_name; loc = _ }; ptype_loc = loc; _ } = td in
     let full_type =
       core_type_of_type_declaration td |> replace_variables_by_underscores
@@ -1457,9 +1481,9 @@ module Str_generate_of_sexp = struct
           let names = List.map bindings_and_names ~f:snd in
           bindings, names)
       else (
-        (* If there are any polymorphic variants, the binding needs to be recursive (even if
-         the types are not) in order for e.g. [t_of_sexp] to be able to reference
-         [__t_of_sexp__]. *)
+        (* If there are any polymorphic variants, the binding needs to be recursive (even
+           if the types are not) in order for e.g. [t_of_sexp] to be able to reference
+           [__t_of_sexp__]. *)
         let rec_flag =
           if List.exists tds ~f:(function
                | { ptype_manifest = Some { ptyp_desc = Ptyp_variant _; _ }; _ } -> true

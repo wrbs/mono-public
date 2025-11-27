@@ -30,6 +30,41 @@ module Spec = struct
     }
   ;;
 
+  let testing_no_scaling =
+    { clock_hz = 100
+    ; horizontal_timing = { sync = 2; back_porch = 1; active = 2; front_porch = 2 }
+    ; vertical_timing = { sync = 1; back_porch = 2; active = 3; front_porch = 1 }
+    }
+  ;;
+
+  let testing_4x4y =
+    { clock_hz = 100
+    ; horizontal_timing = { sync = 2; back_porch = 1; active = 8; front_porch = 2 }
+    ; vertical_timing = { sync = 1; back_porch = 2; active = 12; front_porch = 1 }
+    }
+  ;;
+
+  let testing_2x4y =
+    { clock_hz = 100
+    ; horizontal_timing = { sync = 2; back_porch = 1; active = 4; front_porch = 2 }
+    ; vertical_timing = { sync = 1; back_porch = 2; active = 12; front_porch = 1 }
+    }
+  ;;
+
+  let testing_4x2y =
+    { clock_hz = 100
+    ; horizontal_timing = { sync = 2; back_porch = 1; active = 8; front_porch = 2 }
+    ; vertical_timing = { sync = 1; back_porch = 2; active = 6; front_porch = 1 }
+    }
+  ;;
+
+  let testing_3x5y =
+    { clock_hz = 100
+    ; horizontal_timing = { sync = 2; back_porch = 1; active = 6; front_porch = 2 }
+    ; vertical_timing = { sync = 1; back_porch = 2; active = 15; front_porch = 1 }
+    }
+  ;;
+
   let t640x480_60hz =
     { clock_hz = 25_175_000
     ; horizontal_timing = { sync = 96; back_porch = 48; active = 640; front_porch = 16 }

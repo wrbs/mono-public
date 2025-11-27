@@ -9,6 +9,7 @@ include struct
   module Nexys = Nexys_a7_100t
   module Uart = Uart
   module Uart_types = Uart_types
+  module Vga = Hardcaml_hobby_boards.Vga
   module Hardcaml_risc_v_hart = Hardcaml_risc_v_hart
   module Risc_v = Hardcaml_hobby_boards_hardcaml_risc_v
   module BUFR = Clock_utils.BUFR
@@ -43,17 +44,29 @@ module Cpu =
     end)
     (struct
       let capacity_in_bytes = 65536
+      let ethernet_start_address = 0
+      let frame_buffer_bytes = capacity_in_bytes
     end)
     (struct
       let num_harts = 1
       let io_controller = uart_config
+      let fpga_mac_address = of_string "48'h0018_3e04_c882"
+    end)
+    (struct
+      let input_width = 2
+      let input_height = 3
+      let output_width = 4
+      let output_height = 6
+      let start_address = 64
+      let vga_spec = Vga.Spec.testing
+      let vga_clock_div = design_frequency / vga_spec.clock_hz
     end)
 
 let generate_clear clock_50 reset_n =
   let reset_chain =
     reg_fb
       (Reg_spec.create ~clock:clock_50 ~reset:reset_n ~reset_edge:Falling ())
-      ~reset_to:(ones 16)
+      ~reset_to:(Bits.ones 16)
       ~width:16
       ~f:(fun d -> sll d ~by:1)
   in
@@ -66,7 +79,7 @@ let create () =
   let clocking = Nexys.Clock_and_reset.create board in
   let clear_100 = Utils.generate_clear clocking in
   let clock_inputs = BUFR_COMP.I.{ ce = vdd; clr = clear_100; i = clocking.clock_100 } in
-  let _inputs = Nexys.Ethernet.create board in
+  let _ethernet_inputs = Nexys.Ethernet.create board in
   let%tydi { o = clock_50 } = BUFR_COMP.create clock_inputs in
   let clear_50 = generate_clear clock_50 clocking.reset_n in
   let uart = Nexys.Uart.create board in
@@ -75,7 +88,13 @@ let create () =
       ~read_latency:2
       ~build_mode:Synthesis
       scope
-      { clock = clock_50; clear = clear_50; uart_rx = uart.rxd }
+      { clock = clock_50
+      ; clear = clear_50
+      ; uart_rx = uart.rxd
+      ; eth_crsdv = gnd
+      ; eth_rxerr = gnd
+      ; eth_rxd = zero 2
+      }
   in
   Nexys.Ethernet.complete
     board

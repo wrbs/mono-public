@@ -9,8 +9,7 @@ let create
   =
   let { Context.builder; stable_version; _ } = context in
   let open (val builder : Builder.S) in
-  (* [value] = v ?[@diff.xxx]
-     [map_module_name] = Map_module
+  (* [value] = v ?[@diff.xxx] [map_module_name] = Map_module
   *)
   let how_to_diff = How_to_diff.Custom.As_map { key } in
   let default_key, value =
@@ -71,7 +70,7 @@ let create
   in
   let module_ = Option.map module_ ~f:(Longident_helper.map ~f:Module_name.to_string) in
   let fn name =
-    Longident_helper.add_suffix module_ ~suffix:(Function_name.to_string name, [])
+    Longident_helper.add_suffix module_ ~suffix:[ Function_name.to_string name ]
     |> Longident_helper.to_expression ~builder
   in
   let get = [%expr [%e fn Function_name.get] [%e get_value_diff]] in

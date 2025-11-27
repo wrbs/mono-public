@@ -353,8 +353,8 @@ module Helper = struct
       | Node_helpers.Element
           { children = [ Element { children = [ content ]; _ }; _ ]; _ } -> content
       | Element _ ->
-        (* This test has the added benefit of adding a check on the [Popover_dom]
-                   changing unexpectedly. *)
+        (* This test has the added benefit of adding a check on the [Popover_dom] changing
+           unexpectedly. *)
         failwith
           "modal structure malformed! This test is likely out of date with the current \
            implementation of [Popover_dom]."
@@ -369,8 +369,8 @@ module Helper = struct
   ;;
 
   (* Virtual popovers being opened / closed is controlled by Bonsai computations, which
-       are active / inactive independently of vdom. Therefore, we can always just pull them
-       from the Var that backs portalling. *)
+     are active / inactive independently of vdom. Therefore, we can always just pull them
+     from the Var that backs portalling. *)
   let extract_virtual root_vdom root_helper =
     let positioning =
       let%map.Option hook_inputs =
@@ -385,10 +385,10 @@ module Helper = struct
       ; match_anchor_side_length = hook_inputs.match_anchor_side_length
       }
     in
-    (* We could probably factor something out for structural tests of modals /
-         popovers, but:
-          - We expect modals not to have arrows
-          - The DOM implementations of modals and popovers may diverse someday *)
+    (* We could probably factor something out for structural tests of modals / popovers,
+       but:
+       - We expect modals not to have arrows
+       - The DOM implementations of modals and popovers may diverse someday *)
     let content, arrow =
       match root_helper with
       | Element
@@ -402,8 +402,8 @@ module Helper = struct
       | Element { children = [ Element { children = [ content ]; _ }; _ ]; _ } ->
         content, None
       | Element _ ->
-        (* This test has the added benefit of adding a check on the [Popover_dom]
-                 changing unexpectedly. *)
+        (* This test has the added benefit of adding a check on the [Popover_dom] changing
+           unexpectedly. *)
         failwith
           "popover structure malformed! This test is likely out of date with the current \
            implementation of [Popover_dom]."
@@ -724,7 +724,7 @@ module%test [@name "vdom output"] _ = struct
       +|           tabindex="-1"
       +|           data-bonsai-popover-356c4f74-f7b7-11ee-8823-aa63f6b8d3b4=""
       +|           class="currently-untestable floating_hash_replaced_in_test popover_hash_replaced_in_test"
-      +|           custom-css-vars=((--ppx_css_anonymous_var_1_hash_replaced_in_test"var(--floatingHeight, fit-content)")(--ppx_css_anonymous_var_2_hash_replaced_in_test"var(--floatingWidth, fit-content)")(--ppx_css_anonymous_var_3_hash_replaced_in_test"var(--floatingMinHeight)")(--ppx_css_anonymous_var_4_hash_replaced_in_test"var(--floatingMinWidth)")(--ppx_css_anonymous_var_5_hash_replaced_in_test"var(--floatingAvailableWidth, 100.00%)"))
+      +|           custom-css-vars=((--ppx_css_update_position_anon_variable_1_hash_replaced_in_test"var(--floatingHeight, fit-content)")(--ppx_css_update_position_anon_variable_2_hash_replaced_in_test"var(--floatingWidth, fit-content)")(--ppx_css_update_position_anon_variable_3_hash_replaced_in_test"var(--floatingMinHeight)")(--ppx_css_update_position_anon_variable_4_hash_replaced_in_test"var(--floatingMinWidth)")(--ppx_css_update_position_anon_variable_5_hash_replaced_in_test"var(--floatingAvailableWidth, 100.00%)"))
       +|           floating_positioning_virtual=((prepare <fun>)(position Auto)(alignment Center)(offset((main_axis 0)(cross_axis 0)))(match_anchor_side_length())(arrow_selector([data-floating-ui-arrow-parent]))(anchor <anchor>))
       +|           vdom_toplayer_popover_inertness=()
       +|           vdom_toplayer_restore_focus_on_close=()
@@ -751,7 +751,7 @@ module%test [@name "vdom output"] _ = struct
       +|           tabindex="-1"
       +|           data-bonsai-popover-356c4f74-f7b7-11ee-8823-aa63f6b8d3b4=""
       +|           class="currently-untestable floating_hash_replaced_in_test popover_hash_replaced_in_test"
-      +|           custom-css-vars=((--ppx_css_anonymous_var_1_hash_replaced_in_test"var(--floatingHeight, fit-content)")(--ppx_css_anonymous_var_2_hash_replaced_in_test"var(--floatingWidth, fit-content)")(--ppx_css_anonymous_var_3_hash_replaced_in_test"var(--floatingMinHeight)")(--ppx_css_anonymous_var_4_hash_replaced_in_test"var(--floatingMinWidth)")(--ppx_css_anonymous_var_5_hash_replaced_in_test"var(--floatingAvailableWidth, 100.00%)"))
+      +|           custom-css-vars=((--ppx_css_update_position_anon_variable_1_hash_replaced_in_test"var(--floatingHeight, fit-content)")(--ppx_css_update_position_anon_variable_2_hash_replaced_in_test"var(--floatingWidth, fit-content)")(--ppx_css_update_position_anon_variable_3_hash_replaced_in_test"var(--floatingMinHeight)")(--ppx_css_update_position_anon_variable_4_hash_replaced_in_test"var(--floatingMinWidth)")(--ppx_css_update_position_anon_variable_5_hash_replaced_in_test"var(--floatingAvailableWidth, 100.00%)"))
       +|           floating_positioning_virtual=((prepare <fun>)(position Auto)(alignment Center)(offset((main_axis 0)(cross_axis 0)))(match_anchor_side_length())(arrow_selector([data-floating-ui-arrow-parent]))(anchor <anchor>))
       +|           vdom_toplayer_popover_inertness=()
       +|           vdom_toplayer_restore_focus_on_close=()
@@ -792,7 +792,7 @@ module%test [@name "vdom output"] _ = struct
       +|               tabindex="-1"
       +|               data-bonsai-popover-356c4f74-f7b7-11ee-8823-aa63f6b8d3b4=""
       +|               class="currently-untestable floating_hash_replaced_in_test popover_hash_replaced_in_test"
-      +|               custom-css-vars=((--ppx_css_anonymous_var_1_hash_replaced_in_test"var(--floatingHeight, fit-content)")(--ppx_css_anonymous_var_2_hash_replaced_in_test"var(--floatingWidth, fit-content)")(--ppx_css_anonymous_var_3_hash_replaced_in_test"var(--floatingMinHeight)")(--ppx_css_anonymous_var_4_hash_replaced_in_test"var(--floatingMinWidth)")(--ppx_css_anonymous_var_5_hash_replaced_in_test"var(--floatingAvailableWidth, 100.00%)"))
+      +|               custom-css-vars=((--ppx_css_update_position_anon_variable_1_hash_replaced_in_test"var(--floatingHeight, fit-content)")(--ppx_css_update_position_anon_variable_2_hash_replaced_in_test"var(--floatingWidth, fit-content)")(--ppx_css_update_position_anon_variable_3_hash_replaced_in_test"var(--floatingMinHeight)")(--ppx_css_update_position_anon_variable_4_hash_replaced_in_test"var(--floatingMinWidth)")(--ppx_css_update_position_anon_variable_5_hash_replaced_in_test"var(--floatingAvailableWidth, 100.00%)"))
       +|               floating_positioning_virtual=((prepare <fun>)(position Auto)(alignment Center)(offset((main_axis 0)(cross_axis 0)))(match_anchor_side_length())(arrow_selector([data-floating-ui-arrow-parent]))(anchor <anchor>))
       +|               vdom_toplayer_popover_inertness=()
       +|               vdom_toplayer_restore_focus_on_close=()
@@ -822,7 +822,7 @@ module%test [@name "vdom output"] _ = struct
       +|           data-bonsai-popover-356c4f74-f7b7-11ee-8823-aa63f6b8d3b4=""
       +|           id="bonsai_path_replaced_in_test"
       +|           class="default_theme_helpers__inline_class_hash_replaced_in_test default_theme_helpers__inline_class_hash_replaced_in_test floating_hash_replaced_in_test popover_hash_replaced_in_test toplayer_hash_replaced_in_test"
-      +|           custom-css-vars=((--ppx_css_anonymous_var_1_hash_replaced_in_test"var(--floatingHeight, fit-content)")(--ppx_css_anonymous_var_2_hash_replaced_in_test"var(--floatingWidth, fit-content)")(--ppx_css_anonymous_var_3_hash_replaced_in_test"var(--floatingMinHeight)")(--ppx_css_anonymous_var_4_hash_replaced_in_test"var(--floatingMinWidth)")(--ppx_css_anonymous_var_5_hash_replaced_in_test"var(--floatingAvailableWidth, 100.00%)")(--ppx_css_anonymous_var_1_hash_replaced_in_test white)(--ppx_css_anonymous_var_2_hash_replaced_in_test black)(--ppx_css_anonymous_var_3_hash_replaced_in_test 1px)(--ppx_css_anonymous_var_4_hash_replaced_in_test grey))
+      +|           custom-css-vars=((--ppx_css_update_position_anon_variable_1_hash_replaced_in_test"var(--floatingHeight, fit-content)")(--ppx_css_update_position_anon_variable_2_hash_replaced_in_test"var(--floatingWidth, fit-content)")(--ppx_css_update_position_anon_variable_3_hash_replaced_in_test"var(--floatingMinHeight)")(--ppx_css_update_position_anon_variable_4_hash_replaced_in_test"var(--floatingMinWidth)")(--ppx_css_update_position_anon_variable_5_hash_replaced_in_test"var(--floatingAvailableWidth, 100.00%)")(--ppx_css_default_theme_helpers_anon_variable_1_hash_replaced_in_test white)(--ppx_css_default_theme_helpers_anon_variable_2_hash_replaced_in_test black)(--ppx_css_default_theme_helpers_anon_variable_3_hash_replaced_in_test 1px)(--ppx_css_default_theme_helpers_anon_variable_4_hash_replaced_in_test grey))
       +|           floating_positioning_virtual=((prepare <fun>)(position Auto)(alignment Center)(offset((main_axis 0)(cross_axis 0)))(match_anchor_side_length())(arrow_selector([data-floating-ui-arrow-parent]))(anchor <anchor>))
       +|           global-click-listener=((capture <fun>))
       +|           global-keydown-listener=((bubbling <fun>))
@@ -854,7 +854,7 @@ module%test [@name "vdom output"] _ = struct
       +|           data-bonsai-popover-356c4f74-f7b7-11ee-8823-aa63f6b8d3b4=""
       +|           id="bonsai_path_replaced_in_test"
       +|           class="default_theme_helpers__inline_class_hash_replaced_in_test default_theme_helpers__inline_class_hash_replaced_in_test floating_hash_replaced_in_test popover_hash_replaced_in_test toplayer_hash_replaced_in_test"
-      +|           custom-css-vars=((--ppx_css_anonymous_var_1_hash_replaced_in_test"var(--floatingHeight, fit-content)")(--ppx_css_anonymous_var_2_hash_replaced_in_test"var(--floatingWidth, fit-content)")(--ppx_css_anonymous_var_3_hash_replaced_in_test"var(--floatingMinHeight)")(--ppx_css_anonymous_var_4_hash_replaced_in_test"var(--floatingMinWidth)")(--ppx_css_anonymous_var_5_hash_replaced_in_test"var(--floatingAvailableWidth, 100.00%)")(--ppx_css_anonymous_var_1_hash_replaced_in_test white)(--ppx_css_anonymous_var_2_hash_replaced_in_test black)(--ppx_css_anonymous_var_3_hash_replaced_in_test 1px)(--ppx_css_anonymous_var_4_hash_replaced_in_test grey))
+      +|           custom-css-vars=((--ppx_css_update_position_anon_variable_1_hash_replaced_in_test"var(--floatingHeight, fit-content)")(--ppx_css_update_position_anon_variable_2_hash_replaced_in_test"var(--floatingWidth, fit-content)")(--ppx_css_update_position_anon_variable_3_hash_replaced_in_test"var(--floatingMinHeight)")(--ppx_css_update_position_anon_variable_4_hash_replaced_in_test"var(--floatingMinWidth)")(--ppx_css_update_position_anon_variable_5_hash_replaced_in_test"var(--floatingAvailableWidth, 100.00%)")(--ppx_css_default_theme_helpers_anon_variable_1_hash_replaced_in_test white)(--ppx_css_default_theme_helpers_anon_variable_2_hash_replaced_in_test black)(--ppx_css_default_theme_helpers_anon_variable_3_hash_replaced_in_test 1px)(--ppx_css_default_theme_helpers_anon_variable_4_hash_replaced_in_test grey))
       +|           floating_positioning_virtual=((prepare <fun>)(position Auto)(alignment Center)(offset((main_axis 0)(cross_axis 0)))(match_anchor_side_length())(arrow_selector([data-floating-ui-arrow-parent]))(anchor <anchor>))
       +|           global-click-listener=((capture <fun>))
       +|           global-keydown-listener=((bubbling <fun>))
@@ -892,7 +892,7 @@ module%test [@name "vdom output"] _ = struct
       +|           data-bonsai-popover-356c4f74-f7b7-11ee-8823-aa63f6b8d3b4=""
       +|           id="bonsai_path_replaced_in_test"
       +|           class="default_theme_helpers__inline_class_hash_replaced_in_test default_theme_helpers__inline_class_hash_replaced_in_test floating_hash_replaced_in_test popover_hash_replaced_in_test toplayer_hash_replaced_in_test"
-      +|           custom-css-vars=((--ppx_css_anonymous_var_1_hash_replaced_in_test"var(--floatingHeight, fit-content)")(--ppx_css_anonymous_var_2_hash_replaced_in_test"var(--floatingWidth, fit-content)")(--ppx_css_anonymous_var_3_hash_replaced_in_test"var(--floatingMinHeight)")(--ppx_css_anonymous_var_4_hash_replaced_in_test"var(--floatingMinWidth)")(--ppx_css_anonymous_var_5_hash_replaced_in_test"var(--floatingAvailableWidth, 100.00%)")(--ppx_css_anonymous_var_1_hash_replaced_in_test white)(--ppx_css_anonymous_var_2_hash_replaced_in_test black)(--ppx_css_anonymous_var_3_hash_replaced_in_test 1px)(--ppx_css_anonymous_var_4_hash_replaced_in_test grey))
+      +|           custom-css-vars=((--ppx_css_update_position_anon_variable_1_hash_replaced_in_test"var(--floatingHeight, fit-content)")(--ppx_css_update_position_anon_variable_2_hash_replaced_in_test"var(--floatingWidth, fit-content)")(--ppx_css_update_position_anon_variable_3_hash_replaced_in_test"var(--floatingMinHeight)")(--ppx_css_update_position_anon_variable_4_hash_replaced_in_test"var(--floatingMinWidth)")(--ppx_css_update_position_anon_variable_5_hash_replaced_in_test"var(--floatingAvailableWidth, 100.00%)")(--ppx_css_default_theme_helpers_anon_variable_1_hash_replaced_in_test white)(--ppx_css_default_theme_helpers_anon_variable_2_hash_replaced_in_test black)(--ppx_css_default_theme_helpers_anon_variable_3_hash_replaced_in_test 1px)(--ppx_css_default_theme_helpers_anon_variable_4_hash_replaced_in_test grey))
       +|           floating_positioning_virtual=((prepare <fun>)(position Auto)(alignment Center)(offset((main_axis 0)(cross_axis 0)))(match_anchor_side_length())(arrow_selector([data-floating-ui-arrow-parent]))(anchor <anchor>))
       +|           global-click-listener=((capture <fun>))
       +|           global-keydown-listener=((bubbling <fun>))
@@ -1118,7 +1118,7 @@ module%test [@name "vdom output"] _ = struct
                  data-bonsai-popover-356c4f74-f7b7-11ee-8823-aa63f6b8d3b4=""
                  id="bonsai_path_replaced_in_test"
                  class="floating_hash_replaced_in_test popover_hash_replaced_in_test"
-                 custom-css-vars=((--ppx_css_anonymous_var_1_hash_replaced_in_test"var(--floatingHeight, fit-content)")(--ppx_css_anonymous_var_2_hash_replaced_in_test"var(--floatingWidth, fit-content)")(--ppx_css_anonymous_var_3_hash_replaced_in_test"var(--floatingMinHeight)")(--ppx_css_anonymous_var_4_hash_replaced_in_test"var(--floatingMinWidth)")(--ppx_css_anonymous_var_5_hash_replaced_in_test"var(--floatingAvailableWidth, 100.00%)"))
+                 custom-css-vars=((--ppx_css_update_position_anon_variable_1_hash_replaced_in_test"var(--floatingHeight, fit-content)")(--ppx_css_update_position_anon_variable_2_hash_replaced_in_test"var(--floatingWidth, fit-content)")(--ppx_css_update_position_anon_variable_3_hash_replaced_in_test"var(--floatingMinHeight)")(--ppx_css_update_position_anon_variable_4_hash_replaced_in_test"var(--floatingMinWidth)")(--ppx_css_update_position_anon_variable_5_hash_replaced_in_test"var(--floatingAvailableWidth, 100.00%)"))
                  global-click-listener=((capture <fun>))
                  global-keydown-listener=((bubbling <fun>))
                  global-mousedown-listener=((capture <fun>))

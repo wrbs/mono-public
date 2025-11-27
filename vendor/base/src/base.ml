@@ -24,8 +24,8 @@
       structures (arrays, lists, strings).
     - [Result], [Error], and [Or_error], supporting the or-error pattern. *)
 
-(*_ We hide this from the web docs because the line wrapping is bad, making it
-  pretty much inscrutable. *)
+(*_ We hide this from the web docs because the line wrapping is bad, making it pretty much
+    inscrutable. *)
 (**/**)
 
 (* The intent is to shadow all of INRIA's standard library.  Modules below would cause
@@ -148,6 +148,7 @@ module Portable_lazy = Portable_lazy
 module Pretty_printer = Pretty_printer
 module Printf = Printf
 module Linked_queue = Linked_queue
+module Nonempty_list = Nonempty_list
 module Queue = Queue
 module Random = Random
 module Ref = Ref
@@ -200,7 +201,7 @@ module Export = struct
 
   (* [deriving hash] is missing for [array] and [ref] since these types are mutable. *)
   [%%rederive.portable
-    type 'a array = 'a Array.t
+    type ('a : value_or_null mod separable) array = 'a Array.t
     [@@deriving
       compare ~localize, equal ~localize, globalize, sexp ~stackify, sexp_grammar]]
 
@@ -251,7 +252,7 @@ module Export = struct
 
   type%template nonrec ('a : k) option = ('a Option.t[@kind k])
   [@@deriving compare ~localize, equal ~localize, sexp ~stackify]
-  [@@kind k = (float64, bits32, bits64, word)]
+  [@@kind k = base_non_value]
 
   type ('a : value_or_null, 'b : value_or_null) result = ('a, 'b) Result.t
   [@@deriving
@@ -259,7 +260,7 @@ module Export = struct
 
   type%template nonrec ('a : k, 'b : value_or_null) result = (('a, 'b) Result.t[@kind k])
   [@@deriving compare ~localize, equal ~localize, sexp ~stackify]
-  [@@kind k = (float64, bits32, bits64, word)]
+  [@@kind k = base_non_value]
 
   type ('a : value_or_null) ref = 'a Ref.t
   [@@deriving compare ~localize, equal ~localize, globalize, sexp ~stackify, sexp_grammar]
@@ -350,14 +351,37 @@ module Export = struct
 
   (* Declared as an externals so that the compiler skips the caml_modify when possible and
      to keep reference unboxing working *)
-  external ( ! ) : ('a ref[@local_opt]) -> 'a @@ portable = "%field0"
-  external ref : 'a -> ('a ref[@local_opt]) @@ portable = "%makemutable"
-  external ( := ) : ('a ref[@local_opt]) -> 'a -> unit @@ portable = "%setfield0"
+  external ( ! )
+    : ('a : value_or_null).
+    ('a ref[@local_opt]) -> 'a
+    @@ stateless
+    = "%field0"
+
+  external ref
+    : ('a : value_or_null).
+    'a -> ('a ref[@local_opt])
+    @@ stateless
+    = "%makemutable"
+
+  external ( := )
+    : ('a : value_or_null).
+    ('a ref[@local_opt]) -> 'a -> unit
+    @@ stateless
+    = "%setfield0"
 
   (** Pair operations *)
 
-  let fst = fst
-  let snd = snd
+  external fst
+    : ('a : value_or_null) ('b : value_or_null).
+    ('a * 'b[@local_opt]) -> ('a[@local_opt])
+    @@ portable
+    = "%field0_immut"
+
+  external snd
+    : ('a : value_or_null) ('b : value_or_null).
+    ('a * 'b[@local_opt]) -> ('b[@local_opt])
+    @@ portable
+    = "%field1_immut"
 
   (** Exceptions stuff *)
 
@@ -365,7 +389,7 @@ module Export = struct
   external raise
     : ('a : value_or_null).
     exn -> 'a @ portable unique
-    @@ portable
+    @@ stateless
     = "%reraise"
 
   let failwith = failwith
@@ -382,11 +406,12 @@ module Export = struct
 
   external force : ('a Lazy.t[@local_opt]) -> 'a @@ portable = "%lazy_force"
 
-  (* Export ['a or_null] with constructors [Null] and [This] whenever Base is opened,
-     so uses of those identifiers work in both upstream OCaml and OxCaml. *)
+  (* Export ['a or_null] with constructors [Null] and [This] whenever Base is opened, so
+     uses of those identifiers work in both upstream OCaml and OxCaml. *)
 
-  type nonrec 'a or_null = 'a or_null
-  [@@or_null_reexport] [@@deriving globalize, sexp ~stackify]
+  type 'a or_null = 'a Or_null.t
+  [@@or_null_reexport]
+  [@@deriving compare ~localize, equal ~localize, globalize, hash, sexp ~stackify]
 end
 
 include Export
@@ -398,8 +423,8 @@ include Modes.Export (** @inline *)
 exception Not_found_s = Not_found_s
 
 (* We perform these side effects here because we want them to run for any code that uses
-   [Base].  If this were in another module in [Base] that was not used in some program,
-   then the side effects might not be run in that program.  This will run as long as the
+   [Base]. If this were in another module in [Base] that was not used in some program,
+   then the side effects might not be run in that program. This will run as long as the
    program refers to at least one value directly in [Base]; referring to values in
    [Base.Bool], for example, is not sufficient. *)
 let () = Backtrace.initialize_module ()

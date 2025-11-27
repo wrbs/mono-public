@@ -86,8 +86,8 @@ module Machine = struct
           memory_controller_to_dma
           (List.nth_exn controller.write_response 0)
       ];
-    (* We echo the read and write responses to avoid dead code elimination
-         deleting the entire BRAM *)
+    (* We echo the read and write responses to avoid dead code elimination deleting the
+       entire BRAM *)
     { O.write_response = List.nth_exn controller.write_response 0
     ; read_response = List.nth_exn controller.read_response 0
     }

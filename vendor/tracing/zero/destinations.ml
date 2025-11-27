@@ -1,9 +1,9 @@
 open! Core
 
 let iobuf_destination buf =
-  (* We give out an [Iobuf] with a shared underlying [Bigstring] but different pointers
-     so that when this is closed the provided buffer keeps its window, and we can test
-     the [Buffer_until_initialized] feature to ignore writes after close.
+  (* We give out an [Iobuf] with a shared underlying [Bigstring] but different pointers so
+     that when this is closed the provided buffer keeps its window, and we can test the
+     [Buffer_until_initialized] feature to ignore writes after close.
 
      This also ensures our logic works when the window of [buf] is narrower than the
      limits because [sub_shared] leads to a buffer with equal window and limits. *)
@@ -82,7 +82,8 @@ end = struct
     ; dest : (module Writer_intf.Destination)
     }
 
-  type internal = { mutable buffers : (read_write, Iobuf.seek) Iobuf.t list }
+  type internal =
+    { mutable buffers : (read_write, Iobuf.seek, Iobuf.global) Iobuf.t list }
 
   let create () =
     let t = { buffers = [] } in

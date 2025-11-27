@@ -256,11 +256,10 @@ module To_string = struct
      | Relative -> ());
     if abbreviate
     then (
-      (* Complicated rules:
-         We can use '//' to abbreviate descendant-or-self::node(), but not twice in a row.
-         If descendant-or-self::node() cannot be abbreviated if it's the last thing,
-         or if it's the first thing in a relative path (you have to do .//..., which we shouldn't
-         do in a serialization function).
+      (* Complicated rules: We can use '//' to abbreviate descendant-or-self::node(), but
+         not twice in a row. If descendant-or-self::node() cannot be abbreviated if it's
+         the last thing, or if it's the first thing in a relative path (you have to do
+         .//..., which we shouldn't do in a serialization function).
       *)
       let step_count = List.length path in
       List.foldi path ~init:false ~f:(fun i used_abbreviation step ->

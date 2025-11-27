@@ -1,29 +1,29 @@
 @@ portable
 
 (** Atomic references to unique values. Thread-safe version of {!Ref.t}. *)
-type (!'a : value) t : immutable_data with 'a @@ contended portable
+type (!'a : value_or_null) t : immutable_data with 'a @@ contended portable
 
 (** [make a] creates a new reference containing the given value [a]. *)
 external make
-  : ('a : value).
+  : ('a : value_or_null).
   'a @ contended once portable unique -> ('a t[@local_opt]) @ unique
   = "%makemutable"
 
 (** [get t] destroys [t] to extract the value inside. *)
 external get
-  : ('a : value).
+  : ('a : value_or_null).
   'a t @ local unique -> 'a @ contended once portable unique
   = "%atomic_load"
 
 (** [set t a] overrides the stored value inside [t] with [a]. *)
 external set
-  : ('a : value).
+  : ('a : value_or_null).
   'a t @ local -> 'a @ contended once portable unique -> unit
   = "%atomic_set"
 
 (** [exchange t a] extracts the value inside [t], replacing it with [a]. *)
 external exchange
-  : ('a : value).
+  : ('a : value_or_null).
   'a t @ local
   -> 'a @ contended once portable unique
   -> 'a @ contended once portable unique
@@ -36,7 +36,7 @@ external exchange
     current value was not physically equal to [if_phys_equal_to] and hence the atomic
     reference was left unchanged. *)
 external compare_and_set
-  : ('a : value).
+  : ('a : value_or_null).
   'a t @ local
   -> if_phys_equal_to:'a @ contended
   -> replace_with:'a @ contended once portable unique

@@ -230,11 +230,11 @@ let parse_expr_common ~locs : interpolation Angstrom.t =
      and code = scan_through_ocaml_expression_until_unclosed_curly_brace ~locs
      and end_ = pos
      and () = string "}" in
-     let code, end_, to_t =
+     let interpolation_content_loc = Locations.location locs ~start ~end_ in
+     let code, to_t =
        match Ocaml_parsing.rsplit_on_hash code with
-       | None -> code, end_, None
+       | None -> code, None
        | Some (code, to_t) ->
-         let length = String.length to_t in
          let to_t =
            { txt = to_t
            ; loc = Locations.location locs ~start:(end_ - String.length to_t - 1) ~end_
@@ -246,7 +246,7 @@ let parse_expr_common ~locs : interpolation Angstrom.t =
            | { pexp_loc; _ } ->
              Location.raise_errorf ~loc:pexp_loc "Expected a module identifier (e.g. Foo)"
          in
-         code, end_ - length - 1, Some to_t
+         code, Some to_t
      in
      let code =
        { txt = "(" ^ code ^ ")"; loc = Locations.location locs ~start:(start - 1) ~end_ }
@@ -262,6 +262,7 @@ let parse_expr_common ~locs : interpolation Angstrom.t =
            "Failed to parse OCaml expression inside of HTML."
        | exception exn -> fail ~start ~end_ ~locs ~exn "Failed to Parse Expression"
      in
+     let expr = { expr with pexp_loc = interpolation_content_loc } in
      let string_relative_location = { String_relative_location.start; end_ = end_ - 1 } in
      fun loc ->
        let expr =
@@ -593,13 +594,13 @@ let parse_element ~(parse_node : Node.t t) ~locs : Node.t Angstrom.t =
          and close_end = pos
          and () = char '>' <|> fail_with_closing_tag ~tag ~locs in
          let open struct
-           (* NOTE: This is a bit complex.  There are roughly three scenarios:
+           (* NOTE: This is a bit complex. There are roughly three scenarios:
 
-              - "Normal" tags, (e.g. <div></div>): The closing tag _must_ match the opening
-                tag.
+              - "Normal" tags, (e.g. <div></div>): The closing tag _must_ match the
+                opening tag.
 
-              - "Interpolated" tags/Fragments (e.g. <></> or <%{F}></>): The
-                closing tag _must_ be empty.
+              - "Interpolated" tags/Fragments (e.g. <></> or <%[{F}]></>): The closing tag
+                _must_ be empty.
 
               - "Component" tags (e.g. <Foo.f></> or <Foo.f></Foo.f>): The closing tag may
                 be empty or must match the opening tag.
@@ -662,17 +663,17 @@ let parse_element ~(parse_node : Node.t t) ~locs : Node.t Angstrom.t =
 ;;
 
 let collapse_prefix_and_trailing_ws s =
-  (* NOTE: This "collapses" whitespace so that it remains in-sync with the spec
-     defined in: 
+  (* NOTE: This "collapses" whitespace so that it remains in-sync with the spec defined
+     in:
 
      https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model/Whitespace
 
      this does not "collapse" across adjacent whitespace between elements sadly.
 
-     The "collapsing" whitespace part is optional. Another valid way of addressing
-     this would be to solely leave the whitespace in, but this would have some runtime
-     cost in addition to making the string harder to read during tests... This instead
-     moves the cost to build time (at ppx expansion time).
+     The "collapsing" whitespace part is optional. Another valid way of addressing this
+     would be to solely leave the whitespace in, but this would have some runtime cost in
+     addition to making the string harder to read during tests... This instead moves the
+     cost to build time (at ppx expansion time).
   *)
   match String.for_all s ~f:Char.is_whitespace with
   | true -> " "
@@ -750,8 +751,8 @@ let parse ~locs =
   | Some _ ->
     (* NOTE: Here is unparsed input. Parsing will fail, but we still do things here to
        provide better error messages. I _think_ that this only happens with
-       <div></div></div> though I am unsure it's __ONLY__ in that case hence
-       the `Unknown case. *)
+       <div></div></div> though I am unsure it's __ONLY__ in that case hence the `Unknown
+       case. *)
     (match%bind choice [ "</" => `Unopened_tag; return `Unknown ] with
      | `Unopened_tag -> fail ~locs "This closing tag was never opened."
      | `Unknown ->

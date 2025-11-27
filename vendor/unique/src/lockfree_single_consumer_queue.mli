@@ -5,8 +5,11 @@ open! Base
 (** A lock-free multi-producer, single-consumer queue of [once unique] elements. *)
 type 'a t : value mod portable
 
-(** [create ()] creates a new empty queue. *)
-val create : unit -> 'a t
+(** [create ()] creates a new empty queue.
+
+    The optional [padded] argument specifies whether to pad the data structure to avoid
+    false sharing. See {!Atomic.make} for a longer explanation. *)
+val create : ?padded:bool @ local -> unit -> 'a t
 
 (** [is_empty t] determines whether the queue [t] is empty. *)
 val is_empty : 'a t @ local -> bool

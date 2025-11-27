@@ -19,9 +19,9 @@ val to_string
            output (defaults to [true]). *)
   -> ?buf:
        Buffer.t
-       (* Minified = no new lines or indents (default)
-     Newlines_only = new lines for every tag
-     Indent of n = include new lines, and also indent each nested level w/ n spaces *)
+       (* Minified = no new lines or indents (default) Newlines_only = new lines for every
+          tag Indent of n = include new lines, and also indent each nested level w/ n
+          spaces *)
   -> ?fmt:[ `Minified | `Newlines_only | `Indent of int ]
   -> element
   -> string

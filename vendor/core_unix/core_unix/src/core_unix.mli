@@ -176,7 +176,7 @@ module Error : sig
 
   (*_ See the Jane Street Style Guide for an explanation of [Private] submodules:
 
-    https://opensource.janestreet.com/standards/#private-submodules *)
+      https://opensource.janestreet.com/standards/#private-submodules *)
   module Private : sig
     val to_errno : t -> int
   end
@@ -240,8 +240,8 @@ val unsetenv : string -> unit @@ nonportable
 
 (** The termination status of a process. *)
 module Exit : sig
-  type error = [ `Exit_non_zero of int ] [@@deriving compare ~localize, sexp]
-  type t = (unit, error) Result.t [@@deriving compare ~localize, sexp]
+  type error = [ `Exit_non_zero of int ] [@@deriving bin_io, compare ~localize, sexp]
+  type t = (unit, error) Result.t [@@deriving bin_io, compare ~localize, sexp]
 
   val to_string_hum : t -> string
   val code : t -> int
@@ -254,9 +254,9 @@ module Exit_or_signal : sig
     [ Exit.error
     | `Signal of Signal.t
     ]
-  [@@deriving compare ~localize, sexp]
+  [@@deriving bin_io, compare ~localize, sexp]
 
-  type t = (unit, error) Result.t [@@deriving compare ~localize, sexp]
+  type t = (unit, error) Result.t [@@deriving bin_io, compare ~localize, sexp]
 
   (** [of_unix] assumes that any signal numbers in the incoming value are OCaml internal
       signal numbers. *)
@@ -271,9 +271,9 @@ module Exit_or_signal_or_stop : sig
     [ Exit_or_signal.error
     | `Stop of Signal.t
     ]
-  [@@deriving sexp]
+  [@@deriving bin_io, sexp]
 
-  type t = (unit, error) Result.t [@@deriving sexp]
+  type t = (unit, error) Result.t [@@deriving bin_io, sexp]
 
   (** [of_unix] assumes that any signal numbers in the incoming value are OCaml internal
       signal numbers. *)
@@ -366,26 +366,46 @@ val exec
   -> unit
   -> never_returns
 
-(** [fork_exec ~prog ~argv ?preexec_fn ?use_path ?env ()] forks, calls [preexec_fn], and
-    then execs [prog] with [argv] in the child process, returning the child PID to the
-    parent. As in [exec], by convention, the 0th element in [argv] should be the program
-    itself.
+module Pre_exec_command : sig
+  type t =
+    | Fd_open of
+        { fd : Unix.file_descr
+        ; filename : string
+        ; flags : Unix.open_flag list
+        ; perm : int
+        }
+    | Fd_close of Unix.file_descr
+    | Fd_dup2 of
+        { src : Unix.file_descr
+        ; dst : Unix.file_descr
+        }
+    | Signal_setignore of Signal.t
+    | Signal_setdefault of Signal.t
+    | Signal_setmask of Signal.t list
+    | Signal_setpdeathsig of Signal.t
+    | Sched_setscheduler of
+        { policy : Scheduler.Policy.t
+        ; priority : int
+        }
+    | Sched_nice of
+        { niceness : int
+        ; ignore_eperm : bool
+        }
+    | Sched_setaffinity of int list
+  [@@deriving sexp]
+end
 
-    Since [preexec_fn] is invoked post-fork but pre-exec, it must:
-    - not allocate; and
-    - not call any async-signal-unsafe functions (see man 7 signal)
-
-    Violating these constraints may cause the program to deadlock or exhibit undefined
-    behavior. *)
+(** [fork_exec ~prog ~argv ?preexec ?use_path ?env ()] forks, runs [preexec], and then
+    execs [prog] with [argv] in the child process, returning the child PID to the parent.
+    As in [exec], by convention, the 0th element in [argv] should be the program itself. *)
 val fork_exec
   :  prog:string
   -> argv:string list
-  -> ?preexec_fn:(unit -> unit)
+  -> ?preexec:Pre_exec_command.t list
   -> ?use_path:bool (** default is [true] *)
   -> ?env:env
   -> unit
   -> Pid.t
-  @@ nonportable
 
 (** [fork ()] forks a new process. The return value indicates whether we are continuing in
     the child or the parent, and if the parent, includes the child's process id. *)
@@ -617,7 +637,7 @@ val single_write
   -> ?pos:int
   -> ?len:int
   -> File_descr.t
-  -> buf:Bytes.t
+  -> buf:Bytes.t @ shared
   -> int
 
 (** Same as [single_write] but with a string buffer. *)
@@ -1774,7 +1794,7 @@ val send_substring
 (** Send data over an unconnected socket. *)
 val sendto
   :  File_descr.t
-  -> buf:Bytes.t
+  -> buf:Bytes.t @ shared
   -> pos:int
   -> len:int
   -> mode:msg_flag list
@@ -2102,7 +2122,7 @@ module Terminal_io : sig
       all pending output has been transmitted ([TCSADRAIN]), or after flushing all input
       that has been received but not read ([TCSAFLUSH]). [TCSADRAIN] is recommended when
       changing the output parameters; [TCSAFLUSH], when changing the input parameters. *)
-  val tcsetattr : t -> File_descr.t -> mode:setattr_when -> unit
+  val tcsetattr : t @ shared -> File_descr.t -> mode:setattr_when -> unit
 
   (** Send a break condition on the given file descriptor. The second argument is the
       duration of the break, in 0.1s units; 0 means standard duration (0.25s). *)
@@ -2599,7 +2619,7 @@ module Ifaddr : sig
 
     (*_ See the Jane Street Style Guide for an explanation of [Private] submodules:
 
-      https://opensource.janestreet.com/standards/#private-submodules *)
+        https://opensource.janestreet.com/standards/#private-submodules *)
     module Private : sig
       val core_unix_iff_to_int : t -> int
       val set_of_int : int -> Set.t

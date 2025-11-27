@@ -1,13 +1,13 @@
-(* Binable: signatures defining generated functions for the binary protocol.
-   [S, S1, etc] are the signatures satisfied by the generated code and
-   [Minimal.S, Minimal.S1, etc] are the signatures that generated code uses. *)
+(* Binable: signatures defining generated functions for the binary protocol. [S, S1, etc]
+   are the signatures satisfied by the generated code and [Minimal.S, Minimal.S1, etc] are
+   the signatures that generated code uses. *)
 
 [%%template
 [@@@mode.default m = (global, local)]
 
 (* the subset of S containing only functions, so that one can recursively define modules
    implementing this interface *)
-module type S_any_only_functions = sig
+module type S_only_functions = sig
   type t : any
 
   include sig
@@ -26,10 +26,10 @@ module type S_any_only_functions = sig
   val __bin_read_t__ : t Read.vtag_reader
 end
 
-module type S_any = sig
+module type S = sig
   type t : any
 
-  include S_any_only_functions [@mode m] with type t := t
+  include S_only_functions [@mode m] with type t := t
 
   val bin_shape_t : Shape.t
   val bin_writer_t : t Type_class.writer
@@ -37,22 +37,10 @@ module type S_any = sig
   val bin_t : t Type_class.t
 end
 
-module type S = sig
-  type t
-
-  include S_any [@mode m] with type t := t
-end
-
-module type S_only_functions = sig
-  type t
-
-  include S_any_only_functions [@mode m] with type t := t
-end
-
 [@@@kind.default ka = (value, any)]
 
 module type S1 = sig
-  type ('a : ka) t
+  type ('a : ka) t : any
 
   val bin_shape_t : Shape.t -> Shape.t
 
@@ -73,7 +61,7 @@ end
 [@@@kind.default kb = (value, any)]
 
 module type S2 = sig
-  type ('a : ka, 'b : kb) t
+  type ('a : ka, 'b : kb) t : any
 
   val bin_shape_t : Shape.t -> Shape.t -> Shape.t
 
@@ -94,7 +82,7 @@ end
 [@@@kind.default kc = (value, any)]
 
 module type S3 = sig
-  type ('a : ka, 'b : kb, 'c : kc) t
+  type ('a : ka, 'b : kb, 'c : kc) t : any
 
   val bin_shape_t : Shape.t -> Shape.t -> Shape.t -> Shape.t
 
@@ -134,7 +122,7 @@ module Minimal = struct
   [@@@mode.default m = (global, local)]
 
   module type S = sig
-    type t
+    type t : value_or_null
 
     val bin_shape_t : Shape.t
 
@@ -152,7 +140,7 @@ module Minimal = struct
   [@@@kind.default ka = (value, any)]
 
   module type S1 = sig
-    type ('a : ka) t
+    type ('a : ka) t : value_or_null
 
     val bin_shape_t : Shape.t -> Shape.t
 
@@ -170,7 +158,7 @@ module Minimal = struct
   [@@@kind.default kb = (value, any)]
 
   module type S2 = sig
-    type ('a : ka, 'b : kb) t
+    type ('a : ka, 'b : kb) t : value_or_null
 
     val bin_shape_t : Shape.t -> Shape.t -> Shape.t
 
@@ -188,7 +176,7 @@ module Minimal = struct
   [@@@kind.default kc = (value, any)]
 
   module type S3 = sig
-    type ('a : ka, 'b : kb, 'c : kc) t
+    type ('a : ka, 'b : kb, 'c : kc) t : value_or_null
 
     val bin_shape_t : Shape.t -> Shape.t -> Shape.t -> Shape.t
 

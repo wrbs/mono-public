@@ -272,5 +272,5 @@ function caml_int_as_pointer(i) {
 
 //Provides: caml_is_null
 function caml_is_null(o) {
-  return o === null;
+  return o === null ? 1 : 0;
 }

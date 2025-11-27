@@ -132,11 +132,11 @@ module type Type_class = sig @@ portable
   val bin_shape_lazy : Shape.t -> Shape.t
   val bin_lazy : ('a, 'a lazy_t) S1.t
 
-  (*$ mk_base1 "option" *)
-  val bin_writer_option : ('a, 'a option) S1.writer
-  val bin_reader_option : ('a, 'a option) S1.reader
+  (*$ mk_base1 ~layout:"value_or_null" "option" *)
+  val bin_writer_option : ('a : value_or_null). ('a, 'a option) S1.writer
+  val bin_reader_option : ('a : value_or_null). ('a, 'a option) S1.reader
   val bin_shape_option : Shape.t -> Shape.t
-  val bin_option : ('a, 'a option) S1.t
+  val bin_option : ('a : value_or_null). ('a, 'a option) S1.t
   (*$*)
 
   val bin_writer_pair : ('a, 'b, 'a * 'b) S2.writer
@@ -146,23 +146,23 @@ module type Type_class = sig @@ portable
   val bin_reader_triple : ('a, 'b, 'c, 'a * 'b * 'c) S3.reader
   val bin_triple : ('a, 'b, 'c, 'a * 'b * 'c) S3.t
 
-  (*$ mk_base1 "list" *)
-  val bin_writer_list : ('a, 'a list) S1.writer
-  val bin_reader_list : ('a, 'a list) S1.reader
+  (*$ mk_base1 ~layout:"value_or_null" "list" *)
+  val bin_writer_list : ('a : value_or_null). ('a, 'a list) S1.writer
+  val bin_reader_list : ('a : value_or_null). ('a, 'a list) S1.reader
   val bin_shape_list : Shape.t -> Shape.t
-  val bin_list : ('a, 'a list) S1.t
+  val bin_list : ('a : value_or_null). ('a, 'a list) S1.t
 
-  (*$ mk_base1 "array" *)
-  val bin_writer_array : ('a, 'a array) S1.writer
-  val bin_reader_array : ('a, 'a array) S1.reader
+  (*$ mk_base1 ~layout:"value_or_null mod separable" "array" *)
+  val bin_writer_array : ('a : value_or_null mod separable). ('a, 'a array) S1.writer
+  val bin_reader_array : ('a : value_or_null mod separable). ('a, 'a array) S1.reader
   val bin_shape_array : Shape.t -> Shape.t
-  val bin_array : ('a, 'a array) S1.t
+  val bin_array : ('a : value_or_null mod separable). ('a, 'a array) S1.t
 
-  (*$ mk_base1 "iarray" *)
-  val bin_writer_iarray : ('a, 'a iarray) S1.writer
-  val bin_reader_iarray : ('a, 'a iarray) S1.reader
+  (*$ mk_base1 ~layout:"value_or_null mod separable" "iarray" *)
+  val bin_writer_iarray : ('a : value_or_null mod separable). ('a, 'a iarray) S1.writer
+  val bin_reader_iarray : ('a : value_or_null mod separable). ('a, 'a iarray) S1.reader
   val bin_shape_iarray : Shape.t -> Shape.t
-  val bin_iarray : ('a, 'a iarray) S1.t
+  val bin_iarray : ('a : value_or_null mod separable). ('a, 'a iarray) S1.t
 
   (*$ mk_base_tp "float32_vec" "vec32" *)
   val bin_writer_float32_vec : vec32 writer

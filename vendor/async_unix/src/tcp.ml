@@ -79,9 +79,9 @@ let close_sock_on_error s f =
   >>| function
   | Ok v -> v
   | Error e ->
-    (* [close] may fail, but we don't really care, since it will fail
-       asynchronously.  The error we really care about is [e], and the
-       [raise_error] will cause the current monitor to see that. *)
+    (* [close] may fail, but we don't really care, since it will fail asynchronously. The
+       error we really care about is [e], and the [raise_error] will cause the current
+       monitor to see that. *)
     don't_wait_for (Unix.close (Socket.fd s));
     raise e
 ;;
@@ -241,10 +241,13 @@ module Where_to_listen = struct
     type ('address, 'listening_on) t =
       { listening_on : 'address -> 'listening_on
       ; reuseaddr : bool
+      ; reuseport : bool
       }
     [@@deriving fields ~getters]
 
-    let create ?(reuseaddr = true) listening_on = { listening_on; reuseaddr }
+    let create ?(reuseaddr = true) ?(reuseport = false) listening_on =
+      { listening_on; reuseaddr; reuseport }
+    ;;
   end
 
   type ('address, 'listening_on) t =
@@ -259,20 +262,24 @@ module Where_to_listen = struct
 
   let is_inet_witness t = Socket.Family.is_inet_witness (Socket.Type.family t.socket_type)
 
-  let create_aux ~socket_type ~address ~listening_on ~reuseaddr =
-    { socket_type; address; listening_on = Listening_on.create ~reuseaddr listening_on }
+  let create_aux ~socket_type ~address ~listening_on ~reuseaddr ~reuseport =
+    { socket_type
+    ; address
+    ; listening_on = Listening_on.create ~reuseaddr ~reuseport listening_on
+    }
   ;;
 
   let create ~socket_type ~address ~listening_on =
-    create_aux ~socket_type ~address ~listening_on ~reuseaddr:true
+    create_aux ~socket_type ~address ~listening_on ~reuseaddr:true ~reuseport:false
   ;;
 
   let create_no_reuseaddr ~socket_type ~address ~listening_on =
-    create_aux ~socket_type ~address ~listening_on ~reuseaddr:false
+    create_aux ~socket_type ~address ~listening_on ~reuseaddr:false ~reuseport:false
   ;;
 
   let bind_to
     ?(reuseaddr = true)
+    ?(reuseport = false)
     (bind_to_address : Bind_to_address.t)
     (bind_to_port : Bind_to_port.t)
     =
@@ -294,6 +301,7 @@ module Where_to_listen = struct
             (function
               | `Inet (_, port) -> port)
         ; reuseaddr
+        ; reuseport
         }
     }
   ;;
@@ -325,6 +333,7 @@ module Where_to_listen = struct
   ;;
 
   let reuseaddr t = t.listening_on.reuseaddr
+  let reuseport t = t.listening_on.reuseport
 end
 
 module Server = struct
@@ -362,7 +371,7 @@ module Server = struct
     (* We make sure not to be too spammy with logs. This number was chosen pretty
        arbitrarily. *)
     let log_threshold = Time_ns.Span.of_min 1.
-    let max_connection_limit_logger = ref (eprint_s ?mach:None)
+    let max_connection_limit_logger = ref [%eta1 eprint_s ?mach:None]
     let set_logger = ( := ) max_connection_limit_logger
 
     let log_at_limit t ~now =
@@ -468,17 +477,15 @@ module Server = struct
       | `Socket_closed -> ()
       | `Ok conns ->
         (* It is possible that someone called [close t] after the [accept] returned but
-           before we got here.  In that case, we just close the clients.  One might argue
+           before we got here. In that case, we just close the clients. One might argue
            that if [close] was called with [close_existing_connections = false], then we
            should not close these, but instead let the clients finish their business. One
            may want this for example to arrange a smooth handover when using
-           [SO_REUSEPORT].
-           Unfortunately, even if we make this fix, a smooth handover
-           does not seem to be possible on Linux, since Linux assigns a connection to a
-           process before [accept] is called, which creates an inherent race between that
-           and [close]: any connections assigned to a listening socket at the time of
-           [close] will be dropped.
-        *)
+           [SO_REUSEPORT]. Unfortunately, even if we make this fix, a smooth handover does
+           not seem to be possible on Linux, since Linux assigns a connection to a process
+           before [accept] is called, which creates an inherent race between that and
+           [close]: any connections assigned to a listening socket at the time of [close]
+           will be dropped.  *)
         if is_closed t || t.drop_incoming_connections
         then
           List.iter conns ~f:(fun (sock, _) -> don't_wait_for (Fd.close (Socket.fd sock)))
@@ -600,6 +607,10 @@ module Server = struct
                 socket
                 Socket.Opt.reuseaddr
                 (Where_to_listen.reuseaddr where_to_listen);
+              Socket.setopt
+                socket
+                Socket.Opt.reuseport
+                (Where_to_listen.reuseport where_to_listen);
               socket)
         ; retries_upon_addr_in_use =
             Where_to_listen.max_retries_upon_addr_in_use where_to_listen
@@ -679,7 +690,7 @@ module Server = struct
         ~limit:(get_max_connections_limit max_connections)
         ~time_source
           (* We must call [Fd.info] on the socket's fd after [Socket.bind] is called,
-           otherwise the [Info.t] won't have been set yet. *)
+             otherwise the [Info.t] won't have been set yet. *)
         ~listening_on:(Fd.info (Socket.fd socket))
     in
     create_from_socket
@@ -719,7 +730,7 @@ module Server = struct
         ~limit:(get_max_connections_limit max_connections)
         ~time_source
           (* We must call [Fd.info] on the socket's fd after [Socket.bind_inet] is called,
-           otherwise the [Info.t] won't have been set yet. *)
+             otherwise the [Info.t] won't have been set yet. *)
         ~listening_on:(Fd.info (Socket.fd socket))
     in
     create_from_socket

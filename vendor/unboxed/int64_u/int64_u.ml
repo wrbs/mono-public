@@ -15,7 +15,7 @@ external unbox_float : (float[@local_opt]) -> float# @@ portable = "%unbox_float
 
    Most functions in this file are implemented by boxing the int, calling the equivalent
    function on boxed ints, and then unboxing the result. This may seem surprising: isn't
-   the point of unboxed types to avoid boxes?  But it's fine; the compiler's middle-end
+   the point of unboxed types to avoid boxes? But it's fine; the compiler's middle-end
    will reliably eliminate these boxing and unboxing steps, and the testsuite checks there
    are no allocations here. If you add new functions, you should add similar tests.
 
@@ -481,8 +481,7 @@ module Hex_unsigned = struct
       clamp_unchecked ~min:#1L ~max:max_digits (ceil_div (#64L - clz t) #4L)
     ;;
 
-    (* 2 bytes for the "0x" prefix.
-       plus one byte per 4-bit digit. *)
+    (* 2 bytes for the "0x" prefix. plus one byte per 4-bit digit. *)
     let[@inline] to_string_required_length ~digits_to_process =
       let open O in
       to_int_trunc (#2L + digits_to_process)

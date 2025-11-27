@@ -4,8 +4,8 @@ open Async
 open Command_rpc_intf
 
 module Default_timeouts = struct
-  (* Here we greatly increase the default timeouts that we inherit from Async_rpc.
-     The reason it makes sense to have larger defaults here are:
+  (* Here we greatly increase the default timeouts that we inherit from Async_rpc. The
+     reason it makes sense to have larger defaults here are:
      - it's common to use [Command_rpc] to offload slow computations to the child process,
        so long async cycles in the child are more likely, which makes spurious timeout
        more likely;
@@ -187,8 +187,8 @@ module Command = struct
       Int.( = ) (Core_unix.File_descr.to_int fd1) (Core_unix.File_descr.to_int fd2)
     in
     let equivalent_fd fd1 fd2 =
-      (* this is the same check [Writer] does when sharing the writer between stderr
-         and stdout *)
+      (* this is the same check [Writer] does when sharing the writer between stderr and
+         stdout *)
       let dev_and_ino fd =
         let stats = Core_unix.fstat fd in
         stats.st_dev, stats.st_ino
@@ -225,8 +225,8 @@ module Command = struct
       stdin, stdout
     in
     let make_sure_stdin_and_stdout_are_not_used () =
-      (* After this, anyone attempting to read from stdin gets an empty result
-         and anything written to stdout goes to stderr instead. *)
+      (* After this, anyone attempting to read from stdin gets an empty result and
+         anything written to stdout goes to stderr instead. *)
       let dev_null = Core_unix.openfile ~mode:[ O_RDONLY ] "/dev/null" in
       Async.Fd.expect_file_descr_redirection Core_unix.stdin ~f:(fun () ->
         Core_unix.dup2 ~src:dev_null ~dst:Core_unix.stdin ());
@@ -266,6 +266,8 @@ module Command = struct
     ?connection_description
     ?(handshake_timeout = default_handshake_timeout ~side:`child)
     ?(heartbeat_config = default_heartbeat_config ~side:`child)
+    ?heartbeat_timeout_style
+    ?provide_rpc_shapes
     ?max_message_size
     ?log_not_previously_seen_version
     ?buffer_age_limit
@@ -313,6 +315,8 @@ module Command = struct
              ~description
              ~handshake_timeout
              ~heartbeat_config
+             ?heartbeat_timeout_style
+             ?provide_rpc_shapes
              ?max_message_size
              ~implementations
              ~connection_state:(fun conn ->
@@ -410,6 +414,8 @@ module Command = struct
         fun ?connection_description
           ?handshake_timeout
           ?heartbeat_config
+          ?heartbeat_timeout_style
+          ?provide_rpc_shapes
           ?max_message_size
           ?log_not_previously_seen_version
           ?buffer_age_limit
@@ -419,6 +425,8 @@ module Command = struct
             ?connection_description
             ?handshake_timeout
             ?heartbeat_config
+            ?heartbeat_timeout_style
+            ?provide_rpc_shapes
             ?max_message_size
             ?log_not_previously_seen_version
             ?buffer_age_limit
@@ -438,20 +446,24 @@ module Command = struct
             ?connection_description
             ?handshake_timeout
             ?heartbeat_config
+            ?heartbeat_timeout_style
+            ?provide_rpc_shapes
             ?max_message_size
             ?log_not_previously_seen_version
             ?buffer_age_limit
             ?on_connection
             rpcs
           ->
-          (* If you want to detect success or failure and do something appropriate,
-                 you can just do that from your RPC implementation. But we still need
-                 [param_exit_status] separately because [create] below doesn't have
-                 access to the RPC implementations. *)
+          (* If you want to detect success or failure and do something appropriate, you
+             can just do that from your RPC implementation. But we still need
+             [param_exit_status] separately because [create] below doesn't have access to
+             the RPC implementations. *)
           main
             ?connection_description
             ?handshake_timeout
             ?heartbeat_config
+            ?heartbeat_timeout_style
+            ?provide_rpc_shapes
             ?max_message_size
             ?log_not_previously_seen_version
             ?buffer_age_limit
@@ -466,6 +478,8 @@ module Command = struct
     ?connection_description
     ?handshake_timeout
     ?heartbeat_config
+    ?heartbeat_timeout_style
+    ?provide_rpc_shapes
     ?max_message_size
     ?log_not_previously_seen_version
     ?buffer_age_limit
@@ -484,6 +498,8 @@ module Command = struct
                ?connection_description
                ?handshake_timeout
                ?heartbeat_config
+               ?heartbeat_timeout_style
+               ?provide_rpc_shapes
                ?max_message_size
                ?log_not_previously_seen_version
                ?buffer_age_limit
@@ -533,6 +549,8 @@ module Connection = struct
     -> ?connection_description:Info.t
     -> ?handshake_timeout:Time_float.Span.t
     -> ?heartbeat_config:Rpc.Connection.Heartbeat_config.t
+    -> ?heartbeat_timeout_style:Rpc.Connection.Heartbeat_timeout_style.t
+    -> ?provide_rpc_shapes:bool
     -> ?max_message_size:int
     -> ?buffer_age_limit:Writer.buffer_age_limit
     -> ?implementations:unit Rpc.Implementations.t
@@ -592,9 +610,9 @@ module Connection = struct
       (match stderr_handling with
        | Propagate_stderr | Custom (_ : Reader.t -> unit Deferred.t) -> ()
        | Ignore_stderr ->
-         (* The default for [stderr_handling] (below) is 'Propagate_stderr'.  Because
-            we always propagate stderr here (and stdout), complain if called
-            with anything but 'Propagate_stderr'. *)
+         (* The default for [stderr_handling] (below) is 'Propagate_stderr'. Because we
+            always propagate stderr here (and stdout), complain if called with anything
+            but 'Propagate_stderr'. *)
          raise_s
            [%message
              "Cannot have 'new_fds_for_rpc' and not propagate stderr"
@@ -721,6 +739,8 @@ module Connection = struct
     ?connection_description
     ?(handshake_timeout = default_handshake_timeout ~side:`parent)
     ?(heartbeat_config = default_heartbeat_config ~side:`parent)
+    ?heartbeat_timeout_style
+    ?provide_rpc_shapes
     ?max_message_size
     ?buffer_age_limit
     ?implementations
@@ -751,6 +771,8 @@ module Connection = struct
                (get_connection_description ~connection_description ~prog ~args ~process)
              ~handshake_timeout
              ~heartbeat_config
+             ?heartbeat_timeout_style
+             ?provide_rpc_shapes
              ?max_message_size
              ?implementations
              ~connection_state:(fun _ -> ())
@@ -771,6 +793,8 @@ module Connection = struct
     ?connection_description
     ?(handshake_timeout = default_handshake_timeout ~side:`parent)
     ?(heartbeat_config = default_heartbeat_config ~side:`parent)
+    ?heartbeat_timeout_style
+    ?provide_rpc_shapes
     ?max_message_size
     ?buffer_age_limit
     ?implementations
@@ -800,6 +824,8 @@ module Connection = struct
              (get_connection_description ~connection_description ~prog ~args ~process)
            ~handshake_timeout
            ~heartbeat_config
+           ?heartbeat_timeout_style
+           ?provide_rpc_shapes
            ?max_message_size
            ?implementations
            ~connection_state:(fun _ -> ())

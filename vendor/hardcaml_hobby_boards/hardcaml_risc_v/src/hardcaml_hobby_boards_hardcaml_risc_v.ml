@@ -1,3 +1,4 @@
+module Framebuffer_expander = Framebuffer_expander
 module Memory_to_axi32 = Memory_to_axi32
 module Prepend_address = Prepend_address
 module System = System

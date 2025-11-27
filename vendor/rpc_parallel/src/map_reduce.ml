@@ -102,9 +102,23 @@ end
 module type Rpc_parallel_worker_spec = sig
   type state_type
 
-  module Param : Binable
-  module Run_input : Binable
-  module Run_output : Binable
+  module Param : sig
+    type t
+
+    include Binable with type t := t
+  end
+
+  module Run_input : sig
+    type t
+
+    include Binable with type t := t
+  end
+
+  module Run_output : sig
+    type t
+
+    include Binable with type t := t
+  end
 
   val init : Param.t -> worker_index:int -> state_type Deferred.t
   val execute : state_type -> Run_input.t -> Run_output.t Deferred.t
@@ -235,9 +249,23 @@ end
 (* Map *)
 
 module type Map_function = sig
-  module Param : Binable
-  module Input : Binable
-  module Output : Binable
+  module Param : sig
+    type t
+
+    include Binable with type t := t
+  end
+
+  module Input : sig
+    type t
+
+    include Binable with type t := t
+  end
+
+  module Output : sig
+    type t
+
+    include Binable with type t := t
+  end
 
   module Worker :
     Worker
@@ -249,9 +277,23 @@ end
 module type Map_function_with_init_spec = sig
   type state_type
 
-  module Param : Binable
-  module Input : Binable
-  module Output : Binable
+  module Param : sig
+    type t
+
+    include Binable with type t := t
+  end
+
+  module Input : sig
+    type t
+
+    include Binable with type t := t
+  end
+
+  module Output : sig
+    type t
+
+    include Binable with type t := t
+  end
 
   val init : Param.t -> worker_index:int -> state_type Deferred.t
   val map : state_type -> Input.t -> Output.t Deferred.t
@@ -275,8 +317,17 @@ module Make_map_function_with_init (S : Map_function_with_init_spec) = struct
 end
 
 module type Map_function_spec = sig
-  module Input : Binable
-  module Output : Binable
+  module Input : sig
+    type t
+
+    include Binable with type t := t
+  end
+
+  module Output : sig
+    type t
+
+    include Binable with type t := t
+  end
 
   val map : Input.t -> Output.t Deferred.t
 end
@@ -298,9 +349,23 @@ module Make_map_function (S : Map_function_spec) = Make_map_function_with_init (
 (* Map-combine *)
 
 module type Map_reduce_function = sig
-  module Param : Binable
-  module Accum : Binable
-  module Input : Binable
+  module Param : sig
+    type t
+
+    include Binable with type t := t
+  end
+
+  module Accum : sig
+    type t
+
+    include Binable with type t := t
+  end
+
+  module Input : sig
+    type t
+
+    include Binable with type t := t
+  end
 
   module Worker :
     Worker
@@ -316,9 +381,23 @@ end
 module type Map_reduce_function_with_init_spec = sig
   type state_type
 
-  module Param : Binable
-  module Accum : Binable
-  module Input : Binable
+  module Param : sig
+    type t
+
+    include Binable with type t := t
+  end
+
+  module Accum : sig
+    type t
+
+    include Binable with type t := t
+  end
+
+  module Input : sig
+    type t
+
+    include Binable with type t := t
+  end
 
   val init : Param.t -> worker_index:int -> state_type Deferred.t
   val map : state_type -> Input.t -> Accum.t Deferred.t
@@ -360,8 +439,17 @@ struct
 end
 
 module type Map_reduce_function_spec = sig
-  module Accum : Binable
-  module Input : Binable
+  module Accum : sig
+    type t
+
+    include Binable with type t := t
+  end
+
+  module Input : sig
+    type t
+
+    include Binable with type t := t
+  end
 
   val map : Input.t -> Accum.t Deferred.t
   val combine : Accum.t -> Accum.t -> Accum.t Deferred.t
@@ -567,8 +655,8 @@ let map_reduce (type param a accum) ?how_to_spawn config input_reader ~m ~(param
     | (`Right | `Right_nothing_left) as dir' ->
       (match Map.closest_key (!acc_map : _ H.Map.t) `Greater_than key with
        | Some (right_key, right_acc) when H.lbound right_key = H.ubound key ->
-         (* combine acc_{this_lbound, this_ubound} acc_{right_lbound, right_ubound}
-            -> acc_{this_lbound, right_ubound} *)
+         (* combine acc_[{this_lbound, this_ubound}] acc_[{right_lbound, right_ubound}] ->
+            acc_[{this_lbound, right_ubound}] *)
          acc_map
          := Map.remove (Map.remove (!acc_map : _ H.Map.t) key : _ H.Map.t) right_key;
          let%bind new_acc =
@@ -590,8 +678,8 @@ let map_reduce (type param a accum) ?how_to_spawn config input_reader ~m ~(param
       let%bind () =
         match Map.closest_key (!acc_map : _ H.Map.t) `Less_than key with
         | Some (left_key, left_acc) when H.ubound left_key = H.lbound key ->
-          (* combine acc_{left_lbound, left_ubound} (map a_index)
-             -> acc_{left_lbound, index + 1} *)
+          (* combine acc_[{left_lbound, left_ubound}] (map a_index) ->
+             acc_[{left_lbound, index + 1}] *)
           acc_map := Map.remove (!acc_map : _ H.Map.t) left_key;
           let%bind acc =
             Map_reduce_function.Worker.run_exn

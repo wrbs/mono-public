@@ -16,7 +16,7 @@ end
 
 let create _scope { I.a; b } = { O.s = Signal.( +: ) a b }
 
-module Bench = Step_harness_imperative.Make (I) (O)
+module Bench = Step_harness_imperative.Make_monadic (I) (O)
 
 (* More thorough testing is done in [test_step.ml]; this test is primarily to ensure the
    imperative harness runs correctly. *)

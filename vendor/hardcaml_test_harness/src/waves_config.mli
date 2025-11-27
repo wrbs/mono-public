@@ -43,16 +43,20 @@ val to_file : string -> t
 val to_test_directory : here:[%call_pos] -> unit -> t
 
 (** Write out waveforms to the directory specified by the WAVES_PREFIX environment
-    variable. *)
+    variable *)
 val to_env_directory : here:[%call_pos] -> unit -> t
 
 (** Write out waveforms to $HOME/[subdirectory] where [subdirectory] defaults to "waves" *)
 val to_home_subdirectory : ?subdirectory:string -> here:[%call_pos] -> unit -> t
 
-(** Always include line numbers in the waveform filename even if a test name is specified. *)
+(** to_home_subdirectory if input true, no_waves otherwise. This helps avoid some common
+    boilerplate we write in tests *)
+val to_home_subdirectory_when : ?subdirectory:string -> here:[%call_pos] -> bool -> t
+
+(** Always include line numbers in the waveform filename even if a test name is specified *)
 val with_always_include_line_numbers : t -> t
 
-(** Add some extra cycles to the waveform after a test finishes. *)
+(** Add some extra cycles to the waveform after a test finishes *)
 val with_extra_cycles_after_test : t -> n:int -> t
 
 (** Choose which file format to write the waveform file as *)

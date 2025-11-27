@@ -46,8 +46,7 @@ module%template.portable Make1_phantom2_distinct
   ;;
 
   (* [sub] and [subo] ensure that every position of the created sequence is populated by
-     an element of the source array.  Thus every element of [dst] below is well
-     defined. *)
+     an element of the source array. Thus every element of [dst] below is well defined. *)
   let sub src ~pos ~len =
     Ordered_collection_common.check_pos_len_exn ~pos ~len ~total_length:(Src.length src);
     let dst = Dst.create_like ~len src in
@@ -65,7 +64,7 @@ module%template.portable Make1_phantom2_distinct
          | None -> Src.length src - pos)
   ;;
 end
-[@@kind k = (value, immediate, immediate64, value mod external_, value mod external64)]
+[@@kind k = (value_with_imm, value mod external_, value mod external64)]
 
 module%template.portable [@modality p] Make1 (Sequence : Sequence1 [@kind k]) = struct
   module Seq = struct
@@ -76,7 +75,7 @@ module%template.portable [@modality p] Make1 (Sequence : Sequence1 [@kind k]) = 
 
   include Make1_phantom2_distinct [@kind k] [@modality p] (Seq) (Seq)
 end
-[@@kind k = (value, immediate, immediate64, value mod external_, value mod external64)]
+[@@kind k = (value_with_imm, value mod external_, value mod external64)]
 
 module%template.portable
   [@modality p] Make (Sequence : sig

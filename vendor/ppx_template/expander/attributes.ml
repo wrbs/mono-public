@@ -3,7 +3,6 @@ open! Import
 open Language
 include Attributes_intf.Definitions
 open Result.Let_syntax
-module Type = Language.Typed.Type
 
 module type Context = sig
   type ('a, 'w) t : immediate
@@ -384,6 +383,7 @@ module Poly = struct
   let mode_attr = declare "mode"
   let modality_attr = declare "modality"
   let alloc_attr = declare "alloc"
+  let synchro_attr = declare "synchro"
 
   let find_all_dups (type a) list ~compare =
     let module Set =
@@ -405,10 +405,17 @@ module Poly = struct
   ;;
 
   let validate_no_duplicate_patterns ~loc bindings =
-    match
-      find_all_dups bindings ~compare:(fun (pat1, _) (pat2, _) ->
-        Untyped.Pattern.compare pat1 pat2)
-    with
+    bindings
+    |> List.concat_map ~f:(fun (pattern, _) ->
+      let rec all_identifiers : Untyped.Pattern.t -> string list = function
+        | Wildcard -> []
+        | Identifier { ident } -> [ ident ]
+        | Tuple patterns ->
+          List.concat_map (Nonempty_list.to_list patterns) ~f:all_identifiers
+      in
+      all_identifiers pattern)
+    |> find_all_dups ~compare:String.compare
+    |> function
     | [] -> Ok ()
     | dups ->
       Error
@@ -416,7 +423,7 @@ module Poly = struct
            ~loc
            "[%%template]: duplicate patterns: %a"
            Sexplib0.Sexp.pp_hum
-           (sexp_of_list Untyped.Pattern.sexp_of_t (List.map dups ~f:fst)))
+           (sexp_of_list sexp_of_string dups))
   ;;
 
   let validate_bindings ~loc bindings =
@@ -450,25 +457,32 @@ module Poly = struct
     ()
   ;;
 
-  let type_check_one (pattern, expressions) ~loc ~expected ~is_set ~lookup =
+  let type_check_one (pattern, expressions) ~loc ~expected ~allow_set ~lookup =
     let* pattern = Typed.Pattern.type_check pattern ~expected in
     let+ expressions =
       Nonempty_list.map_result expressions ~f:(fun { txt = expr; loc = _ } ->
-        let+ expr = Typed.Expression.type_check expr ~expected ~is_set in
+        let+ expr = Typed.Expression.type_check expr ~expected ~allow_set in
         Typed.Expression.to_set expr)
     in
     let expression : _ Typed.Expression.t loc = { txt = Union expressions; loc } in
     ({ pattern; expression; lookup } : _ Typed.Binding.t)
   ;;
 
-  let type_check_many bindings ~expected ~is_set ~lookup =
+  let type_check_many bindings ~expected ~allow_set ~lookup =
     List.map bindings ~f:(fun { txt = binding; loc } ->
-      type_check_one binding ~loc ~expected ~is_set ~lookup)
+      type_check_one binding ~loc ~expected ~allow_set ~lookup)
     |> Result.all
   ;;
 
-  let type_check_many_not_a_tuple bindings ~expected ~is_set ~mangle_axis ~mangle ~lookup =
-    let+ bindings = type_check_many bindings ~expected ~is_set ~lookup in
+  let type_check_many_not_a_tuple
+    bindings
+    ~expected
+    ~allow_set
+    ~mangle_axis
+    ~mangle
+    ~lookup
+    =
+    let+ bindings = type_check_many bindings ~expected ~allow_set ~lookup in
     Poly
       ( mangle_axis
       , List.map bindings ~f:(fun binding -> Binding { binding; mangle; mangle_axis }) )
@@ -477,8 +491,8 @@ module Poly = struct
   let type_check_many_maybe_tuple
     (type expected)
     bindings
-    ~(expected : expected Type.basic Type.t)
-    ~is_set
+    ~(expected : expected Type.non_tuple Type.t)
+    ~allow_set
     ~mangle_axis
     ~mangle
     ~lookup
@@ -492,7 +506,7 @@ module Poly = struct
           let open struct
             type 'a nonempty_tuple = P : ('a * _) Type.tuple -> 'a nonempty_tuple
           end in
-          let rec loop : _ Nonempty_list.t -> expected Type.basic nonempty_tuple
+          let rec loop : _ Nonempty_list.t -> expected Type.non_tuple nonempty_tuple
             = function
             | [ _ ] -> P [ expected ]
             | _ :: tl :: tls ->
@@ -502,11 +516,11 @@ module Poly = struct
           let (P tuple) = loop patterns in
           let expected = Type.Tuple tuple in
           let mangle (Typed.Value.Tuple (hd :: _)) = hd in
-          let+ binding = type_check_one binding ~loc ~is_set ~expected ~lookup in
+          let+ binding = type_check_one binding ~loc ~allow_set ~expected ~lookup in
           Poly.Binding { binding; mangle_axis; mangle }
         | _ ->
           (* If the pattern is just an identifier, assume it's not a tuple binding *)
-          let+ binding = type_check_one binding ~loc ~is_set ~expected ~lookup in
+          let+ binding = type_check_one binding ~loc ~allow_set ~expected ~lookup in
           Poly.Binding { binding; mangle_axis; mangle })
       |> Result.all
     in
@@ -556,31 +570,36 @@ let consume_poly ctx item =
     | None -> item, None
     | Some (item, bindings) -> item, Some bindings
   in
-  let type_check_opt type_check bindings ~expected ~is_set ~mangle_axis ~mangle ~lookup =
+  let type_check_opt type_check bindings ~expected ~allow_set ~mangle_axis ~mangle ~lookup
+    =
     Option.map bindings ~f:(fun bindings ->
       Maybe_explicit.map_result bindings ~f:(fun bindings ->
-        type_check bindings ~expected ~is_set ~mangle_axis ~mangle ~lookup))
+        type_check bindings ~expected ~allow_set ~mangle_axis ~mangle ~lookup))
   in
   let item, kinds = consume Poly.kind_attr item in
   let item, kind_sets = consume Poly.kind_set_attr item in
   let item, modes = consume Poly.mode_attr item in
   let item, modalities = consume Poly.modality_attr item in
   let item, allocs = consume Poly.alloc_attr item in
+  let item, synchros = consume Poly.synchro_attr item in
   let res =
     let* kinds = maybe_ok kinds in
     let* kind_sets = maybe_ok kind_sets in
     let* modes = maybe_ok modes in
     let* modalities = maybe_ok modalities in
     let* allocs = maybe_ok allocs in
-    let untyped = [ kinds; kind_sets; modes; modalities; allocs ] |> List.filter_opt in
+    let* synchros = maybe_ok synchros in
+    let untyped =
+      [ kinds; kind_sets; modes; modalities; allocs; synchros ] |> List.filter_opt
+    in
     let* typed =
       let kinds =
         type_check_opt
           Poly.type_check_many_maybe_tuple
           kinds
           ~expected:Type.kind
-          ~is_set:Set
-          ~mangle_axis:Kind
+          ~allow_set:Set_or_singleton
+          ~mangle_axis:(Singleton Kind)
           ~mangle:Fn.id
           ~lookup:Expand_atoms_bound_to_sets
       in
@@ -589,7 +608,7 @@ let consume_poly ctx item =
           Poly.type_check_many_maybe_tuple
           kind_sets
           ~expected:Type.kind
-          ~is_set:(Singleton Hint.no_unions_in_kind_sets)
+          ~allow_set:(Singleton_only { why_no_set = Hint.no_unions_in_kind_sets })
           ~mangle_axis:(Set Kind)
           ~mangle:Fn.id
           ~lookup:Preserve_atoms
@@ -599,8 +618,8 @@ let consume_poly ctx item =
           Poly.type_check_many_maybe_tuple
           modes
           ~expected:Type.mode
-          ~is_set:(Singleton (Hint.sets_unsupported "mode"))
-          ~mangle_axis:Mode
+          ~allow_set:(Singleton_only { why_no_set = Hint.sets_unsupported "mode" })
+          ~mangle_axis:(Singleton Mode)
           ~mangle:Fn.id
           ~lookup:Expand_atoms_bound_to_sets
       in
@@ -609,8 +628,8 @@ let consume_poly ctx item =
           Poly.type_check_many_maybe_tuple
           modalities
           ~expected:Type.modality
-          ~is_set:(Singleton (Hint.sets_unsupported "modality"))
-          ~mangle_axis:Modality
+          ~allow_set:(Singleton_only { why_no_set = Hint.sets_unsupported "modality" })
+          ~mangle_axis:(Singleton Modality)
           ~mangle:Fn.id
           ~lookup:Expand_atoms_bound_to_sets
       in
@@ -620,8 +639,8 @@ let consume_poly ctx item =
             Poly.type_check_many_not_a_tuple
             allocs
             ~expected:Type.alloc
-            ~is_set:(Singleton (Hint.no_sets_in "alloc"))
-            ~mangle_axis:Alloc
+            ~allow_set:(Singleton_only { why_no_set = Hint.no_sets_in "alloc" })
+            ~mangle_axis:(Singleton Alloc)
             ~mangle:Fn.id
             ~lookup:Preserve_atoms
         with
@@ -631,12 +650,34 @@ let consume_poly ctx item =
             Poly.type_check_many_not_a_tuple
             allocs
             ~expected:Type.(tuple2 alloc mode)
-            ~is_set:(Singleton (Hint.no_sets_in "alloc"))
-            ~mangle_axis:Alloc
+            ~allow_set:(Singleton_only { why_no_set = Hint.no_sets_in "alloc" })
+            ~mangle_axis:(Singleton Alloc)
             ~mangle:(fun (Tuple [ alloc; _mode ]) -> alloc)
             ~lookup:Preserve_atoms
       in
-      [ kinds; kind_sets; modes; modalities; allocs ]
+      let synchros =
+        match
+          type_check_opt
+            Poly.type_check_many_not_a_tuple
+            synchros
+            ~expected:Type.synchro
+            ~allow_set:(Singleton_only { why_no_set = Hint.no_sets_in "synchro" })
+            ~mangle_axis:(Singleton Synchro)
+            ~mangle:Fn.id
+            ~lookup:Preserve_atoms
+        with
+        | (Some (Ok _) | None) as res -> res
+        | Some (Error _) ->
+          type_check_opt
+            Poly.type_check_many_not_a_tuple
+            synchros
+            ~expected:Type.(tuple2 synchro mode)
+            ~allow_set:(Singleton_only { why_no_set = Hint.no_sets_in "synchro" })
+            ~mangle_axis:(Singleton Synchro)
+            ~mangle:(fun (Tuple [ synchro; _mode ]) -> synchro)
+            ~lookup:Preserve_atoms
+      in
+      [ kinds; kind_sets; modes; modalities; allocs; synchros ]
       |> List.filter_opt
       |> List.map ~f:(Type_error.lift_to_error_result ~loc:(get_loc ctx item))
       |> Result.collect_errors
@@ -672,7 +713,8 @@ module Mono = struct
              Typed.Expression.type_check
                expr
                ~expected
-               ~is_set:(Singleton Hint.no_unions_in_mono_attributes)
+               ~allow_set:
+                 (Singleton_only { why_no_set = Hint.no_unions_in_mono_attributes })
            in
            Loc.make ~loc (Typed.Expression.Basic.P expr))
           |> Loc.make ~loc)
@@ -685,6 +727,7 @@ module Mono = struct
   let mode_attr = declare "mode" Type.mode
   let modality_attr = declare "modality" Type.modality
   let alloc_attr = declare "alloc" Type.alloc
+  let synchro_attr = declare "synchro" Type.synchro
 end
 
 let consume_mono ctx item =
@@ -699,11 +742,12 @@ let consume_mono ctx item =
         Typed.Axis.Map.add (P axis) vals mono )
   in
   let mono = Ok Typed.Axis.Map.empty in
-  let item, mono = consume mono Kind Mono.kind_attr item in
+  let item, mono = consume mono (Singleton Kind) Mono.kind_attr item in
   let item, mono = consume mono (Set Kind) Mono.kind_set_attr item in
-  let item, mono = consume mono Mode Mono.mode_attr item in
-  let item, mono = consume mono Modality Mono.modality_attr item in
-  let item, mono = consume mono Alloc Mono.alloc_attr item in
+  let item, mono = consume mono (Singleton Mode) Mono.mode_attr item in
+  let item, mono = consume mono (Singleton Modality) Mono.modality_attr item in
+  let item, mono = consume mono (Singleton Alloc) Mono.alloc_attr item in
+  let item, mono = consume mono (Singleton Synchro) Mono.synchro_attr item in
   item, mono
 ;;
 
@@ -813,8 +857,8 @@ module Floating = struct
         Attached_poly.type_check_many_maybe_tuple
           bindings
           ~expected:Type.kind
-          ~is_set:Set
-          ~mangle_axis:Kind
+          ~allow_set:Set_or_singleton
+          ~mangle_axis:(Singleton Kind)
           ~mangle:Fn.id
           ~lookup:Expand_atoms_bound_to_sets)
     ;;
@@ -824,7 +868,7 @@ module Floating = struct
         Attached_poly.type_check_many_maybe_tuple
           bindings
           ~expected:Type.kind
-          ~is_set:(Singleton Hint.no_unions_in_kind_sets)
+          ~allow_set:(Singleton_only { why_no_set = Hint.no_unions_in_kind_sets })
           ~mangle_axis:(Set Kind)
           ~mangle:Fn.id
           ~lookup:Preserve_atoms)
@@ -835,8 +879,8 @@ module Floating = struct
         Attached_poly.type_check_many_maybe_tuple
           bindings
           ~expected:Type.mode
-          ~is_set:(Singleton (Hint.sets_unsupported "mode"))
-          ~mangle_axis:Mode
+          ~allow_set:(Singleton_only { why_no_set = Hint.sets_unsupported "mode" })
+          ~mangle_axis:(Singleton Mode)
           ~mangle:Fn.id
           ~lookup:Expand_atoms_bound_to_sets)
     ;;
@@ -846,8 +890,8 @@ module Floating = struct
         Attached_poly.type_check_many_maybe_tuple
           bindings
           ~expected:Type.modality
-          ~is_set:(Singleton (Hint.sets_unsupported "modality"))
-          ~mangle_axis:Modality
+          ~allow_set:(Singleton_only { why_no_set = Hint.sets_unsupported "modality" })
+          ~mangle_axis:(Singleton Modality)
           ~mangle:Fn.id
           ~lookup:Expand_atoms_bound_to_sets)
     ;;
@@ -858,8 +902,8 @@ module Floating = struct
           Attached_poly.type_check_many_not_a_tuple
             bindings
             ~expected:Type.alloc
-            ~is_set:(Singleton (Hint.no_sets_in "alloc"))
-            ~mangle_axis:Alloc
+            ~allow_set:(Singleton_only { why_no_set = Hint.no_sets_in "alloc" })
+            ~mangle_axis:(Singleton Alloc)
             ~mangle:Fn.id
             ~lookup:Expand_atoms_bound_to_sets
         with
@@ -868,13 +912,37 @@ module Floating = struct
           Attached_poly.type_check_many_not_a_tuple
             bindings
             ~expected:Type.(tuple2 alloc mode)
-            ~is_set:(Singleton (Hint.no_sets_in "alloc"))
-            ~mangle_axis:Alloc
+            ~allow_set:(Singleton_only { why_no_set = Hint.no_sets_in "alloc" })
+            ~mangle_axis:(Singleton Alloc)
             ~mangle:(fun (Tuple [ alloc; _mode ]) -> alloc)
             ~lookup:Expand_atoms_bound_to_sets)
     ;;
 
-    let all_attrs = kind_poly @ kind_set_poly @ mode_poly @ modality_poly @ alloc_poly
+    let synchro_poly =
+      declare "synchro" (fun bindings ->
+        match
+          Attached_poly.type_check_many_not_a_tuple
+            bindings
+            ~expected:Type.synchro
+            ~allow_set:(Singleton_only { why_no_set = Hint.no_sets_in "synchro" })
+            ~mangle_axis:(Singleton Synchro)
+            ~mangle:Fn.id
+            ~lookup:Expand_atoms_bound_to_sets
+        with
+        | Ok _ as ok -> ok
+        | Error _ ->
+          Attached_poly.type_check_many_not_a_tuple
+            bindings
+            ~expected:Type.(tuple2 synchro mode)
+            ~allow_set:(Singleton_only { why_no_set = Hint.no_sets_in "synchro" })
+            ~mangle_axis:(Singleton Synchro)
+            ~mangle:(fun (Tuple [ synchro; _mode ]) -> synchro)
+            ~lookup:Expand_atoms_bound_to_sets)
+    ;;
+
+    let all_attrs =
+      kind_poly @ kind_set_poly @ mode_poly @ modality_poly @ alloc_poly @ synchro_poly
+    ;;
 
     let is_present (type a) (ctx : a Context.poly) (ast : a) =
       let maybe_attr =
@@ -910,7 +978,7 @@ module Floating = struct
     open Language.Typed
     include Make (Attribute.Floating) (Context)
 
-    type t = Define : 'a Type.basic Binding.t list -> t
+    type t = Define : 'a Type.non_tuple Binding.t list -> t
 
     let declare name type_check =
       declare
@@ -936,7 +1004,7 @@ module Floating = struct
           { txt = pat, [ expr ]; loc })
         |> Attached_poly.type_check_many
              ~expected:Type.kind
-             ~is_set:Set
+             ~allow_set:Set_or_singleton
              ~lookup:Expand_atoms_bound_to_sets)
     ;;
 
@@ -990,36 +1058,128 @@ module Non_explicit = struct
   ;;
 
   module Exclave_if = struct
-    let declare name expected =
+    include Exclave_if
+
+    module Reason = struct
+      include Reason
+
+      let all =
+        [ Exclave_arrows; Layout_polymorphism; Mode_polymorphism; Unboxed_variants ]
+      ;;
+
+      let of_string : string -> t option = function
+        | "Exclave_arrows" -> Some Exclave_arrows
+        | "Layout_polymorphism" -> Some Layout_polymorphism
+        | "Mode_polymorphism" -> Some Mode_polymorphism
+        | "Unboxed_variants" -> Some Unboxed_variants
+        | _ -> None
+      ;;
+
+      let to_string : t -> string = function
+        | Exclave_arrows -> "Exclave_arrows"
+        | Layout_polymorphism -> "Layout_polymorphism"
+        | Mode_polymorphism -> "Mode_polymorphism"
+        | Unboxed_variants -> "Unboxed_variants"
+      ;;
+
+      module Error = struct
+        let syntax_error ~loc sexp =
+          Syntax_error.createf ~loc "%s" (Sexp.to_string_hum sexp)
+        ;;
+
+        let unknown_exclave_reasons ~provided ~loc =
+          let available = List (List.map all ~f:(fun x -> Atom (to_string x))) in
+          let message =
+            Sexplib0.Sexp.message
+              "Invalid exclave_if reasons (listed individually below)"
+              [ "The following reasons are valid", available ]
+          in
+          Syntax_error.combine
+            (syntax_error ~loc (List [ Atom "[%template]"; message ]))
+            (List.map provided ~f:(fun (name, loc) ->
+               syntax_error ~loc (List [ Atom "Invalid reason"; Atom name ])))
+        ;;
+
+        let cannot_have_exclave_reasons ~name ~loc =
+          let message =
+            Sexplib0.Sexp.message "Reasons cannot be provided" [ "to", Atom name ]
+          in
+          syntax_error ~loc (List [ Atom "[%template]"; message ])
+        ;;
+      end
+    end
+
+    let pattern () =
+      let open Ast_pattern in
+      let open Ast_pattern_helpers in
+      let ident = map (single_ident ()) ~f:(fun k mode -> k mode None) in
+      let ident_with_reasons =
+        pexp_apply
+          (ident_expr ())
+          ((labelled (string "reasons")
+            ** map2
+                 (as__ (elist (pexp_construct (lident __') none)))
+                 ~f:(fun expr reasons -> Some (expr.pexp_loc, reasons)))
+           ^:: nil)
+        |> single_expr_payload
+      in
+      ident ||| ident_with_reasons |> map2 ~f:(fun mode args -> mode, args)
+    ;;
+
+    let parse_reasons ~loc reasons =
+      List.map reasons ~f:(fun { txt = reason; loc } ->
+        match Reason.of_string reason with
+        | Some r -> Ok r
+        | None -> Error (reason, loc))
+      |> Result.combine_errors
+      |> Result.map_error ~f:(fun provided ->
+        Reason.Error.unknown_exclave_reasons ~provided ~loc)
+    ;;
+
+    let maybe_consume_reasons ~name:_ = function
+      | Some (loc, reasons) -> parse_reasons ~loc reasons
+      | None -> Ok []
+    ;;
+
+    let do_not_consume_reasons ~name = function
+      | None -> Ok ()
+      | Some (loc, _) -> Error (Reason.Error.cannot_have_exclave_reasons ~name ~loc)
+    ;;
+
+    let declare name expected handle_reasons =
+      let pattern = pattern () in
       declare
         ~name
         ~contexts:[ T Expression ]
-        ~pattern:(Ast_pattern_helpers.single_ident ())
-        ~k:(fun { txt = expr; loc } ->
-          (let+ expr =
-             Typed.Expression.type_check
-               expr
-               ~expected
-               ~is_set:(Singleton (Hint.no_sets_in "exclave_if"))
-           in
-           { txt = expr; loc })
-          |> Type_error.lift_to_error_result ~loc)
+        ~pattern
+        ~k:(fun ({ txt = expr; loc = expr_loc }, reasons) ->
+          let* expr =
+            Typed.Expression.type_check
+              expr
+              ~expected
+              ~allow_set:(Singleton_only { why_no_set = Hint.no_sets_in "exclave_if" })
+            |> Type_error.lift_to_error_result ~loc:expr_loc
+          in
+          let* reasons = handle_reasons ~name reasons in
+          Ok ({ expr = { txt = expr; loc = expr_loc }; reasons } : _ Exclave_if.t))
     ;;
 
-    let local_attr = declare "exclave_if_local" Type.mode
-    let stack_attr = declare "exclave_if_stack" Type.alloc
+    let local_attr = declare "exclave_if_local" Type.mode maybe_consume_reasons
+    let stack_attr = declare "exclave_if_stack" Type.alloc do_not_consume_reasons
   end
 
   let exclave_if_local = consume_attr_if Exclave_if.local_attr
   let exclave_if_stack = consume_attr_if Exclave_if.stack_attr
 
   module Zero_alloc_if = struct
+    include Zero_alloc_if
+
     let pattern () =
       let open Ast_pattern in
       single_expr_payload
         (map (Ast_pattern_helpers.ident_expr ()) ~f:(fun k mode -> k mode [])
          ||| pexp_apply (Ast_pattern_helpers.ident_expr ()) (many (pair nolabel __)))
-      |> map2' ~f:(fun loc mode payload -> loc, mode, payload)
+      |> map2' ~f:(fun loc mode args -> loc, mode, args)
     ;;
 
     let declare name expected =
@@ -1027,14 +1187,15 @@ module Non_explicit = struct
         ~name
         ~contexts:[ T Expression; T Value_binding; T Value_description ]
         ~pattern:(pattern ())
-        ~k:(fun (loc, { txt = expr; loc = mode_loc }, args) ->
+        ~k:(fun (loc, { txt = expr; loc = expr_loc }, args) ->
           (let+ expr =
              Typed.Expression.type_check
                expr
                ~expected
-               ~is_set:(Singleton (Hint.no_sets_in "zero_alloc_if"))
+               ~allow_set:
+                 (Singleton_only { why_no_set = Hint.no_sets_in "zero_alloc_if" })
            in
-           loc, { txt = expr; loc = mode_loc }, args)
+           ({ loc; expr = { txt = expr; loc = expr_loc }; args } : _ Zero_alloc_if.t))
           |> Type_error.lift_to_error_result ~loc)
     ;;
 

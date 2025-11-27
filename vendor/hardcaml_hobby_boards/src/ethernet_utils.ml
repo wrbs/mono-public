@@ -100,11 +100,11 @@ module Swap_addressing = struct
        | - - F F | 36
        |     - - | 40
        +---------+
-   v}
+     v}
   *)
 
-  (* This code could be generalised to perform arbitrary byte swapping based on a given byte
-   order. *)
+  (* This code could be generalised to perform arbitrary byte swapping based on a given
+     byte order. *)
   let byte_order =
     let range ofs n = List.init n ~f:(fun i -> i + ofs) in
     [ range 6 6 (* mac *)
@@ -229,28 +229,28 @@ module Swap_addressing = struct
     let module Select_bytes = Make_select_bytes (Signal) in
     (* Pipeline control.
 
-     - Data is pushed by the RX interface. We cannot stall this interface, though it will
-       not provide data every cycle.
+       - Data is pushed by the RX interface. We cannot stall this interface, though it
+         will not provide data every cycle.
 
-     - We must buffer a few words in order to reorder some bytes
+       - We must buffer a few words in order to reorder some bytes
 
-     - This poses a problem for the last few words of a packet which we must somehow
-       flush through the pipeline, even though the RX interface isn't pushing data.
+       - This poses a problem for the last few words of a packet which we must somehow
+         flush through the pipeline, even though the RX interface isn't pushing data.
 
-     - In the following we distingiush a few cases;
+       - In the following we distingiush a few cases;
 
-     - RX data valid - pipeline shifts
+       - RX data valid - pipeline shifts
 
-     - RX data not valid - the words in the pipeline shift towards the output and
-       bunch up
+       - RX data not valid - the words in the pipeline shift towards the output and bunch
+         up
 
-     - depending on which word is being processed, we check that the appropriate
-       enables are set in the pipeline.  If they are, a word is output.  Otherwise
-       we stall, unless ...
+       - depending on which word is being processed, we check that the appropriate enables
+         are set in the pipeline. If they are, a word is output. Otherwise we stall,
+         unless ...
 
-     - The last word of a packet is in the pipeline therefore we shift the pipeline
-       in order to flush it.  In this state we may also be buffering the first words
-       of the next packet.
+       - The last word of a packet is in the pipeline therefore we shift the pipeline in
+         order to flush it. In this state we may also be buffering the first words of the
+         next packet.
     *)
     let reg_axi ~enable axi = Ethernet.Axi32.Source.map axi ~f:(reg spec ~enable) in
     let e = Array.init 5 ~f:(fun i -> wire 1 -- ("ENABLE" ^ Int.to_string i)) in
@@ -277,7 +277,7 @@ module Swap_addressing = struct
     in
     let valid = (valid |: last) -- "VLD_LAST" in
     (* shift out when the current output word can be constructed - or must be constructed
-     because of tlast *)
+       because of tlast *)
     let shift_out = axi2.tvalid &: (valid &: mask ==: mask) in
     (* clear count on tlast - potentially it might be useful to also clear on tfirst. *)
     let clr_count = i.clr |: (shift_out &: axi2.tlast) in
@@ -505,11 +505,9 @@ module For_testing = struct
         (preamble_received @: data_received @: fcs_received)
         ~expect:(preamble_sfd_value @: expected_data @: expected_fcs);
     if print_data_as_string
-    then
-      List.iter byte_list ~f:(fun byte ->
-        let char = to_char byte in
-        printf "%c" (if Char.is_print char then char else '_'));
-    printf "\n"
+    then (
+      printf "%s" (data_received |> to_ascii_string_msb);
+      printf "\n")
   ;;
 
   let check_tx_packet
@@ -564,5 +562,28 @@ module For_testing = struct
     inputs.crsdv := gnd;
     (* Wait some cycles for the writes to all finalize. *)
     Cyclesim.cycle ~n:1000 sim
+  ;;
+
+  let sim_udp_packet sim ~packet (inputs : _ Ethernet.Rx.I.t) =
+    let all_inputs =
+      let data = of_ascii_string_msb packet in
+      let packet = create_packet_from_host ~config:get_config data in
+      let total_width =
+        Packet.sum_of_port_widths - (Ethernet_types.max_data_bits - width data)
+      in
+      let packet_vector =
+        bswap (Packet.Of_bits.pack ~rev:true packet) |> sel_bottom ~width:total_width
+      in
+      split_lsb ~exact:true ~part_width:2 packet_vector
+    in
+    List.iter
+      ~f:(fun input ->
+        inputs.crsdv := vdd;
+        inputs.rxd := input;
+        Cyclesim.cycle sim)
+      all_inputs;
+    inputs.crsdv := gnd;
+    (* Wait some cycles for the writes to all finalize. *)
+    Cyclesim.cycle ~n:2500 sim
   ;;
 end

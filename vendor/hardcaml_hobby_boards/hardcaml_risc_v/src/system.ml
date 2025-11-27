@@ -10,6 +10,7 @@ module Make
     (Hart_config : Hart_config_intf.S)
     (Memory_config : System_intf.Memory_config)
     (General_config : System_intf.Config)
+    (Video_config : Framebuffer_expander.Config)
     (Axi4 : Axi4.S) =
 struct
   module Registers = Registers.Make (Hart_config)
@@ -17,8 +18,8 @@ struct
 
   let required_read_channels_per_hart = Hart.required_read_channels
   let required_write_channels_per_hart = Hart.required_write_channels
-  let system_non_hart_read_memory_channels = 2
-  let system_non_hart_write_memory_channels = 1
+  let system_non_hart_read_memory_channels = 3
+  let system_non_hart_write_memory_channels = 2
 
   module Memory_controller =
     Memory_controller.Make
@@ -43,8 +44,11 @@ struct
   module Memory_bus = Memory_controller.Memory_bus
   include Memory_bus
 
+  module Video_out =
+    Framebuffer_expander.Make (Video_config) (Memory_controller.Memory_bus)
+
   let write_ch_start_offset which_hart =
-    system_non_hart_write_memory_channels + (which_hart * required_read_channels_per_hart)
+    system_non_hart_write_memory_channels + (which_hart * required_write_channels_per_hart)
   ;;
 
   let read_ch_start_offset which_hart =
@@ -82,13 +86,18 @@ struct
       (Axi8)
 
   module Dma =
-    System_dma_controller.Make (Memory_controller.Memory_bus) (Memory_to_packet8)
+    System_dma_controller.Make (General_config) (Memory_config)
+      (Memory_controller.Memory_bus)
+      (Memory_to_packet8)
 
   module I = struct
     type 'a t =
       { clock : 'a
       ; clear : 'a
       ; uart_rx : 'a
+      ; eth_crsdv : 'a
+      ; eth_rxerr : 'a
+      ; eth_rxd : 'a [@bits 2]
       ; memory : 'a Axi4.I.t [@rtlprefix "axi_i$"]
       }
     [@@deriving hardcaml]
@@ -101,6 +110,11 @@ struct
       ; ethernet_txd : 'a [@bits 2]
       ; uart_tx : 'a
       ; uart_rx_valid : 'a
+      ; vga_red : 'a [@bits 4]
+      ; vga_green : 'a [@bits 4]
+      ; vga_blue : 'a [@bits 4]
+      ; vga_hsync : 'a
+      ; vga_vsync : 'a
       ; memory : 'a Axi4.O.t [@rtlprefix "axi_o$"]
       }
     [@@deriving hardcaml]
@@ -124,7 +138,9 @@ struct
 
   let uart_dma_read_slot = 0
   let ethernet_dma_read_slot = 1
+  let vga_read_slot = 2
   let uart_dma_write_slot = 0
+  let ethernet_dma_write_slot = 1
 
   let assign_dma_io_ecall
     ~clock
@@ -134,10 +150,8 @@ struct
     ~tx_ready
     scope
     =
-    (* For now we only allow Hart0 to do IO. This isn't
-       necessary, but it makes it easier to stop them both
-       issuing commands at the same time and entering a weird
-       state. *)
+    (* For now we only allow Hart0 to do IO. This isn't necessary, but it makes it easier
+       to stop them both issuing commands at the same time and entering a weird state. *)
     let reg_spec_no_clear = Reg_spec.create ~clock () in
     let hart0 = List.nth_exn harts 0 in
     (* Delay the ecall by a cycle so we can register all the relevant
@@ -177,8 +191,8 @@ struct
   ;;
 
   let assign_ecalls ~clock ~tx_input ~tx_ready harts hart_ecall_transactions scope =
-    (* If a DMA controller is in the design then wire up DMA related ecalls
-       otherwise do not include any ecalls *)
+    (* If a DMA controller is in the design then wire up DMA related ecalls otherwise do
+       not include any ecalls *)
     assign_dma_io_ecall ~clock ~tx_input ~tx_ready harts hart_ecall_transactions scope
   ;;
 
@@ -226,15 +240,20 @@ struct
     harts
   ;;
 
-  let create ~build_mode:_ scope (i : _ I.t) =
-    (* Initialize the DMA controller with a bunch of unconnected wires. These will be wired to the memory controller and harts below. *)
+  let create ~build_mode scope (i : _ I.t) =
+    (* Initialize the DMA controller with a bunch of unconnected wires. These will be
+       wired to the memory controller and harts below. *)
     let tx_input = Memory_to_packet8.Input.With_valid.Of_signal.wires () in
     let dma_read_request_uart = Read_bus.Dest.Of_signal.wires () in
     let dma_read_request_ethernet = Read_bus.Dest.Of_signal.wires () in
-    let dma_write_request = Write_bus.Dest.Of_signal.wires () in
+    let read_request_vga = Read_bus.Dest.Of_signal.wires () in
+    let dma_write_request_uart = Write_bus.Dest.Of_signal.wires () in
+    let dma_write_request_ethernet = Write_bus.Dest.Of_signal.wires () in
     let dma_read_response_uart = Read_response.With_valid.Of_signal.wires () in
     let dma_read_response_ethernet = Read_response.With_valid.Of_signal.wires () in
-    let dma_write_response = Write_response.With_valid.Of_signal.wires () in
+    let read_response_vga = Read_response.With_valid.Of_signal.wires () in
+    let dma_write_response_uart = Write_response.With_valid.Of_signal.wires () in
+    let dma_write_response_ethernet = Write_response.With_valid.Of_signal.wires () in
     let dma_controller =
       Dma.create
         ~uart_config:General_config.io_controller
@@ -242,18 +261,23 @@ struct
         { Dma.I.clock = i.clock
         ; clear = i.clear
         ; uart_rx = i.uart_rx
+        ; eth_crsdv = i.eth_crsdv
+        ; eth_rxerr = i.eth_rxerr
+        ; eth_rxd = i.eth_rxd
         ; tx_input
         ; uart_read_request = dma_read_request_uart
         ; ethernet_read_request = dma_read_request_ethernet
-        ; write_request = dma_write_request
+        ; uart_write_request = dma_write_request_uart
+        ; ethernet_write_request = dma_write_request_ethernet
         ; uart_read_response = dma_read_response_uart
         ; ethernet_read_response = dma_read_response_ethernet
-        ; write_response = dma_write_response
+        ; uart_write_response = dma_write_response_uart
+        ; ethernet_write_response = dma_write_response_ethernet
         }
     in
-    (* Initialize the memory controller and allocate some wires for channels.
-       Any non-hart memory channels will occupy the start of the memory
-       controller, followed by the memory channels of each hart. *)
+    (* Initialize the memory controller and allocate some wires for channels. Any non-hart
+       memory channels will occupy the start of the memory controller, followed by the
+       memory channels of each hart. *)
     let read_bus_per_hart =
       List.init
         ~f:(fun _which_hart ->
@@ -270,6 +294,7 @@ struct
             required_write_channels_per_hart)
         General_config.num_harts
     in
+    let video_out_read_request = Read_bus.Source.Of_signal.wires () in
     let controller =
       Memory_controller.hierarchical
         ~priority_mode:Priority_order
@@ -277,10 +302,14 @@ struct
         { Memory_controller.I.clock = i.clock
         ; clear = i.clear
         ; read_to_controller =
-            [ dma_controller.uart_read_request; dma_controller.ethernet_read_request ]
+            [ dma_controller.uart_read_request
+            ; dma_controller.ethernet_read_request
+            ; video_out_read_request
+            ]
             @ List.concat read_bus_per_hart
         ; write_to_controller =
-            [ dma_controller.write_request ] @ List.concat write_bus_per_hart
+            [ dma_controller.uart_write_request; dma_controller.ethernet_write_request ]
+            @ List.concat write_bus_per_hart
         ; memory = i.memory
         }
     in
@@ -292,8 +321,8 @@ struct
     let harts =
       initialize_harts
         ~io_clear:dma_controller.clear_message
-          (* Clear harts when the DMA core pulses clear in addition to the
-             global clear if a DMA controller is attached. *)
+          (* Clear harts when the DMA core pulses clear in addition to the global clear if
+             a DMA controller is attached. *)
         ~hart_ecall_transactions
         ~write_bus_per_hart
         ~read_bus_per_hart
@@ -319,16 +348,43 @@ struct
     Read_response.With_valid.Of_signal.(
       dma_read_response_ethernet
       <-- List.nth_exn controller.read_response ethernet_dma_read_slot);
+    Read_bus.Dest.Of_signal.(
+      read_request_vga <-- List.nth_exn controller.read_to_controller vga_read_slot);
+    Read_response.With_valid.Of_signal.(
+      read_response_vga <-- List.nth_exn controller.read_response vga_read_slot);
     Write_bus.Dest.Of_signal.(
-      dma_write_request
+      dma_write_request_uart
       <-- List.nth_exn controller.write_to_controller uart_dma_write_slot);
+    Write_bus.Dest.Of_signal.(
+      dma_write_request_ethernet
+      <-- List.nth_exn controller.write_to_controller ethernet_dma_write_slot);
     Write_response.With_valid.Of_signal.(
-      dma_write_response <-- List.nth_exn controller.write_response uart_dma_write_slot);
+      dma_write_response_uart
+      <-- List.nth_exn controller.write_response uart_dma_write_slot);
+    Write_response.With_valid.Of_signal.(
+      dma_write_response_ethernet
+      <-- List.nth_exn controller.write_response ethernet_dma_write_slot);
+    let video_out =
+      Video_out.hierarchical
+        ~build_mode
+        scope
+        { Video_out.I.clock = i.clock
+        ; clear = i.clear
+        ; memory_request = read_request_vga
+        ; memory_response = read_response_vga
+        }
+    in
+    Read_bus.Source.Of_signal.(video_out_read_request <-- video_out.memory_request);
     { O.registers = List.map ~f:(fun o -> o.registers) harts
     ; ethernet_txen = dma_controller.ethernet_txen
     ; ethernet_txd = dma_controller.ethernet_txd
     ; uart_tx = dma_controller.uart_tx
     ; uart_rx_valid = dma_controller.uart_rx_valid
+    ; vga_red = video_out.red
+    ; vga_green = video_out.green
+    ; vga_blue = video_out.blue
+    ; vga_hsync = video_out.hsync
+    ; vga_vsync = video_out.vsync
     ; memory = controller.memory
     }
   ;;

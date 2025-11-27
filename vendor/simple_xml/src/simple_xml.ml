@@ -240,9 +240,9 @@ and t = Stable.V2.t =
   | Text of Printable_string.t
 [@@deriving sexp_of, compare, equal, hash, quickcheck ~shrinker ~observer]
 
-(* When generating an entire XML element, it needs to be internally consistent.
-   All namespaces used should be declared at some point, so we need to do some
-   extra work to make sure we only reference namespaces previously defined. *)
+(* When generating an entire XML element, it needs to be internally consistent. All
+   namespaces used should be declared at some point, so we need to do some extra work to
+   make sure we only reference namespaces previously defined. *)
 module Fully_defined_xml_generator = struct
   open Quickcheck.Generator
   open Let_syntax

@@ -18,8 +18,8 @@ module Type = struct
       | Time_ns_span : Time_ns.Span.t t
     [@@deriving sexp_of]
 
-    (* This will only get called on k1 <> k2 if a user exposes that e.g.
-       int = int63 = Time_ns.Span.t *)
+    (* This will only get called on k1 <> k2 if a user exposes that e.g. int = int63 =
+       Time_ns.Span.t *)
     let compare _compare_a k1 k2 = Poly.compare k1 k2
 
     let widen (type a) (t : a t) : a parent =
@@ -121,11 +121,11 @@ let compare (type a) compare_inner (t1 : a t @ m) (t2 : a t @ m) =
 ;;
 
 let equal _equal_inner =
-  (* The [compare] function currently completely ignores [compare_inner] and forces
-     the use of standard comparison functions for [int], [float] or [Time_ns.Span.t].
-     To highlight this, we pass in [Nothing.unreachable_code]. If [compare] starts
-     meaningfully using [compare_inner], this will stop compiling and we'll have to
-     pass in whatever suits the new semantics of [compare_inner]. *)
+  (* The [compare] function currently completely ignores [compare_inner] and forces the
+     use of standard comparison functions for [int], [float] or [Time_ns.Span.t]. To
+     highlight this, we pass in [Nothing.unreachable_code]. If [compare] starts
+     meaningfully using [compare_inner], this will stop compiling and we'll have to pass
+     in whatever suits the new semantics of [compare_inner]. *)
   (Comparable.equal [@mode m]) ((compare [@mode m]) Nothing.unreachable_code)
 ;;]
 

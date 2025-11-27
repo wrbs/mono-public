@@ -3,7 +3,7 @@ open Basement
 open Await_kernel
 open Await_sync_intf
 
-(* The underlying state machine of an mvar:
+(*=The underlying state machine of an mvar:
 
                                                     [create_full]
                   +--[set]-----------------------------+  |
@@ -29,8 +29,8 @@ open Await_sync_intf
 *)
 
 module State : sig @@ portable
-  type 'a t : immutable_data with 'a @@ contended portable
-  (* = | Empty
+  type !'a t : immutable_data with 'a @@ contended portable
+  (*== | Empty
        | Readers
        | Value of 'a @@ contended portable *)
 
@@ -46,7 +46,7 @@ module State : sig @@ portable
   val is_value : 'a t @ contended local -> bool
   val value : 'a t @ contended -> 'a or_null @ contended once portable unique
 end = struct
-  type +'a t : immutable_data with 'a @@ contended portable
+  type !+'a t : immutable_data with 'a @@ contended portable
 
   let empty = (Obj.magic [@mode contended portable]) (ref 0)
   let readers = (Obj.magic [@mode contended portable]) (ref 1)
@@ -73,8 +73,8 @@ end
 
 type 'a t = 'a State.t Awaitable.t
 
-let create () = Awaitable.make State.empty
-let create_full v = Awaitable.make (State.of_value v)
+let create ?padded () = Awaitable.make ?padded State.empty
+let create_full ?padded v = Awaitable.make ?padded (State.of_value v)
 
 type ('a, 'r) result =
   | Value : ('a, 'a) result
@@ -151,7 +151,7 @@ let take_as (type a r) w c (t : a t) (r : (a, r) result) : r =
        with
        | Set_here ->
          (* Note: we unconditionally broadcast here since the state representation doesn't
-         differentiate between "full" and "full, with waiting putters". *)
+            differentiate between "full" and "full, with waiting putters". *)
          Awaitable.broadcast t;
          (match r with
           | Value -> v
@@ -206,7 +206,7 @@ let try_take t =
        with
        | Set_here ->
          (* Note: we unconditionally broadcast here since the state representation doesn't
-           differentiate between "full" and "full, with waiting putters". *)
+            differentiate between "full" and "full, with waiting putters". *)
          Awaitable.broadcast t;
          This v
        | Compare_failed -> go (Backoff.once backoff))
@@ -221,3 +221,30 @@ let take_exn t =
 ;;
 
 let is_full t = t |> Awaitable.get |> State.is_value
+
+let rec wait_until_empty_as
+  : type a r.
+    Await.t @ local -> Cancellation.t @ local -> a t @ local -> (unit, r) result -> r
+  =
+  fun w c t r ->
+  let before = Awaitable.get t in
+  if State.is_value before
+  then (
+    match r with
+    | Value ->
+      (match Awaitable.await w t ~until_phys_unequal_to:before with
+       | Signaled -> wait_until_empty_as w c t r
+       | Terminated -> raise Await.Terminated)
+    | Or_canceled ->
+      (match Awaitable.await_or_cancel w c t ~until_phys_unequal_to:before with
+       | Signaled -> wait_until_empty_as w c t r
+       | Terminated -> raise Await.Terminated
+       | Canceled -> Canceled))
+  else (
+    match r with
+    | Value -> ()
+    | Or_canceled -> Completed ())
+;;
+
+let wait_until_empty w t = wait_until_empty_as w Cancellation.never t Value
+let wait_until_empty_or_cancel w c t = wait_until_empty_as w c t Or_canceled

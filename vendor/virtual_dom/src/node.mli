@@ -125,7 +125,6 @@ val dt : node_creator
 val em : node_creator
 
 (* [embed] is omitted, because we don't use it. *)
-
 val fieldset : node_creator
 val figcaption : node_creator
 val figure : node_creator
@@ -142,9 +141,7 @@ val header : node_creator
 val hgroup : node_creator
 val hr : node_creator_childless
 val html : node_creator
-
-(* [i] is omitted because we should either use CSS, or the semantic [em]. *)
-
+val i : node_creator
 val iframe : node_creator
 val img : node_creator_childless
 val input : node_creator_childless
@@ -154,8 +151,8 @@ val label : node_creator
 val legend : node_creator
 val li : node_creator
 
-(* [link] is omitted because it could be confusing to new web devs, and Bonsai apps
-   almost never need to render the <head />. *)
+(* [link] is omitted because it could be confusing to new web devs, and Bonsai apps almost
+   never need to render the <head />. *)
 
 val map : node_creator
 val mark : node_creator
@@ -185,7 +182,7 @@ val ruby : node_creator
 val samp : node_creator
 
 (* [script] is omitted, because Bonsai apps shouldn't be dynamically generating script
-   tags.*)
+   tags. *)
 
 val search : node_creator
 val section : node_creator
@@ -213,9 +210,7 @@ val time : node_creator
 
 val tr : node_creator
 val track : node_creator_childless
-
-(* [u] is omitted, use CSS instead. *)
-
+val u : node_creator
 val ul : node_creator
 val var : node_creator
 val video : node_creator
@@ -227,10 +222,10 @@ val sexp_for_debugging : ?indent:int -> Sexp.t -> t
 (** [of_opt node] returns the underlying Node.t for a Some, and Node.none for a None *)
 val of_opt : t option -> t
 
-(* [lazy_] allows you to defer the computation of a virtual-dom node until
-   the node is actually necessary for rendering.  This can be _very_ valuable
-   in situations where a node might be computed multiple-times per frame - but
-   only used once (at the end, for rendering) *)
+(* [lazy_] allows you to defer the computation of a virtual-dom node until the node is
+   actually necessary for rendering. This can be _very_ valuable in situations where a
+   node might be computed multiple-times per frame - but only used once (at the end, for
+   rendering) *)
 val lazy_ : ?key:string -> t Lazy.t -> t
 
 (** This function can be used to build a node with the tag and html content of that node

@@ -10,9 +10,17 @@ open! Core
 
    negative infinity is converted to the string -Infinity
 
-   if the number is an integer, the number is represented in decimal form as a Number with no decimal point and no leading zeros, preceded by a minus sign (-) if the number is negative
+   if the number is an integer, the number is represented in decimal form as a Number with
+   no decimal point and no leading zeros, preceded by a minus sign (-) if the number is
+   negative
 
-   otherwise, the number is represented in decimal form as a Number including a decimal point with at least one digit before the decimal point and at least one digit after the decimal point, preceded by a minus sign (-) if the number is negative; there must be no leading zeros before the decimal point apart possibly from the one required digit immediately before the decimal point; beyond the one required digit after the decimal point there must be as many, but only as many, more digits as are needed to uniquely distinguish the number from all other IEEE 754 numeric values.
+   otherwise, the number is represented in decimal form as a Number including a decimal
+   point with at least one digit before the decimal point and at least one digit after the
+   decimal point, preceded by a minus sign (-) if the number is negative; there must be no
+   leading zeros before the decimal point apart possibly from the one required digit
+   immediately before the decimal point; beyond the one required digit after the decimal
+   point there must be as many, but only as many, more digits as are needed to uniquely
+   distinguish the number from all other IEEE 754 numeric values.
 *)
 let serialize f =
   match Float.classify f with

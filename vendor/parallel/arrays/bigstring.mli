@@ -4,10 +4,9 @@ open! Base
 open! Import
 
 module Kind : sig
-  (** Scalar type stored in the bigstring. *)
   type 'a t =
-    | Int8 : Int_repr.int8 t
-    | Int16 : Int_repr.int16 t
+    | Int8 : int8 t
+    | Int16 : int16 t
     | Int32 : int32 t
     | Int64 : int64 t
     | Float32 : float32 t

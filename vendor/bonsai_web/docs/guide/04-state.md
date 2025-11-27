@@ -443,8 +443,8 @@ let counter_state_machine_with_input ~(step : int Bonsai.t) (local_ graph) =
       ~apply_action:(fun (_ : _ Bonsai.Apply_action_context.t) input model action ->
         match input with
         | Bonsai.Computation_status.Inactive ->
-          (* This state machine is inactive, so it can't access the current value of [input].
-             Just keep the original model *)
+          (* This state machine is inactive, so it can't access the current value of
+             [input]. Just keep the original model *)
           model
         | Active step ->
           (match action with
@@ -518,8 +518,8 @@ other.
 
 Bonsai has some other tools for state, such as `Bonsai.state_opt`,
 `Bonsai.toggle`, and `Bonsai.actor`. You should read the [API
-Docs](https://github.com/janestreet/bonsai/blob/master/src/bonsai.mli)
-to learn more.
+Docs](https://github.com/janestreet/bonsai/blob/master/src/cont.mli) to
+learn more.
 
 All Bonsai state primitives also take an optional `reset` argument,
 which allows you to control what happens when [state is

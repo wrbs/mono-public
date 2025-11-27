@@ -8,7 +8,7 @@ open! Base
 
     It's part of the same family of libraries as `lib/float_u`, `lib/int32_u`, and
     `lib/int64_u`. They share similar project structures, conventions, and tests. *)
-type t = nativeint# [@@deriving quickcheck]
+type t = nativeint# [@@deriving globalize, quickcheck]
 
 module Boxed = Core.Nativeint
 
@@ -46,7 +46,7 @@ val t_of_sexp : Sexp.t -> t
 
 (** {3 For [bin_io]} *)
 
-include%template Bin_prot.Binable.S_any [@mode local] with type t := t
+include%template Bin_prot.Binable.S [@mode local] with type t := t
 
 (** {3 For [hash]} *)
 
@@ -438,7 +438,7 @@ module Stable : sig
     val sexp_of_t : t -> Sexp.t
     val t_of_sexp : Sexp.t -> t
 
-    include Bin_prot.Binable.S_any with type t := t
+    include Bin_prot.Binable.S with type t := t
     include Ppx_hash_lib.Hashable.S_any with type t := t
 
     val typerep_of_t : t Typerep_lib.Std.Typerep.t

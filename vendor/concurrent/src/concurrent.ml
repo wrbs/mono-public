@@ -2,15 +2,21 @@ open Base
 open Await
 module Scope = Scope
 
-type ('scope_ctx, 'concurrent_ctx) spawn_fn =
+type 'resource spawn_result =
+  | Spawned
+  | Failed of 'resource * exn @@ aliased many * Backtrace.t @@ aliased many
+
+type ('resource, 'scope_ctx, 'concurrent_ctx) spawn_fn =
   'scope_ctx Scope.t @ local
   -> f:
        ('scope_ctx Scope.Task_handle.t @ local unique
         -> 'concurrent_ctx @ local
         -> 'concurrent_ctx t @ local portable
+        -> 'resource @ contended once portable unique
         -> unit)
      @ once portable
-  -> unit
+  -> 'resource @ contended once portable unique
+  -> 'resource spawn_result @ contended once portable unique
 
 and 'concurrent_ctx t =
   { await : Await.t
@@ -18,37 +24,60 @@ and 'concurrent_ctx t =
   }
 [@@deriving fields ~getters]
 
-and 'ctx scheduler = { spawn : 'scope_ctx. ('scope_ctx, 'ctx) spawn_fn } [@@unboxed]
+and 'ctx scheduler =
+  { spawn : 'resource 'scope_ctx. ('resource, 'scope_ctx, 'ctx) spawn_fn }
+[@@unboxed]
 
 and ('scope_ctx, 'concurrent_ctx) spawn =
   { scope : 'scope_ctx Scope.t
   ; concurrent : 'concurrent_ctx t
   }
 
+type packed = T : 'concurrent_ctx t -> packed [@@unboxed]
+
 module Scheduler = struct
-  type 'ctx t = 'ctx scheduler = { spawn : 'scope_ctx. ('scope_ctx, 'ctx) spawn_fn }
+  type 'ctx t = 'ctx scheduler =
+    { spawn : 'resource 'scope_ctx. ('resource, 'scope_ctx, 'ctx) spawn_fn }
   [@@unboxed]
 
-  let%template create ~(spawn : 'scope_ctx. ('scope_ctx, _) spawn_fn @ l) =
+  type packed = T : 'ctx t -> packed [@@unboxed]
+
+  let%template create
+    ~(spawn : 'resource 'scope_ctx. ('resource, 'scope_ctx, _) spawn_fn @ l)
+    =
     { spawn } [@exclave_if_stack a]
   [@@alloc a @ l = (heap_global, stack_local)] [@@mode p = (portable, nonportable)]
   ;;
 
   let spawn_daemon' t scope ~f =
-    spawn t scope ~f:(fun [@inline] h b t ->
-      let #(s, c) = Scope.Task_handle.become_daemon h in
-      f s c b t [@nontail])
+    match
+      spawn t scope () ~f:(fun [@inline] h b t () ->
+        let #(s, c) = Scope.Task_handle.become_daemon h in
+        f s c b t [@nontail])
+    with
+    | Spawned -> ()
+    | Failed ((), exn, bt) -> Exn.raise_with_original_backtrace exn bt
   ;;
 
   let spawn_daemon t scope ~f =
-    spawn t scope ~f:(fun [@inline] h b t ->
-      let #(s, c) = Scope.Task_handle.become_daemon h in
-      ignore (f s c b t : unit Or_canceled.t))
+    match
+      spawn t scope () ~f:(fun [@inline] h b t () ->
+        let #(s, c) = Scope.Task_handle.become_daemon h in
+        ignore (f s c b t : unit Or_canceled.t))
+    with
+    | Spawned -> ()
+    | Failed ((), exn, bt) -> Exn.raise_with_original_backtrace exn bt
   ;;
 
-  let spawn { spawn; _ } scope ~f =
-    spawn scope ~f:(fun [@inline] h b t ->
-      f (Scope.Task_handle.into_scope h) b t [@nontail])
+  let spawn_with { spawn; _ } scope ~f r =
+    spawn scope r ~f:(fun [@inline] h b t r ->
+      f (Scope.Task_handle.into_scope h) b t r [@nontail])
+  ;;
+
+  let spawn t scope ~f =
+    match spawn_with t scope ~f:(fun s c t () -> f s c t) () with
+    | Spawned -> ()
+    | Failed ((), exn, bt) -> Exn.raise_with_original_backtrace exn bt
   ;;
 end
 
@@ -61,8 +90,15 @@ module Spawn = struct
     }
   [@@deriving fields ~getters]
 
+  type 'scope_ctx packed = T : ('scope_ctx, 'concurrent_ctx) t -> 'scope_ctx packed
+  [@@unboxed]
+
   let%template create concurrent ~scope = exclave_ { scope; concurrent }
   [@@mode p = (portable, nonportable)]
+  ;;
+
+  let with_scheduler { scope; concurrent } scheduler = exclave_
+    { scope; concurrent = { concurrent with scheduler } }
   ;;
 
   let await t = exclave_ await (concurrent t)
@@ -84,6 +120,10 @@ let with_scope t b ~f =
 
 let spawn (type a b) ({ scope; concurrent } : (a, b) Spawn.t @ local) ~f =
   Scheduler.spawn concurrent.scheduler scope ~f
+;;
+
+let spawn_with (type a b) ({ scope; concurrent } : (a, b) Spawn.t @ local) ~f r =
+  Scheduler.spawn_with concurrent.scheduler scope ~f r
 ;;
 
 let spawn_daemon' (type a b) ({ scope; concurrent } : (a, b) Spawn.t @ local) ~f =
@@ -125,7 +165,7 @@ module Unsafe_result : sig @@ portable
   val racy_get : 'a t -> 'a @ contended portable
 
   module Array : sig
-    type ('a : value mod non_float) t : value mod contended portable
+    type 'a t : value mod contended portable
 
     val make : len:int -> 'a t
 
@@ -157,12 +197,16 @@ end = struct
   let racy_get t = unsafe_assume_init t.contents
 
   module Array = struct
-    type 'a t : value mod contended portable = { array : 'a portended or_null array }
+    type 'a t : value mod contended portable =
+      { array : 'a portended or_null Uniform_array.t }
     [@@unboxed]
     [@@unsafe_allow_any_mode_crossing (* See SAFETY comments in the interface *)]
 
-    let make ~len = { array = Array.create ~len Null }
-    let racy_fill { array } i a = Array.unsafe_set array i (This { portended = a })
+    let make ~len = { array = Uniform_array.create ~len Null }
+
+    let racy_fill { array } i a =
+      Uniform_array.unsafe_set array i (This { portended = a })
+    ;;
 
     external unsafe_assume_init
       :  'a t
@@ -185,11 +229,11 @@ end
    - Each function [spawn]ed into a scope either runs to completion, or raises
    - If any function is [spawn]ed into a scope, the entire scope raises
    - [with_scope] does not return until all functions [spawn]ed into the scope return or
-   raise.
+     raise.
 
    In each spawn_join function, iter, and map, we must ensure:
    - each result (either [Unsafe_result.t] or, in the case of [map],
-   [Unsafe_result.Array.t]) is filled within a task spawned into the scope
+     [Unsafe_result.Array.t]) is filled within a task spawned into the scope
    - We don't call [racy_get] until after the scope is finished
 *)
 
@@ -277,6 +321,20 @@ let map t iarr c ~f =
         spawn s ~f:(fun s c t ->
           let result = (f [@inlined hint]) s c t a in
           Unsafe_result.Array.racy_fill results idx result)
+      done);
+    Unsafe_result.Array.racy_get results)
+;;
+
+let spawn_join_n t b ~n ~f =
+  if n = 0
+  then [::]
+  else (
+    let results = Unsafe_result.Array.make ~len:n in
+    (with_scope [@mode p]) t b ~f:(fun s ->
+      for i = 0 to n - 1 do
+        spawn s ~f:(fun s c t ->
+          let result = (f [@inlined hint]) s c t i in
+          Unsafe_result.Array.racy_fill results i result)
       done);
     Unsafe_result.Array.racy_get results)
 ;;]

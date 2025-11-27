@@ -2,6 +2,8 @@ module I = Base.Nativeint
 
 type t = nativeint#
 
+let[@inline] globalize (local_ (t : t)) = t
+
 module Boxed = Core.Nativeint
 
 external of_nativeint : (nativeint[@local_opt]) -> t @@ portable = "%unbox_nativeint"
@@ -11,7 +13,7 @@ external to_nativeint : t -> (nativeint[@local_opt]) @@ portable = "%box_nativei
 
    Most functions in this file are implemented by boxing the int, calling the equivalent
    function on boxed ints, and then unboxing the result. This may seem surprising: isn't
-   the point of unboxed types to avoid boxes?  But it's fine; the compiler's middle-end
+   the point of unboxed types to avoid boxes? But it's fine; the compiler's middle-end
    will reliably eliminate these boxing and unboxing steps, and the testsuite checks there
    are no allocations here. If you add new functions, you should add similar tests.
 

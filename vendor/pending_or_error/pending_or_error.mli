@@ -11,9 +11,14 @@ type 'a t =
 
 val of_or_error : 'a Or_error.t -> 'a t
 val of_or_error_option : 'a Or_error.t option -> 'a t
+
+(** Treats [Pending] as an error. *)
+val to_or_error : 'a t -> 'a Or_error.t
+
 val to_or_error_option : 'a t -> 'a Or_error.t option
 val to_option : 'a t -> 'a option
 val error_s : Sexp.t -> _ t
+val tag_error : 'a t -> tag:string -> 'a t
 val value : 'a t -> default:'a -> 'a
 val value_map : 'a t -> f:('a -> 'b) -> default:'b -> 'b
 
@@ -67,3 +72,10 @@ val map7
   -> 'h t
 
 val join_or_error : 'a Or_error.t t -> 'a t
+val of_map : ('key, 'data t, 'cmp) Map.t -> ('key, 'data, 'cmp) Map.t t
+
+module Stable : sig
+  module V1 : sig
+    type nonrec 'a t = 'a t [@@deriving sexp, bin_io, stable_witness]
+  end
+end

@@ -8,7 +8,7 @@ module Implementation = Implementation
 module Implementations = Implementations
 module Transport = Transport
 module Connection = Connection
-module How_to_recognise_errors = How_to_recognise_errors
+module How_to_recognize_errors = How_to_recognize_errors
 
 (* The Result monad is also used. *)
 let ( >>=~ ) = Result.( >>= )
@@ -81,7 +81,7 @@ module Rpc = struct
   let[@inline] create ~name ~version ~bin_query ~bin_response ~include_in_error_count =
     (* We hope to inline the below call as it is normally trivial *)
     let has_errors =
-      How_to_recognise_errors.Private.to_error_mode include_in_error_count
+      How_to_recognize_errors.Private.to_error_mode include_in_error_count
     in
     aux_create ~name ~version ~bin_query ~bin_response ~has_errors
   ;;
@@ -850,8 +850,8 @@ module Streaming_rpc = struct
                  error)
           in
           (* It's always fine to close our own local reader when we want to. We just can't
-             always close the connection handler for this [Query_id.t] since more
-             messages might be on the way. *)
+             always close the connection handler for this [Query_id.t] since more messages
+             might be on the way. *)
           Update_handler.handle_closed handler (`Error core_error);
           on_error (Error error) ~we_know_the_server_pipe_is_open
         in
@@ -1028,16 +1028,38 @@ module Streaming_rpc = struct
         (* Set a small buffer to reduce the number of pushback events *)
         Pipe.set_size_budget pipe_w 100;
         let close_reason : Pipe_close_reason.t Ivar.t = Ivar.create () in
+        (* The regular TCP transport [lib/async_rpc/core/src/rpc_transport.ml], unlike
+           other transports (low latency, pipe), does not immediately bind on the
+           [flushed] deferred when it receives [Wait] and instead will call [f] in a
+           synchronous loop until the end of its batch of messages and [bind] on all the
+           [Wait]s it received in that batch.
+
+           Instead of allocating a bunch of deferreds in this case, we cache the deferred
+           of the first [Wait] we send back. This does mean that the transport could send
+           its next batch of messages before the previous batch has flushed, so we'll
+           buffer at most two batches of messages on the pipe (compared to just one batch
+           if we didn't cache). This is likely fine for memory usage since the transport
+           already had these messages buffered anyways. *)
+        let cached_flush_deferred : unit Deferred.t or_null ref = ref Null in
+        let get_flush_deferred () =
+          match !cached_flush_deferred with
+          | This d when not (Deferred.is_determined d) -> d
+          | _ ->
+            incr Util.For_testing.number_of_unique_flushed_waits_due_to_streaming_pushback;
+            let d =
+              match%map Pipe.downstream_flushed pipe_w with
+              | `Ok | `Reader_closed -> ()
+            in
+            cached_flush_deferred := This d;
+            d
+        in
         let f : _ Pipe_message.t -> Pipe_response.t = function
           | Update data ->
             if not (Pipe.is_closed pipe_w)
             then (
               Pipe.write_without_pushback pipe_w data;
               if t.client_pushes_back && Pipe.length pipe_w >= Pipe.size_budget pipe_w
-              then
-                Wait
-                  (match%map Pipe.downstream_flushed pipe_w with
-                   | `Ok | `Reader_closed -> ())
+              then Wait (get_flush_deferred ())
               else Continue)
             else Continue
           | Closed reason ->
@@ -1072,8 +1094,8 @@ end
 module Pipe_message = Streaming_rpc.Pipe_message
 module Pipe_response = Streaming_rpc.Pipe_response
 
-(* A Pipe_rpc is like a Streaming_rpc, except we don't care about initial state - thus
-   it is restricted to unit and ultimately ignored *)
+(* A Pipe_rpc is like a Streaming_rpc, except we don't care about initial state - thus it
+   is restricted to unit and ultimately ignored *)
 module Pipe_rpc = struct
   type ('query, 'response, 'error) t = ('query, unit, 'response, 'error) Streaming_rpc.t
 
@@ -1089,9 +1111,8 @@ module Pipe_rpc = struct
       ~bin_initial_response:Unit.bin_t
       ~bin_update_response:bin_response
       ~bin_error
-        (* [initial_response] doesn't show up in [Pipe_rpc]'s signature,
-         so the type-id created using [alias_for_initial_response] is
-         unreachable. *)
+        (* [initial_response] doesn't show up in [Pipe_rpc]'s signature, so the type-id
+           created using [alias_for_initial_response] is unreachable. *)
       ~alias_for_initial_response:""
       ~alias_for_update_response:"response"
       ()
@@ -1239,8 +1260,9 @@ module Pipe_rpc = struct
           then (
             Moption.set_some t.last_value_not_written x;
             (* Updating [last_value_len] isn't strictly necessary, but it makes it true
-               that we always either have a [last_value_not_written] OR [last_value_len >=
-               0], not both (or that we've never had a value written to this group). *)
+               that we always either have a [last_value_not_written] OR
+               [last_value_len >= 0], not both (or that we've never had a value written to
+               this group). *)
             t.last_value_len <- -1)
         | Some one ->
           let one = Bag.Elt.value one in

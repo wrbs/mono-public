@@ -9,14 +9,24 @@ open! Import
 module Async_kernel_config = Async_kernel_config
 module Async_kernel_require_explicit_time_source = Require_explicit_time_source
 module Async_kernel_scheduler = Async_kernel_scheduler
-module Bvar = Bvar
+
+module Bvar = struct
+  include Bvar
+  module Portable = Portable_bvar
+end
+
 module Clock_ns = Clock_ns
 module Condition = Async_condition
 module Deferred = Deferred
 module Execution_context = Execution_context
 module Gc = Async_gc
 module Invariant = Async_invariant
-module Ivar = Ivar
+
+module Ivar = struct
+  include Ivar
+  module Portable = Portable_ivar
+end
+
 module Lazy_deferred = Lazy_deferred
 module Monad_sequence = Monad_sequence
 module Monitor = Monitor
@@ -83,7 +93,7 @@ end
 
 (**/**)
 
-(* This test must be in this library, because it requires [return] to be inlined.  Moving
+(* This test must be in this library, because it requires [return] to be inlined. Moving
    it to another library will cause it to break with [X_LIBRARY_INLINING=false]. *)
 let%test_unit "[return ()] does not allocate" =
   let w1 = Gc.minor_words () in

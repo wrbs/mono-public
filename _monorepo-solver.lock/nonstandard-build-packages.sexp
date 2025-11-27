@@ -26,28 +26,6 @@
     (@runtest :if with-test)
     (@doc     :if with-doc))))
 
-((ppxlib 0.33.0+ox)
- ((rm -rf ast astlib stdppx traverse_builtins)
-  ((dune subst) :if dev)
-  (dune build -p
-    (name)
-    -j
-    (jobs)
-    @install
-    (@runtest :if with-test)
-    (@doc     :if with-doc))))
-
-((ppxlib_ast 0.33.0+ox)
- ((bash ./cleanup.sh)
-  ((dune subst) :if dev)
-  (dune build -p
-    (name)
-    -j
-    (jobs)
-    @install
-    (@runtest :if with-test)
-    (@doc     :if with-doc))))
-
 ((topkg 1.0.8+ox)
  ((ocaml pkg/pkg.ml build --pkg-name (name) --dev-pkg %{dev}%)))
 
@@ -88,3 +66,5 @@
   ((make))))
 
 ((cmdliner 1.3.0) (((make) all PREFIX=%{prefix}%)))
+
+((react 1.2.2) ((ocaml pkg/pkg.ml build --dev-pkg %{dev}%)))

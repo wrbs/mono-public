@@ -114,12 +114,19 @@ module In_scope_shared (I : Interface.S) (O : Interface.S) = struct
     let scope = Scope.sub_scope scope name in
     let label_ports = Scope.auto_label_hierarchical_ports scope in
     let ( -- ) = if auto_naming scope then Signal.( -- ) else Scope.naming scope in
-    let ( -- ) p s n = Signal.wireof s -- (p ^ Scope.Path.default_path_seperator ^ n) in
+    let ( -- ) p s n f =
+      let s = Signal.wireof s -- (p ^ Scope.Path.default_path_seperator ^ n) in
+      Signal.( --$ ) s f
+    in
     let inputs =
-      if label_ports then I.map2 inputs I.port_names ~f:(( -- ) "i") else inputs
+      if label_ports
+      then I.map3 inputs I.port_names I.wave_formats ~f:(( -- ) "i")
+      else inputs
     in
     let outputs = create_fn scope inputs in
-    if label_ports then O.map2 outputs O.port_names ~f:(( -- ) "o") else outputs
+    if label_ports
+    then O.map3 outputs O.port_names O.wave_formats ~f:(( -- ) "o")
+    else outputs
   ;;
 
   (* Convert a filename to a reasonable module name for use in the hierarchy *)
@@ -260,7 +267,7 @@ module In_scope_shared (I : Interface.S) (O : Interface.S) = struct
        runtime domains
 
      The first two cases are simple -- we just map to spec to the one exact runtime
-     domain.  For the third case, we choose to regenerate a new fresh domain, rather than
+     domain. For the third case, we choose to regenerate a new fresh domain, rather than
      propogate the Constant domain. This is definitely sound, possibly overly strict. But
      it shouldn't happen often enough that we have chosen to opt for a conservative
      solution for now.
@@ -287,8 +294,8 @@ module In_scope_shared (I : Interface.S) (O : Interface.S) = struct
 
      - The output ports' clock domains are consistent amongst themselves wrt the
        specification (independent of the input clock domain)
-     - The output ports' with a particular clock domain spec has the same runtime
-       clock domain as input ports with the same clock domain spec
+     - The output ports' with a particular clock domain spec has the same runtime clock
+       domain as input ports with the same clock domain spec
   *)
   let validate_outputs_clock_domain_consistent_with_mapping_and_specification
     ~(mapping_inferred_from_input_domain_specification :
@@ -325,9 +332,9 @@ module In_scope_shared (I : Interface.S) (O : Interface.S) = struct
             (* Entering this branch means we encountered a clock domain specification that
                wasn't associated to any ports in the input. In this case, we use the clock
                domain implied from the output gruoping.
-               [mapping_inferred_from_output_domain_specification] is a total map from
-               all the specifications that shows up in the output domains specification,
-               so this find_exn should always succeed.
+               [mapping_inferred_from_output_domain_specification] is a total map from all
+               the specifications that shows up in the output domains specification, so
+               this find_exn should always succeed.
             *)
             Map.find_exn mapping_inferred_from_output_domain_specification spec_uid
           | Some expected_exact ->
@@ -478,7 +485,7 @@ struct
          | Signal -> inputs
          | Clocked -> I.map inputs ~f:(fun x -> fst (Clocked_signal.to_rep x)))
     in
-    (* Get the output domains.  Forcing this is fine - it must have been set. *)
+    (* Get the output domains. Forcing this is fine - it must have been set. *)
     let created_output_domains = Option.value_exn !created_output_domains in
     (* Validate output domains against the domain specification *)
     let output_domains =

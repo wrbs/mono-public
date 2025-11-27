@@ -5,11 +5,11 @@ type t =
   { time : Time_float.t
   ; level : Level.t option
   ; raw_message : Message_data.t
-      (* [`Sexp] comes from uses of [%log.t.sexp] or from upstream logs, and [`String] comes
-     from uses of [%log.t.string]; [`Sexp | `String] can also come from message events
-     reconstructed out of serialized [Message]s.
+      (* [`Sexp] comes from uses of [%log.t.sexp] or from upstream logs, and [`String]
+         comes from uses of [%log.t.string]; [`Sexp | `String] can also come from message
+         events reconstructed out of serialized [Message]s.
 
-     [`Structured] comes from uses of [%log.t]. *)
+         [`Structured] comes from uses of [%log.t]. *)
   ; source : Message_source.t
   ; legacy_tags : (string * string) list
   ; user_scope : string option
@@ -18,10 +18,16 @@ type t =
   }
 [@@deriving fields ~getters ~iterators:create]
 
-let create ?time ?(source = "") ?(legacy_tags = []) ?level raw_message =
+let create
+  ?time
+  ?(source = Message_source.Manually_constructed "")
+  ?(legacy_tags = [])
+  ?level
+  raw_message
+  =
   let time = Option.value_or_thunk time ~default:Time_float.now in
   { raw_message
-  ; source = Manually_constructed source
+  ; source
   ; level
   ; time
   ; legacy_tags

@@ -83,8 +83,8 @@ module type S = sig
             in
             Vdom.Node.body [] [ counter ]
           and model in
-          (* Note that we don't include [on_display] or [update_visibility], since
-             these are optional arguments *)
+          (* Note that we don't include [on_display] or [update_visibility], since these
+             are optional arguments *)
           Component.create ~apply_action model view
         ;;
       ]}
@@ -108,6 +108,11 @@ module Private = struct
     ; apply_action :
         'state -> schedule_event:(unit Ui_effect.t -> unit) -> 'model -> 'action -> 'model
     ; update_visibility : 'model -> schedule_event:(unit Ui_effect.t -> unit) -> 'model
+    ; before_display :
+        'state
+        -> schedule_event:(unit Ui_effect.t -> unit)
+        -> apply_actions_recursor:(unit -> unit)
+        -> unit
     ; on_display : 'state -> schedule_event:(unit Ui_effect.t -> unit) -> unit
     }
 

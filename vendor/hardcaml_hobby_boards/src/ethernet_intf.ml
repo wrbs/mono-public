@@ -47,7 +47,7 @@ module type Ethernet = sig
 
       module O : sig
         type 'a t =
-          { txen : 'a (* Signal that is asserted when the data present on txd is valid*)
+          { txen : 'a (* Signal that is asserted when the data present on txd is valid *)
           ; txd : 'a (* 2-bit wide data signal *)
           ; ready : 'a Axi32.Dest.t
           (* Axi ready signal that is asserted when the ethernet TX FIFO is not full *)

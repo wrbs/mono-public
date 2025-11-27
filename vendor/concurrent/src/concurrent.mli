@@ -11,38 +11,48 @@ module Scope = Scope
     The ['concurrent_ctx] type parameter is the per-task context type - a value of type
     ['concurrent_ctx] will be passed in [@ local] as the second argument to each spawned
     task. *)
-type 'concurrent_ctx t : value mod contended
+type 'concurrent_ctx t : value mod contended non_float
+
+type packed = T : 'concurrent_ctx t -> packed [@@unboxed]
 
 (** [await t] is the implementation of awaiting associated with the implementation of
     concurrency [t] *)
 val await : 'concurrent_ctx t @ local -> Await.t @ local
 
-type ('scope_ctx, 'concurrent_ctx) spawn_fn =
+type 'resource spawn_result =
+  | Spawned
+  | Failed of 'resource * exn @@ aliased many * Backtrace.t @@ aliased many
+
+type ('resource, 'scope_ctx, 'concurrent_ctx) spawn_fn =
   'scope_ctx Scope.t @ local
   -> f:
        ('scope_ctx Scope.Task_handle.t @ local unique
         -> 'concurrent_ctx @ local
         -> 'concurrent_ctx t @ local portable
+        -> 'resource @ contended once portable unique
         -> unit)
      @ once portable
-  -> unit
+  -> 'resource @ contended once portable unique
+  -> 'resource spawn_result @ contended once portable unique
 
 module Scheduler : sig
   type 'ctx concurrent := 'ctx t
 
   (** [Scheduler.t] is the type representing a handle to a concurrent scheduler. A handle
       to the scheduler allows spawning unstructured concurrent tasks. *)
-  type 'ctx t : value mod contended
+  type 'ctx t : value mod aliased contended non_float
 
-  (** [create ~spawn] creates a new scheduler with the given spawn function *)
+  type packed = T : 'ctx t -> packed [@@unboxed]
+
+  (** [create ~spawn] creates a new scheduler with the given spawn function. *)
   val%template create
     : 'concurrent_ctx.
-    spawn:('scope_ctx. ('scope_ctx, 'concurrent_ctx) spawn_fn) @ l p
+    spawn:('resource 'scope_ctx. ('resource, 'scope_ctx, 'concurrent_ctx) spawn_fn) @ l p
     -> 'concurrent_ctx t @ l p
   [@@alloc __ @ l = (heap_global, stack_local)] [@@mode p = (portable, nonportable)]
 
   (** [spawn scheduler ~f] spawns a new concurrent task to execute
-      [f scope concurrent_ctx conc] using the scheduler [scheduler]
+      [f scope concurrent_ctx conc] using the scheduler [scheduler].
 
       [scope] is the scope itself, allowing access to the context provided to [with_scope]
       via {!Scope.context}, and also spawning tasks into the parent scope via
@@ -51,7 +61,7 @@ module Scheduler : sig
       [concurrent_ctx] is the per-task concurrent context, defined by the implementation
       of concurrency.
 
-      [conc] is the implementation of concurrency itself, allowing creating futher nested
+      [conc] is the implementation of concurrency itself, allowing creating further nested
       scopes. *)
   val spawn
     :  'concurrent_ctx t @ local
@@ -63,6 +73,34 @@ module Scheduler : sig
           -> unit)
        @ once portable
     -> unit
+
+  (** [spawn_with scheduler ~f resource] spawns a new concurrent task to execute
+      [f scope concurrent_ctx conc resource] using the scheduler [scheduler].
+
+      [resource] is a unique resource that is guaranteed to either be passed to [f], or
+      returned as part of the {!Failed} {!spawn_result} to be handled by the caller.
+
+      [scope] is the scope itself, allowing access to the context provided to [with_scope]
+      via {!Scope.context}, and also spawning tasks into the parent scope via
+      {!into_scope}.
+
+      [concurrent_ctx] is the per-task concurrent context, defined by the implementation
+      of concurrency.
+
+      [conc] is the implementation of concurrency itself, allowing creating further nested
+      scopes. *)
+  val spawn_with
+    :  'concurrent_ctx t @ local
+    -> 'scope_ctx Scope.t @ local
+    -> f:
+         ('scope_ctx Scope.t @ local
+          -> 'concurrent_ctx @ local
+          -> 'concurrent_ctx concurrent @ local portable
+          -> 'resource @ contended once portable unique
+          -> unit)
+       @ once portable
+    -> 'resource @ contended once portable unique
+    -> 'resource spawn_result @ contended once portable unique
 
   (** [spawn_daemon scheduler scope ~f] spawns a concurrent {i daemon} task executing [f]
       into the given scope. Daemon tasks are given a cancellation token which is canceled
@@ -80,7 +118,7 @@ module Scheduler : sig
     -> unit
 
   (** [spawn_daemon'] is like [spawn_daemon], except the function given to it returns
-      [unit] instead of [unit Or_canceled.t] *)
+      [unit] instead of [unit Or_canceled.t]. *)
   val spawn_daemon'
     :  'concurrent_ctx t @ local
     -> 'scope_ctx Scope.t @ local
@@ -94,7 +132,7 @@ module Scheduler : sig
     -> unit
 end
 
-(** [scheduler t] is the scheduler associated with the implementation of concurrency [t] *)
+(** [scheduler t] is the scheduler associated with the implementation of concurrency [t]. *)
 val scheduler : 'ctx t @ local -> 'ctx Scheduler.t @ local
 
 module Spawn : sig
@@ -112,38 +150,49 @@ module Spawn : sig
       2. ['concurrent_ctx] is the type of the context associated with the {!Concurrent.t}
          that the {!Spawn.t} is associated with, if any, and is passed to all spawned
          tasks [@ local] *)
-  type ('scope_ctx, 'concurrent_ctx) t : value mod contended
+  type ('scope_ctx, 'concurrent_ctx) t : value mod contended non_float
+
+  type 'scope_ctx packed = T : ('scope_ctx, 'concurrent_ctx) t -> 'scope_ctx packed
+  [@@unboxed]
 
   [%%template:
   [@@@mode.default p = (portable, nonportable)]
 
   (** [create concurrent ~scope] creates a new capability value providing the ability to
       [spawn] concurrent tasks using the given implementation of concurrency into the
-      given [scope] *)
+      given [scope]. *)
   val create
     : 'scope_ctx 'concurrent_ctx.
     'concurrent_ctx concurrent @ local p
     -> scope:'scope_ctx Scope.t @ local
     -> ('scope_ctx, 'concurrent_ctx) t @ local p]
 
-  (** [concurrent t] is the implementation of concurrency associated with [t] *)
+  (** [with_scheduler s scheduler] is a capability providing the ability to [spawn] tasks
+      guarded by the scope associated with [s], but running on the concurrent scheduler
+      [scheduler] *)
+  val with_scheduler
+    :  ('scope_ctx, _) t @ local
+    -> 'concurrent_ctx Scheduler.t @ local
+    -> ('scope_ctx, 'concurrent_ctx) t @ local
+
+  (** [concurrent t] is the implementation of concurrency associated with [t]. *)
   val concurrent
     :  ('scope_ctx, 'concurrent_ctx) t @ local
     -> 'concurrent_ctx concurrent @ local
 
-  (** [await t] is [Concurrent.await (concurrent t)] *)
+  (** [await t] is [Concurrent.await (concurrent t)]. *)
   val await : (_, _) t @ local -> Await.t @ local
 
-  (** [scheduler t] is [Concurrent.scheduler (concurrent t)] *)
+  (** [scheduler t] is [Concurrent.scheduler (concurrent t)]. *)
   val scheduler : (_, 'concurrent_ctx) t @ local -> 'concurrent_ctx Scheduler.t @ local
 
-  (** [scope t] is the {!Scope} associated with [t] *)
+  (** [scope t] is the {!Scope} associated with [t]. *)
   val scope : ('scope_ctx, 'concurrent_ctx) t @ local -> 'scope_ctx Scope.t @ local
 
-  (** [context t] is [Scope.context (scope t)] *)
-  val context : ('scope_ctx, _) t -> 'scope_ctx @ contended local portable
+  (** [context t] is [Scope.context (scope t)]. *)
+  val context : ('scope_ctx, _) t @ local -> 'scope_ctx @ contended local portable
 
-  (** [terminator t] is [Scope.terminator (scope t)] *)
+  (** [terminator t] is [Scope.terminator (scope t)]. *)
   val terminator : (_, _) t @ local -> Terminator.t @ local
 end
 
@@ -151,7 +200,7 @@ end
 [@@@mode.default p = (portable, nonportable)]
 
 (** [create await ~scheduler] creates a new implementation of concurrency, given an
-    implementation of awaiting and a handle to a scheduler *)
+    implementation of awaiting and a handle to a scheduler. *)
 val create
   :  Await.t @ local p
   -> scheduler:'concurrent_ctx Scheduler.t @ local p
@@ -189,7 +238,7 @@ val with_scope
     [concurrent_ctx] is the per-task concurrent context, defined by the implementation of
     concurrency.
 
-    [conc] is the implementation of concurrency itself, allowing creating futher nested
+    [conc] is the implementation of concurrency itself, allowing creating further nested
     scopes. *)
 val spawn
   :  ('scope_ctx, 'concurrent_ctx) Spawn.t @ local
@@ -200,6 +249,32 @@ val spawn
         -> unit)
      @ once portable
   -> unit
+
+(** [spawn_with s ~f resource] spawns a new concurrent task to execute
+    [f scope concurrent_ctx conc resource] using [s] as the implementation of spawning.
+
+    [resource] is a unique resource that is either guaranteed to be passed to [f] or is
+    returned as part of the {!Failed} {!spawn_result} to be handled by the caller.
+
+    [scope] is the scope itself, allowing access to the context provided to [with_scope]
+    via {!Scope.context}, and also spawning tasks into the parent scope via {!into_scope}.
+
+    [concurrent_ctx] is the per-task concurrent context, defined by the implementation of
+    concurrency.
+
+    [conc] is the implementation of concurrency itself, allowing creating further nested
+    scopes. *)
+val spawn_with
+  :  ('scope_ctx, 'concurrent_ctx) Spawn.t @ local
+  -> f:
+       ('scope_ctx Scope.t @ local
+        -> 'concurrent_ctx @ local
+        -> 'concurrent_ctx t @ local portable
+        -> 'resource @ contended once portable unique
+        -> unit)
+     @ once portable
+  -> 'resource @ contended once portable unique
+  -> 'resource spawn_result @ contended once portable unique
 
 (** [spawn_daemon scheduler scope ~f] spawns a concurrent {i daemon} task executing [f]
     into the given scope. Daemon tasks are given a cancellation token which is canceled
@@ -216,7 +291,7 @@ val spawn_daemon
   -> unit
 
 (** [spawn_daemon'] is like [spawn_daemon], except the function given to it returns [unit]
-    instead of [unit Or_canceled.t] *)
+    instead of [unit Or_canceled.t]. *)
 val spawn_daemon'
   :  ('scope_ctx, 'concurrent_ctx) Spawn.t @ local
   -> f:
@@ -242,7 +317,7 @@ val spawn_nonportable
      @ once
   -> unit
 
-(** [spawn_onto_initial spawn ~f] is [spawn_nonportable Capsule.Initial.access ~f] *)
+(** [spawn_onto_initial spawn ~f] is [spawn_nonportable Capsule.Initial.access ~f]. *)
 val spawn_onto_initial
   :  ('scope_ctx, Capsule.Initial.k Capsule.Access.boxed) Spawn.t @ local
   -> f:
@@ -259,7 +334,7 @@ val spawn_onto_initial
 
 (** [map t iarr s ~f] creates a new concurrent scope onto which a new task executing
     [f s c t a] is spawned for each [a] in [iarr], with [c] being the task-local value
-    provided by [t]. Returns an immutable array containing the results of each [f] *)
+    provided by [t]. Returns an immutable array containing the results of each [f]. *)
 val map
   : ('a : value mod non_float) ('b : value mod non_float).
   'concurrent_ctx t @ local p
@@ -400,4 +475,20 @@ val spawn_join5
       -> 'concurrent_ctx t @ local p
       -> 'e @ contended portable)
      @ once portable
-  -> #('a * 'b * 'c * 'd * 'e) @ contended portable]
+  -> #('a * 'b * 'c * 'd * 'e) @ contended portable
+
+(** [spawn_join_n t b ~n ~f] spawns [n] concurrent tasks executing [f s c t i], where [i]
+    is the 0-based index of the task, waits for them all to return, and returns an iarray
+    containing the results. *)
+val spawn_join_n
+  :  'concurrent_ctx t @ local p
+  -> 'scope_ctx @ portable
+  -> n:int
+  -> f:
+       ('scope_ctx Scope.t @ local
+        -> 'concurrent_ctx @ local
+        -> 'concurrent_ctx t @ local p
+        -> int
+        -> 'a @ contended portable)
+     @ portable
+  -> 'a Iarray.t @ contended portable]

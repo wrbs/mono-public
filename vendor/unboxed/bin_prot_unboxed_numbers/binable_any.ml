@@ -5,7 +5,9 @@ module%template
   [@kind k = (float32, float64, bits32, bits64, word)] Of_binable
     (Boxed : sig
      @@ portable
-       include Bin_prot.Binable.S_only_functions [@mode local]
+       type t
+
+       include Bin_prot.Binable.S_only_functions [@mode local] with type t := t
      end)
     (T : sig
      @@ portable

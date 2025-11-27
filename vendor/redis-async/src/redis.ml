@@ -92,16 +92,31 @@ struct
       (Response.create Key_parser.cursor_and_list)
   ;;
 
-  let set t k ?expire v =
+  let set' ?expire ?only_if t k v response =
     let args =
-      match expire with
-      | None -> []
-      | Some expire -> [ "PX"; Int.to_string (Time_ns.Span.to_int_ms expire) ]
+      let args =
+        match expire with
+        | None -> []
+        | Some expire -> [ "PX"; Int.to_string (Time_ns.Span.to_int_ms expire) ]
+      in
+      match only_if with
+      | None -> args
+      | Some `Key_does_not_exist -> "NX" :: args
+      | Some `Key_already_exists -> "XX" :: args
     in
-    command_kv t [ "SET" ] [ k, v ] args (Response.create_ok ())
+    command_kv t [ "SET" ] [ k, v ] args response
   ;;
 
-  let setnx t k v = command_kv t [ "SETNX" ] [ k, v ] [] (Response.create_01_bool ())
+  let set ?expire t k v = set' ?expire t k v (Response.create_ok ())
+
+  let set_if ?expire t only_if k v =
+    match%bind set' ?expire ~only_if t k v (Response.create_resp3 ()) with
+    | String "OK" -> return `Set
+    | Null -> return `Not_set
+    | unexpected ->
+      Deferred.return
+        (Response.handle_unexpected_response ~expected:"OK or Null" unexpected)
+  ;;
 
   let pexpire t key ?(nx = false) span =
     let nx = if nx then [ "NX" ] else [] in
@@ -142,8 +157,8 @@ struct
 
   let msetnx t kvs =
     (* This atomically sets all the keys/values as long as none of the keys already exist.
-       For an empty set of key-values, we always succeed (vacuous truth), so the result
-       of empty input should be true. *)
+       For an empty set of key-values, we always succeed (vacuous truth), so the result of
+       empty input should be true. *)
     command_kv
       t
       ~result_of_empty_input:(Ok true)
@@ -448,7 +463,8 @@ struct
         raise_s [%message [%here] "Unexpected response to config get" (resp3 : Resp3.t)]
     in
     let configuration =
-      (* Redis sets flags based on this string and does not care about duplicate characters *)
+      (* Redis sets flags based on this string and does not care about duplicate
+         characters *)
       String.of_char_list
         (category :: List.map (events :> Key_event.t list) ~f:keyevent_configuration)
       ^ existing_configuration
@@ -459,8 +475,7 @@ struct
         [ "CONFIG"; "SET"; "notify-keyspace-events"; configuration ]
         (Response.create_ok ())
     in
-    (* Transform the string events we may receive back into their variant
-       representation. *)
+    (* Transform the string events we may receive back into their variant representation. *)
     String.Map.of_alist_exn
       (List.map events ~f:(fun event -> Key_event.to_string (event :> Key_event.t), event))
   ;;

@@ -8,9 +8,7 @@ module Compare_failed_or_set_here = struct
   [@@deriving sexp_of ~stackify]
 end
 
-type 'a t = 'a Basement.Portable_atomic.t
-
-let make = Basement.Portable_atomic.make
+type ('a : value_or_null) t = 'a Basement.Portable_atomic.t
 
 let make_alone =
   if Basement.Stdlib_shim.runtime5 ()
@@ -19,27 +17,34 @@ let make_alone =
     (* [caml_atomic_make_contended] is not supported on runtime4; we can just fall back to
        regular make, which is semantically correct and we shouldn't be as worried about
        false sharing on single-core applications anyway. *)
-    make
+    Basement.Portable_atomic.make
 ;;
 
-external get : ('a t[@local_opt]) -> 'a @ contended portable @@ portable = "%atomic_load"
+let[@inline] make ?(padded = false) value =
+  if padded then make_alone value else Basement.Portable_atomic.make value
+;;
+
+external get
+  : ('a : value_or_null).
+  ('a t[@local_opt]) -> 'a @ contended portable
+  @@ portable
+  = "%atomic_load"
 
 external exchange
-  :  ('a t[@local_opt])
-  -> 'a @ contended portable
-  -> 'a @ contended portable
+  : ('a : value_or_null).
+  ('a t[@local_opt]) -> 'a @ contended portable -> 'a @ contended portable
   @@ portable
   = "%atomic_exchange"
 
 external set
-  :  ('a t[@local_opt])
-  -> 'a @ contended portable
-  -> unit
+  : ('a : value_or_null).
+  ('a t[@local_opt]) -> 'a @ contended portable -> unit
   @@ portable
   = "%atomic_set"
 
 external compare_and_set
-  :  ('a t[@local_opt])
+  : ('a : value_or_null).
+  ('a t[@local_opt])
   -> if_phys_equal_to:'a @ contended
   -> replace_with:'a @ contended portable
   -> Compare_failed_or_set_here.t
@@ -47,7 +52,8 @@ external compare_and_set
   = "%atomic_cas"
 
 external compare_exchange
-  :  ('a t[@local_opt])
+  : ('a : value_or_null).
+  ('a t[@local_opt])
   -> if_phys_equal_to:'a @ contended
   -> replace_with:'a @ contended portable
   -> 'a @ contended portable
@@ -65,7 +71,7 @@ let[@inline] update_and_return t ~pure_f =
   aux Backoff.default [@nontail]
 ;;
 
-let[@inline] update (type a) (t : a t) ~pure_f =
+let[@inline] update (type a : value_or_null) (t : a t) ~pure_f =
   Basement.Stdlib_shim.ignore_contended (update_and_return t ~pure_f : a)
 ;;
 
@@ -196,8 +202,8 @@ let contents (t : _ t) = [%atomic.loc t.contended.Stdlib.Atomic.contents]
 module Expert = struct
   (* This is subject to CSE. *)
   external fenceless_get_cse
-    :  ('a t[@local_opt])
-    -> 'a @ contended portable
+    : ('a : value_or_null).
+    ('a t[@local_opt]) -> 'a @ contended portable
     @@ portable
     = "%field0"
 

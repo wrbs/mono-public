@@ -7,7 +7,8 @@ open Signal
 module Make
     (Hart_config : Hart_config_intf.S)
     (Memory_config : System_intf.Memory_config)
-    (General_config : System_intf.Config) =
+    (General_config : System_intf.Config)
+    (Video_config : Framebuffer_expander.Config) =
 struct
   module Axi_config = struct
     let id_bits = 8
@@ -26,7 +27,8 @@ struct
       end)
       (Axi4)
 
-  module System = System.Make (Hart_config) (Memory_config) (General_config) (Axi4)
+  module System =
+    System.Make (Hart_config) (Memory_config) (General_config) (Video_config) (Axi4)
 
   (* Re-exports *)
   include struct
@@ -40,6 +42,9 @@ struct
       { clock : 'a
       ; clear : 'a
       ; uart_rx : 'a
+      ; eth_crsdv : 'a
+      ; eth_rxerr : 'a
+      ; eth_rxd : 'a [@bits 2]
       }
     [@@deriving hardcaml]
   end
@@ -51,11 +56,21 @@ struct
       ; ethernet_txd : 'a [@bits 2]
       ; uart_tx : 'a
       ; uart_rx_valid : 'a
+      ; vga_red : 'a [@bits 4]
+      ; vga_green : 'a [@bits 4]
+      ; vga_blue : 'a [@bits 4]
+      ; vga_hsync : 'a
+      ; vga_vsync : 'a
       }
     [@@deriving hardcaml]
   end
 
-  let create ~build_mode ~read_latency scope { I.clock; clear; uart_rx } =
+  let create
+    ~build_mode
+    ~read_latency
+    scope
+    { I.clock; clear; uart_rx; eth_crsdv; eth_rxerr; eth_rxd }
+    =
     let memory = Axi4.O.Of_signal.wires () in
     let mem =
       Memory.hierarchical
@@ -68,7 +83,14 @@ struct
       System.create
         ~build_mode
         scope
-        { System.I.clock; clear; uart_rx; memory = mem.memory }
+        { System.I.clock
+        ; clear
+        ; uart_rx
+        ; memory = mem.memory
+        ; eth_crsdv
+        ; eth_rxerr
+        ; eth_rxd
+        }
     in
     Axi4.O.Of_signal.assign memory core.memory;
     { O.registers = core.registers
@@ -76,6 +98,11 @@ struct
     ; ethernet_txen = core.ethernet_txen
     ; ethernet_txd = core.ethernet_txd
     ; uart_rx_valid = core.uart_rx_valid
+    ; vga_red = core.vga_red
+    ; vga_green = core.vga_green
+    ; vga_blue = core.vga_blue
+    ; vga_hsync = core.vga_hsync
+    ; vga_vsync = core.vga_vsync
     }
   ;;
 

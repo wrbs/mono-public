@@ -8,7 +8,8 @@ open Hardcaml_risc_v_hart
 module Make
     (Hart_config : Hart_config_intf.S)
     (Memory_config : System_intf.Memory_config)
-    (General_config : System_intf.Config) : sig
+    (General_config : System_intf.Config)
+    (Video_config : Framebuffer_expander.Config) : sig
   module Registers : Registers_intf.S
   module Memory_bus : Memory_bus_intf.S
 
@@ -17,6 +18,9 @@ module Make
       { clock : 'a
       ; clear : 'a
       ; uart_rx : 'a
+      ; eth_crsdv : 'a
+      ; eth_rxerr : 'a
+      ; eth_rxd : 'a
       }
     [@@deriving hardcaml]
   end
@@ -28,6 +32,11 @@ module Make
       ; ethernet_txd : 'a
       ; uart_tx : 'a
       ; uart_rx_valid : 'a
+      ; vga_red : 'a
+      ; vga_green : 'a
+      ; vga_blue : 'a
+      ; vga_hsync : 'a
+      ; vga_vsync : 'a
       }
     [@@deriving hardcaml]
   end

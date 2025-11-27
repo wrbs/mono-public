@@ -13,7 +13,7 @@ module Websocket_role = struct
     | Server
   [@@deriving sexp_of]
 
-  (*  https://tools.ietf.org/html/rfc6455#section-5.3 *)
+  (* https://tools.ietf.org/html/rfc6455#section-5.3 *)
   let should_mask = function
     | Client -> true
     | Server -> false
@@ -144,7 +144,7 @@ module Pipes = struct
           let frame_handler
             ~(opcode : Opcode.t)
             ~(final : bool)
-            ~(content : (read, Iobuf.no_seek) Iobuf.t)
+            ~(content : (read, Iobuf.no_seek, Iobuf.global) Iobuf.t)
             ~masked:_
             =
             if not (Bus.is_closed read_opcode_bus) then Bus.write read_opcode_bus opcode;
@@ -237,8 +237,8 @@ let close
   { raw = ws; pipes = pipe_reader, pipe_writer; read_opcode_bus = _; masked = _ }
   =
   Frame.write_frame ws.writer ~masked (Frame.create_close ~code reason);
-  (* Wait for the writer to be flushed before actually closing it,
-     otherwise the closing frame won't be sent. *)
+  (* Wait for the writer to be flushed before actually closing it, otherwise the closing
+     frame won't be sent. *)
   let%bind () = Writer.flushed ws.writer in
   let%bind () = Writer.close ws.writer in
   let%bind () = Reader.close ws.reader in

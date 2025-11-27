@@ -35,6 +35,7 @@ module Supported_axis = struct
     type t =
       | Portable
       | Contended
+      | Forkable
       | Unyielding
       | Many
       | Stateless
@@ -49,6 +50,7 @@ module Supported_axis = struct
   let of_modal_mod : Ppxlib_jane.mode -> t Or_error.t = function
     | Mode "portable" -> Ok Portable
     | Mode "contended" -> Ok Contended
+    | Mode "forkable" -> Ok Forkable
     | Mode "unyielding" -> Ok Unyielding
     | Mode "many" -> Ok Many
     | Mode "stateless" -> Ok Stateless
@@ -63,6 +65,7 @@ module Supported_axis = struct
     | Portable -> "portable"
     | Contended -> "contended"
     | Many -> "many"
+    | Forkable -> "forkable"
     | Unyielding -> "unyielding"
     | Stateless -> "stateless"
     | Immutable -> "immutable"
@@ -87,13 +90,31 @@ end
     ; "non_float"
     ; "portable"
     ; "stateless"
+    ; "forkable"
     ; "unyielding"
     ]
   ;;
 
-  let mutable_data = [ "many"; "non_float"; "portable"; "stateless"; "unyielding" ]
+  let mutable_data =
+    [ "many"
+    ; "non_float"
+    ; "portable"
+    ; "stateless"
+    ; "forkable"
+    ; "unyielding"
+    ]
+  ;;
 
-  let sync_data = [ "contended"; "many"; "non_float"; "portable"; "stateless"; "unyielding" ]
+  let sync_data =
+    [ "contended"
+    ; "many"
+    ; "non_float"
+    ; "portable"
+    ; "stateless"
+    ; "forkable"
+    ; "unyielding"
+    ]
+  ;;
 *)
 (*$
   let print_list_and_test data ~name =
@@ -121,38 +142,42 @@ end
   let () = print_list_and_test sync_data ~name:"sync_data"
 *)
 let immutable_data : Supported_axis.t list =
-  [ Contended; Immutable; Many; Non_float; Portable; Stateless; Unyielding ]
+  [ Contended; Immutable; Many; Non_float; Portable; Stateless; Forkable; Unyielding ]
 ;;
 
 module _ : sig
   type _t1 : immutable_data
-  type _t2 : value mod contended immutable many non_float portable stateless unyielding
+
+  type _t2 :
+    value mod contended forkable immutable many non_float portable stateless unyielding
 end = struct
-  type _t1 : value mod contended immutable many non_float portable stateless unyielding
+  type _t1 :
+    value mod contended forkable immutable many non_float portable stateless unyielding
+
   type _t2 : immutable_data
 end
 
 let mutable_data : Supported_axis.t list =
-  [ Many; Non_float; Portable; Stateless; Unyielding ]
+  [ Many; Non_float; Portable; Stateless; Forkable; Unyielding ]
 ;;
 
 module _ : sig
   type _t1 : mutable_data
-  type _t2 : value mod many non_float portable stateless unyielding
+  type _t2 : value mod forkable many non_float portable stateless unyielding
 end = struct
-  type _t1 : value mod many non_float portable stateless unyielding
+  type _t1 : value mod forkable many non_float portable stateless unyielding
   type _t2 : mutable_data
 end
 
 let sync_data : Supported_axis.t list =
-  [ Contended; Many; Non_float; Portable; Stateless; Unyielding ]
+  [ Contended; Many; Non_float; Portable; Stateless; Forkable; Unyielding ]
 ;;
 
 module _ : sig
   type _t1 : sync_data
-  type _t2 : value mod contended many non_float portable stateless unyielding
+  type _t2 : value mod contended forkable many non_float portable stateless unyielding
 end = struct
-  type _t1 : value mod contended many non_float portable stateless unyielding
+  type _t1 : value mod contended forkable many non_float portable stateless unyielding
   type _t2 : sync_data
 end
 (*$*)
@@ -166,11 +191,14 @@ let axes_to_ignore modalities =
     modalities
     ~f:
       (fun
-        (Ppxlib_jane.Shim.Modality.Modality field_modality) : Supported_axis.t option ->
+        { txt = Ppxlib_jane.Shim.Modality.Modality field_modality; _ }
+        : Supported_axis.t option
+      ->
       match field_modality with
       | "portable" -> Some Portable
       | "contended" -> Some Contended
       | "many" -> Some Many
+      | "forkable" -> Some Forkable
       | "unyielding" -> Some Unyielding
       | _ -> None)
   |> Set.of_list (module Supported_axis)
@@ -179,7 +207,7 @@ let axes_to_ignore modalities =
 let crossing_axes_is_implied_by_immutable_data axes =
   List.for_all axes ~f:(fun { txt = m; loc = _ } ->
     match (m : Supported_axis.t) with
-    | Portable | Contended | Unyielding | Many | Stateless | Immutable -> true
+    | Portable | Contended | Forkable | Unyielding | Many | Stateless | Immutable -> true
     | Non_float -> false)
 ;;
 
@@ -212,8 +240,8 @@ let type_with_builtin_cross_checking ty ~axes_to_cross ~axes_to_ignore =
         None
         (Some
            { pjkind_desc =
-               Mod
-                 ( { pjkind_desc = Abbreviation "any"; pjkind_loc = loc }
+               Pjk_mod
+                 ( { pjkind_desc = Pjk_abbreviation "any"; pjkind_loc = loc }
                  , List.map axes_to_check_crossing ~f:(fun axis ->
                      Supported_axis.to_axis axis.txt, axis.loc)
                      (* sort to match ocamlformat output *)
@@ -226,12 +254,11 @@ let type_with_builtin_cross_checking ty ~axes_to_cross ~axes_to_ignore =
            })
         ~loc
     in
-    (* The following code block sidesteps an issue with ppx_fuelproof's
-       method of ensuring mode crossing. The issue presents when the
-       recursive instance of the type being defined appears under a type
-       constructor, like [list] or [iarray]. In these cases, mode crossing
-       inference is made happier when the wrapping check appears closer
-       to the type being defined.
+    (* The following code block sidesteps an issue with ppx_fuelproof's method of ensuring
+       mode crossing. The issue presents when the recursive instance of the type being
+       defined appears under a type constructor, like [list] or [iarray]. In these cases,
+       mode crossing inference is made happier when the wrapping check appears closer to
+       the type being defined.
 
        Engineering effort will be paid toward obviating ppx_fuelproof rather than making
        this check better.
@@ -270,7 +297,13 @@ let rewrite_fields original_fields ~axes_to_cross =
     let%bind () =
       match field.pld_mutable with
       | Mutable ->
-        if check_crossing_contention
+        let is_atomic =
+          List.exists field.pld_attributes ~f:(fun attr ->
+            match attr.attr_name.txt, attr.attr_payload with
+            | ("atomic" | "ocaml.atomic"), PStr [] -> true
+            | _ -> false)
+        in
+        if (not is_atomic) && check_crossing_contention
         then
           Error
             ( Error.of_string "Type with a mutable field can't cross contention"
@@ -342,8 +375,9 @@ let rewrite_tydecls (tydecls : type_declaration list) ~loc
         | Some jkind ->
           let%bind axes_to_cross =
             match jkind with
-            | { pjkind_desc = Mod ({ pjkind_desc = Abbreviation "value"; _ }, mods); _ }
-              ->
+            | { pjkind_desc = Pjk_mod ({ pjkind_desc = Pjk_abbreviation "value"; _ }, mods)
+              ; _
+              } ->
               let%bind axes =
                 List.map mods ~f:(fun mod_ ->
                   let%map axis =
@@ -354,11 +388,11 @@ let rewrite_tydecls (tydecls : type_declaration list) ~loc
                 |> Result.all
               in
               Ok axes
-            | { pjkind_desc = Abbreviation "immutable_data"; pjkind_loc = loc } ->
+            | { pjkind_desc = Pjk_abbreviation "immutable_data"; pjkind_loc = loc } ->
               Ok (immutable_data ~loc)
-            | { pjkind_desc = Abbreviation "mutable_data"; pjkind_loc = loc } ->
+            | { pjkind_desc = Pjk_abbreviation "mutable_data"; pjkind_loc = loc } ->
               Ok (mutable_data ~loc)
-            | { pjkind_desc = Abbreviation "sync_data"; pjkind_loc = loc } ->
+            | { pjkind_desc = Pjk_abbreviation "sync_data"; pjkind_loc = loc } ->
               Ok (sync_data ~loc)
             | { pjkind_loc = loc; _ } ->
               Error (Error.of_string "Unsupported kind annotation for %fuelproof", loc)
@@ -369,9 +403,9 @@ let rewrite_tydecls (tydecls : type_declaration list) ~loc
                 String.equal attr.attr_name.txt "unboxed")
             in
             (* For example, [Non_float]'s axis (separability) is not modal, so applies in
-             different circumstances than modal axes. In particular, it is only relevant
-             for fuelproof checks on [@@unboxed] types, where the separability of the
-             overall type is inherited from the separability of the single field. *)
+               different circumstances than modal axes. In particular, it is only relevant
+               for fuelproof checks on [@@unboxed] types, where the separability of the
+               overall type is inherited from the separability of the single field. *)
             if is_unboxed then axes_to_cross else remove_non_modal axes_to_cross
           in
           let%bind new_ptype_kind =
@@ -425,13 +459,12 @@ let create_extension_str ~loc rec_flag original_tydecls =
        We generate something like:
 
        {[
-        module Check = struct
-          type t = { x : (int as (_ : value mod portable)) }
-          [@@unsafe_allow_any_mode_crossing]
-        end
+         module Check = struct
+           type t = { x : int as (_ : value mod portable) } [@@unsafe_allow_any_mode_crossing]
+         end
 
-        type t = Check.t = { x : int } [@@unsafe_allow_any_mode_crossing]
-      ]}
+         type t = Check.t = { x : int } [@@unsafe_allow_any_mode_crossing]
+       ]}
 
        The [Check] module is used to check the mode-crossing behavior is as expected, but
        doensn't interact well with deriving ppxes, like [@@deriving sexp_of].
@@ -451,9 +484,9 @@ let create_extension_str ~loc rec_flag original_tydecls =
               List.filter tydecl.ptype_attributes ~f:(fun attr ->
                 String.( <> ) attr.attr_name.txt "deriving")
             in
-            (* Clear attributes, which may only be consumed by deriving ppxes.
-             The attributes will be present on the [decl_for_deriving_ppxes],
-             so we're not dropping information.
+            (* Clear attributes, which may only be consumed by deriving ppxes. The
+               attributes will be present on the [decl_for_deriving_ppxes], so we're not
+               dropping information.
             *)
             let cleared_tydecl = clear_non_builtin_attributes#type_declaration tydecl in
             { cleared_tydecl with ptype_attributes = attributes }))

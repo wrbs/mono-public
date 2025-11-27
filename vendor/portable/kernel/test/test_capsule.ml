@@ -14,11 +14,11 @@ module%test [@name "[Capsule.Isolated]"] _ = struct
 
   let%expect_test _ =
     let data = Capsule.Isolated.create (fun () -> ref 0) in
-    let data, { aliased = do_stuff_result } =
+    let #(data, { aliased = do_stuff_result }) =
       Capsule.Isolated.with_unique data ~f:(fun r -> Some_library.do_stuff r)
     in
     (* Even though [get] is [portable], it can still read the contents of [data] since it
-     has [shared] access to it. *)
+       has [shared] access to it. *)
     let (get @ portable) () =
       Capsule.Isolated.with_shared data ~f:(fun r -> r.contents)
     in

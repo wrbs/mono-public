@@ -107,9 +107,16 @@ module Definitions = struct
 
     val of_list
       :  ?growth_allowed:bool (** defaults to [true] *)
-      -> ?size:int (** initial size -- default 0 *)
+      -> ?size:int (** initial size -- default [List.length] *)
       -> 'a Key.t
       -> 'a list
+      -> 'a t
+
+    val of_array
+      :  ?growth_allowed:bool (** defaults to [true] *)
+      -> ?size:int (** initial size -- default [Array.length] *)
+      -> 'a Key.t
+      -> 'a array
       -> 'a t
   end
 
@@ -120,6 +127,7 @@ module Definitions = struct
 
     val create : ('a, unit -> 'a t) create_options
     val of_list : ('a, 'a elt list -> 'a t) create_options
+    val of_array : ('a, 'a elt array -> 'a t) create_options
   end
 
   module type Sexp_of_m = sig
@@ -231,7 +239,7 @@ module type Hash_set = sig @@ portable
 
   (*_ See the Jane Street Style Guide for an explanation of [Private] submodules:
 
-    https://opensource.janestreet.com/standards/#private-submodules *)
+      https://opensource.janestreet.com/standards/#private-submodules *)
   module Private : sig
     val hashable : 'a t -> 'a Hashable.t
   end

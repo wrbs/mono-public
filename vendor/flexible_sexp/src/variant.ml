@@ -93,9 +93,9 @@ module Stable = struct
           let lookup name = String_dict.find variant_names (normalise name)
         end
 
-        (* It shouldn't actually break anything if the [Other] variant is called
-           something different to "Other". However, we currently don't think it's good
-           form to allow this field to be called anything different. So, forbid it. *)
+        (* It shouldn't actually break anything if the [Other] variant is called something
+           different to "Other". However, we currently don't think it's good form to allow
+           this field to be called anything different. So, forbid it. *)
         let () =
           let other_actual_variant_name = T.Variants.other.name in
           if String.( <> ) other_actual_variant_name "Other"

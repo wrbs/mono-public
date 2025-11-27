@@ -69,6 +69,7 @@ module Pick_from : sig
   val inputs : string list -> string t
   val command_output : string -> string t
   val streaming : 'a Streaming.t -> 'a t
+  val lookup_selection : 'a t -> string -> 'a
 
   module Of_stringable : sig
     val map : (module Stringable with type t = 't) -> ('t, 'a, _) Map.t -> 'a t
@@ -91,8 +92,8 @@ end
 
 module Expect : sig
   type t =
-    { (* List of keys a user can use to select an entry. See [man fzf] for
-         available keys and how to format them. *)
+    { (* List of keys a user can use to select an entry. See [man fzf] for available keys
+         and how to format them. *)
       expect_keys : string Nonempty_list.t
         (* Will be set to the key the user used to finalize their selection *)
     ; key_pressed : string Set_once.t

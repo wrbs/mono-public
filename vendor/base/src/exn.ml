@@ -3,8 +3,6 @@ module Sexp = Sexp0
 
 type t = exn [@@deriving sexp_of]
 
-let exit = Stdlib.exit
-
 exception Finally of t * t [@@deriving sexp]
 exception Reraised of string * t [@@deriving sexp]
 exception Sexp of Sexp.t
@@ -123,31 +121,41 @@ let set_uncaught_exception_handler () =
   Stdlib.Printexc.set_uncaught_exception_handler print_with_backtrace
 ;;
 
-let handle_uncaught_aux ~do_at_exit ~exit f =
+(* skips [at_exit] handlers *)
+external exit_immediately : int -> 'a @@ portable = "caml_sys_exit"
+
+let handle_uncaught_aux ~do_at_exit ~exit_or_ignore f =
   try f () with
   | exc ->
     let raw_backtrace = Stdlib.Printexc.get_raw_backtrace () in
     (* One reason to run [do_at_exit] handlers before printing out the error message is
        that it helps curses applications bring the terminal in a good state, otherwise the
-       error message might get corrupted.  Also, the OCaml top-level uncaught exception
+       error message might get corrupted. Also, the OCaml top-level uncaught exception
        handler does the same. *)
-    if do_at_exit
-    then (
-      try Stdlib.do_at_exit () with
-      | _ -> ());
+    (try do_at_exit () with
+     | _ -> ());
     (try print_with_backtrace exc raw_backtrace with
      | _ ->
        (try
           Stdlib.Printf.eprintf "Exn.handle_uncaught could not print; exiting anyway\n%!"
         with
         | _ -> ()));
-    exit 1
+    exit_or_ignore 1
 ;;
 
-let handle_uncaught_and_exit f = handle_uncaught_aux f ~exit ~do_at_exit:true
+let handle_uncaught_and_exit f =
+  handle_uncaught_aux f ~exit_or_ignore:exit_immediately ~do_at_exit:Stdlib.do_at_exit
+;;
+
+let handle_uncaught_and_exit_immediately f =
+  handle_uncaught_aux f ~exit_or_ignore:exit_immediately ~do_at_exit:ignore
+;;
 
 let handle_uncaught ~exit:must_exit f =
-  handle_uncaught_aux f ~exit:(if must_exit then exit else ignore) ~do_at_exit:must_exit
+  handle_uncaught_aux
+    f
+    ~exit_or_ignore:(if must_exit then exit_immediately else ignore)
+    ~do_at_exit:(if must_exit then Stdlib.do_at_exit else ignore)
 ;;
 
 let reraise_uncaught str func =
@@ -161,8 +169,8 @@ external clear_backtrace : unit -> unit @@ portable = "Base_clear_caml_backtrace
 [@@noalloc]
 
 let raise_without_backtrace e =
-  (* We clear the backtrace to reduce confusion, so that people don't think whatever
-     is stored corresponds to this raise. *)
+  (* We clear the backtrace to reduce confusion, so that people don't think whatever is
+     stored corresponds to this raise. *)
   clear_backtrace ();
   Stdlib.raise_notrace e
 ;;

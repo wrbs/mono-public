@@ -11,10 +11,13 @@ open Await_kernel
     approach adds a bit of overhead over [Atomic] and [Awaitable], but should make [Atom]
     easier to use. *)
 
-type 'a t : value mod contended portable
+type !'a t : value mod contended portable
 
-(** [make value] creates an atom with the given initial [value]. *)
-val make : 'a @ contended portable -> 'a t
+(** [make value] creates an atom with the given initial [value].
+
+    The optional [padded] argument specifies whether to pad the data structure to avoid
+    false sharing. See {!Atomic.make} for a longer explanation. *)
+val make : ?padded:bool @ local -> 'a @ contended portable -> 'a t
 
 (** [get t] gets the the current value of [t].
 

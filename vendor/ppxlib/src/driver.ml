@@ -1088,7 +1088,11 @@ end
 module Create_file_property (Name : sig
   val name : string
 end)
-(T : Sexpable.S) =
+    (T : sig
+       type t
+
+       include Sexpable.S with type t := t
+     end) =
 struct
   let t : _ File_property.t =
     { name = Name.name; data = None; sexp_of_t = T.sexp_of_t }

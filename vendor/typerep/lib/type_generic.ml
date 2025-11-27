@@ -138,21 +138,31 @@ module type Computation = sig
   val bytes : bytes t
   val bool : bool t
   val unit : unit t
-  val option : 'a t -> 'a option t
-  val or_null : 'a t -> 'a or_null t
-  val list : 'a t -> 'a list t
+  val option : ('a : value_or_null). 'a t -> 'a option t
+  val or_null : ('a : value). 'a t -> 'a or_null t
+  val list : ('a : value_or_null). 'a t -> 'a list t
   val array : ('a : any mod separable). 'a Typerep.Kind.t -> 'a t -> 'a builtin_array t
-  val lazy_t : 'a t -> 'a lazy_t t
-  val ref_ : 'a t -> 'a ref t
+  val lazy_t : ('a : value). 'a t -> 'a lazy_t t
+  val ref_ : ('a : value_or_null). 'a t -> 'a ref t
 
   val function_
     : ('a : any) ('b : any).
     #('a Typerep.Kind.t * 'b Typerep.Kind.t) -> 'a t -> 'b t -> ('a -> 'b) t
 
-  val tuple2 : 'a t -> 'b t -> ('a * 'b) t
-  val tuple3 : 'a t -> 'b t -> 'c t -> ('a * 'b * 'c) t
-  val tuple4 : 'a t -> 'b t -> 'c t -> 'd t -> ('a * 'b * 'c * 'd) t
-  val tuple5 : 'a t -> 'b t -> 'c t -> 'd t -> 'e t -> ('a * 'b * 'c * 'd * 'e) t
+  val tuple2 : ('a : value_or_null) ('b : value_or_null). 'a t -> 'b t -> ('a * 'b) t
+
+  val tuple3
+    : ('a : value_or_null) ('b : value_or_null) ('c : value_or_null).
+    'a t -> 'b t -> 'c t -> ('a * 'b * 'c) t
+
+  val tuple4
+    : ('a : value_or_null) ('b : value_or_null) ('c : value_or_null) ('d : value_or_null).
+    'a t -> 'b t -> 'c t -> 'd t -> ('a * 'b * 'c * 'd) t
+
+  val tuple5
+    : ('a : value_or_null) ('b : value_or_null) ('c : value_or_null) ('d : value_or_null)
+      ('e : value_or_null).
+    'a t -> 'b t -> 'c t -> 'd t -> 'e t -> ('a * 'b * 'c * 'd * 'e) t
 
   val tuple2_u
     : ('a : any) ('b : any).
@@ -189,8 +199,8 @@ module type Computation = sig
     -> 'e t
     -> #('a * 'b * 'c * 'd * 'e) t
 
-  val record : 'a Record.t -> 'a t
-  val variant : 'a Variant.t -> 'a t
+  val record : ('a : value). 'a Record.t -> 'a t
+  val variant : ('a : value). 'a Variant.t -> 'a t
 
   module Named : Named with type ('a : any) computation := 'a t
 end
@@ -263,8 +273,8 @@ module Ident = struct
             if not (implements uid)
             then (
               (* something is wrong with the set up, this is an error during the
-                  initialization of the program, we rather fail with a human
-                  readable output *)
+                 initialization of the program, we rather fail with a human readable
+                 output *)
               let message =
                 Printf.sprintf
                   "Type_generic %S requires %S for uid %S\n"
@@ -299,10 +309,8 @@ module type Extending = sig
   (* special less scary type when the type has no parameters *)
   val register : 'a Typerep.t -> 'a t -> unit
 
-  (*
-     Essentially because we cannot talk about a variable of kind * -> k
-     val register1 : 'a 't Typerep.t -> ('a computation -> 'a 't computation) -> unit
-     ...
+  (* Essentially because we cannot talk about a variable of kind * -> k val register1 : 'a
+     't Typerep.t -> ('a computation -> 'a 't computation) -> unit ...
   *)
 end
 
@@ -315,8 +323,7 @@ module type S_implementation = sig
 
   type implementation = { generic : 'a. 'a Typerep.t -> 'a t }
 
-  (*
-     This function allows you more control on what you want to do
+  (* This function allows you more control on what you want to do
   *)
   val find_extended_implementation
     : ('a : any).
@@ -753,9 +760,8 @@ struct
           (of_typerep dom)
           (of_typerep rng)
       | Typerep.Tuple tuple ->
-        (* do NOT write [X.tuple2 (of_typerep a) (of_typerep b)]
-           because of_typerep can contain a side effect and [a] should be executed
-           before [b] *)
+        (* do NOT write [X.tuple2 (of_typerep a) (of_typerep b)] because of_typerep can
+           contain a side effect and [a] should be executed before [b] *)
         (match tuple with
          | Typerep.Tuple.T2 (a, b) ->
            let ra = of_typerep a in

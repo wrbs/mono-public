@@ -15,7 +15,8 @@ include struct
   module Ethernet = Ethernet
   module BUFR = Clock_utils.BUFR
 
-  (* Divide the 100MHz board clock by 2 to create a 50MHz clock for the design to run at and output as the refclk*)
+  (* Divide the 100MHz board clock by 2 to create a 50MHz clock for the design to run at
+     and output as the refclk *)
   module BUFR_COMP = BUFR.Make (struct
       include BUFR.P
 
@@ -27,7 +28,7 @@ let generate_clear clock_50 reset_n =
   let reset_chain =
     reg_fb
       (Reg_spec.create ~clock:clock_50 ~reset:reset_n ~reset_edge:Falling ())
-      ~reset_to:(ones 16)
+      ~reset_to:(Bits.ones 16)
       ~width:16
       ~f:(fun d -> sll d ~by:1)
   in

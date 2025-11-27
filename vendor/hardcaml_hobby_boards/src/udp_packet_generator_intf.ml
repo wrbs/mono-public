@@ -1,8 +1,9 @@
 (* Module that produces a UDP packet (from ethernet header to the end of the UDP data
- field) with the following fixed data:
- AAAA_BBBB_CCCC_1111_2222_AAAA_BBBB_CCCC_1111_2222_0000_0000_0000_0000_0000 (hex)
+   field) with the following fixed data:
+   AAAA_BBBB_CCCC_1111_2222_AAAA_BBBB_CCCC_1111_2222_0000_0000_0000_0000_0000 (hex)
 
- This UDP packet is generate on a counter (every 2^19 cycles) and the FPGA and host mac addresses, ip addresses and ports are configurable.
+   This UDP packet is generate on a counter (every 2^19 cycles) and the FPGA and host mac
+   addresses, ip addresses and ports are configurable.
 *)
 
 open! Base

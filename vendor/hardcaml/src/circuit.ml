@@ -161,8 +161,8 @@ let create_exn ?(config = Config.default) ~name outputs =
   (* We have to filter out the assertions that are already in the output because they are
      from [Cyclesim_with_properties.With_interface.create]
 
-     We add the assertions as output to make sure they show up on the waveform and their signals
-     are not optimized away *)
+     We add the assertions as output to make sure they show up on the waveform and their
+     signals are not optimized away *)
   let output_assertions =
     assertions
     |> Map.to_alist
@@ -224,8 +224,8 @@ let create_exn ?(config = Config.default) ~name outputs =
 ;;
 
 let set_phantom_inputs circuit phantom_inputs =
-  (* Remove phantom inputs that are already inputs, and disallow phantom inputs
-     that have the same name as an output. *)
+  (* Remove phantom inputs that are already inputs, and disallow phantom inputs that have
+     the same name as an output. *)
   let module Port = struct
     module T = struct
       type t = string * (int[@compare.ignore]) [@@deriving compare ~localize, sexp_of]
@@ -308,7 +308,7 @@ let structural_compare ?check_names c0 c1 =
   (* outputs, including names, are the same *)
   && ports_match outputs
   && ports_match inputs
-  && (* check full structural comparision from each output *)
+  && (* check full structural comparison from each output *)
   recurse_into_circuit ()
 ;;
 
@@ -433,6 +433,7 @@ module With_interface (I : Interface.S) (O : Interface.S) = struct
     in
     Option.iter input_attributes ~f:(fun input_attributes ->
       I.iter2 circuit_inputs input_attributes ~f:Signal.Type.set_attributes);
+    I.iter2 circuit_inputs I.wave_formats ~f:Signal.set_wave_format;
     (* Create wires on the inputs - [create_fn] may want to set names and such on them. *)
     let inputs = I.map circuit_inputs ~f:Signal.wireof in
     (* Create the design. *)
@@ -449,6 +450,7 @@ module With_interface (I : Interface.S) (O : Interface.S) = struct
     in
     Option.iter output_attributes ~f:(fun output_attributes ->
       O.iter2 circuit_outputs output_attributes ~f:Signal.Type.set_attributes);
+    O.iter2 circuit_outputs O.wave_formats ~f:Signal.set_wave_format;
     (* Create the circuit. *)
     let circuit =
       create_exn ~config ~name (config.modify_outputs (O.to_list circuit_outputs))

@@ -3,10 +3,11 @@ include Queue_intf.Definitions
 module Sexp = Sexp0
 
 (* [t] stores the [t.length] queue elements at consecutive increasing indices of [t.elts],
-   mod the capacity of [t], which is [Option_array.length t.elts].  The capacity is
+   mod the capacity of [t], which is [Option_array.length t.elts]. The capacity is
    required to be a power of two (user-requested capacities are rounded up to the nearest
-   power), so that mod can quickly be computed using [land t.mask], where [t.mask =
-   capacity t - 1].  So, queue element [i] is at [t.elts.( (t.front + i) land t.mask )].
+   power), so that mod can quickly be computed using [land t.mask], where
+   [t.mask = capacity t - 1]. So, queue element [i] is at
+   [t.elts.( (t.front + i) land t.mask )].
 
    [num_mutations] is used to detect modification during iteration. *)
 type 'a t =
@@ -249,7 +250,10 @@ let dequeue_back t = if is_empty t then None else Some (dequeue_back_nonempty t)
 let front_nonempty t = Option_array.unsafe_get_some_exn t.elts t.front
 let back_nonempty t = Option_array.unsafe_get_some_exn t.elts (back_index t)
 let last_nonempty t = unsafe_get t (t.length - 1)
-let peek t = if is_empty t then None else Some (front_nonempty t)
+let peek_or_null t = if is_empty t then Null else This (front_nonempty t)
+
+(* See the comment on [dequeue] for why this is inlined. *)
+let[@inline] peek t = peek_or_null t |> Or_null.to_option
 let peek_exn t = if is_empty t then raise Stdlib.Queue.Empty else front_nonempty t
 let peek_back t = if is_empty t then None else Some (back_nonempty t)
 let peek_back_exn t = if is_empty t then raise Stdlib.Queue.Empty else back_nonempty t
@@ -336,8 +340,7 @@ let foldi t ~init ~f =
   [@nontail]
 ;;
 
-(* [iter] is implemented directly because implementing it in terms of [fold] is
-   slower. *)
+(* [iter] is implemented directly because implementing it in terms of [fold] is slower. *)
 let iter t ~f =
   let num_mutations = t.num_mutations in
   for i = 0 to t.length - 1 do
@@ -467,9 +470,9 @@ let of_list l =
 ;;
 
 (* The queue [t] returned by [create] will have [t.length = 0], [t.front = 0], and
-   [capacity t = Int.ceil_pow2 len].  So, we only have to set [t.length] to [len] after
-   the blit to maintain all the invariants: [t.length] is equal to the number of elements
-   in the queue, [t.front] is the array index of the first element in the queue, and
+   [capacity t = Int.ceil_pow2 len]. So, we only have to set [t.length] to [len] after the
+   blit to maintain all the invariants: [t.length] is equal to the number of elements in
+   the queue, [t.front] is the array index of the first element in the queue, and
    [capacity t = Option_array.length t.elts]. *)
 let init len ~f =
   if len < 0

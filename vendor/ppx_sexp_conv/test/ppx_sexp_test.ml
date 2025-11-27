@@ -529,7 +529,7 @@ module Drop_if = struct
          [@sexp_drop_if
            fun x ->
              (* pa_type_conv used to drop parens altogether, causing type errors in the
-                 following code *)
+                following code *)
              let pair = x, 2 in
              match Some pair with
              | None -> true
@@ -805,6 +805,21 @@ module Optional = struct
   let%test _ = sexp_of_t__stack t = sexp
 end
 
+module Nullable = struct
+  type t = { nullable : int or_null [@sexp.or_null] }
+  [@@deriving sexp ~stackify, sexp_grammar]
+
+  let sexp = Sexplib.Sexp.of_string "()"
+  let t = { nullable = Null }
+  let%test _ = t_of_sexp sexp = t
+  let%test _ = sexp_of_t t = sexp
+  let%test _ = sexp_of_t__stack t = sexp
+  let sexp = Sexplib.Sexp.of_string "((nullable 5))"
+  let t = { nullable = This 5 }
+  let%test _ = t_of_sexp sexp = t
+  let%test _ = sexp_of_t__stack t = sexp
+end
+
 module Nonempty = struct
   type t =
     { list : int list [@sexp.list]
@@ -877,7 +892,8 @@ module Variance = struct
 end
 
 module Clash = struct
-  (* Same name for type-var and type-name; must be careful when introducing rigid type names. *)
+  (* Same name for type-var and type-name; must be careful when introducing rigid type
+     names. *)
   type 'hey hey = Hey of 'hey [@@deriving sexp ~stackify, sexp_grammar]
   type 'hey rigid_hey = Hey of 'hey [@@deriving sexp ~stackify, sexp_grammar]
   type ('foo, 'rigid_foo) foo = Foo of 'foo [@@deriving sexp ~stackify, sexp_grammar]

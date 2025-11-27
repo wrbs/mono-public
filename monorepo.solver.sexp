@@ -36,7 +36,7 @@
     ;; opam memtrace doesn't work with compiler libs
     ecaml
     memtrace_viewer))
-  ;; too new
+  ;; 6.0 beta too new
   (include (
     (cohttp       = 5.3.0)
     (cohttp-async = 5.3.0)))
@@ -44,13 +44,11 @@
   (include (decompress))))
 
 (vendoring (
-  (exclude_pkgs (ocamlbuild ocamlfind findlib dune-configurator))
+  (exclude_pkgs (ocamlbuild ocamlfind findlib dune-configurator ppxlib_ast))
   ;; avoid naming conflicts where oxcaml repo splits same source into different
   ;; packages with different patches
-  (rename_dirs ((ppxlib_ast ppxlib_ast)))
+  (rename_dirs ())
   ;; exclude source dirs, no matter what packages provided them
   (exclude_dirs (ocaml bytes))
   ;; custom commands in the opam file that need to run before the build
-  (prepare_commands (
-    (ppxlib ((rm -rf ast astlib stdppx traverse_builtins)))
-    (ppxlib_ast ((bash ./cleanup.sh)))))))
+  (prepare_commands ())))

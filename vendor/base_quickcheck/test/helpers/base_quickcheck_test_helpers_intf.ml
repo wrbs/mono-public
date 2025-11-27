@@ -2,11 +2,11 @@ open! Base
 open Base_quickcheck
 
 module type Value = sig
-  type t [@@deriving compare, sexp_of]
+  type t : value_or_null [@@deriving compare, sexp_of]
 end
 
 module type With_examples = sig
-  type t [@@deriving compare, sexp_of]
+  type t : value_or_null [@@deriving compare, sexp_of]
 
   val examples : t list
 end
@@ -40,7 +40,8 @@ module type Base_quickcheck_test_helpers = sig
   (** Tests whether the shrinker can produce smaller versions of any of the example
       values. Prints a cr if the result is inconsistent with the [~mode] argument. *)
   val test_shrinker
-    :  ?config:Test.Config.t
+    : ('a : value_or_null).
+    ?config:Test.Config.t
     -> ?mode:[ `compound | `atomic ] (** default: [`compound] *)
     -> ?cr:Expect_test_helpers_core.CR.t
     -> 'a Shrinker.t
@@ -75,11 +76,17 @@ module type Base_quickcheck_test_helpers = sig
   val m_sexp : (module With_examples with type t = Sexp.t)
 
   val m_option
-    :  (module With_examples with type t = 'a)
+    : ('a : value_or_null).
+    (module With_examples with type t = 'a)
     -> (module With_examples with type t = 'a option)
 
-  val m_list
+  val m_or_null
     :  (module With_examples with type t = 'a)
+    -> (module With_examples with type t = 'a or_null)
+
+  val m_list
+    : ('a : value_or_null).
+    (module With_examples with type t = 'a)
     -> (module With_examples with type t = 'a list)
 
   val m_array
@@ -95,22 +102,26 @@ module type Base_quickcheck_test_helpers = sig
     -> (module With_examples with type t = 'a lazy_t)
 
   val m_either
-    :  (module With_examples with type t = 'a)
+    : ('a : value_or_null) ('b : value_or_null).
+    (module With_examples with type t = 'a)
     -> (module With_examples with type t = 'b)
     -> (module With_examples with type t = ('a, 'b) Either.t)
 
   val m_result
-    :  (module With_examples with type t = 'a)
+    : ('a : value_or_null) ('b : value_or_null).
+    (module With_examples with type t = 'a)
     -> (module With_examples with type t = 'b)
     -> (module With_examples with type t = ('a, 'b) Result.t)
 
   val m_pair
-    :  (module With_examples with type t = 'a)
+    : ('a : value_or_null) ('b : value_or_null).
+    (module With_examples with type t = 'a)
     -> (module With_examples with type t = 'b)
     -> (module With_examples with type t = 'a * 'b)
 
   val m_triple
-    :  (module With_examples with type t = 'a)
+    : ('a : value_or_null) ('b : value_or_null) ('c : value_or_null).
+    (module With_examples with type t = 'a)
     -> (module With_examples with type t = 'b)
     -> (module With_examples with type t = 'c)
     -> (module With_examples with type t = 'a * 'b * 'c)

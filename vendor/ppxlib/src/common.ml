@@ -229,7 +229,7 @@ let parameter_may_be_non_value params =
       match ty.ptyp_desc with
       | Ptyp_var (_, Some jkind) -> begin
          match jkind.pjkind_desc with
-         | Default | Abbreviation "value" -> false
+         | Pjk_default | Pjk_abbreviation "value" -> false
          | _ -> true
         end
       | _ -> false)

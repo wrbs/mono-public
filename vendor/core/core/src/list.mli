@@ -11,8 +11,8 @@ include module type of struct
   include Base.List
 end
 
-[%%rederive: type nonrec ('a : value_or_null) t = 'a list [@@deriving typerep]]
-[%%rederive: type nonrec 'a t = 'a list [@@deriving bin_io ~localize]]
+[%%rederive:
+  type nonrec ('a : value_or_null) t = 'a list [@@deriving bin_io ~localize, typerep]]
 
 module Assoc : sig
   type ('a : value_or_null, 'b : value_or_null) t = ('a, 'b) Base.List.Assoc.t
@@ -53,7 +53,11 @@ val%template exn_if_dup
 
 (** [slice t start stop] returns a new list including elements [t.(start)] through
     [t.(stop-1)], normalized Python-style with the exception that [stop = 0] is treated as
-    [stop = length t]. *)
+    [stop = length t]. This can still raise if indices are too large in the negative or
+    positive direction.
+
+    Consider using [List.sub] instead, which has a more conventional interface that does
+    not require reasoning about negative indices. *)
 val slice : 'a t -> int -> int -> 'a t
 
 include%template Comparator.Derived [@modality portable] with type 'a t := 'a t
@@ -95,13 +99,16 @@ val zip_with_remainder
 module Stable : sig
   module V1 : sig
     type%template nonrec ('a : k) t = ('a t[@kind k])
-    [@@kind k = (float64, bits32, bits64, word)]
-    [@@deriving compare ~localize, equal ~localize]
+    [@@kind k = base_non_value] [@@deriving compare ~localize, equal ~localize]
 
     type nonrec ('a : value_or_null) t = 'a t
     [@@deriving
-      sexp, sexp_grammar, compare ~localize, equal ~localize, hash, stable_witness]
-
-    [%%rederive: type nonrec 'a t = 'a t [@@deriving bin_io ~localize]]
+      sexp
+      , sexp_grammar
+      , bin_io ~localize
+      , compare ~localize
+      , equal ~localize
+      , hash
+      , stable_witness]
   end
 end

@@ -7,7 +7,7 @@ open Common
 include Write_intf.Definitions
 
 external unsafe_set
-  :  buf
+  :  local_ buf
   -> int
   -> local_ char
   -> unit
@@ -15,7 +15,7 @@ external unsafe_set
   = "%caml_ba_unsafe_set_1"
 
 external unsafe_set8
-  :  buf
+  :  local_ buf
   -> int
   -> local_ int
   -> unit
@@ -23,7 +23,7 @@ external unsafe_set8
   = "%caml_ba_unsafe_set_1"
 
 external unsafe_set16
-  :  buf
+  :  local_ buf
   -> int
   -> local_ int
   -> unit
@@ -31,7 +31,7 @@ external unsafe_set16
   = "%caml_bigstring_set16u"
 
 external unsafe_set32
-  :  buf
+  :  local_ buf
   -> int
   -> local_ int32
   -> unit
@@ -39,7 +39,7 @@ external unsafe_set32
   = "%caml_bigstring_set32u"
 
 external unsafe_set64
-  :  buf
+  :  local_ buf
   -> int
   -> local_ int64
   -> unit
@@ -346,7 +346,7 @@ let bin_write_array_loop bin_write_el buf ~els_pos ~n ar =
   !els_pos_ref
 ;;
 
-let bin_write_array (type a) bin_write_el buf ~pos ar =
+let bin_write_array (type a : value_or_null mod separable) bin_write_el buf ~pos ar =
   let module Obj = Base.Obj in
   if (Obj.magic (bin_write_el : a writer) : float writer)
      == (bin_write_float :> float writer)
@@ -377,7 +377,8 @@ let bin_write_iarray_loop bin_write_el buf ~els_pos ~n ar =
   !els_pos_ref
 ;;
 
-let bin_write_iarray (type a) bin_write_el buf ~pos (ar @ m) =
+let bin_write_iarray (type a : value_or_null mod separable) bin_write_el buf ~pos (ar @ m)
+  =
   let module Obj = Base.Obj in
   if (Obj.magic (bin_write_el : (a writer[@mode m])) : float writer)
      == (bin_write_float :> float writer)

@@ -157,7 +157,7 @@ module Util = struct
     let bin_float32 = [%bin_type_class: float32]
   end
 
-  (* Stolen from [pervasives.ml].  Adds a "." at the end if needed.  It is in
+  (* Stolen from [pervasives.ml]. Adds a "." at the end if needed. It is in
      [pervasives.mli], but it also says not to use it directly, so we copy and paste the
      code. It makes the assumption on the string passed in argument that it was returned
      by [format_float]. *)
@@ -398,12 +398,12 @@ let lower_bound_for_int bound_bits =
   let open Int in
   if bound_bits - 1 < 24 (* 24 = #bits in the float's mantissa with sign included *)
   then (
-    (* The smallest float that rounds towards zero to [min_int] is
-       [min_int - 1 + epsilon] *)
+    (* The smallest float that rounds towards zero to [min_int] is [min_int - 1 + epsilon] *)
     assert (is_x_minus_one_exact min_int_as_float32);
     one_ulp `Up (sub min_int_as_float32 1.s))
   else (
-    (* [min_int_as_float32] is already the smallest float [f] satisfying [f > min_int - 1]. *)
+    (* [min_int_as_float32] is already the smallest float [f] satisfying
+       [f > min_int - 1]. *)
     assert (not (is_x_minus_one_exact min_int_as_float32));
     min_int_as_float32)
 ;;
@@ -415,26 +415,24 @@ let lower_bound_for_int bound_bits =
    (respectively) while float is IEEE standard for double (52 significant bits).
 
    In all cases, we want to guarantee that
-   [lower_bound_for_int <= x <= upper_bound_for_int]
-   iff [int_of_float x] fits in an int with [num_bits] bits.
+   [lower_bound_for_int <= x <= upper_bound_for_int] iff [int_of_float x] fits in an int
+   with [num_bits] bits.
 
    [2 ** (num_bits - 1)] is the first float greater that max_int, we use the preceding
    float as upper bound.
 
-   [- (2 ** (num_bits - 1))] is equal to min_int.
-   For lower bound we look for the smallest float [f] satisfying [f > min_int - 1] so that
-   [f] rounds toward zero to [min_int]
+   [- (2 ** (num_bits - 1))] is equal to min_int. For lower bound we look for the smallest
+   float [f] satisfying [f > min_int - 1] so that [f] rounds toward zero to [min_int]
 
-   So in particular we will have:
-   [lower_bound_for_int x <= - (2 ** (1-x))]
+   So in particular we will have: [lower_bound_for_int x <= - (2 ** (1-x))]
    [upper_bound_for_int x  <    2 ** (1-x) ]
 *)
 let upper_bound_for_int num_bits = one_ulp `Down (ldexp 1.s (num_bits - 1))
 
 let box =
-  (* Prevent potential constant folding of [+ (-0.s)] in the near ocamlopt future.
-     The reason we add [-0.s] rather than [0.s] is that [x + (-0.s)] is always the
-     same as [x], whereas [x + 0.s] is not, in that it sends [-0.s] to [0.s]. *)
+  (* Prevent potential constant folding of [+ (-0.s)] in the near ocamlopt future. The
+     reason we add [-0.s] rather than [0.s] is that [x + (-0.s)] is always the same as
+     [x], whereas [x + 0.s] is not, in that it sends [-0.s] to [0.s]. *)
   let x = Sys.opaque_identity (-0.s) in
   fun (local_ f) -> add (globalize f) x
 ;;
@@ -490,11 +488,11 @@ let to_int f =
       ()
 ;;
 
-(* The performance of the "exn" rounding functions is important, so they are written
-   out separately, and tuned individually.  (We could have the option versions call
-   the "exn" versions, but that imposes arguably gratuitous overhead---especially
-   in the case where the capture of backtraces is enabled upon "with"---and that seems
-   not worth it when compared to the relatively small amount of code duplication.) *)
+(* The performance of the "exn" rounding functions is important, so they are written out
+   separately, and tuned individually. (We could have the option versions call the "exn"
+   versions, but that imposes arguably gratuitous overhead---especially in the case where
+   the capture of backtraces is enabled upon "with"---and that seems not worth it when
+   compared to the relatively small amount of code duplication.) *)
 
 let iround_up t =
   if t > 0.0s
@@ -581,8 +579,8 @@ let round_nearest_lb = neg (pow 2.s 23.s)
 let round_nearest_ub = pow 2.s 23.s
 
 (* For [x = one_ulp `Down 0.5s], the formula [floor (x +. 0.5s)] for rounding to nearest
-   does not work, because the exact result is halfway between [one_ulp `Down 1.s] and [1.s],
-   and it gets rounded up to [1.s] due to the round-ties-to-even rule. *)
+   does not work, because the exact result is halfway between [one_ulp `Down 1.s] and
+   [1.s], and it gets rounded up to [1.s] due to the round-ties-to-even rule. *)
 let one_ulp_less_than_half = one_ulp `Down 0.5s
 
 let[@ocaml.inline always] add_half_for_round_nearest t = exclave_
@@ -631,8 +629,8 @@ let[@ocaml.inline always] iround_nearest_exn t =
       ()
 ;;
 
-(* The following [iround_exn] and [iround] functions are slower than the ones above.
-   Their equivalence to those functions is tested in the unit tests below. *)
+(* The following [iround_exn] and [iround] functions are slower than the ones above. Their
+   equivalence to those functions is tested in the unit tests below. *)
 
 let[@inline] iround_exn ?(dir = `Nearest) t =
   match dir with
@@ -714,7 +712,7 @@ let round_nearest_half_to_even' t =
   then box t
   else (
     let floor = floor t in
-    (* [ceil_or_succ = if t is an integer then t +. 1.s else ceil t].  Faster than [ceil]. *)
+    (* [ceil_or_succ = if t is an integer then t +. 1.s else ceil t]. Faster than [ceil]. *)
     let ceil_or_succ = add floor 1.s in
     let diff_floor = sub t floor in
     let diff_ceil = sub ceil_or_succ t in
@@ -826,22 +824,21 @@ let sexp_of_t t =
 
 let to_padded_compact_string_custom t ?(prefix = "") ~kilo ~mega ~giga ~tera ?peta () =
   (* Round a ratio toward the nearest integer, resolving ties toward the nearest even
-     number.  For sane inputs (in particular, when [denominator] is an integer and
-     [abs numerator < 2e52]) this should be accurate.  Otherwise, the result might be a
+     number. For sane inputs (in particular, when [denominator] is an integer and
+     [abs numerator < 2e52]) this should be accurate. Otherwise, the result might be a
      little bit off, but we don't really use that case. *)
   let iround_ratio_exn ~numerator ~denominator =
     let k = floor (div numerator denominator) in
     (* if [abs k < 2e53], then both [k] and [k +. 1.] are accurately represented, and in
-       particular [k +. 1. > k].  If [denominator] is also an integer, and
+       particular [k +. 1. > k]. If [denominator] is also an integer, and
        [abs (denominator *. (k +. 1)) < 2e53] (and in some other cases, too), then [lower]
-       and [higher] are actually both accurate.  Since (roughly)
-       [numerator = denominator *. k] then for [abs numerator < 2e52] we should be
-       fine. *)
+       and [higher] are actually both accurate. Since (roughly)
+       [numerator = denominator *. k] then for [abs numerator < 2e52] we should be fine. *)
     let lower = mul denominator k in
     let higher = mul denominator (add k 1.s) in
-    (* Subtracting numbers within a factor of two from each other is accurate.
-       So either the two subtractions below are accurate, or k = 0, or k = -1.
-       In case of a tie, round to even. *)
+    (* Subtracting numbers within a factor of two from each other is accurate. So either
+       the two subtractions below are accurate, or k = 0, or k = -1. In case of a tie,
+       round to even. *)
     let diff_right = sub higher numerator in
     let diff_left = sub numerator lower in
     let k = iround_nearest_exn k in
@@ -924,12 +921,11 @@ let to_padded_compact_string t =
   to_padded_compact_string_custom t ~kilo:"k" ~mega:"m" ~giga:"g" ~tera:"t" ~peta:"p" ()
 ;;
 
-(* Performance note: Initializing the accumulator to 1 results in one extra
-   multiply; e.g., to compute x ** 4, we in principle only need 2 multiplies,
-   but this function will have 3 multiplies.  However, attempts to avoid this
-   (like decrementing n and initializing accum to be x, or handling small
-   exponents as a special case) have not yielded anything that is a net
-   improvement.
+(* Performance note: Initializing the accumulator to 1 results in one extra multiply;
+   e.g., to compute x ** 4, we in principle only need 2 multiplies, but this function will
+   have 3 multiplies. However, attempts to avoid this (like decrementing n and
+   initializing accum to be x, or handling small exponents as a special case) have not
+   yielded anything that is a net improvement.
 *)
 let int_pow x n =
   let open Int in
@@ -949,29 +945,27 @@ let int_pow x n =
       n := ~- (!n);
       if !n < 0
       then (
-        (* n must have been min_int, so it is now so big that it has wrapped around.
-           We decrement it so that it looks positive again, but accordingly have
-           to put an extra factor of x in the accumulator.
+        (* n must have been min_int, so it is now so big that it has wrapped around. We
+           decrement it so that it looks positive again, but accordingly have to put an
+           extra factor of x in the accumulator.
         *)
         accum := !x;
         decr n));
-    (* Letting [a] denote (the original value of) [x ** n], we maintain
-       the invariant that [(x ** n) *. accum = a]. *)
+    (* Letting [a] denote (the original value of) [x ** n], we maintain the invariant that
+       [(x ** n) *. accum = a]. *)
     while !n > 1 do
       if !n land 1 <> 0 then accum := mul !x !accum;
       x := mul !x !x;
       n := !n lsr 1
     done;
-    (* n is necessarily 1 at this point, so there is one additional
-       multiplication by x. *)
+    (* n is necessarily 1 at this point, so there is one additional multiplication by x. *)
     mul !x !accum)
 ;;
 
 let between t ~low ~high = low <= t && t <= high
 
 let clamp_unchecked ~to_clamp_maybe_nan ~min_which_is_not_nan ~max_which_is_not_nan =
-  (* We want to propagate nans; this means we have to use them as the
-     _second_ argument. *)
+  (* We want to propagate nans; this means we have to use them as the _second_ argument. *)
   let t_maybe_nan = max min_which_is_not_nan to_clamp_maybe_nan in
   min max_which_is_not_nan t_maybe_nan
 ;;
@@ -1056,8 +1050,7 @@ let ieee_exponent t =
 
 let ieee_mantissa t =
   let bits = to_bits t in
-  (* This is safe because mantissa_mask32 < Int.max_value, even on
-     32-bit platforms. *)
+  (* This is safe because mantissa_mask32 < Int.max_value, even on 32-bit platforms. *)
   Int.of_int32_trunc Int32.O.(bits land mantissa_mask32)
 ;;
 
@@ -1098,10 +1091,10 @@ include%template Comparable.With_zero [@modality portable] (struct
     let zero = zero
   end)
 
-(* These are partly here as a performance hack to avoid some boxing we're getting with
-   the versions we get from [With_zero].  They also make [Float32.is_negative nan] and
-   [Float32.is_non_positive nan] return [false]; the versions we get from [With_zero] return
-   [true]. *)
+(* These are partly here as a performance hack to avoid some boxing we're getting with the
+   versions we get from [With_zero]. They also make [Float32.is_negative nan] and
+   [Float32.is_non_positive nan] return [false]; the versions we get from [With_zero]
+   return [true]. *)
 let is_positive t = t > 0.s
 let is_non_negative t = t >= 0.s
 let is_negative t = t < 0.s
@@ -1146,10 +1139,9 @@ module O_dot = struct
   let ( **. ) = ( ** )
 end
 
-(* Include type-specific [Replace_polymorphic_compare] at the end, after
-   including functor application that could shadow its definitions. This is
-   here so that efficient versions of the comparison functions are exported by
-   this module. *)
+(* Include type-specific [Replace_polymorphic_compare] at the end, after including functor
+   application that could shadow its definitions. This is here so that efficient versions
+   of the comparison functions are exported by this module. *)
 include Util.Float32_replace_polymorphic_compare
 
 (* These functions specifically replace defaults in replace_polymorphic_compare.

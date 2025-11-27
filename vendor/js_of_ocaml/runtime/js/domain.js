@@ -7,6 +7,7 @@ var caml_domain_dls = [0];
 //Version: >= 5
 function caml_domain_dls_set(a) {
   caml_domain_dls = a;
+  return 0;
 }
 
 //Provides: caml_domain_dls_compare_and_set
@@ -267,4 +268,20 @@ function caml_atomic_lor_field(ref, field, i) {
 function caml_atomic_lxor_field(ref, field, i) {
   ref[field + 1] ^= i;
   return 0;
+}
+
+//Provides: caml_domain_tls
+var caml_domain_tls = [0];
+
+//Provides: caml_domain_tls_set
+//Requires: caml_domain_tls
+function caml_domain_tls_set(a) {
+  caml_domain_tls = a;
+  return 0;
+}
+
+//Provides: caml_domain_tls_get
+//Requires: caml_domain_tls
+function caml_domain_tls_get(a) {
+  return caml_domain_tls;
 }

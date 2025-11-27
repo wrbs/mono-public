@@ -4,7 +4,7 @@ open Hardcaml
 module type S = Register_bank_intf.S
 
 module Packed_array = struct
-  module M = Register_bank_intf.Packed_array.M
+  module type S = Register_bank_intf.Packed_array.S
 
   module Make (X : sig
       include Interface.S
@@ -12,7 +12,9 @@ module Packed_array = struct
       val name : string
     end) =
   struct
-    module T = struct
+    type 'a unpacked = 'a X.t
+
+    module Pre = struct
       type 'a t = 'a array [@@deriving equal ~localize, compare ~localize, sexp_of]
 
       let word_size = 32
@@ -29,8 +31,8 @@ module Packed_array = struct
       let to_list = Array.to_list
     end
 
-    include T
-    include Interface.Make (T)
+    include Pre
+    include Interface.Make (Pre)
 
     let to_packed_array (type a) (module Comb : Comb.S with type t = a) (x : a X.t) =
       let module C = X.Make_comb (Comb) in
@@ -281,11 +283,34 @@ module Packed_array = struct
       X.map extract_field_as_int ~f:(fun extract_fn -> extract_fn t)
     ;;
 
+    let of_packed_int_array_to_int64 t =
+      X.map extract_field_as_int64 ~f:(fun extract_fn -> extract_fn t)
+    ;;
+
     let to_packed_int_array unpacked =
       let packed = Array.create ~len:num_words 0 in
       X.iter2 set_field_as_int unpacked ~f:(fun set_fn field -> set_fn packed field);
       packed
     ;;
+  end
+
+  module Include = struct
+    module type S = sig
+      type 'a unpacked
+
+      module Packed : S with type 'a unpacked = 'a unpacked
+    end
+
+    module type F = functor (X : Interface.S) -> S with type 'a unpacked := 'a X.t
+
+    module Make (X : sig
+        include Interface.S
+
+        val name : string
+      end) =
+    struct
+      module Packed = Make (X)
+    end
   end
 end
 
@@ -454,10 +479,17 @@ struct
       let reg_spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
       let write_modes = Write.to_list write_modes in
       let read_values =
-        Read.to_list i.read_values
-        |> List.map ~f:(fun s ->
+        Read.zip Read.port_names_and_widths i.read_values
+        |> Read.to_list
+        |> List.map ~f:(fun ((name, intf_width), s) ->
           if Signal.width s > 32
-          then raise_s [%message "register width > 32 bit"]
+          then
+            raise_s
+              [%message
+                "register width > 32 bit"
+                  (name : string)
+                  (Signal.width s : int)
+                  (intf_width : int)]
           else Signal.uresize s ~width:32)
       in
       let { Slave_with_data.slave
@@ -477,9 +509,11 @@ struct
           Write.to_list Write.port_names
           |> List.map2_exn write_values ~f:(fun s n -> n, s)
         in
-        Write.map Write.port_names_and_widths ~f:(fun (n, b) ->
+        Write.map Write.port_names_and_widths ~f:(fun (n, width) ->
+          if width > 32
+          then raise_s [%message "write register width >32b" (n : string) (width : int)];
           let { With_valid.valid; value } = List.Assoc.find_exn t n ~equal:String.equal in
-          { With_valid.valid; value = value.Signal.:[b - 1, 0] })
+          { With_valid.valid; value = value.Signal.:[width - 1, 0] })
       in
       let read_enable =
         let t = List.zip_exn (Read.to_list Read.port_names) read_enables in

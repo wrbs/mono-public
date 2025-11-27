@@ -1,18 +1,18 @@
-(* [Bytes0] defines string functions that are primitives or can be simply
-   defined in terms of [Stdlib.Bytes]. [Bytes0] is intended to completely express
-   the part of [Stdlib.Bytes] that [Base] uses -- no other file in Base other
-   than bytes0.ml should use [Stdlib.Bytes]. [Bytes0] has few dependencies, and
-   so is available early in Base's build order.
+(* [Bytes0] defines string functions that are primitives or can be simply defined in terms
+   of [Stdlib.Bytes]. [Bytes0] is intended to completely express the part of
+   [Stdlib.Bytes] that [Base] uses -- no other file in Base other than bytes0.ml should
+   use [Stdlib.Bytes]. [Bytes0] has few dependencies, and so is available early in Base's
+   build order.
 
-   All Base files that need to use strings and come before [Base.Bytes] in
-   build order should do:
+   All Base files that need to use strings and come before [Base.Bytes] in build order
+   should do:
 
    {[
-     module Bytes  = Bytes0
+     module Bytes = Bytes0
    ]}
 
-   Defining [module Bytes = Bytes0] is also necessary because it prevents
-   ocamldep from mistakenly causing a file to depend on [Base.Bytes]. *)
+   Defining [module Bytes = Bytes0] is also necessary because it prevents ocamldep from
+   mistakenly causing a file to depend on [Base.Bytes]. *)
 
 open! Import0
 module Uchar = Uchar0
@@ -20,7 +20,7 @@ module Sys = Sys0
 
 module Primitives = struct
   external get
-    :  (bytes[@local_opt])
+    :  (bytes[@local_opt]) @ read
     -> (int[@local_opt])
     -> char
     @@ portable
@@ -29,7 +29,7 @@ module Primitives = struct
   external length : (bytes[@local_opt]) @ immutable -> int @@ portable = "%bytes_length"
 
   external unsafe_get
-    :  (bytes[@local_opt])
+    :  (bytes[@local_opt]) @ read
     -> (int[@local_opt])
     -> char
     @@ portable
@@ -64,7 +64,7 @@ module Primitives = struct
   [@@noalloc]
 
   external unsafe_get_int64
-    :  (bytes[@local_opt])
+    :  (bytes[@local_opt]) @ read
     -> (int[@local_opt])
     -> int64
     @@ portable
@@ -79,7 +79,7 @@ module Primitives = struct
     = "%caml_bytes_set64u"
 
   external unsafe_get_int32
-    :  (bytes[@local_opt])
+    :  (bytes[@local_opt]) @ read
     -> (int[@local_opt])
     -> int32
     @@ portable
@@ -94,7 +94,7 @@ module Primitives = struct
     = "%caml_bytes_set32u"
 
   external unsafe_get_int16
-    :  (bytes[@local_opt])
+    :  (bytes[@local_opt]) @ read
     -> (int[@local_opt])
     -> int
     @@ portable

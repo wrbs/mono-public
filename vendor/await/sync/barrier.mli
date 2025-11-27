@@ -2,7 +2,7 @@
 
 open Await_kernel
 
-(** A poisonable barrier.
+(** A poisonable multi-shot synchronization barrier.
 
     To use a barrier, one first {!create}s a barrier by specifying the number of
     independent threads of control, or {!parties}, participating in barrier
@@ -36,10 +36,13 @@ val max_parties : int
 
 (** [create parties] creates a new barrier for given number of parties.
 
+    The optional [padded] argument specifies whether to pad the data structure to avoid
+    false sharing. See {!Atomic.make} for a longer explanation.
+
     @raise Invalid_argument
       in case the given number of [parties] is less than [1] or greater than
       [max_parties]. *)
-val create : int -> t
+val create : ?padded:bool @ local -> int -> t
 
 (** [parties t] returns the number of parties the barrier was {{!create} created} with. *)
 val parties : t @ local -> int

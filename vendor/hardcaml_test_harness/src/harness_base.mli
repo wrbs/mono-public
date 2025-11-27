@@ -27,6 +27,7 @@ type 'a with_test_config =
            test that runs. *)
   -> ?test_name:string
   -> ?print_waves_after_test:(Waveform.t -> unit)
+  -> ?clock_mode:Cyclesim.Config.Clock_mode.t
   -> 'a
 
 val run

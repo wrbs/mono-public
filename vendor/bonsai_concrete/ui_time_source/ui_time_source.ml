@@ -7,15 +7,17 @@ type t =
   ; timing_wheel : (unit, unit) Ui_effect.Private.Callback.t Timing_wheel.t
   ; mutable add_before_advance :
       (Time_ns.t * (unit, unit) Ui_effect.Private.Callback.t) Reversed_list.t
+  ; mutable wait_before_display_callbacks :
+      (unit, unit) Ui_effect.Private.Callback.t Reversed_list.t
   ; mutable wait_after_display_callbacks :
       (unit, unit) Ui_effect.Private.Callback.t Reversed_list.t
   ; mutable advance_to : Time_ns.t option
   }
 
 let invariant t =
-  (* This is only a soft invariant (it prints instead of raising) because it
-     probably isn't fatal if the two clocks are out of sync. We want to know
-     about it if they are, though. *)
+  (* This is only a soft invariant (it prints instead of raising) because it probably
+     isn't fatal if the two clocks are out of sync. We want to know about it if they are,
+     though. *)
   let wheel_now = Timing_wheel.now t.timing_wheel in
   let incr_now = Incr.Clock.now t.incr in
   if not (Time_ns.equal wheel_now incr_now)
@@ -41,6 +43,7 @@ let create ~start =
     { incr
     ; timing_wheel
     ; add_before_advance = []
+    ; wait_before_display_callbacks = []
     ; wait_after_display_callbacks = []
     ; advance_to = None
     }
@@ -76,10 +79,10 @@ let advance_clock t ~to_ =
 
 let advance_clock_by t span = advance_clock t ~to_:(Time_ns.add (now t) span)
 
-(* [until], [sleep], and [wait_after_display] all want to add alarms to [t.timing_wheel],
-   which throws if we're already in the middle of an alarm. Instead of adding it to the
-   timing wheel immediately, we store it and then add it next time the timing wheel is
-   advanced.
+(* [until], [sleep], and [wait_before/after_display] all want to add alarms to
+   [t.timing_wheel], which throws if we're already in the middle of an alarm. Instead of
+   adding it to the timing wheel immediately, we store it and then add it next time the
+   timing wheel is advanced.
 
    Note: the alarms are added as part of [flush], which is the only place that we actually
    advance [t.time_source], which makes this approach sound. *)
@@ -92,6 +95,11 @@ let sleep t span =
   Effect.Private.make ~request:() ~evaluator:(fun callback ->
     let at = Time_ns.add (now t) span in
     t.add_before_advance <- (at, callback) :: t.add_before_advance)
+;;
+
+let wait_before_display t =
+  Effect.Private.make ~request:() ~evaluator:(fun callback ->
+    t.wait_before_display_callbacks <- callback :: t.wait_before_display_callbacks)
 ;;
 
 let wait_after_display t =
@@ -119,6 +127,19 @@ module Private = struct
        Incr.Clock.advance_clock t.incr ~to_
      | None -> Timing_wheel.fire_past_alarms t.timing_wheel ~handle_fired);
     invariant t
+  ;;
+
+  let trigger_before_display t =
+    let callbacks = t.wait_before_display_callbacks in
+    t.wait_before_display_callbacks <- [];
+    List.iter (Reversed_list.rev callbacks) ~f:(fun callback ->
+      Effect.Expert.handle
+        (Effect.Private.Callback.respond_to callback ())
+        ~on_exn:(Effect.Private.Callback.on_exn callback))
+  ;;
+
+  let has_before_display_events t =
+    not (Reversed_list.is_empty t.wait_before_display_callbacks)
   ;;
 
   let trigger_after_display t =

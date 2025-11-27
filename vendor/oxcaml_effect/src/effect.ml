@@ -1,9 +1,31 @@
+include Effect_intf
+
 module Obj = struct
   include Stdlib.Obj
   include Basement.Stdlib_shim.Obj
+
+  external magic_at_unique : 'a @ unique -> 'b @ unique @@ portable = "%obj_magic"
+
+  external magic_at_unique_once
+    :  'a @ once unique
+    -> 'b @ once unique
+    @@ portable
+    = "%obj_magic"
+
+  external magic_portable_at_unique_once
+    :  'a @ once unique
+    -> 'a @ once portable unique
+    @@ portable
+    = "%identity"
 end
 
-module Modes = Base.Modes
+module Modes = struct
+  include Base.Modes
+
+  module Many_aliased = struct
+    type 'a t = { many_aliased : 'a @@ aliased many }
+  end
+end
 
 module Handler_index : sig @@ portable
   (** [(es1, es2) t] represents an index into the effect list [es2]. [es1] is the tail
@@ -99,34 +121,9 @@ module Handler : sig @@ portable
   (** Heap-allocated handler. *)
   type 'e t = { h : 'e t' @@ aliased global } [@@unboxed]
 
+  include Handler with type 'e t := 'e t
+
   type _ t' += Dummy : 'a t'
-
-  module List : sig
-    type 'e handler := 'e t
-
-    type 'es t =
-      | [] : unit t
-      | ( :: ) : 'e handler * 'es t -> ('e * 'es) t
-      (** [es t] is a list of handlers for effects [es]. *)
-
-    module Length : sig
-      type x = X (** [x] is the type of [X]s *)
-
-      type 'es t =
-        | [] : unit t
-        | ( :: ) : x * 'es t -> ('e * 'es) t
-        (** [es t] is the length of effect list [es]. It has slightly unusual constructors
-            so that lengths can be written as [[X;X;X]] rather than e.g. [(S (S (S Z)))].
-            This looks nicer on calls to [fiber_with]:
-
-            {[
-              fiber_with [X; X; X] (fun [a; b; c] -> ...)
-            ]} *)
-    end
-
-    (** [length t] is the length of [t]. *)
-    val length : 'es t @ local -> 'es Length.t
-  end
 
   module type Create = sig
     type e
@@ -317,17 +314,22 @@ end = struct
 end
 
 type ('a, 'e) op
-type ('a, 'e) perform = ('a, 'e) op * 'e Handler.t'
 
-(* [perform_] is able to return a unique value because [continue] is required
-   to provide a unique value. *)
-external perform_ : ('a, 'e) perform -> 'a @ unique @@ portable = "%perform"
+type ('a, 'e) perform =
+  (* It is important that this tuple is in this order! This type has to be [Obj.magic]able
+     from Stdlib.Effect, or else throwing a stdlib effect past an oxcaml handler can cause
+     a segfault. Locality prevents the inverse from happening. *)
+  'e Handler.t' * ('a, 'e) op
 
-(* A last_fiber is a tagged pointer, so does not keep the fiber alive.
-   It must never be the sole reference to the fiber, and is only used to cache
-   the final fiber in the linked list formed by [cont.fiber->parent]. *)
+(* [perform_] is able to return a unique value because [continue] is required to provide a
+   unique value. *)
+external perform_ : ('a, 'e) perform -> 'a @ once unique @@ portable = "%perform"
+
+(* A last_fiber is a tagged pointer, so does not keep the fiber alive. It must never be
+   the sole reference to the fiber, and is only used to cache the final fiber in the
+   linked list formed by [cont.fiber->parent]. *)
 type last_fiber : immediate
-type (-'a, +'b) cont
+type (-'a, +'b) cont : value mod many
 
 let borrow (f : ('a, 'b) cont @ local -> 'c @ unique) (k : ('a, 'b) cont @ unique)
   : 'c * ('a, 'b) cont
@@ -357,8 +359,8 @@ type 'b effc =
 [@@unboxed]
 
 module Must_not_enter_gc = struct
-  (* Stacks are represented as tagged pointers, so do not keep the fiber alive.
-     We must not enter the GC between the creation and use of a [stack]. *)
+  (* Stacks are represented as tagged pointers, so do not keep the fiber alive. We must
+     not enter the GC between the creation and use of a [stack]. *)
   type (-'a, +'b) stack : immediate
 
   external alloc_stack
@@ -386,26 +388,26 @@ module Must_not_enter_gc = struct
 
   external resume
     :  ('a, 'b) stack
-    -> ('c -> 'a) @ once
-    -> 'c
+    -> ('c @ once unique -> 'a @ once unique) @ once
+    -> 'c @ once unique
     -> last_fiber
-    -> 'b @ unique
+    -> 'b @ once unique
     @@ portable
     = "%resume"
 
   let is_runtime5 () = Basement.Stdlib_shim.runtime5 ()
 
-  (* Allocate a stack and immediately run [f x] using that stack.
-     We must not enter the GC between [alloc_stack] and [runstack].
-     [with_stack] is marked as [@inline never] to avoid reordering. *)
+  (* Allocate a stack and immediately run [f x] using that stack. We must not enter the GC
+     between [alloc_stack] and [runstack]. [with_stack] is marked as [@inline never] to
+     avoid reordering. *)
   let[@inline never] with_stack valuec exnc effc f x =
     if not (is_runtime5 ()) then failwith "Effects require the OCaml 5 runtime.";
     runstack (alloc_stack valuec exnc effc) f x
   ;;
 
-  (* Retrieve the stack from a [cont]inuation and run [f x] using it.
-     We must not enter the GC between [take_cont_noexc] and [resume].
-     [with_cont] is marked as [@inline never] to avoid reordering. *)
+  (* Retrieve the stack from a [cont]inuation and run [f x] using it. We must not enter
+     the GC between [take_cont_noexc] and [resume]. [with_cont] is marked as
+     [@inline never] to avoid reordering. *)
   let[@inline never] with_cont cont f x =
     if not (is_runtime5 ()) then failwith "Effects require the OCaml 5 runtime.";
     let fiber, cont = borrow (fun k -> cont_last_fiber k) cont in
@@ -414,10 +416,10 @@ module Must_not_enter_gc = struct
 end
 
 type (+'a, 'es) r =
-  | Val : 'a @@ aliased global -> ('a, 'es) r
-  | Exn : exn @@ aliased global -> ('a, 'es) r
+  | Val : 'a @@ aliased global many -> ('a, 'es) r
+  | Exn : exn @@ aliased global many -> ('a, 'es) r
   | Op :
-      ('o, 'e) op @@ aliased global
+      ('o, 'e) op @@ aliased global many
       * ('e, 'es) Raw_handler.t
       * ('o, ('a, 'es) r) cont
       * last_fiber
@@ -437,14 +439,14 @@ external reperform
 let alloc_cont
   (type a b h e es)
   (module H : Handler.Create with type e = e and type es = es)
-  (f : (h @ local -> a -> b) @ once)
+  (f : (h @ local -> a @ once unique -> b) @ once)
   (h : h)
   : (a, (b, e * es) r) cont
   =
   let exception Ready__ of (a, (b, e * es) r) cont in
   let effc
     (type o eh)
-    ((op, h) as perf : (o, eh) perform)
+    ((h, op) as perf : (o, eh) perform)
     (k : (o, (b, e * es) r) cont)
     last_fiber
     =
@@ -458,14 +460,13 @@ let alloc_cont
     | _ -> reperform perf k last_fiber
   in
   let dummy_op : (a, e) op = Obj.magic () in
-  let p = dummy_op, Handler.Dummy in
+  let p = Handler.Dummy, dummy_op in
   match
     Must_not_enter_gc.with_stack valuec exnc { effc } (fun () -> f h (perform_ p)) ()
   with
   | _ -> assert false
-  (* [Ready__ k] is only ever raised once with an unique [k]. However,
-     raised exceptions must have the legacy mode, so we can't get rid
-     of [magic_unique] here. *)
+  (* [Ready__ k] is only ever raised once with an unique [k]. However, raised exceptions
+     must have the legacy mode, so we can't get rid of [magic_unique] here. *)
   | exception Ready__ k -> Obj.magic_unique k
 ;;
 
@@ -476,7 +477,7 @@ let run_stack
   (h : h)
   : (a, e * es) r
   =
-  let effc ((op, h) as perf) k last_fiber =
+  let effc ((h, op) as perf) k last_fiber =
     match h with
     | H.C h -> Op (op, h, k, last_fiber)
     | _ -> reperform perf k last_fiber
@@ -487,15 +488,15 @@ let run_stack
 type (-'a, +'b, 'e, 'es) continuation =
   | Cont :
       { cont : ('a, ('b, 'e * 'es) r) cont
-      ; mapping : 'es Mapping.t @@ aliased global
+      ; mapping : 'es Mapping.t @@ aliased global many
       }
       -> ('a, 'b, 'e, 'es) continuation
 
 type ('a, 'e, 'es) res =
-  | Value : 'a @@ aliased global -> ('a, 'e, 'es) res
-  | Exception : exn @@ aliased global -> ('a, 'e, 'es) res
+  | Value : 'a @@ aliased global many -> ('a, 'e, 'es) res
+  | Exception : exn @@ aliased global many -> ('a, 'e, 'es) res
   | Operation :
-      ('o, 'e) op @@ aliased global * ('o, 'a, 'e, 'es) continuation
+      ('o, 'e) op @@ aliased global many * ('o, 'a, 'e, 'es) continuation
       -> ('a, 'e, 'es) res
 
 let get_callstack (Cont { cont; mapping }) i =
@@ -506,7 +507,8 @@ let get_callstack (Cont { cont; mapping }) i =
 ;;
 
 let rec handle
-  : type a e es. es Mapping.t -> (a, e * es) r @ unique -> (a, e, es) res @ unique
+  : type a e es.
+    es Mapping.t -> (a, e * es) r @ once unique -> (a, e, es) res @ once unique
   =
   fun mapping -> function
   | Val x -> Value x
@@ -520,23 +522,34 @@ let rec handle
        let handler = Raw_handler.weaken handler in
        let fwd = Mapping.lookup handler mapping in
        (* the bytecode compiler requires [reperform] to be in tail position *)
-       let result = (fun () -> reperform (op, fwd.h) k last_fiber) () in
+       let result = (fun () -> reperform (fwd.h, op) k last_fiber) () in
        handle mapping result)
 ;;
 
-let resume (Cont { cont; mapping }) f x handlers =
+let resume (Cont { cont; mapping }) f (x @ once unique) handlers =
   Mapping.set handlers mapping;
   handle mapping (Must_not_enter_gc.with_cont cont f x)
 ;;
 
 let continue k v hs = resume k (fun x -> x) v hs
-let discontinue k e hs = resume k (fun e -> raise e) e hs
 
-let discontinue_with_backtrace k e bt hs =
-  resume k (fun e -> Printexc.raise_with_backtrace e bt) e hs
+let discontinue k e hs =
+  resume
+    k
+    (fun { Modes.Many_aliased.many_aliased = e } -> raise e)
+    { many_aliased = e }
+    hs
 ;;
 
-let fiber (type a b e) (f : (e Handler.t @ local -> a -> b) @ once) =
+let discontinue_with_backtrace k e bt hs =
+  resume
+    k
+    (fun { Modes.Many_aliased.many_aliased = e } -> Printexc.raise_with_backtrace e bt)
+    { many_aliased = e }
+    hs
+;;
+
+let fiber (type a b e) (f : (e Handler.t @ local -> a @ once unique -> b) @ once) =
   let module H =
     (val Handler.create () : Handler.Create with type e = e and type es = unit)
   in
@@ -550,7 +563,7 @@ let fiber (type a b e) (f : (e Handler.t @ local -> a -> b) @ once) =
 let fiber_with
   (type a b e es)
   (l : es Handler.List.Length.t @ local)
-  (f : ((e * es) Handler.List.t @ local -> a -> b) @ once)
+  (f : ((e * es) Handler.List.t @ local -> a @ once unique -> b) @ once)
   =
   let module H = (val Handler.create () : Handler.Create with type e = e and type es = es)
   in
@@ -587,38 +600,51 @@ let run_with
 
 (* Data-race-free wrappers around [fiber]/[run] functions.
 
-   Uses [Obj.magic_portable] to avoid duplicating implementations
-   of [alloc_cont]/[run_stack] in absence of mode polymorphism.
+   Uses [Obj.magic_portable] to avoid duplicating implementations of
+   [alloc_cont]/[run_stack] in absence of mode polymorphism.
 
-   Wrappers provide the handler at [portable], but require [portable]
-   arguments and operations, which are marked as [contended]. *)
+   Wrappers provide the handler at [portable], but require [portable] arguments and
+   operations, which are marked as [contended]. *)
 module DRF : sig @@ portable
   val fiber
     : ('a : value mod portable) 'b 'e.
-    ('e Handler.t @ local portable -> 'a @ contended -> 'b) @ once
+    ('e Handler.t @ local portable -> 'a @ contended once unique -> 'b) @ once
     -> ('a, 'b, 'e, unit) continuation @ unique
 
   val fiber_with
     : ('a : value mod portable) 'b 'e 'es.
-    local_ 'es Handler.List.Length.t
-    -> (('e * 'es) Handler.List.t @ local portable -> 'a @ contended -> 'b) @ once
+    'es Handler.List.Length.t @ local
+    -> (('e * 'es) Handler.List.t @ local portable -> 'a @ contended once unique -> 'b)
+       @ once
     -> ('a, 'b, 'e, 'es) continuation @ unique
 
-  val run : ('e Handler.t @ local portable -> 'a) @ once -> ('a, 'e, unit) res @ unique
+  val run
+    :  ('e Handler.t @ local portable -> 'a) @ once
+    -> ('a, 'e, unit) res @ once unique
+
+  (* Returns a [res] to be [Obj.magic]ed into the contended result type with
+     [op @@ contended]. *)
 
   val run_with
     :  'es Handler.List.t @ local portable
     -> (('e * 'es) Handler.List.t @ local portable -> 'a) @ once
-    -> ('a, 'e, 'es) res @ unique
+    -> ('a, 'e, 'es) res @ once unique
+
+  (* Returns a [res] to be [Obj.magic]ed into the contended result type with
+     [op @@ contended]. *)
 end = struct
   let[@inline] fiber f =
-    let f h a = f (Obj.magic_portable h) (Obj.magic_portable a) [@nontail] in
+    let f h a =
+      f (Obj.magic_portable h) (Obj.magic_portable_at_unique_once a) [@nontail]
+    in
     let k : ('a, 'b, 'e, unit) continuation = Obj.magic_at_unique (fiber f) in
     k
   ;;
 
   let[@inline] fiber_with hs f =
-    let f hs a = f (Obj.magic_portable hs) (Obj.magic_portable a) [@nontail] in
+    let f hs a =
+      f (Obj.magic_portable hs) (Obj.magic_portable_at_unique_once a) [@nontail]
+    in
     let k : ('a, 'b, 'e, 'es) continuation = Obj.magic_at_unique (fiber_with hs f) in
     k
   ;;
@@ -638,8 +664,8 @@ module Continuation = struct
   type (-'a, +'b, 'es) t : value mod contended many =
     | Continuation : ('a, 'c, 'e, 'es) continuation -> ('a, 'b, 'es) t
   [@@unsafe_allow_any_mode_crossing "Only accesses mutable data uniquely. "] [@@unboxed]
-  (* This type has an unexpressible constraint that ['b] is a type that
-     can safely be [Obj.magic]ed from [(c, e, es) res] *)
+  (* This type has an unexpressible constraint that ['b] is a type that can safely be
+     [Obj.magic]ed from [(c, e, es) res] *)
 
   let get_callstack (Continuation cont) i =
     let bt, cont = get_callstack cont i in
@@ -651,431 +677,126 @@ let continue (type a b es) (k : (a, b, es) Continuation.t) v hs =
   let (Continuation (type e c) (cont : (a, c, e, es) continuation)) = k in
   let res : (c, e, es) res = continue cont v hs in
   (* Sound per the constraint on [Continuation.t]. *)
-  (Obj.magic_at_unique res : b)
+  (Obj.magic_at_unique_once res : b)
 ;;
 
 let discontinue (type a b es) (k : (a, b, es) Continuation.t) e hs =
   let (Continuation (type e c) (cont : (a, c, e, es) continuation)) = k in
   let res : (c, e, es) res = discontinue cont e hs in
   (* Sound per the constraint on [Continuation.t]. *)
-  (Obj.magic_at_unique res : b)
+  (Obj.magic_at_unique_once res : b)
 ;;
 
 let discontinue_with_backtrace (type a b es) (k : (a, b, es) Continuation.t) e bt hs =
   let (Continuation (type e c) (cont : (a, c, e, es) continuation)) = k in
   let res : (c, e, es) res = discontinue_with_backtrace cont e bt hs in
   (* Sound per the constraint on [Continuation.t]. *)
-  (Obj.magic_at_unique res : b)
+  (Obj.magic_at_unique_once res : b)
 ;;
 
-module type S = sig @@ portable
-  type ('o, 'e) ops
-  type t
+include Effect_intf.Definitions (Handler) (Continuation)
 
-  module Result : sig
-    type eff := t
+module Make_generic (Types : sig
+    type ('p, 'q) t
+    type ('a, 'p, 'q, 'e) ops
+    type ('a, 'p, 'q, 'es) result
+  end) :
+  S2_generic
+  with type ('p, 'q) t := ('p, 'q) Types.t
+   and type ('a, 'p, 'q, 'e) ops := ('a, 'p, 'q, 'e) Types.ops
+   and type ('a, 'p, 'q, 'es) result := ('a, 'p, 'q, 'es) Types.result = struct
+  include Types
 
-    type ('a, 'es) t =
-      | Value : 'a @@ aliased global -> ('a, 'es) t
-      | Exception : exn @@ aliased global -> ('a, 'es) t
-      | Operation :
-          ('o, eff) ops @@ aliased global * ('o, ('a, 'es) t, 'es) Continuation.t
-          -> ('a, 'es) t
+  let fiber f = Continuation.Continuation (fiber f)
+  let fiber_with hs f = Continuation.Continuation (fiber_with hs f)
 
-    type ('a, 'es) handler =
-      { handle : 'o. ('o, eff) ops -> ('o, ('a, 'es) t, 'es) Continuation.t @ unique -> 'a
-      }
-    [@@unboxed]
+  let run (type a p q) f =
+    let res : (a, (p, q) t, unit) res = run f in
+    (Obj.magic_at_unique_once res : (a, p, q, unit) result)
+  ;;
 
-    val handle : ('a, 'es) t @ unique -> ('a, 'es) handler -> 'a
-  end
+  let run_with (type a p q es) hs f =
+    let res : (a, (p, q) t, es) res = run_with hs f in
+    (Obj.magic_at_unique_once res : (a, p, q, es) result)
+  ;;
 
-  type ('a, 'es) result = ('a, 'es) Result.t =
-    | Value : 'a @@ aliased global -> ('a, 'es) result
-    | Exception : exn @@ aliased global -> ('a, 'es) result
-    | Operation :
-        ('o, t) ops @@ aliased global * ('o, ('a, 'es) result, 'es) Continuation.t
-        -> ('a, 'es) result
-
-  val fiber
-    :  (local_ t Handler.t -> 'a -> 'b) @ once
-    -> ('a, ('b, unit) Result.t, unit) Continuation.t @ unique
-
-  val fiber_with
-    :  local_ 'es Handler.List.Length.t
-    -> (local_ (t * 'es) Handler.List.t -> 'a -> 'b) @ once
-    -> ('a, ('b, 'es) Result.t, 'es) Continuation.t @ unique
-
-  val run : (local_ t Handler.t -> 'a) @ once -> ('a, unit) Result.t @ unique
-
-  val run_with
-    :  local_ 'es Handler.List.t
-    -> (local_ (t * 'es) Handler.List.t -> 'a) @ once
-    -> ('a, 'es) Result.t @ unique
-
-  val perform : t Handler.t @ local -> ('a, t) ops -> 'a @ unique
-
-  module Contended : sig
-    module Result : sig
-      type eff := t
-
-      type ('a, 'es) t =
-        | Value : 'a @@ aliased global -> ('a, 'es) t
-        | Exception : exn @@ aliased global -> ('a, 'es) t
-        | Operation :
-            ('o, eff) ops @@ aliased contended global
-            * ('o Modes.Portable.t, ('a, 'es) t, 'es) Continuation.t
-            -> ('a, 'es) t
-    end
-
-    val fiber
-      : ('a : value mod portable) 'b.
-      (t Handler.t @ local portable -> 'a @ contended -> 'b) @ once
-      -> ('a, ('b, unit) Result.t, unit) Continuation.t @ unique
-
-    val fiber_with
-      : ('a : value mod portable) 'b 'es.
-      local_ 'es Handler.List.Length.t
-      -> ((t * 'es) Handler.List.t @ local portable -> 'a @ contended -> 'b) @ once
-      -> ('a, ('b, 'es) Result.t, 'es) Continuation.t @ unique
-
-    val run : (t Handler.t @ local portable -> 'a) @ once -> ('a, unit) Result.t @ unique
-
-    val run_with
-      :  'es Handler.List.t @ local portable
-      -> ((t * 'es) Handler.List.t @ local portable -> 'a) @ once
-      -> ('a, 'es) Result.t @ unique
-
-    val perform
-      :  t Handler.t @ contended local
-      -> ('a, t) ops @ portable
-      -> 'a @ contended unique
-  end
-
-  module Handler : sig
-    type nonrec t = t Handler.t
-  end
-
-  module Continuation : sig
-    type ('a, 'b, 'es) t = ('a, ('b, 'es) Result.t, 'es) Continuation.t
-  end
+  let perform (type a p q) (h : _ Handler.t @ local) (op : (a, p, q, (p, q) t) ops) =
+    let op : (a, (p, q) t) op = Obj.magic op in
+    perform_ (h.h, op)
+  ;;
 end
 
-module type S1 = sig @@ portable
-  type ('o, 'p, 'e) ops
-  type 'p t
+module Make_generic_contended (Types : sig
+    type ('p, 'q) t
+    type ('a, 'p, 'q, 'e) ops
+    type ('a, 'p, 'q, 'es) result
+  end) :
+  S2_generic_contended
+  with type ('p, 'q) t := ('p, 'q) Types.t
+   and type ('a, 'p, 'q, 'e) ops := ('a, 'p, 'q, 'e) Types.ops
+   and type ('a, 'p, 'q, 'es) result := ('a, 'p, 'q, 'es) Types.result = struct
+  include Types
 
-  module Result : sig
-    type 'p eff := 'p t
+  let fiber f = Continuation.Continuation (DRF.fiber f)
+  let fiber_with l f = Continuation.Continuation (DRF.fiber_with l f)
 
-    type ('a, 'p, 'es) t =
-      | Value : 'a @@ aliased global -> ('a, 'p, 'es) t
-      | Exception : exn @@ aliased global -> ('a, 'p, 'es) t
-      | Operation :
-          ('o, 'p, 'p eff) ops @@ aliased global
-          * ('o, ('a, 'p, 'es) t, 'es) Continuation.t
-          -> ('a, 'p, 'es) t
+  let run (type a p q) f =
+    let res : (a, (p, q) t, unit) res = DRF.run f in
+    (Obj.magic_at_unique_once res : (a, p, q, unit) result)
+  ;;
 
-    type ('a, 'p, 'es) handler =
-      { handle :
-          'o.
-          ('o, 'p, 'p eff) ops -> ('o, ('a, 'p, 'es) t, 'es) Continuation.t @ unique -> 'a
-      }
-    [@@unboxed]
+  let run_with (type a p q es) hs f =
+    let res : (a, (p, q) t, es) res = DRF.run_with hs f in
+    (Obj.magic_at_unique_once res : (a, p, q, es) result)
+  ;;
 
-    val handle : ('a, 'p, 'es) t @ unique -> ('a, 'p, 'es) handler -> 'a
-  end
-
-  type ('a, 'p, 'es) result = ('a, 'p, 'es) Result.t =
-    | Value : 'a @@ aliased global -> ('a, 'p, 'es) result
-    | Exception : exn @@ aliased global -> ('a, 'p, 'es) result
-    | Operation :
-        ('o, 'p, 'p t) ops @@ aliased global
-        * ('o, ('a, 'p, 'es) result, 'es) Continuation.t
-        -> ('a, 'p, 'es) result
-
-  val fiber
-    :  (local_ 'p t Handler.t -> 'a -> 'b) @ once
-    -> ('a, ('b, 'p, unit) Result.t, unit) Continuation.t @ unique
-
-  val fiber_with
-    :  local_ 'es Handler.List.Length.t
-    -> (local_ ('p t * 'es) Handler.List.t -> 'a -> 'b) @ once
-    -> ('a, ('b, 'p, 'es) Result.t, 'es) Continuation.t @ unique
-
-  val run : (local_ 'p t Handler.t -> 'a) @ once -> ('a, 'p, unit) Result.t @ unique
-
-  val run_with
-    :  local_ 'es Handler.List.t
-    -> (local_ ('p t * 'es) Handler.List.t -> 'a) @ once
-    -> ('a, 'p, 'es) Result.t @ unique
-
-  val perform : 'p t Handler.t @ local -> ('a, 'p, 'p t) ops -> 'a @ unique
-
-  module Contended : sig
-    module Result : sig
-      type 'p eff := 'p t
-
-      type ('a, 'p, 'es) t =
-        | Value : 'a @@ aliased global -> ('a, 'p, 'es) t
-        | Exception : exn @@ aliased global -> ('a, 'p, 'es) t
-        | Operation :
-            ('o, 'p, 'p eff) ops @@ aliased contended global
-            * ('o Modes.Portable.t, ('a, 'p, 'es) t, 'es) Continuation.t
-            -> ('a, 'p, 'es) t
-    end
-
-    val fiber
-      : ('a : value mod portable) 'b 'p.
-      ('p t Handler.t @ local portable -> 'a @ contended -> 'b) @ once
-      -> ('a, ('b, 'p, unit) Result.t, unit) Continuation.t @ unique
-
-    val fiber_with
-      : ('a : value mod portable) 'b 'p 'es.
-      local_ 'es Handler.List.Length.t
-      -> (('p t * 'es) Handler.List.t @ local portable -> 'a @ contended -> 'b) @ once
-      -> ('a, ('b, 'p, 'es) Result.t, 'es) Continuation.t @ unique
-
-    val run
-      :  ('p t Handler.t @ local portable -> 'a) @ once
-      -> ('a, 'p, unit) Result.t @ unique
-
-    val run_with
-      :  'es Handler.List.t @ local portable
-      -> (('p t * 'es) Handler.List.t @ local portable -> 'a) @ once
-      -> ('a, 'p, 'es) Result.t @ unique
-
-    val perform
-      :  'p t Handler.t @ contended local
-      -> ('a, 'p, 'p t) ops @ portable
-      -> 'a @ contended unique
-  end
-
-  module Handler : sig
-    type nonrec 'p t = 'p t Handler.t
-  end
-
-  module Continuation : sig
-    type ('a, 'b, 'p, 'es) t = ('a, ('b, 'p, 'es) Result.t, 'es) Continuation.t
-  end
-end
-
-module type S2 = sig @@ portable
-  type ('o, 'p, 'q, 'e) ops
-  type ('p, 'q) t
-
-  module Result : sig
-    type ('p, 'q) eff := ('p, 'q) t
-
-    type ('a, 'p, 'q, 'es) t =
-      | Value : 'a @@ aliased global -> ('a, 'p, 'q, 'es) t
-      | Exception : exn @@ aliased global -> ('a, 'p, 'q, 'es) t
-      | Operation :
-          ('o, 'p, 'q, ('p, 'q) eff) ops @@ aliased global
-          * ('o, ('a, 'p, 'q, 'es) t, 'es) Continuation.t
-          -> ('a, 'p, 'q, 'es) t
-
-    type ('a, 'p, 'q, 'es) handler =
-      { handle :
-          'o.
-          ('o, 'p, 'q, ('p, 'q) eff) ops
-          -> ('o, ('a, 'p, 'q, 'es) t, 'es) Continuation.t @ unique
-          -> 'a
-      }
-    [@@unboxed]
-
-    val handle : ('a, 'p, 'q, 'es) t @ unique -> ('a, 'p, 'q, 'es) handler -> 'a
-  end
-
-  type ('a, 'p, 'q, 'es) result = ('a, 'p, 'q, 'es) Result.t =
-    | Value : 'a @@ aliased global -> ('a, 'p, 'q, 'es) result
-    | Exception : exn @@ aliased global -> ('a, 'p, 'q, 'es) result
-    | Operation :
-        ('o, 'p, 'q, ('p, 'q) t) ops @@ aliased global
-        * ('o, ('a, 'p, 'q, 'es) result, 'es) Continuation.t
-        -> ('a, 'p, 'q, 'es) result
-
-  val fiber
-    :  (local_ ('p, 'q) t Handler.t -> 'a -> 'b) @ once
-    -> ('a, ('b, 'p, 'q, unit) result, unit) Continuation.t @ unique
-
-  val fiber_with
-    :  local_ 'es Handler.List.Length.t
-    -> (local_ (('p, 'q) t * 'es) Handler.List.t -> 'a -> 'b) @ once
-    -> ('a, ('b, 'p, 'q, 'es) result, 'es) Continuation.t @ unique
-
-  val run
-    :  (local_ ('p, 'q) t Handler.t -> 'a) @ once
-    -> ('a, 'p, 'q, unit) result @ unique
-
-  val run_with
-    :  local_ 'es Handler.List.t
-    -> (local_ (('p, 'q) t * 'es) Handler.List.t -> 'a) @ once
-    -> ('a, 'p, 'q, 'es) result @ unique
-
-  val perform
-    :  ('p, 'q) t Handler.t @ local
-    -> ('a, 'p, 'q, ('p, 'q) t) ops
-    -> 'a @ unique
-
-  module Contended : sig
-    module Result : sig
-      type ('p, 'q) eff := ('p, 'q) t
-
-      type ('a, 'p, 'q, 'es) t =
-        | Value : 'a @@ aliased global -> ('a, 'p, 'q, 'es) t
-        | Exception : exn @@ aliased global -> ('a, 'p, 'q, 'es) t
-        | Operation :
-            ('o, 'p, 'q, ('p, 'q) eff) ops @@ aliased contended global
-            * ('o Modes.Portable.t, ('a, 'p, 'q, 'es) t, 'es) Continuation.t
-            -> ('a, 'p, 'q, 'es) t
-    end
-
-    val fiber
-      : ('a : value mod portable) 'b 'p 'q.
-      (('p, 'q) t Handler.t @ local portable -> 'a @ contended -> 'b) @ once
-      -> ('a, ('b, 'p, 'q, unit) Result.t, unit) Continuation.t @ unique
-
-    val fiber_with
-      : ('a : value mod portable) 'b 'p 'q 'es.
-      local_ 'es Handler.List.Length.t
-      -> ((('p, 'q) t * 'es) Handler.List.t @ local portable -> 'a @ contended -> 'b)
-         @ once
-      -> ('a, ('b, 'p, 'q, 'es) Result.t, 'es) Continuation.t @ unique
-
-    val run
-      :  (('p, 'q) t Handler.t @ local portable -> 'a) @ once
-      -> ('a, 'p, 'q, unit) Result.t @ unique
-
-    val run_with
-      :  'es Handler.List.t @ local portable
-      -> ((('p, 'q) t * 'es) Handler.List.t @ local portable -> 'a) @ once
-      -> ('a, 'p, 'q, 'es) Result.t @ unique
-
-    val perform
-      :  ('p, 'q) t Handler.t @ contended local
-      -> ('a, 'p, 'q, ('p, 'q) t) ops @ portable
-      -> 'a @ contended unique
-  end
-
-  module Handler : sig
-    type nonrec ('p, 'q) t = ('p, 'q) t Handler.t
-  end
-
-  module Continuation : sig
-    type ('a, 'b, 'p, 'q, 'es) t = ('a, ('b, 'p, 'q, 'es) result, 'es) Continuation.t
-  end
-end
-
-module type Operations = sig
-  type 'a t
-end
-
-module type Operations_rec = sig
-  type ('a, 'e) t
-end
-
-module type Operations1 = sig
-  type ('a, 'p) t
-end
-
-module type Operations1_rec = sig
-  type ('a, 'p, 'e) t
-end
-
-module type Operations2 = sig
-  type ('a, 'p, 'q) t
-end
-
-module type Operations2_rec = sig
-  type ('a, 'p, 'q, 'e) t
+  let perform (type a p q) (h : _ Handler.t) op : a =
+    let op : (a, (p, q) t) op = Obj.magic op in
+    (* Here and below, [magic_uncontended] is safe since the handler is either portable or
+       is executed in its original capsule. *)
+    perform_ (Obj.magic_uncontended h.h, op)
+  ;;
 end
 
 module Make_rec (Ops : Operations_rec) : S with type ('a, 'e) ops := ('a, 'e) Ops.t =
 struct
   type t
 
-  module Result = struct
-    type eff = t
-
-    type ('e, 'es) t =
-      | Value : 'a @@ aliased global -> ('a, 'es) t
-      | Exception : exn @@ aliased global -> ('a, 'es) t
-      | Operation :
-          ('o, eff) Ops.t @@ aliased global * ('o, ('a, 'es) t, 'es) Continuation.t
-          -> ('a, 'es) t
-
-    type ('a, 'es) handler =
-      { handle :
-          'o. ('o, eff) Ops.t -> ('o, ('a, 'es) t, 'es) Continuation.t @ unique -> 'a
-      }
-    [@@unboxed]
-
-    let handle r { handle } =
-      match r with
-      | Value x -> x
-      | Exception e -> raise e
-      | Operation (op, k) -> handle op k
-    ;;
-  end
-
-  type ('a, 'es) result = ('a, 'es) Result.t =
-    | Value : 'a @@ aliased global -> ('a, 'es) result
-    | Exception : exn @@ aliased global -> ('a, 'es) result
+  type ('a, 'es) result =
+    | Value : 'a @@ aliased global many -> ('a, 'es) result
+    | Exception : exn @@ aliased global many -> ('a, 'es) result
     | Operation :
-        ('o, t) Ops.t @@ aliased global * ('o, ('a, 'es) result, 'es) Continuation.t
+        ('o, t) Ops.t @@ aliased global many * ('o, ('a, 'es) result, 'es) Continuation.t
         -> ('a, 'es) result
 
-  let fiber f = Continuation.Continuation (fiber f)
-  let fiber_with hs f = Continuation.Continuation (fiber_with hs f)
+  include Make_generic (struct
+      type nonrec (_, _) t = t
+      type nonrec ('a, _, _, 'e) ops = ('a, 'e) Ops.t
+      type nonrec ('a, _, _, 'es) result = ('a, 'es) result
+    end)
 
-  let run (type a) f =
-    let res : (a, t, unit) res = run f in
-    (Obj.magic_at_unique res : (a, unit) Result.t)
-  ;;
-
-  let run_with (type a es) hs f =
-    let res : (a, t, es) res = run_with hs f in
-    (Obj.magic_at_unique res : (a, es) Result.t)
-  ;;
-
-  let perform (type a) (h : _ Handler.t @ local) (op : (a, t) Ops.t) =
-    let op : (a, t) op = Obj.magic op in
-    perform_ (op, h.h)
-  ;;
+  module Result = struct
+    type ('a, 'es) t = ('a, 'es) result
+  end
 
   module Contended = struct
+    type ('a, 'es) result =
+      | Value : 'a @@ aliased global many -> ('a, 'es) result
+      | Exception : exn @@ aliased global many -> ('a, 'es) result
+      | Operation :
+          ('o, t) Ops.t @@ aliased contended global many
+          * ('o Modes.Portable.t, ('a, 'es) result, 'es) Continuation.t
+          -> ('a, 'es) result
+
+    include Make_generic_contended (struct
+        type nonrec (_, _) t = t
+        type nonrec ('a, _, _, 'e) ops = ('a, 'e) Ops.t
+        type nonrec ('a, _, _, 'es) result = ('a, 'es) result
+      end)
+
     module Result = struct
-      type eff = t
-
-      type ('a, 'es) t =
-        | Value : 'a @@ aliased global -> ('a, 'es) t
-        | Exception : exn @@ aliased global -> ('a, 'es) t
-        | Operation :
-            ('o, eff) Ops.t @@ aliased contended global
-            * ('o Modes.Portable.t, ('a, 'es) t, 'es) Continuation.t
-            -> ('a, 'es) t
+      type ('a, 'es) t = ('a, 'es) result
     end
-
-    let fiber f = Continuation.Continuation (DRF.fiber f)
-    let fiber_with l f = Continuation.Continuation (DRF.fiber_with l f)
-
-    let run (type a) f =
-      let res : (a, t, unit) res = DRF.run f in
-      (Obj.magic_at_unique res : (a, unit) Result.t)
-    ;;
-
-    let run_with (type a es) hs f =
-      let res : (a, t, es) res = DRF.run_with hs f in
-      (Obj.magic_at_unique res : (a, es) Result.t)
-    ;;
-
-    let perform (type a) (h : t Handler.t) op : a =
-      let op : (a, t) op = Obj.magic op in
-      (* Here and below, [magic_uncontended] is safe since the handler
-         is either portable or is executed in its original capsule. *)
-      perform_ (op, Obj.magic_uncontended h.h)
-    ;;
   end
 
   module Handler = struct
@@ -1083,7 +804,7 @@ struct
   end
 
   module Continuation = struct
-    type ('a, 'b, 'es) t = ('a, ('b, 'es) Result.t, 'es) Continuation.t
+    type ('a, 'b, 'es) t = ('a, ('b, 'es) result, 'es) Continuation.t
   end
 end
 
@@ -1095,90 +816,42 @@ module Make1_rec (Ops : Operations1_rec) :
   S1 with type ('a, 'p, 'e) ops := ('a, 'p, 'e) Ops.t = struct
   type 'p t
 
-  module Result = struct
-    type 'p eff = 'p t
-
-    type ('a, 'p, 'es) t =
-      | Value : 'a @@ aliased global -> ('a, 'p, 'es) t
-      | Exception : exn @@ aliased global -> ('a, 'p, 'es) t
-      | Operation :
-          ('o, 'p, 'p eff) Ops.t @@ aliased global
-          * ('o, ('a, 'p, 'es) t, 'es) Continuation.t
-          -> ('a, 'p, 'es) t
-
-    type ('a, 'p, 'es) handler =
-      { handle :
-          'o.
-          ('o, 'p, 'p eff) Ops.t
-          -> ('o, ('a, 'p, 'es) t, 'es) Continuation.t @ unique
-          -> 'a
-      }
-    [@@unboxed]
-
-    let handle r { handle } =
-      match r with
-      | Value x -> x
-      | Exception e -> raise e
-      | Operation (op, k) -> handle op k
-    ;;
-  end
-
-  type ('a, 'p, 'es) result = ('a, 'p, 'es) Result.t =
-    | Value : 'a @@ aliased global -> ('a, 'p, 'es) result
-    | Exception : exn @@ aliased global -> ('a, 'p, 'es) result
+  type ('a, 'p, 'es) result =
+    | Value : 'a @@ aliased global many -> ('a, 'p, 'es) result
+    | Exception : exn @@ aliased global many -> ('a, 'p, 'es) result
     | Operation :
-        ('o, 'p, 'p t) Ops.t @@ aliased global
+        ('o, 'p, 'p t) Ops.t @@ aliased global many
         * ('o, ('a, 'p, 'es) result, 'es) Continuation.t
         -> ('a, 'p, 'es) result
 
-  let fiber f = Continuation.Continuation (fiber f)
-  let fiber_with hs f = Continuation.Continuation (fiber_with hs f)
+  include Make_generic (struct
+      type nonrec ('p, _) t = 'p t
+      type nonrec ('a, 'p, _, 'e) ops = ('a, 'p, 'e) Ops.t
+      type nonrec ('a, 'p, _, 'es) result = ('a, 'p, 'es) result
+    end)
 
-  let run (type a p) f =
-    let res : (a, p t, unit) res = run f in
-    (Obj.magic_at_unique res : (a, p, unit) Result.t)
-  ;;
-
-  let run_with (type a p es) hs f =
-    let res : (a, p t, es) res = run_with hs f in
-    (Obj.magic_at_unique res : (a, p, es) Result.t)
-  ;;
-
-  let perform (type a p) (h : _ Handler.t @ local) (op : (a, p, p t) Ops.t) =
-    let op : (a, p t) op = Obj.magic op in
-    perform_ (op, h.h)
-  ;;
+  module Result = struct
+    type ('a, 'p, 'es) t = ('a, 'p, 'es) result
+  end
 
   module Contended = struct
+    type ('a, 'p, 'es) result =
+      | Value : 'a @@ aliased global many -> ('a, 'p, 'es) result
+      | Exception : exn @@ aliased global many -> ('a, 'p, 'es) result
+      | Operation :
+          ('o, 'p, 'p t) Ops.t @@ aliased contended global many
+          * ('o Modes.Portable.t, ('a, 'p, 'es) result, 'es) Continuation.t
+          -> ('a, 'p, 'es) result
+
+    include Make_generic_contended (struct
+        type nonrec ('p, _) t = 'p t
+        type nonrec ('a, 'p, _, 'e) ops = ('a, 'p, 'e) Ops.t
+        type nonrec ('a, 'p, _, 'es) result = ('a, 'p, 'es) result
+      end)
+
     module Result = struct
-      type 'p eff = 'p t
-
-      type ('a, 'p, 'es) t =
-        | Value : 'a @@ aliased global -> ('a, 'p, 'es) t
-        | Exception : exn @@ aliased global -> ('a, 'p, 'es) t
-        | Operation :
-            ('o, 'p, 'p eff) Ops.t @@ aliased contended global
-            * ('o Modes.Portable.t, ('a, 'p, 'es) t, 'es) Continuation.t
-            -> ('a, 'p, 'es) t
+      type ('a, 'p, 'es) t = ('a, 'p, 'es) result
     end
-
-    let fiber f = Continuation.Continuation (DRF.fiber f)
-    let fiber_with l f = Continuation.Continuation (DRF.fiber_with l f)
-
-    let run (type a p) f =
-      let res : (a, p t, unit) res = DRF.run f in
-      (Obj.magic_at_unique res : (a, p, unit) Result.t)
-    ;;
-
-    let run_with (type a p es) hs f =
-      let res : (a, p t, es) res = DRF.run_with hs f in
-      (Obj.magic_at_unique res : (a, p, es) Result.t)
-    ;;
-
-    let perform (type a p) (h : p t Handler.t) op : a =
-      let op : (a, p t) op = Obj.magic op in
-      perform_ (op, Obj.magic_uncontended h.h)
-    ;;
   end
 
   module Handler = struct
@@ -1186,7 +859,7 @@ module Make1_rec (Ops : Operations1_rec) :
   end
 
   module Continuation = struct
-    type ('a, 'b, 'p, 'es) t = ('a, ('b, 'p, 'es) Result.t, 'es) Continuation.t
+    type ('a, 'b, 'p, 'es) t = ('a, ('b, 'p, 'es) result, 'es) Continuation.t
   end
 end
 
@@ -1199,90 +872,42 @@ module Make2_rec (Ops : Operations2_rec) :
   S2 with type ('a, 'p, 'q, 'e) ops := ('a, 'p, 'q, 'e) Ops.t = struct
   type ('p, 'q) t
 
-  module Result = struct
-    type ('p, 'q) eff = ('p, 'q) t
-
-    type ('a, 'p, 'q, 'es) t =
-      | Value : 'a @@ aliased global -> ('a, 'p, 'q, 'es) t
-      | Exception : exn @@ aliased global -> ('a, 'p, 'q, 'es) t
-      | Operation :
-          ('o, 'p, 'q, ('p, 'q) eff) Ops.t @@ aliased global
-          * ('o, ('a, 'p, 'q, 'es) t, 'es) Continuation.t
-          -> ('a, 'p, 'q, 'es) t
-
-    type ('a, 'p, 'q, 'es) handler =
-      { handle :
-          'o.
-          ('o, 'p, 'q, ('p, 'q) eff) Ops.t
-          -> ('o, ('a, 'p, 'q, 'es) t, 'es) Continuation.t @ unique
-          -> 'a
-      }
-    [@@unboxed]
-
-    let handle r { handle } =
-      match r with
-      | Value x -> x
-      | Exception e -> raise e
-      | Operation (op, k) -> handle op k
-    ;;
-  end
-
-  type ('a, 'p, 'q, 'es) result = ('a, 'p, 'q, 'es) Result.t =
-    | Value : 'a @@ aliased global -> ('a, 'p, 'q, 'es) result
-    | Exception : exn @@ aliased global -> ('a, 'p, 'q, 'es) result
+  type ('a, 'p, 'q, 'es) result =
+    | Value : 'a @@ aliased global many -> ('a, 'p, 'q, 'es) result
+    | Exception : exn @@ aliased global many -> ('a, 'p, 'q, 'es) result
     | Operation :
-        ('o, 'p, 'q, ('p, 'q) t) Ops.t @@ aliased global
+        ('o, 'p, 'q, ('p, 'q) t) Ops.t @@ aliased global many
         * ('o, ('a, 'p, 'q, 'es) result, 'es) Continuation.t
         -> ('a, 'p, 'q, 'es) result
 
-  let fiber f = Continuation.Continuation (fiber f)
-  let fiber_with hs f = Continuation.Continuation (fiber_with hs f)
+  include Make_generic (struct
+      type nonrec ('p, 'q) t = ('p, 'q) t
+      type nonrec ('a, 'p, 'q, 'e) ops = ('a, 'p, 'q, 'e) Ops.t
+      type nonrec ('a, 'p, 'q, 'es) result = ('a, 'p, 'q, 'es) result
+    end)
 
-  let run (type a p q) f =
-    let res : (a, (p, q) t, unit) res = run f in
-    (Obj.magic_at_unique res : (a, p, q, unit) result)
-  ;;
-
-  let run_with (type a p q es) hs f =
-    let res : (a, (p, q) t, es) res = run_with hs f in
-    (Obj.magic_at_unique res : (a, p, q, es) result)
-  ;;
-
-  let perform (type a p q) (h : _ Handler.t @ local) (op : (a, p, q, (p, q) t) Ops.t) =
-    let op : (a, (p, q) t) op = Obj.magic op in
-    perform_ (op, h.h)
-  ;;
+  module Result = struct
+    type ('a, 'p, 'q, 'es) t = ('a, 'p, 'q, 'es) result
+  end
 
   module Contended = struct
+    type ('a, 'p, 'q, 'es) result =
+      | Value : 'a @@ aliased global many -> ('a, 'p, 'q, 'es) result
+      | Exception : exn @@ aliased global many -> ('a, 'p, 'q, 'es) result
+      | Operation :
+          ('o, 'p, 'q, ('p, 'q) t) Ops.t @@ aliased contended global many
+          * ('o Modes.Portable.t, ('a, 'p, 'q, 'es) result, 'es) Continuation.t
+          -> ('a, 'p, 'q, 'es) result
+
+    include Make_generic_contended (struct
+        type nonrec ('p, 'q) t = ('p, 'q) t
+        type nonrec ('a, 'p, 'q, 'e) ops = ('a, 'p, 'q, 'e) Ops.t
+        type nonrec ('a, 'p, 'q, 'es) result = ('a, 'p, 'q, 'es) result
+      end)
+
     module Result = struct
-      type ('p, 'q) eff = ('p, 'q) t
-
-      type ('a, 'p, 'q, 'es) t =
-        | Value : 'a @@ aliased global -> ('a, 'p, 'q, 'es) t
-        | Exception : exn @@ aliased global -> ('a, 'p, 'q, 'es) t
-        | Operation :
-            ('o, 'p, 'q, ('p, 'q) eff) Ops.t @@ aliased contended global
-            * ('o Modes.Portable.t, ('a, 'p, 'q, 'es) t, 'es) Continuation.t
-            -> ('a, 'p, 'q, 'es) t
+      type ('a, 'p, 'q, 'es) t = ('a, 'p, 'q, 'es) result
     end
-
-    let fiber f = Continuation.Continuation (DRF.fiber f)
-    let fiber_with l f = Continuation.Continuation (DRF.fiber_with l f)
-
-    let run (type a p q) f =
-      let res : (a, (p, q) t, unit) res = DRF.run f in
-      (Obj.magic_at_unique res : (a, p, q, unit) Result.t)
-    ;;
-
-    let run_with (type a p q es) hs f =
-      let res : (a, (p, q) t, es) res = DRF.run_with hs f in
-      (Obj.magic_at_unique res : (a, p, q, es) Result.t)
-    ;;
-
-    let perform (type a p q) (h : (p, q) t Handler.t) op : a =
-      let op : (a, (p, q) t) op = Obj.magic op in
-      perform_ (op, Obj.magic_uncontended h.h)
-    ;;
   end
 
   module Handler = struct
@@ -1305,11 +930,13 @@ type exn += Unhandled : 'e Handler.t -> exn
 
 (* Register the exceptions so that the runtime can access it *)
 let _ =
-  Callback.Safe.register_exception "Effect.Unhandled" (Unhandled { h = Handler.Dummy })
+  Basement.Stdlib_shim.Callback.Safe.register_exception
+    "Effect.Unhandled"
+    (Unhandled { h = Handler.Dummy })
 ;;
 
 let _ =
-  Callback.Safe.register_exception
+  Basement.Stdlib_shim.Callback.Safe.register_exception
     "Effect.Continuation_already_resumed"
     Continuation_already_resumed
 ;;

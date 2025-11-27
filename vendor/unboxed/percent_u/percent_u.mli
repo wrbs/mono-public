@@ -14,7 +14,7 @@ val t_of_sexp : Sexp.t -> t
 val to_string : t -> string
 val of_string : string -> t
 
-include%template Bin_prot.Binable.S_any [@mode local] with type t := t
+include%template Bin_prot.Binable.S [@mode local] with type t := t
 
 include Ppx_hash_lib.Hashable.S_any with type t := t
 
@@ -90,7 +90,7 @@ module Option : sig
   val sexp_of_t : t -> Sexp.t
   val t_of_sexp : Sexp.t -> t
 
-  include%template Bin_prot.Binable.S_any [@mode local] with type t := t
+  include%template Bin_prot.Binable.S [@mode local] with type t := t
 
   include Ppx_hash_lib.Hashable.S_any with type t := t
 
@@ -141,11 +141,7 @@ module Option : sig
 
     (** Comparison Infix *)
 
-    val ( >= ) : t -> t -> bool [@@zero_alloc]
-    val ( <= ) : t -> t -> bool [@@zero_alloc]
     val ( = ) : t -> t -> bool [@@zero_alloc]
-    val ( > ) : t -> t -> bool [@@zero_alloc]
-    val ( < ) : t -> t -> bool [@@zero_alloc]
     val ( <> ) : t -> t -> bool [@@zero_alloc]
   end
 
@@ -159,7 +155,7 @@ module Stable : sig
     val sexp_of_t : t -> Sexp.t
     val t_of_sexp : Sexp.t -> t
 
-    include%template Bin_prot.Binable.S_any [@mode local] with type t := t
+    include%template Bin_prot.Binable.S [@mode local] with type t := t
   end
 
   module Option : sig
@@ -169,7 +165,7 @@ module Stable : sig
       val sexp_of_t : t -> Sexp.t
       val t_of_sexp : Sexp.t -> t
 
-      include%template Bin_prot.Binable.S_any [@mode local] with type t := t
+      include%template Bin_prot.Binable.S [@mode local] with type t := t
     end
   end
 end

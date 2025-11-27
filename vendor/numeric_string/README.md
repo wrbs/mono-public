@@ -18,7 +18,8 @@ include a different treatment of case, special handling of whitespace
 or punctuation, etc.)
 
 See the comments in [the
-interface](https://cs/jane/lib/numeric_string/src/numeric_string.mli)
+interface](
+          https://github.com/janestreet/numeric_string/blob/master/src/numeric_string.mli)
 for a precise specification of the algorithm.
 
 ## Tie-breaking

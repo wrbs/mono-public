@@ -1,34 +1,33 @@
 diff --git a/src/dune b/src/dune
-index 9f4d2e7..a3d3a72 100644
+index bcfa932..bc4c47f 100644
 --- a/src/dune
 +++ b/src/dune
-@@ -24,11 +24,12 @@
-   (language c)
-   (names ffi_generated_stubs)
+@@ -26,12 +26,25 @@
    (flags
--   (:standard \ -Werror -pedantic -Wall -Wunused -Wincompatible-pointer-types)
-+   (:standard \ -Werror -pedantic -Wall -Wunused)
-    -w
-    (:include ../bindings/openssl-ccopt.sexp)
-    -Wno-int-conversion
--   -Wno-implicit-function-declaration))
-+   -Wno-implicit-function-declaration
-+   -Wno-error=incompatible-pointer-types))
+    :standard
+    -Wno-everything
++   -Wno-error=incompatible-pointer-types
+    (:include ../bindings/openssl-ccopt.sexp)))
   (name async_ssl)
   (public_name async_ssl)
-  (modules import version opt verify_mode ffi_generated_types ffi_generated
-diff --git a/stubgen/dune b/stubgen/dune
-index 61f8ecf..8fcff35 100644
---- a/stubgen/dune
-+++ b/stubgen/dune
-@@ -17,7 +17,8 @@
-  (deps
-   (:first_dep ./ffi_ml_types_stubgen.c)
-   ../bindings/openssl-ccopt
--  ../bindings/openssl-cclib)
-+  ../bindings/openssl-cclib
-+  (package ctypes))
-  (action
-   (bash
--    "%{cc} %{first_dep} $(< ../bindings/openssl-ccopt) $(< ../bindings/openssl-cclib) -I `dirname %{lib:ctypes:ctypes_cstubs_internals.h}` -I %{ocaml_where} -o %{targets}")))
-+   "%{cc} %{first_dep} $(< ../bindings/openssl-ccopt) $(< ../bindings/openssl-cclib) -I `dirname %{lib:ctypes:ctypes_cstubs_internals.h}` -I %{ocaml_where} -o %{targets}")))
+- (modules import version opt verify_mode ffi_generated_types ffi_generated
+-   ffi__library_must_be_initialized rfc3526 ssl initialize std config tls
+-   async_ssl)
++ (modules
++  import
++  version
++  opt
++  verify_mode
++  ffi_generated_types
++  ffi_generated
++  ffi__library_must_be_initialized
++  rfc3526
++  ssl
++  initialize
++  std
++  config
++  tls
++  async_ssl)
+  (flags :standard -w -9-27-32-34)
+  (libraries async core async_ssl_bindings ctypes.stubs ctypes integers)
+  (preprocess

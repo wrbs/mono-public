@@ -254,8 +254,8 @@ module%test _ : module type of Avltree = struct
       end)
       ~f:(fun (constructors, key, data, replace) ->
         let t, map = (reify [@kind k v]) constructors in
-        (* test [added], other aspects of [add] are tested via [reify] in the
-              [invariant] test above *)
+        (* test [added], other aspects of [add] are tested via [reify] in the [invariant]
+           test above *)
         let added = ref false in
         let (_ : (_ t[@kind k v])) =
           (add [@kind k v])
@@ -279,7 +279,7 @@ module%test _ : module type of Avltree = struct
       ~f:(fun (constructors, key) ->
         let t, map = (reify [@kind k v]) constructors in
         (* test [removed], other aspects of [remove] are tested via [reify] in the
-              [invariant] test above *)
+           [invariant] test above *)
         let removed = ref false in
         let (_ : (_ t[@kind k v])) =
           (remove [@kind k v]) t (Key.unbox key) ~compare ~removed
@@ -515,7 +515,7 @@ module%test _ : module type of Avltree = struct
              | Some data -> `Found (key, data, a, b)))
   ;;
 
-  let iter = (iter [@kind k v])
+  let iter = (iter [@kind k v] [@mode c]) [@@mode c = (uncontended, shared)]
 
   let%test_unit _ =
     Base_quickcheck.Test.run_exn (module Constructors) ~f:(fun constructors ->
@@ -540,7 +540,7 @@ module%test _ : module type of Avltree = struct
         ~expect:(Map.map map ~f:Data.map |> Map.to_alist |> List.rev))
   ;;
 
-  let fold = (fold [@kind k v])
+  let fold = (fold [@kind k v] [@mode c]) [@@mode c = (uncontended, shared)]
 
   let%test_unit _ =
     Base_quickcheck.Test.run_exn (module Constructors) ~f:(fun constructors ->
@@ -551,7 +551,7 @@ module%test _ : module type of Avltree = struct
         ~expect:(Map.to_alist map |> List.rev))
   ;;
 
-  let choose_exn = (choose_exn [@kind k v])
+  let choose_exn = (choose_exn [@kind k v] [@mode c]) [@@mode c = (uncontended, shared)]
 
   let%test_unit _ =
     Base_quickcheck.Test.run_exn (module Constructors) ~f:(fun constructors ->

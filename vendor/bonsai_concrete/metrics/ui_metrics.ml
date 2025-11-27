@@ -163,7 +163,8 @@ module Timing_histograms = struct
     ;;
 
     (* This needs:
-     - A test to make sure that everything serializes and deserializes with no duplicates. *)
+       - A test to make sure that everything serializes and deserializes with no
+         duplicates. *)
     let of_string = function
       | "Bonsai_stabilization_all" -> Aggregated Bonsai_stabilization_all
       | x -> Input (Input.of_string x)

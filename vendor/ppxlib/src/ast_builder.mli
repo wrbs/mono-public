@@ -53,7 +53,7 @@ module Default : sig
     val label_declaration :
       loc:location -> name:string loc ->
       mutable_:mutable_flag ->
-      modalities:modality list ->
+      modalities:modalities ->
       type_:core_type ->
       label_declaration
   end
@@ -104,7 +104,7 @@ module type S = sig
     val label_declaration :
       name:string loc ->
       mutable_:mutable_flag ->
-      modalities:modality list ->
+      modalities:modalities ->
       type_:core_type ->
       label_declaration
   end

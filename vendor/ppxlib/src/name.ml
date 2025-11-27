@@ -122,6 +122,7 @@ module Allowlisted = struct
         "ocaml.unsafe_allow_any_mode_crossing";
         "ocaml.or_null_reexport";
         "ocaml.atomic";
+        "ocaml.llvm_backend"
       ]
 
   (* Allow list the following extensions.
@@ -139,6 +140,7 @@ module Allowlisted = struct
       ; "ocaml.src_pos"
       ; "ocaml.call_pos"
       ; "ocaml.atomic.loc"
+      ; "ocaml.eval"
       ]
 
   let is_allowlisted ~kind name =

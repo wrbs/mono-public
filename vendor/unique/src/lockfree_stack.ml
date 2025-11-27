@@ -6,7 +6,7 @@ module Backoff = Basement.Stdlib_shim.Backoff
 
 type 'a t = 'a list Atomic.t
 
-let create () = Atomic.make_alone []
+let create ?padded () = Atomic.make ?padded []
 
 let rec push t x backoff =
   let xs = Atomic.get t in

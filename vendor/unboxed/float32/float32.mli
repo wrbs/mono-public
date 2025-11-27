@@ -15,7 +15,7 @@ include sig
 
   val globalize : local_ t -> t
 
-  include Sexplib0.Sexpable.S_any__stack with type t := t
+  include Sexplib0.Sexpable.S__stack with type t := t
   include Ppx_quickcheck_runtime.Quickcheckable.S with type t := t
 end
 [@@ocaml.doc "@inline"]
@@ -539,7 +539,7 @@ val log : local_ t -> t
 val classify : local_ t -> Float.Class.t
 
 (*_ Caution: If we remove this sig item, [sign] will still be present from
-  [Comparable.With_zero]. *)
+    [Comparable.With_zero]. *)
 
 val sign : t -> Sign.t
 [@@deprecated "[since 2016-01] Replace [sign] with [robust_sign] or [sign_exn]"]
@@ -578,7 +578,7 @@ module Terse : sig
   include sig
     [@@@ocaml.warning "-32"]
 
-    include Sexplib0.Sexpable.S_any with type t := t
+    include Sexplib0.Sexpable.S with type t := t
   end
   [@@ocaml.doc "@inline"]
 
@@ -591,7 +591,7 @@ end
 
 (*_ See the Jane Street Style Guide for an explanation of [Private] submodules:
 
-  https://opensource.janestreet.com/standards/#private-submodules *)
+    https://opensource.janestreet.com/standards/#private-submodules *)
 module Private : sig
   val box : local_ t -> t
   val lower_bound_for_int : int -> t

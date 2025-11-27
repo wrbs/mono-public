@@ -7,7 +7,10 @@ type 'a t =
   ; tail : 'a Lockfree_stack.t
   }
 
-let create () = { head = { portended = [] }; tail = Lockfree_stack.create () }
+let create ?padded () =
+  { head = { portended = [] }; tail = Lockfree_stack.create ?padded () }
+;;
+
 let is_empty t = phys_equal [] t.head.portended && Lockfree_stack.is_empty t.tail
 
 let rec rev_to (ys @ contended once portable unique) : _ @ contended once portable unique

@@ -17,8 +17,7 @@
  (deps
   (:first_dep ./ffi_ml_types_stubgen.c)
   ../bindings/openssl-ccopt
-  ../bindings/openssl-cclib
-  (package ctypes))
+  ../bindings/openssl-cclib)
  (action
   (bash
-   "%{cc} %{first_dep} $(< ../bindings/openssl-ccopt) $(< ../bindings/openssl-cclib) -I `dirname %{lib:ctypes:ctypes_cstubs_internals.h}` -I %{ocaml_where} -o %{targets}")))
+    "%{cc} %{first_dep} $(< ../bindings/openssl-ccopt) $(< ../bindings/openssl-cclib) -I `dirname %{lib:ctypes:ctypes_cstubs_internals.h}` -I %{ocaml_where} -o %{targets}")))

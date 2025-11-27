@@ -1,5 +1,17 @@
+# 3.6 (2025-01-05)
+- Fixed one of the ranges implementing
+  Implement Corrigendum #1: UTF-8 Shortest Form
+  for 4-bytes long characters (#171)
+
+# 3.5 (2025-05-29)
+- Implement Corrigendum #1: UTF-8 Shortest Form
+- Add utf8 support for string literal (#127)
+
+# 3.4 (2025-03-28)
+- Make the library compatibility with ppxlib.0.36 (#166)
+
 # 3.3 (2024-10-29)
-- Add support for unicode `16.0.0`
+- Add support for unicode `16.0.0` (#157)
 - Add API for retrieving start and stop positions separately (#155)
 
 # 3.2 (2023-06-28):

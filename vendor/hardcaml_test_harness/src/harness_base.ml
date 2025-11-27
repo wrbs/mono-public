@@ -11,6 +11,7 @@ type 'a with_test_config =
   -> ?test_name_prefix:string
   -> ?test_name:string
   -> ?print_waves_after_test:(Waveform.t -> unit)
+  -> ?clock_mode:Cyclesim.Config.Clock_mode.t
   -> 'a
 
 (* Some tests (such as quickchecks) will invoke the harness more than once within a single
@@ -28,6 +29,7 @@ let run
   ?test_name_prefix
   ?test_name
   ?(print_waves_after_test : (Waveform.t -> unit) option)
+  ?(clock_mode = Cyclesim.Config.Clock_mode.All_one_domain)
   ~(cycle_fn : sim -> unit)
   ~(create :
       always_wrap_waveterm:bool
@@ -48,9 +50,9 @@ let run
         then Expect_test_helpers_base.current_expect_test_name_exn ()
         else None
       in
-      (* Prioritize the test name passed by the user if there is one, then fall back
-             to trying to automatically infer it from the running expect-test. If all else
-             fails, use just the filename + line number. *)
+      (* Prioritize the test name passed by the user if there is one, then fall back to
+         trying to automatically infer it from the running expect-test. If all else fails,
+         use just the filename + line number. *)
       let test_name = Option.first_some test_name currently_running_expect_test in
       let test_identifier =
         Option.value_map test_name ~default:line_number ~f:(fun name ->
@@ -111,6 +113,7 @@ let run
         (Cyclesim.Config.Random_initializer.create
            Cyclesim.Config.Random_initializer.randomize_memories)
   in
+  let sim_config = { sim_config with clock_mode } in
   let wave_mode, save_fn =
     match waves_config with
     | No_waves -> Wave_mode.None, Fn.ignore

@@ -1,6 +1,6 @@
 open! Base
 
-(** Subset of the [Parsexp.Parse_error.Reason.t] type **)
+(** Subset of the [Parsexp.Parse_error.Reason.t] type *)
 
 module T = struct
   type t =

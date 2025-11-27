@@ -1,6 +1,7 @@
 open! Stdppx
 open! Import
 open Language.Typed
+module Type = Language.Type
 open Result.Let_syntax
 
 module Context = struct
@@ -51,10 +52,16 @@ let extract_attrs (type a) (ctx : a Attributes.Context.poly) (node : a) =
   | Include_infos -> node.pincl_attributes
 ;;
 
+type error =
+  { loc : Location.t
+  ; err : Syntax_error.t
+  ; attrs : attributes
+  }
+
 let extract_bindings (type a) (ctx : a Attributes.Context.poly) node =
   match Attributes.consume Attributes.poly ctx node with
   | Ok (node, bindings) -> Ok (node, bindings)
-  | Error err -> Error (extract_loc ctx node, err, extract_attrs ctx node)
+  | Error err -> Error { loc = extract_loc ctx node; err; attrs = extract_attrs ctx node }
 ;;
 
 let extract_floating (type a) (ctx : a Attributes.Floating.Context.poly) item =
@@ -134,6 +141,12 @@ let handle_one_attribute
   |> List.fold_left ~init ~f:(handle_one_binding ~original_env)
 ;;
 
+type 'a instance =
+  { node : 'a
+  ; env : Env.t
+  ; manglers : Value.Basic.packed list Maybe_explicit.t Axis.Map.t
+  }
+
 let instantiate poly_attributes ~env:(original_env : Env.t) =
   let envs =
     List.fold_left
@@ -143,8 +156,12 @@ let instantiate poly_attributes ~env:(original_env : Env.t) =
   in
   envs
   >>| List.map ~f:(fun (env, manglers) ->
-    (* Manglers were added in reverse order *)
-    env, Axis.Map.map (Maybe_explicit.map ~f:List.rev) manglers)
+    { node = ()
+    ; env
+    ; manglers =
+        (* Manglers were added in reverse order *)
+        Axis.Map.map (Maybe_explicit.map ~f:List.rev) manglers
+    })
 ;;
 
 let consume_poly
@@ -159,10 +176,12 @@ let consume_poly
     | Error _ as err -> err
     | Ok (node, polys) ->
       (match instantiate polys ~env with
-       | Error sexp -> Error (extract_loc attr_ctx node, sexp, extract_attrs attr_ctx node)
+       | Error err ->
+         Error
+           { loc = extract_loc attr_ctx node; err; attrs = extract_attrs attr_ctx node }
        | Ok list ->
          let instances =
-           List.map list ~f:(fun (env, manglers) ->
+           List.map list ~f:(fun { node = (); env; manglers } ->
              (* Use current default manglers when axis is unspecified. *)
              let manglers =
                Axis.Map.merge
@@ -175,7 +194,7 @@ let consume_poly
                  manglers
              in
              (* Associate node with the instance *)
-             node, env, manglers)
+             { node; env; manglers })
          in
          Ok instances))
   |> List.fold_right ~init:(Ok []) ~f:(fun head tail ->
@@ -187,13 +206,9 @@ let consume_poly
   |> function
   | Ok instances -> Ok (List.concat instances)
   | Error errs ->
-    let locs, errs, attrs =
-      List.fold_right
-        errs
-        ~init:([], [], [])
-        ~f:(fun (loc, err, attr) (locs, errs, attrs) ->
-          loc :: locs, err :: errs, attr :: attrs)
-    in
+    let locs = List.map errs ~f:(fun err -> err.loc)
+    and errs = List.map errs ~f:(fun err -> err.err)
+    and attrs = List.concat_map errs ~f:(fun err -> err.attrs) in
     let loc =
       List.fold_left ~init:(List.hd locs) (List.tl locs) ~f:(fun a b ->
         { loc_start = Location.min_pos a.loc_start b.loc_start
@@ -207,8 +222,7 @@ let consume_poly
       | [ err ] -> err
       | [] -> Syntax_error.createf ~loc "empty error list"
     in
-    let attrs = List.concat attrs in
-    Error (loc, err, attrs)
+    Error { loc; err; attrs }
 ;;
 
 (* Ppxlib individually applies every [@@deriving] or [@@deriving_inline] attribute it
@@ -270,11 +284,16 @@ let is_stack (alloc : (Type.alloc, Expression.singleton) Expression.t Loc.t) ~en
     | alloc -> Error (Syntax_error.createf ~loc "Unbound alloc identifier: %s" alloc))
 ;;
 
-let should_wrap_with_exclave expr ~exclave_because_stack ~exclave_because_local ~env =
+let should_wrap_with_exclave
+  expr
+  ~(exclave_because_stack : _ Attributes.Exclave_if.t option)
+  ~(exclave_because_local : _ Attributes.Exclave_if.t option)
+  ~env
+  =
   let stack_result =
     match exclave_because_stack with
     | None -> None
-    | Some alloc ->
+    | Some { expr = alloc; reasons = _ } ->
       (match is_stack alloc ~env with
        | (Ok true | Error _) as result ->
          Some
@@ -287,7 +306,7 @@ let should_wrap_with_exclave expr ~exclave_because_stack ~exclave_because_local 
   | Some result -> result
   | None ->
     (match exclave_because_local with
-     | Some mode ->
+     | Some { expr = mode; reasons } ->
        let rec is_ident_or_field_or_constant = function
          | { pexp_desc = Pexp_ident _ | Pexp_constant _ | Pexp_construct (_, None); _ } ->
            true
@@ -317,7 +336,7 @@ let should_wrap_with_exclave expr ~exclave_because_stack ~exclave_because_local 
            && List.for_all ~f:(fun (_, e) -> is_ident_or_field_or_constant e) args
          | _ -> is_pure_allocation expr
        in
-       if is_allowable
+       if is_allowable || not (List.is_empty reasons)
        then
          is_local mode ~env
          |> Result.map_error
@@ -327,9 +346,9 @@ let should_wrap_with_exclave expr ~exclave_because_stack ~exclave_because_local 
            ((* Ideally this check is conservative, which seems fine for now. *)
             Syntax_error.createf
               ~loc:expr.pexp_loc
-              "[%%template]: exclave_if_local is only allowed on tailcalls or syntactic \
+              "[%%template]: exclave_if_local is only allowed on: tailcalls; syntactic \
                allocations (e.g. tuples) consisting entirely of identifiers, record \
-               fields, and/or constants"
+               fields, and/or constants; or when given a nonempty ~reasons argument."
             |> Syntax_error_conversion.to_extension_node Expression expr)
      | None -> Ok false)
 ;;
@@ -349,18 +368,18 @@ let consume_zero_alloc_if
   let* add_zero_alloc_if_local =
     match zero_alloc_if_local with
     | None -> Ok None
-    | Some (loc, mode, payload) ->
+    | Some { loc; expr = mode; args } ->
       (match is_local mode ~env with
-       | Ok true -> Ok (Some (loc, payload))
+       | Ok true -> Ok (Some (loc, args))
        | Ok false -> Ok None
        | Error _ as err -> err)
   in
   let+ add_zero_alloc_if_stack =
     match zero_alloc_if_stack with
     | None -> Ok None
-    | Some (loc, alloc, payload) ->
+    | Some { loc; expr = alloc; args } ->
       (match is_stack alloc ~env with
-       | Ok true -> Ok (Some (loc, payload))
+       | Ok true -> Ok (Some (loc, args))
        | Ok false -> Ok None
        | Error _ as err -> err)
   in
@@ -421,13 +440,13 @@ let t ~mk_struct ~mk_sig =
 
     method! jkind_annotation ctx ({ pjkind_desc; pjkind_loc } as jkind) =
       match pjkind_desc with
-      | Abbreviation kind ->
+      | Pjk_abbreviation kind ->
         (match Env.find ctx.env { ident = kind; type_ = Type.kind } with
          | None -> super#jkind_annotation ctx jkind
          | Some kind ->
            let (Jkind_annotation kind) = Value.to_node ~loc:pjkind_loc kind in
            kind)
-      | Mod (base, modifiers) ->
+      | Pjk_mod (base, modifiers) ->
         (* Even though [modifiers] is represented as a list of [mode]s, they conceptually
            act more like modalities. *)
         let modifiers =
@@ -438,7 +457,7 @@ let t ~mk_struct ~mk_sig =
             { txt = Ppxlib_jane.Mode name; loc })
         in
         { pjkind_loc = self#location ctx pjkind_loc
-        ; pjkind_desc = Mod (self#jkind_annotation ctx base, modifiers)
+        ; pjkind_desc = Pjk_mod (self#jkind_annotation ctx base, modifiers)
         }
       | _ -> super#jkind_annotation ctx jkind
 
@@ -463,8 +482,8 @@ let t ~mk_struct ~mk_sig =
     (* The [@kind] attribute can appear on various identifier nodes that reference values,
        modules, or types that were defined using [@kind]. For each node that could be such
        an identifier, we check if the [@kind] attribute is present, and if so, mangle that
-       identifier according to the provided layouts.  An error node will be created
-       instead if the attribute is attached to a node which is not an identifier. *)
+       identifier according to the provided layouts. An error node will be created instead
+       if the attribute is attached to a node which is not an identifier. *)
     method private visit_mono : type a. a Attributes.Context.mono -> Context.t -> a -> a =
       fun attr_ctx ctx node ->
         (* We can't define a single [visit] function as in [visit_poly] because we need to
@@ -540,9 +559,9 @@ let t ~mk_struct ~mk_sig =
 
     (* The [@@kind] attribute can appear on various nodes that define or declare values,
        modules, or types. For each such node, we determine what layout mappings are being
-       requested (no attribute is equivalent to [@@kind __ = value]), and for each
-       such mapping, we duplicate the definition/declaration, and mangle the
-       defined/declared name accordingly. *)
+       requested (no attribute is equivalent to [@@kind _ = value]), and for each such
+       mapping, we duplicate the definition/declaration, and mangle the defined/declared
+       name accordingly. *)
     method
       private visit_poly
       : type a
@@ -578,18 +597,20 @@ let t ~mk_struct ~mk_sig =
         in
         (match consume_poly ~env:ctx.env ~defaults:ctx.defaults attr_ctx nodes with
          | Ok instances ->
-           List.mapi instances ~f:(fun i (node, env, manglers) : _ Maybe_hide_in_docs.t ->
-             let node, res = visit_mangle (Mangle.Suffix.create manglers) node in
-             let node =
-               visit_self
-                 { Context.ghostify = ctx.ghostify || i > 0
-                 ; env
-                 ; defaults = Context.Defaults.empty
-                 }
-                 node
-             in
-             { node; hide_in_docs = Mangle.Result.did_mangle res })
-         | Error (_, err, _) ->
+           List.mapi
+             instances
+             ~f:(fun i { node; env; manglers } : _ Maybe_hide_in_docs.t ->
+               let node, res = visit_mangle (Mangle.Suffix.create manglers) node in
+               let node =
+                 visit_self
+                   { Context.ghostify = ctx.ghostify || i > 0
+                   ; env
+                   ; defaults = Context.Defaults.empty
+                   }
+                   node
+               in
+               { node; hide_in_docs = Mangle.Result.did_mangle res })
+         | Error { loc = _; err; attrs = _ } ->
            [ { node =
                  Syntax_error_conversion.to_extension_node
                    (Attributes.Context.poly_to_any attr_ctx)
@@ -656,9 +677,8 @@ let t ~mk_struct ~mk_sig =
                           ~init:(Ok original_env)
                           ~f:(fun env ({ pattern; expression; lookup } : _ Binding.t) ->
                             let* env = env in
-                            let (Identifier ident) = pattern in
                             let* set_value = Env.eval original_env lookup expression in
-                            Env.bind_set env ~loc ident set_value)
+                            Env.bind_set env ~loc pattern set_value)
                       in
                       (match new_env with
                        | Ok env -> loop { ctx with env } items
@@ -672,7 +692,7 @@ let t ~mk_struct ~mk_sig =
                       (match instantiate [ explicitness, bindings ] ~env:ctx.env with
                        | Ok instances ->
                          let is_many = List.length instances > 1 in
-                         List.mapi instances ~f:(fun i (env, manglers) ->
+                         List.mapi instances ~f:(fun i { node = (); env; manglers } ->
                            let defaults =
                              match kind with
                              | Never_add_mangler -> ctx.defaults
@@ -689,7 +709,7 @@ let t ~mk_struct ~mk_sig =
                                      , Some new_defaults ) ->
                                      Some
                                        (* Always use the explicit flag from the new
-                                       attribute. *)
+                                          attribute. *)
                                        (Maybe_explicit.map
                                           new_defaults
                                           ~f:(fun new_defaults ->
@@ -700,10 +720,10 @@ let t ~mk_struct ~mk_sig =
                            let ctx : Context.t =
                              { ghostify = ctx.ghostify || i > 0; env; defaults }
                            in
-                           (* The location of the include statement spans from the start of
-                              the attribute to the end of the last item in [items]. This
-                              ensures that the locations of every item is well-nested, which
-                              helps Merlin. *)
+                           (* The location of the include statement spans from the start
+                              of the attribute to the end of the last item in [items].
+                              This ensures that the locations of every item is
+                              well-nested, which helps Merlin. *)
                            wrap_include
                              ~loc:
                                { loc_start = attr_loc.loc_start
@@ -801,8 +821,8 @@ let t ~mk_struct ~mk_sig =
               | infos -> mk_struct ~loc:info.pincl_loc infos ~f:Ast_builder.pstr_include)
         | desc ->
           (* We reset the defaults here since they are supposed to act "shallowly", i.e.
-             they only apply to the current layer of structure items, not nested items.
-             In particular, this avoids poor interaction with [let%expect_test] items. *)
+             they only apply to the current layer of structure items, not nested items. In
+             particular, this avoids poor interaction with [let%expect_test] items. *)
           super#structure_item_desc { ctx with defaults = Context.Defaults.empty } desc
 
     method! signature_item ctx =

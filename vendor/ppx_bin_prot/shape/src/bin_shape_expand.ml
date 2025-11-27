@@ -46,6 +46,10 @@ let shape_tuple ~loc (exps : expression list) =
   [%expr Bin_prot.Shape.tuple [%e elist ~loc exps]]
 ;;
 
+let shape_unboxed_tuple ~loc (exps : expression list) =
+  [%expr Bin_prot.Shape.unboxed_tuple [%e elist ~loc exps]]
+;;
+
 let shape_record ~loc (xs : (string * expression) list) =
   [%expr
     Bin_prot.Shape.record
@@ -150,6 +154,8 @@ let of_type
        | None -> curry_app_list ~loc (bin_shape_lid ~loc lid) args)
     | Ptyp_tuple labeled_typs ->
       shape_tuple ~loc (List.map labeled_typs ~f:(fun (_, typ) -> traverse typ))
+    | Ptyp_unboxed_tuple labeled_typs ->
+      shape_unboxed_tuple ~loc (List.map labeled_typs ~f:(fun (_, typ) -> traverse typ))
     | Ptyp_var (tvar, _) ->
       if allow_free_vars
       then
@@ -376,7 +382,8 @@ end = struct
            ~loc
            ~name:(Loc.make name ~loc)
            ~type_
-           ~modalities:(if portable then [ Ppxlib_jane.Modality "portable" ] else [])
+           ~modalities:
+             (if portable then Ppxlib_jane.Shim.Modalities.portable ~loc else [])
            ~prim:[])
   ;;
 

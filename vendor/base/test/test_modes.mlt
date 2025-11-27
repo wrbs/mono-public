@@ -10,7 +10,8 @@ type ('a : value mod global) require_global
 
 (* Tests for Modes.At_locality.t *)
 
-(* [('a, Modes.At_locality.global) Modes.At_locality.t] crosses locality even if ['a] doesn't *)
+(* [('a, Modes.At_locality.global) Modes.At_locality.t] crosses locality even if ['a]
+   doesn't *)
 
 type _crosses_locality =
   (string, Modes.At_locality.global) Modes.At_locality.t require_global
@@ -23,7 +24,8 @@ let crosses_locality (x : (_, Modes.At_locality.global) Modes.At_locality.t @ lo
 
 [%%expect {| |}]
 
-(* [('a, Modes.At_locality.local) Modes.At_locality.t] doesn't cross locality even if ['a] does *)
+(* [('a, Modes.At_locality.local) Modes.At_locality.t] doesn't cross locality even if ['a]
+   does *)
 
 type _doesn't_cross_locality =
   (int, Modes.At_locality.local) Modes.At_locality.t require_global
@@ -37,9 +39,11 @@ Error: This type
        should be an instance of type ('a : value mod global)
        The kind of (Base.int, Base.Modes.At_locality.local)
                    Base.Modes.At_locality.t is
-           immediate
-             with Base.Modes.At_locality.local
+           immutable_data
+             mod aliased
+             with Base.Modes.At_locality.actually_local
                     @@
+                    forkable
                     unyielding
                     many
                     portable
@@ -51,8 +55,7 @@ Error: This type
          because of the definition of require_global at file "test_modes.mlt", line 7, characters 0-43.
 
        The first mode-crosses less than the second along:
-         locality: mod global with Base.Modes.At_locality.local ≰
-           mod global
+         locality: mod local ≰ mod global
 |}]
 
 let doesn't_cross_locality
@@ -69,8 +72,8 @@ Error: This value is local but is expected to be global.
 
 (* Tests for Modes.At_portability.t *)
 
-(* [('a, Modes.At_portability.portable) Modes.At_portability.t] crosses portability even if
-   ['a] doesn't *)
+(* [('a, Modes.At_portability.portable) Modes.At_portability.t] crosses portability even
+   if ['a] doesn't *)
 
 type _crosses_portability =
   (int -> int, Modes.At_portability.portable) Modes.At_portability.t require_portable
@@ -102,8 +105,9 @@ Error: This type
        should be an instance of type ('a : value mod portable)
        The kind of (Base.int, Base.Modes.At_portability.nonportable)
                    Base.Modes.At_portability.t is
-           immediate
-             with Base.Modes.At_portability.nonportable
+           immutable_data
+             mod global aliased yielding unforkable
+             with Base.Modes.At_portability.nonportable_
                     @@
                     global
                     many
@@ -116,7 +120,7 @@ Error: This type
 
        The first mode-crosses less than the second along:
          portability:
-           mod portable with Base.Modes.At_portability.nonportable ≰
+           mod portable with Base.Modes.At_portability.nonportable_ ≰
            mod portable
 |}]
 
@@ -149,7 +153,7 @@ Error: This type
                    Base.Modes.At_portability.t is
            value
              mod aliased portable immutable non_float
-             with Base.Modes.At_portability.nonportable @@ aliased contended.
+             with Base.Modes.At_portability.nonportable_ @@ aliased contended.
        But the kind of (Base.int -> Base.int,
                         Base.Modes.At_portability.nonportable)
                        Base.Modes.At_portability.t must be a subkind of
@@ -158,7 +162,7 @@ Error: This type
 
        The first mode-crosses less than the second along:
          portability:
-           mod portable with Base.Modes.At_portability.nonportable ≰
+           mod portable with Base.Modes.At_portability.nonportable_ ≰
            mod portable
 |}]
 

@@ -212,8 +212,8 @@ d98e8198afaec5c2f51b02129c9ba9df
 |}]
 ;;
 
-(* Drive RX with TX.  This is done without any sampling on the rx side and is
-   about testing the statemachine transitions. *)
+(* Drive RX with TX. This is done without any sampling on the rx side and is about testing
+   the statemachine transitions. *)
 
 let test_tx_rx
   ?(top = false)

@@ -18,14 +18,15 @@ end
    array cell) *)
 
 [%%template
+[@@@kind_set.define all = (bits64, float64, value_or_null)]
+
 (* We deliberately leave the [k = value, v = value] for last so that
    [t[@kind value value]] is defined last and the constructors can be inferred to
    correspond to the "regular" version of the type. The inference appears rather delicate,
    so moving the [[@@@kind.default]] to after the type definition and adding a poly
    attribute separately on the type might break code after the end of the templated
    section. *)
-[@@@kind.default
-  k = (bits64, float64, value_or_null), v = (bits64, float64, value_or_null)]
+[@@@kind.default k = all, v = all]
 
 type ('k : k, 'v : v) t =
   | Empty
@@ -82,15 +83,11 @@ let invariant compare =
 
 let invariant t ~compare = (invariant [@kind k v]) compare t
 
-(* In the following comments,
-   't is balanced' means that 'invariant t' does not
-   raise an exception.  This implies of course that each node's height field is
-   correct.
-   't is balanceable' means that height of the left and right subtrees of t
-   differ by at most 3. *)
+(* In the following comments, 't is balanced' means that 'invariant t' does not raise an
+   exception. This implies of course that each node's height field is correct. 't is
+   balanceable' means that height of the left and right subtrees of t differ by at most 3. *)
 
-(* @pre: left and right subtrees have correct heights
-   @post: output has the correct height *)
+(* @pre: left and right subtrees have correct heights @post: output has the correct height *)
 let update_height = function
   | Node ({ left; key = _; value = _; height = old_height; right } as x) ->
     let new_height =
@@ -100,26 +97,23 @@ let update_height = function
   | Empty | Leaf _ -> assert false
 ;;
 
-(* @pre: left and right subtrees are balanced
-   @pre: tree is balanceable
-   @post: output is balanced (in particular, height is correct) *)
+(* @pre: left and right subtrees are balanced @pre: tree is balanceable @post: output is
+   balanced (in particular, height is correct) *)
 let balance tree =
   match tree with
   | Empty | Leaf _ -> tree
   | Node ({ left; key = _; value = _; height = _; right } as root_node) ->
     let hl = (height [@kind k v]) left
     and hr = (height [@kind k v]) right in
-    (* + 2 is critically important, lowering it to 1 will break the Leaf
-       assumptions in the code below, and will force us to promote leaf nodes in
-       the balance routine. It's also faster, since it will balance less often.
-       Note that the following code is delicate.  The update_height calls must
-       occur in the correct order, since update_height assumes its children have
-       the correct heights.  *)
+    (* + 2 is critically important, lowering it to 1 will break the Leaf assumptions in
+         the code below, and will force us to promote leaf nodes in the balance routine.
+         It's also faster, since it will balance less often. Note that the following code
+         is delicate. The update_height calls must occur in the correct order, since
+         update_height assumes its children have the correct heights. *)
     if hl > hr + 2
     then (
       match left with
-      (* It cannot be a leaf, because even if right is empty, a leaf
-         is only height 1 *)
+      (* It cannot be a leaf, because even if right is empty, a leaf is only height 1 *)
       | Empty | Leaf _ -> assert false
       | Node
           ({ left = left_node_left
@@ -136,8 +130,8 @@ let balance tree =
           (update_height [@kind k v]) left;
           left)
         else (
-          (* if right is a leaf, then left must be empty. That means
-             height is 2. Even if hr is empty we still can't get here. *)
+          (* if right is a leaf, then left must be empty. That means height is 2. Even if
+             hr is empty we still can't get here. *)
           match left_node_right with
           | Empty | Leaf _ -> assert false
           | Node
@@ -190,9 +184,8 @@ let balance tree =
       tree)
 ;;
 
-(* @pre: t is balanced.
-   @post: result is balanced, with new node inserted
-   @post: !added = true iff the shape of the input tree changed.  *)
+(* @pre: t is balanced. @post: result is balanced, with new node inserted @post: !added =
+   true iff the shape of the input tree changed. *)
 
 let rec add t ~replace ~compare ~added ~key:k ~data:v =
   match t with
@@ -201,9 +194,8 @@ let rec add t ~replace ~compare ~added ~key:k ~data:v =
     Leaf { key = k; value = v }
   | Leaf ({ key = k'; value = _ } as r) ->
     let c = compare k' k in
-    (* This compare is reversed on purpose, we are pretending
-       that the leaf was just inserted instead of the other way
-       round, that way we only allocate one node. *)
+    (* This compare is reversed on purpose, we are pretending that the leaf was just
+       inserted instead of the other way round, that way we only allocate one node. *)
     if c = 0
     then (
       added := false;
@@ -232,12 +224,7 @@ let rec add t ~replace ~compare ~added ~key:k ~data:v =
       if !added then (balance [@kind k v]) t else t)
 ;;
 
-let[@kind
-     k = k
-     , v = v
-     , a = (value_or_null, bits64, float64)
-     , b = (value_or_null, bits64, float64)
-     , r = (value_or_null, bits64, float64)]
+let[@kind k = k, v = v, a = all, b = all, r = all]
    [@mode c = (uncontended, shared)]
    [@inline always] rec findi_and_call_impl
   : type (k : k mod c) (v : v) (a : a) (b : b) (r : r) if_ in_.
@@ -278,7 +265,7 @@ let[@kind
 
 [%%template
 [@@@mode.default c = (uncontended, shared)]
-[@@@kind r = (value_or_null, bits64, float64)]
+[@@@kind r = all]
 
 let[@kind k = k, v = v, r = r] find_and_call =
   let call_if_found ~if_found ~key:_ ~data () () = if_found data in
@@ -312,7 +299,7 @@ let[@kind k = k, v = v, r = r] findi_and_call =
       ~if_not_found
 ;;
 
-[@@@kind a = (value_or_null, bits64, float64)]
+[@@@kind a = all]
 
 let[@kind k = k, v = v, a = a, r = r] find_and_call1 =
   let call_if_found ~if_found ~key:_ ~data arg () = if_found data arg in
@@ -346,7 +333,7 @@ let[@kind k = k, v = v, a = a, r = r] findi_and_call1 =
       ~if_not_found
 ;;
 
-[@@@kind b = (value_or_null, bits64, float64)]
+[@@@kind b = all]
 
 let[@kind k = k, v = v, a = a, b = b, r = r] find_and_call2 =
   let call_if_found ~if_found ~key:_ ~data arg1 arg2 = if_found data arg1 arg2 in
@@ -506,12 +493,20 @@ let rec fold t ~init ~f =
       } -> f ~key:rkey ~data:rdata (f ~key ~data init)
   | Node
       { left; key; value = data; height = _; right = Leaf { key = rkey; value = rdata } }
-    -> f ~key:rkey ~data:rdata (f ~key ~data ((fold [@kind k v]) left ~init ~f))
+    -> f ~key:rkey ~data:rdata (f ~key ~data ((fold [@kind k v] [@mode c]) left ~init ~f))
   | Node
       { left = Leaf { key = lkey; value = ldata }; key; value = data; height = _; right }
-    -> (fold [@kind k v]) right ~init:(f ~key ~data (f ~key:lkey ~data:ldata init)) ~f
+    ->
+    (fold [@kind k v] [@mode c])
+      right
+      ~init:(f ~key ~data (f ~key:lkey ~data:ldata init))
+      ~f
   | Node { left; key; value = data; height = _; right } ->
-    (fold [@kind k v]) right ~init:(f ~key ~data ((fold [@kind k v]) left ~init ~f)) ~f
+    (fold [@kind k v] [@mode c])
+      right
+      ~init:(f ~key ~data ((fold [@kind k v] [@mode c]) left ~init ~f))
+      ~f
+[@@mode c = (uncontended, shared)]
 ;;
 
 let rec iter t ~f =
@@ -519,9 +514,10 @@ let rec iter t ~f =
   | Empty -> ()
   | Leaf { key; value = data } -> f ~key ~data
   | Node { left; key; value = data; height = _; right } ->
-    (iter [@kind k v]) left ~f;
+    (iter [@kind k v] [@mode c]) left ~f;
     f ~key ~data;
-    (iter [@kind k v]) right ~f
+    (iter [@kind k v] [@mode c]) right ~f
+[@@mode c = (uncontended, shared)]
 ;;
 
 let rec mapi_inplace t ~f =
@@ -539,6 +535,7 @@ let choose_exn = function
     (match raise_s (Sexp.message "[Avltree.choose_exn] of empty hashtbl" []) with
      | (_ : Nothing.t) -> .)
   | Leaf { key; value; _ } | Node { key; value; _ } -> #(key, value)
+[@@mode c = (uncontended, shared)]
 ;;]
 
 let rec first t =

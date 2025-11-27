@@ -16,7 +16,7 @@ external to_float : float# -> (float[@local_opt]) @@ portable = "%box_float"
 
    Most functions in this file are implemented by boxing the float, calling the equivalent
    function on boxed floats, and then unboxing the result. This may seem surprising: isn't
-   the point of unboxed types to avoid boxes?  But it's fine; the compiler's middle-end
+   the point of unboxed types to avoid boxes? But it's fine; the compiler's middle-end
    will reliably eliminate these boxing and unboxing steps, and the testsuite checks there
    are no allocations here. If you add new functions, you should add similar tests.
 
@@ -37,6 +37,7 @@ module Shared_derived = struct
   let[@inline] hash_fold_t state t = (F.hash_fold_t [@inlined hint]) state (to_float t)
   let[@inline] hash t = (F.hash [@inlined hint]) (to_float t)
   let typerep_of_t = Typerep_lib.Std.Typerep.Float_u
+  let typename_of_t = Typerep_lib.Std.typename_of_float_u
   let[@inline] to_string t : string = (F.to_string [@inlined hint]) (to_float t)
   let[@inline] of_string s : t = of_float ((F.of_string [@inlined hint]) s)
 
@@ -456,8 +457,12 @@ module type Array = sig
     -> len:int
     -> unit
 
+  val compare : t -> t -> int
   val copy : t -> t
+  val t_of_sexp : Core.Sexp.t -> t @@ portable
+  val sexp_of_t : t -> Core.Sexp.t @@ portable
   val custom_sexp_of_t : (elt -> Core.Sexp.t) -> t -> Core.Sexp.t
+  val custom_t_of_sexp : (Core.Sexp.t -> elt) -> Core.Sexp.t -> t
   val init : int -> f:(int -> elt) -> t
   val iter : t -> f:(elt -> unit) -> unit
   val iteri : t -> f:(int -> elt -> unit) -> unit
@@ -467,7 +472,7 @@ module type Array = sig
 end
 
 module Array = struct
-  type t = Float_array.t
+  type t = Float_array.t [@@deriving bin_io]
 
   let[@zero_alloc assume_unless_opt] get a i : float# = of_float (FA.get a i)
   let[@zero_alloc assume_unless_opt] set a i t : unit = FA.set a i (to_float t)
@@ -485,6 +490,9 @@ module Array = struct
   let length = FA.length
   let copy = FA.copy
   let unsafe_blit = FA.unsafe_blit
+  let t_of_sexp = FA.t_of_sexp
+  let sexp_of_t = FA.sexp_of_t
+  let compare = FA.compare
 
   (* The use of %identity, as opposed to %obj_magic, is safe because the internal type
      system used by the compiler's middle-end treats these two types identically (this is
@@ -515,6 +523,11 @@ module Array = struct
   let custom_sexp_of_t sexp_of_a t =
     let sexp_of_a a = sexp_of_a (of_float a) in
     FA.custom_sexp_of_t sexp_of_a t
+  ;;
+
+  let custom_t_of_sexp a_of_sexp t =
+    let a_of_sexp sexp = to_float (a_of_sexp sexp) in
+    FA.custom_t_of_sexp a_of_sexp t
   ;;
 
   let iter t ~f = (FA.iter [@inlined hint]) t ~f:(fun [@inline] x -> f (of_float x))
@@ -600,10 +613,10 @@ module Option = struct
   type t = value
 
   let typerep_of_t = typerep_of_t
+  let typename_of_t = typename_of_t
 
-  (* The magic value for [none] is a signaling nan, which will cause many floating
-     point operations to fail. In particular, comparisons should fail rather than
-     return false. *)
+  (* The magic value for [none] is a signaling nan, which will cause many floating point
+     operations to fail. In particular, comparisons should fail rather than return false. *)
   let none () : t = of_bits (#0x7ff0_1234_5678_90ABL : int64#)
   let%test_unit "none is nan" = [%test_eq: Base.Bool.t] (is_nan (none ())) true
 
@@ -613,16 +626,16 @@ module Option = struct
       let sign_mask : int64# = sign_mask () in
       (* Flatten all nan values to either [nan] or [-nan]. The purpose is to prevent
          calling [some] on the magic value for [none] from accidentally returning [none],
-         while preserving the sign of nan. Note that this maps all signalling nans
-         into a quiet nan -- we're preserving this behavior for consistency with
+         while preserving the sign of nan. Note that this maps all signalling nans into a
+         quiet nan -- we're preserving this behavior for consistency with
          [Float63.Option]. *)
       if Int64_u.(to_bits x land sign_mask = #0L) then nan () else neg (nan ()))
     else x
   ;;
 
   let is_none t =
-    (* We need to be careful here - the compiler is clever enough to see that [none ()]
-       is nan and will try to optimize comparisons away *)
+    (* We need to be careful here - the compiler is clever enough to see that [none ()] is
+       nan and will try to optimize comparisons away *)
     Int64_u.equal (to_bits t) (to_bits (none ()))
   ;;
 

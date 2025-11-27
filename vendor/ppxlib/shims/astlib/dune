@@ -1,5 +1,5 @@
 (library
- (name astlib)
+ (name astlib_shim)
  (wrapped false)
  (public_name ppxlib.astlib)
  (libraries (re_export ppxlib_ast.astlib)))

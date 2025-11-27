@@ -37,6 +37,7 @@ module Event_arg : sig
     | Int64 of int64
     | Pointer of Int64.Hex.t
     | Float of float
+    | Bool of bool
   [@@deriving sexp_of, compare ~localize]
 
   type t = String_index.t * value [@@deriving sexp_of, compare ~localize]
@@ -82,8 +83,8 @@ module Record : sig
         ; pid : int
         ; tid : int
         }
-    (* [Tick_initialization] records correspond to "initialization records" (record type 1)
-       in the Fuchsia spec. *)
+    (* [Tick_initialization] records correspond to "initialization records" (record
+       type 1) in the Fuchsia spec. *)
     | Tick_initialization of
         { ticks_per_second : int
         ; base_time : Time_ns.Option.t
@@ -99,13 +100,17 @@ type t
     If [ignore_not_found] is specified, the parser will not raise when parsing events that
     refer to interned thread and string indices that have not yet been set. Instead, the
     event will be returned including the unknown indices. *)
-val create : ?ignore_not_found:bool -> ?buffer:(read, Iobuf.seek) Iobuf.t -> unit -> t
+val create
+  :  ?ignore_not_found:bool
+  -> ?buffer:(read, Iobuf.seek, Iobuf.global) Iobuf.t
+  -> unit
+  -> t
 
 (** Provides a new data buffer for the parser to continue reading from. Optionally
     prepends [prefix] to the buffer, allowing the user to preserve state returned by
     [Parse_error.Incomplete_record]. If the new buffer completes the record, it will be
     returned by the next call to [parse_next]. *)
-val set_buffer : t -> (read, Iobuf.seek) Iobuf.t -> unit
+val set_buffer : t -> (read, Iobuf.seek, Iobuf.global) Iobuf.t -> unit
 
 (** Advance through the trace until we find a Fuchsia record matching one of the record
     types defined above.
@@ -126,7 +131,7 @@ val parse_next : t -> (Record.t, Parse_error.t) Result.t
     updating its internal state (ex. interned strings) *)
 val parse_next_with_buffer
   :  t
-  -> local_ (read, Iobuf.seek) Iobuf.t
+  -> local_ (read, Iobuf.seek, Iobuf.global) Iobuf.t
   -> (Record.t, Parse_error.t) Result.t
 
 val warnings : t -> Warnings.t
@@ -137,7 +142,7 @@ exception Thread_not_found
 (* The functions below should only be called immediately after obtaining a record from
    [parse_next]. A new call to [parse_next] may invalidate any string indices/thread
    indices or tick rates stored on a previous record and the functions below would return
-   the wrong values.*)
+   the wrong values. *)
 val ticks_per_second : t -> int
 val base_time : t -> Time_ns.Option.t
 
@@ -148,8 +153,8 @@ val base_time : t -> Time_ns.Option.t
 val lookup_string_exn : t -> index:String_index.t -> string
 
 (* Either returns the string stored at [index] in the parser's string table if
-   [string_ref] is [String_index index] or returns the inlined string if [string_ref]
-   is [Inline_string].
+   [string_ref] is [String_index index] or returns the inlined string if [string_ref] is
+   [Inline_string].
 
    Raises in the same cases as [lookup_string_exn]. *)
 val lookup_string_ref_exn : t -> string_ref:String_ref.t -> string

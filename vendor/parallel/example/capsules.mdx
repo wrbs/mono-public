@@ -11,10 +11,9 @@ end
 
 # Capsules
 
-_This page introduces the ["expert" capsule
-API](https://ocaml-docs/basement/Basement/Capsule/index.html).  A
+_This page introduces the "expert" capsule API. A
 more ergonomic, work-in-progress API is available in
-[`Portable.Capsule`](https://ocaml-docs/portable_kernel/Portable_kernel/Capsule/index.html)._
+`Portable.Capsule`._
 
 A _capsule_ is a collection of mutable state accessible via a particular API
 that prohibits data races.  Capsules may be associated with _locks_, which allow
@@ -178,7 +177,6 @@ Passwords **do** cross contention, so they can be freely shared between
 also always `local`.
 That means we still can't transfer a password across domains: fork/join requires
 `global` functions, which cannot capture a `local` password.
-
 
 ```ocaml
 let parallel_increment parallel ~(password : 'k Capsule.Password.t @ local) =

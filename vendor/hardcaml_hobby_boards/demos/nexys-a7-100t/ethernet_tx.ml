@@ -32,7 +32,7 @@ let generate_clear clock_50 reset_n =
   let reset_chain =
     reg_fb
       (Reg_spec.create ~clock:clock_50 ~reset:reset_n ~reset_edge:Falling ())
-      ~reset_to:(ones 16)
+      ~reset_to:(Bits.ones 16)
       ~width:16
       ~f:(fun d -> sll d ~by:1)
   in
@@ -85,7 +85,8 @@ let create () =
   let switches = Nexys.Switches.create board in
   let sending_data = wire 1 in
   let sending_data_reg = reg spec sending_data in
-  (* Wait to finish sending the ethernet data stream to the ethernet tx module before switching to a different mode *)
+  (* Wait to finish sending the ethernet data stream to the ethernet tx module before
+     switching to a different mode *)
   let%hw sending_state =
     reg_fb spec ~width:1 ~f:(fun d ->
       mux2 (d <>: lsb switches &: ~:sending_data) (lsb switches) d)

@@ -19,6 +19,7 @@ module Make (I : Interface.S) (O : Interface.S) = struct
     ?test_name_prefix
     ?test_name
     ?print_waves_after_test
+    ?clock_mode
     ?timeout
     ~create
     testbench
@@ -32,6 +33,7 @@ module Make (I : Interface.S) (O : Interface.S) = struct
       ?test_name
       ?test_name_prefix
       ?print_waves_after_test
+      ?clock_mode
       ~cycle_fn:Cyclesim.cycle
       ~create:(fun ~always_wrap_waveterm ~wave_mode config scope ->
         let inst = create scope in
@@ -49,6 +51,7 @@ module Make (I : Interface.S) (O : Interface.S) = struct
     ?test_name_prefix
     ?test_name
     ?print_waves_after_test
+    ?clock_mode
     ?timeout
     ~create
     testbench
@@ -62,6 +65,7 @@ module Make (I : Interface.S) (O : Interface.S) = struct
       ?test_name
       ?test_name_prefix
       ?print_waves_after_test
+      ?clock_mode
       ?timeout
       ~create
       (fun sim ->

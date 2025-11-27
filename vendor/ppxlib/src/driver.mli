@@ -220,7 +220,11 @@ end
 module Create_file_property (Name : sig
   val name : string
 end)
-(T : Sexpable.S) : sig
+    (T : sig
+       type t
+
+       include Sexpable.S with type t := t
+    end) : sig
   val set : T.t -> unit
 end
 

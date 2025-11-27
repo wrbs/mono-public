@@ -20,7 +20,9 @@ module type Binable_any = sig
   module Of_binable
       (Boxed : sig
        @@ portable
-         include Bin_prot.Binable.S_only_functions [@mode local]
+         type t
+
+         include Bin_prot.Binable.S_only_functions [@mode local] with type t := t
        end)
       (T : sig
        @@ portable
@@ -29,6 +31,6 @@ module type Binable_any = sig
          include S_any with type t := t and type boxed := Boxed.t
        end) : sig
     @@ portable
-    include Bin_prot.Binable.S_any [@mode local] with type t := T.t
+    include Bin_prot.Binable.S [@mode local] with type t := T.t
   end]
 end

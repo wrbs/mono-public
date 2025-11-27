@@ -54,7 +54,7 @@ module Local = struct
   ;;
 
   [%%template
-  [@@@kind ka = value, kacc = (value, bits64, bits32, word, float64)]
+  [@@@kind ka = value, kacc = base_or_null]
 
   let rec foldi_loop t ~f ~len ~pos ~acc = exclave_
     if len = pos
@@ -701,7 +701,7 @@ let iteri t ~(local_ f : _ -> _ -> _) =
 let iter t ~f = iteri t ~f:(fun _ x -> f x) [@nontail]
 
 [%%template
-[@@@kind.default ka = value, kacc = (value, bits64, bits32, word, float64)]
+[@@@kind.default ka = value, kacc = base_or_null]
 
 let foldi (type (a : ka) (acc : kacc)) (t : a t) ~(init : acc) ~(local_ f) : acc =
   let n = length t in
@@ -1143,7 +1143,8 @@ let rev t =
    we use
    {[
      unsafe_of_array__promise_no_mutation [||]
-   ]}. *)
+   ]}
+   . *)
 
 let split_n t_orig n =
   if n <= 0
@@ -1242,9 +1243,8 @@ module Unique = struct
   let iter (t @ unique) ~f = (iteri [@inlined]) t ~f:(fun [@inline] _ x -> f x) [@nontail]
 
   let[@inline] unzip (t @ unique) : (_ t * _ t) @ unique =
-    (* SAFETY:
-       We know the returned arrays are unique because of the contract of [unzip] - each
-       element of the argument array, which is unique, is split into one of the two
+    (* SAFETY: We know the returned arrays are unique because of the contract of [unzip] -
+       each element of the argument array, which is unique, is split into one of the two
        returned arrays, both of which are newly allocated
     *)
     Obj.magic_unique (unzip t)

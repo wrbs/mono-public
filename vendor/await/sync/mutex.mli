@@ -1,14 +1,25 @@
 @@ portable
 
-open Basement
+(** A poisonable mutual exclusion lock. *)
+
 open Await_kernel
+module Capsule := Capsule.Expert
+
+(** {1 Creating a mutex} *)
 
 (** [k t] is the type of a mutex protecting the contents of the [k] capsule. *)
 type 'k t : value mod contended portable
 
 (** [create k] creates a new mutex for the capsule ['k] associated with [k], consuming the
-    key itself. *)
-val create : 'k Capsule.Key.t @ unique -> 'k t
+    key itself.
+
+    The optional [padded] argument specifies whether to pad the data structure to avoid
+    false sharing. See {!Atomic.make} for a longer explanation. *)
+val create : ?padded:bool @ local -> 'k Capsule.Key.t @ unique -> 'k t
+
+(** {1 Executing critical sections} *)
+
+(** {2 With uncontended [Access]} *)
 
 (** [with_access w t ~f] acquires [t], runs [f] within the associated capsule, then
     releases [t]. If [t] is locked then uses [w] to wait until it is unlocked.
@@ -61,6 +72,8 @@ val with_access_or_cancel_poisoning
   -> 'k t @ local
   -> f:('k Capsule.Access.t -> 'a @ contended portable unique) @ local once portable
   -> 'a Or_canceled.t @ contended once portable unique
+
+(** {2 With a local [Password]} *)
 
 (** [with_password w t f] acquires [t], runs [f] with permission to access the associated
     capsule, then releases [t]. If [t] is locked then uses [w] to wait until it is
@@ -117,6 +130,11 @@ val with_password_or_cancel_poisoning
   -> f:('k Capsule.Password.t @ local -> 'a @ unique) @ local once
   -> 'a Or_canceled.t @ unique
 
+(** {2 With a unique [Key]} *)
+
+[%%template:
+[@@@alloc.default a @ l = (heap_global, stack_local)]
+
 (** [with_key t ~f] locks [t] and runs [f], providing it a key for ['k] uniquely. If [t]
     is locked, then [with_key] uses [w] to wait until it is unlocked.
 
@@ -126,8 +144,9 @@ val with_key
   : ('a : value_or_null) 'k.
   Await.t @ local
   -> 'k t @ local
-  -> f:('k Capsule.Key.t @ unique -> #('a * 'k Capsule.Key.t) @ once unique) @ local once
-  -> 'a @ once unique
+  -> f:('k Capsule.Key.t @ unique -> #('a * 'k Capsule.Key.t) @ l once unique)
+     @ local once
+  -> 'a @ l once unique
 
 (** [with_key_poisoning t ~f] locks [t] and runs [f], providing it a key for ['k]
     uniquely. If the function raises without returning the key back, the mutex is
@@ -140,8 +159,9 @@ val with_key_poisoning
   : ('a : value_or_null) 'k.
   Await.t @ local
   -> 'k t @ local
-  -> f:('k Capsule.Key.t @ unique -> #('a * 'k Capsule.Key.t) @ once unique) @ local once
-  -> 'a @ once unique
+  -> f:('k Capsule.Key.t @ unique -> #('a * 'k Capsule.Key.t) @ l once unique)
+     @ local once
+  -> 'a @ l once unique
 
 (** [with_key_or_cancel w c t ~f] is [Completed (with_key w t ~f)] if [c] is not canceled,
     otherwise it is [Canceled].
@@ -152,8 +172,9 @@ val with_key_or_cancel
   Await.t @ local
   -> Cancellation.t @ local
   -> 'k t @ local
-  -> f:('k Capsule.Key.t @ unique -> #('a * 'k Capsule.Key.t) @ once unique) @ local once
-  -> 'a Or_canceled.t @ once unique
+  -> f:('k Capsule.Key.t @ unique -> #('a * 'k Capsule.Key.t) @ l once unique)
+     @ local once
+  -> 'a Or_canceled.t @ l once unique
 
 (** [with_key_or_cancel_poisoning w c t ~f] is [Completed (with_key_poisoning w t ~f)] if
     [c] is not canceled, otherwise it is [Canceled].
@@ -164,14 +185,70 @@ val with_key_or_cancel_poisoning
   Await.t @ local
   -> Cancellation.t @ local
   -> 'k t @ local
-  -> f:('k Capsule.Key.t @ unique -> #('a * 'k Capsule.Key.t) @ once unique) @ local once
-  -> 'a Or_canceled.t @ once unique
+  -> f:('k Capsule.Key.t @ unique -> #('a * 'k Capsule.Key.t) @ l once unique)
+     @ local once
+  -> 'a Or_canceled.t @ l once unique]
+
+(** {3 And waiting for a [Condition]} *)
+
+module Condition : Condition_intf.Condition with type 'k lock := 'k t (** @open *)
+
+(** {3 And releasing temporarily} *)
+
+(** [release_temporarily w t k ~f] releases [t], runs [f] without the mutex, reacquires
+    [t] and returns the result of running [f] along with the [k].
+
+    To obtain a key to pass to [release_temporarily], use {!with_key} or similar
+    functions.
+
+    @raise Poisoned if [t] cannot be reacquired because it is poisoned.
+    @raise Terminated if [w] is terminated before the mutex is reacquired. *)
+val release_temporarily
+  : ('a : value_or_null) 'k.
+  Await.t @ local
+  -> 'k t @ local
+  -> 'k Capsule.Key.t @ unique
+  -> f:(unit -> 'a @ unique) @ local once
+  -> #('a * 'k Capsule.Key.t) @ unique
+
+(** [release_temporarily_or_cancel w c t k ~f] is
+    [Completed (release_temporarily w t k ~f)] if [c] is not canceled, otherwise it is
+    [Canceled]. *)
+val release_temporarily_or_cancel
+  : ('a : value_or_null).
+  Await.t @ local
+  -> Cancellation.t @ local
+  -> 'k t @ local
+  -> 'k Capsule.Key.t @ unique
+  -> f:(unit -> 'a @ unique) @ local once
+  -> (#('a * 'k Capsule.Key.t) Or_canceled.t[@kind value_or_null & void]) @ unique
+
+(** {3 And poisoning indefinitely} *)
 
 (** [poison t key] poisons the mutex associated with the [key].
 
     Note that poisoning a mutex does not signal waiters on associated {{!Condition}
     condition variables}. *)
 val poison : 'k t @ local -> 'k Capsule.Key.t @ unique -> 'k Capsule.Key.t @ unique
+
+(** {2 Indefinitely through poisoning} *)
+
+(** [acquire_and_poison w t] acquires [t] and then immediately poisons it, returning the
+    key to the protected capsule.
+
+    @raise Poisoned if [t] cannot be acquired because it is poisoned.
+    @raise Terminated if [w] is terminated before the mutex is acquired. *)
+val acquire_and_poison : Await.t @ local -> 'k t @ local -> 'k Capsule.Key.t @ unique
+
+(** [acquire_and_poison_or_cancel w c t] is [Completed (acquire_and_poison w t)] if [c] is
+    not canceled, otherwise it is [Canceled]. *)
+val acquire_and_poison_or_cancel
+  :  Await.t @ local
+  -> Cancellation.t @ local
+  -> 'k t @ local
+  -> ('k Capsule.Key.t Or_canceled.t[@kind void]) @ unique
+
+(** {2 With arbitrary dynamic scope} *)
 
 module Guard : sig
   (** ['k Mutex.Guard.t] represents a locked mutex. It morally contains a
@@ -212,7 +289,10 @@ module Guard : sig
   val release : 'k t @ unique -> unit
 
   (** [poison guard] poisons the mutex protected by [guard], consuming the guard and
-      returning the key to the protected capsule. *)
+      returning the key to the protected capsule.
+
+      Note that poisoning a mutex does not signal waiters on associated {{!Condition}
+      condition variables}. *)
   val poison : 'k t @ unique -> 'k Capsule.Key.t @ unique
 
   (** [is_poisoning guard] is [true] if [guard] will poison if its finalizer runs without
@@ -235,58 +315,22 @@ val acquire_or_cancel
   -> 'k t
   -> 'k Guard.t Or_canceled.t @ unique
 
-(** [release_temporarily w t k ~f] releases [t], runs [f] without the mutex, reacquires
-    [t] and returns the result of running [f] along with the [k].
-
-    To obtain a key to pass to [release_temporarily], use {!with_key} or similar
-    functions.
-
-    @raise Poisoned if [t] cannot be reacquired because it is poisoned.
-    @raise Terminated if [w] is terminated before the mutex is reacquired. *)
-val release_temporarily
-  : ('a : value_or_null) 'k.
-  Await.t @ local
-  -> 'k t @ local
-  -> 'k Capsule.Key.t @ unique
-  -> f:(unit -> 'a @ unique) @ local once
-  -> #('a * 'k Capsule.Key.t) @ unique
-
-(** [release_temporarily_or_cancel w c t k ~f] is
-    [Completed (release_temporarily w t k ~f)] if [c] is not canceled, otherwise it is
-    [Canceled]. *)
-val release_temporarily_or_cancel
-  : ('a : value_or_null).
-  Await.t @ local
-  -> Cancellation.t @ local
-  -> 'k t @ local
-  -> 'k Capsule.Key.t @ unique
-  -> f:(unit -> 'a @ unique) @ local once
-  -> (#('a * 'k Capsule.Key.t) Or_canceled.t[@kind value_or_null & void]) @ unique
-
-(** [acquire_and_poison w t] acquires [t] and then immediately poisons it, returning the
-    key to the protected capsule.
-
-    @raise Poisoned if [t] cannot be acquired because it is poisoned.
-    @raise Terminated if [w] is terminated before the mutex is acquired. *)
-val acquire_and_poison : Await.t @ local -> 'k t @ local -> 'k Capsule.Key.t @ unique
-
-(** [acquire_and_poison_or_cancel w c t] is [Completed (acquire_and_poison w t)] if [c] is
-    not canceled, otherwise it is [Canceled]. *)
-val acquire_and_poison_or_cancel
-  :  Await.t @ local
-  -> Cancellation.t @ local
-  -> 'k t @ local
-  -> ('k Capsule.Key.t Or_canceled.t[@kind void]) @ unique
-
-(** [poison_unacquired t] poisons [t] without acquiring it. Note that this can render the
-    capsule associated with [t] innaccessible, since it potentially destroys the
-    associated key. Does nothing if [t] is already poisoned. *)
-val poison_unacquired : 'k t @ local -> unit
+(** {1 Poisoning as a signal} *)
 
 (** [is_poisoned t] determines whether the mutex [t] is poisoned. *)
 val is_poisoned : 'k t @ local -> bool
 
-module Condition : Condition_intf.Condition with type 'k lock := 'k t (** @open *)
+(** [poison_unacquired t] poisons [t] without acquiring it. Does nothing if [t] is already
+    poisoned.
+
+    Note that this can render the capsule associated with [t] innaccessible, since it
+    potentially destroys the associated key.
+
+    Note that poisoning a mutex does not signal waiters on associated {{!Condition}
+    condition variables}. *)
+val poison_unacquired : 'k t @ local -> unit
+
+(**/**)
 
 module For_testing : sig
   (** [is_exclusive t] determines whether the mutex [t] is locked. *)

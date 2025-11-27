@@ -13,12 +13,14 @@ include (
     type ('a : any mod separable) t = 'a array
 
     [%%rederive:
-      type nonrec 'a t = 'a t
+      type nonrec ('a : value_or_null mod separable) t = 'a t
       [@@deriving compare ~localize, globalize, sexp ~stackify, sexp_grammar]]
   end)
 
 [%%rederive.portable
-  type 'a t = 'a array [@@deriving bin_io ~localize, quickcheck ~portable, typerep]]
+  type ('a : value_or_null mod separable) t = 'a array [@@deriving bin_io ~localize]]
+
+[%%rederive.portable type 'a t = 'a array [@@deriving quickcheck ~portable, typerep]]
 
 module T = struct
   include Base.Array
@@ -654,26 +656,18 @@ module type S = sig @@ portable
   val array_should_be_polymorphic_over_value_or_null : unit
 
   type%template ('a : k) t
-  [@@kind k = (float64, bits32, bits64, word, immediate, immediate64)]
+  [@@kind k = (base_non_value, immediate, immediate64)]
   [@@deriving compare ~localize, equal ~localize, sexp ~stackify, globalize]
 
   include Binary_searchable.S1 with type 'a t := 'a t
   include Indexed_container.S1_with_creators with type 'a t := 'a t
 
-  include
-    Indexed_container.S1_with_creators__base
-    with type 'a t := 'a t
-     and type 'a t__float64 := 'a t
-     and type 'a t__bits32 := 'a t
-     and type 'a t__bits64 := 'a t
-     and type 'a t__word := 'a t
-     and type 'a t__immediate := 'a t
-     and type 'a t__immediate64 := 'a t
+  include%template
+    Indexed_container.S1_with_creators
+  [@kind_set.explicit base_with_imm] [@with: type 'a t := 'a t [@@kind base_with_imm]]
 
   val%template map : ('a : ki) ('b : ko). 'a t -> f:local_ ('a -> 'b) -> 'b t
-  [@@kind
-    ki = (value, float64, bits32, bits64, word, immediate, immediate64)
-    , ko = (value, float64, bits32, bits64, word, immediate, immediate64)]
+  [@@kind ki = base_with_imm, ko = base_with_imm]
 
   external length
     : ('a : any mod separable) 'perms.
@@ -689,7 +683,7 @@ module type S = sig @@ portable
 
   val%template get_opt : ('a : k). 'a t @ c local -> int -> ('a Option.t[@kind k]) @ c m
   [@@mode c = (uncontended, shared)]
-  [@@kind k = (value, immediate, immediate64, float64, bits32, bits64, word)]
+  [@@kind k = base_with_imm]
   [@@alloc __ @ m = (heap_global, stack_local)]
 
   external set
@@ -751,7 +745,9 @@ module type S = sig @@ portable
 
   val create_float_uninitialized : len:int -> float t
 
-  val%template init : int -> f:local_ (int -> 'a) -> 'a t @ m
+  val%template init
+    : ('a : value_or_null mod separable).
+    int -> f:local_ (int -> 'a) -> 'a t @ m
   [@@alloc __ @ m = (heap_global, stack_local)]
 
   val make_matrix : dimx:int -> dimy:int -> 'a -> 'a t t
@@ -759,7 +755,7 @@ module type S = sig @@ portable
   val append : 'a t -> 'a t -> 'a t
 
   [%%template:
-  [@@@kind.default k = (value, float64, bits32, bits64, word, immediate, immediate64)]
+  [@@@kind.default k = base_with_imm]
 
   val concat : ('a : k). local_ 'a t list -> 'a t
   val copy : ('a : k). local_ 'a t -> 'a t
@@ -768,10 +764,10 @@ module type S = sig @@ portable
   include Blit.S1 with type 'a t := 'a t
 
   val%template unsafe_blit : ('a : k). ('a array, 'a array) Blit.blit
-  [@@kind k = (immediate, immediate64, bits64, bits32, word, float64)]
+  [@@kind k = (base_non_value, immediate, immediate64)]
 
   val%template sub : ('a : k). ('a array, 'a array) Blit.sub
-  [@@kind k = (immediate, immediate64, bits64, bits32, word, float64)]
+  [@@kind k = (base_non_value, immediate, immediate64)]
 
   val of_list : 'a list -> 'a t
   val map : 'a t -> f:local_ ('a -> 'b) -> 'b t
@@ -840,8 +836,20 @@ module type S = sig @@ portable
   val fold2_exn : 'a t -> 'b t -> init:'acc -> f:local_ ('acc -> 'a -> 'b -> 'acc) -> 'acc
 
   [%%template:
-  [@@@kind.default k1 = (value, float64, bits32, bits64, word, immediate, immediate64)]
-  [@@@kind.default k2 = (value, float64, bits32, bits64, word, immediate, immediate64)]
+  [@@@kind.default k1 = base_with_imm]
+
+  [%%template:
+  [@@@kind.default
+    k1 = k1
+    , (k2_for_mangling, k2)
+      = ( (value, value_or_null mod separable)
+        , (bits64, bits64)
+        , (bits32, bits32)
+        , (word, word)
+        , (float64, float64)
+        , (float32, float32)
+        , (immediate, immediate)
+        , (immediate64, immediate64) )]
 
   val of_list_map
     : ('a : k1) ('b : k2).
@@ -849,7 +857,9 @@ module type S = sig @@ portable
 
   val of_list_mapi
     : ('a : k1) ('b : k2).
-    ('a List.t[@kind k1]) -> f:local_ (int -> 'a -> 'b) -> 'b t
+    ('a List.t[@kind k1]) -> f:local_ (int -> 'a -> 'b) -> 'b t]
+
+  [@@@kind.default k2 = base_with_imm]
 
   val of_list_rev_map
     : ('a : k1) ('b : k2).
@@ -874,7 +884,7 @@ module type S = sig @@ portable
   val map_inplace : local_ 'a t -> f:local_ ('a -> 'a) -> unit
 
   [%%template:
-  [@@@kind.default k1 = (value, float64, bits32, bits64, word, immediate, immediate64)]
+  [@@@kind.default k1 = base_with_imm]
 
   val swap : ('a : k1). local_ 'a t -> int -> int -> unit
   val rev_inplace : ('a : k1). local_ 'a t -> unit
@@ -882,7 +892,7 @@ module type S = sig @@ portable
   val of_list_rev : ('a : k1). ('a List.t[@kind k1]) -> 'a t
   val find_exn : ('a : k1). 'a t -> f:local_ ('a -> bool) -> 'a
 
-  [@@@kind.default k2 = (value, float64, bits32, bits64, word, immediate, immediate64)]
+  [@@@kind.default k2 = base]
 
   val find_map_exn
     : ('a : k1) ('b : k2).
@@ -893,7 +903,7 @@ module type S = sig @@ portable
     'a t -> f:local_ (int -> 'a -> ('b Option.t[@kind k2])) -> 'b]
 
   [%%template:
-  [@@@kind.default k = (float64, bits32, bits64, word, immediate, immediate64)]
+  [@@@kind.default k = (base_non_value, immediate, immediate64)]
 
   val findi
     : ('a : k).
@@ -927,13 +937,14 @@ module type S = sig @@ portable
   val sorted_copy : local_ 'a t -> compare:local_ ('a -> 'a -> int) -> 'a t
   val last : 'a t -> 'a
   val last_exn : 'a t -> 'a
-  val equal : ('a -> 'a -> bool) -> 'a t -> 'a t -> bool
+
+  val equal
+    : ('a : value_or_null mod separable).
+    ('a -> 'a -> bool) -> 'a t -> 'a t -> bool
 
   val equal__local
-    :  (local_ 'a -> local_ 'a -> bool)
-    -> local_ 'a t
-    -> local_ 'a t
-    -> bool
+    : ('a : value_or_null mod separable).
+    (local_ 'a -> local_ 'a -> bool) -> local_ 'a t -> local_ 'a t -> bool
 
   val to_sequence : 'a t -> 'a Core_sequence.t
   val to_sequence_mutable : 'a t -> 'a Core_sequence.t
@@ -941,16 +952,12 @@ module type S = sig @@ portable
   val chunks_of : 'a t -> length:int -> 'a t t
 end
 
-include (
+include%template (
   T :
     S
-    with type ('a : any mod separable) t := 'a array
-     and type ('a : bits64) t__bits64 = 'a array
-     and type ('a : bits32) t__bits32 = 'a array
-     and type ('a : float64) t__float64 = 'a array
-     and type ('a : word) t__word = 'a array
-     and type ('a : immediate) t__immediate = 'a array
-     and type ('a : immediate64) t__immediate64 = 'a array)
+    [@with:
+      type ('a : any mod separable) t := 'a array
+      type ('a : k) t = 'a array [@@kind k = (base_non_value, immediate, immediate64)]])
 [@ocaml.warning "-3"]
 
 let invariant invariant_a t = iter t ~f:invariant_a

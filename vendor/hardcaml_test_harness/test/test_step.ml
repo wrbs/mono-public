@@ -16,7 +16,7 @@ end
 
 let create _scope { I.a; b } = { O.s = Signal.( +: ) a b }
 
-module Bench = Step_harness.Make (I) (O)
+module Bench = Step_harness.Make_monadic (I) (O)
 
 let%expect_test "no waves test" =
   Bench.run ~random_initial_state:`All ~create (fun () ->

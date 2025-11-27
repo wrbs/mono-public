@@ -8,7 +8,7 @@ open! Base
 
     It's part of the same family of libraries as `lib/float_u`, `lib/nativeint_u`, and
     `lib/int32_u`. They share similar project structures, conventions, and tests. *)
-type t = int64# [@@deriving quickcheck]
+type t = int64# [@@deriving globalize, quickcheck]
 
 module Boxed = Base.Int64
 
@@ -22,7 +22,6 @@ module Boxed = Base.Int64
 
 external to_int64 : int64# -> (int64[@local_opt]) = "%box_int64"
 external of_int64 : (int64[@local_opt]) -> int64# = "%unbox_int64"
-val globalize : local_ t -> t [@@zero_alloc]
 
 (** {1 [Int_intf.S] inlined} *)
 
@@ -46,7 +45,7 @@ val t_sexp_grammar : t Sexplib0.Sexp_grammar.t
 
 (** {3 For [bin_io]} *)
 
-include%template Bin_prot.Binable.S_any [@mode local] with type t := t
+include%template Bin_prot.Binable.S [@mode local] with type t := t
 
 (** {3 For [hash]} *)
 
@@ -283,37 +282,38 @@ val for_loop_incl : start_incl:t -> end_incl:t -> f:(t -> unit) @ local -> unit
 
 (** A sub-module designed to be opened to make working with ints more convenient. *)
 module O : sig
-  val ( + ) : t -> t -> t
-  val ( - ) : t -> t -> t
-  val ( * ) : t -> t -> t
-  val ( / ) : t -> t -> t
-  val ( ~- ) : t -> t
+  val ( + ) : t -> t -> t [@@zero_alloc]
+  val ( - ) : t -> t -> t [@@zero_alloc]
+  val ( * ) : t -> t -> t [@@zero_alloc]
+  val ( / ) : t -> t -> t [@@zero_alloc]
+  val ( ~- ) : t -> t [@@zero_alloc]
 
   (** Integer exponentiation *)
   val ( ** ) : t -> t -> t
 
-  val ( = ) : t -> t -> bool
-  val ( <> ) : t -> t -> bool
-  val ( < ) : t -> t -> bool
-  val ( > ) : t -> t -> bool
-  val ( <= ) : t -> t -> bool
-  val ( >= ) : t -> t -> bool
+  val ( = ) : t -> t -> bool [@@zero_alloc]
+  val ( <> ) : t -> t -> bool [@@zero_alloc]
+  val ( < ) : t -> t -> bool [@@zero_alloc]
+  val ( > ) : t -> t -> bool [@@zero_alloc]
+  val ( <= ) : t -> t -> bool [@@zero_alloc]
+  val ( >= ) : t -> t -> bool [@@zero_alloc]
 
   (** Same as [bit_and/or/xor/not] *)
-  val ( land ) : t -> t -> t
+  val ( land ) : t -> t -> t [@@zero_alloc]
 
-  val ( lor ) : t -> t -> t
-  val ( lxor ) : t -> t -> t
-  val lnot : t -> t
+  val ( lor ) : t -> t -> t [@@zero_alloc]
+  val ( lxor ) : t -> t -> t [@@zero_alloc]
+  val lnot : t -> t [@@zero_alloc]
 
   (** Returns the absolute value of the argument. May be negative if the input is
       [min_value]. *)
   val abs : t -> t
+  [@@zero_alloc]
 
   (** Negation *)
-  val neg : t -> t
+  val neg : t -> t [@@zero_alloc]
 
-  val zero : unit -> t
+  val zero : unit -> t [@@zero_alloc]
 
   (** There are two pairs of integer division and remainder functions, [/%] and [%], and
       [/] and [rem]. They both satisfy the same equation relating the quotient and the
@@ -335,20 +335,20 @@ module O : sig
       other hand, [rem x y] returns a negative value if and only if [x < 0]; that value
       satisfies [abs (rem x y) <= abs y - 1]. *)
 
-  val ( % ) : t -> t -> t
-  val ( /% ) : t -> t -> t
+  val ( % ) : t -> t -> t [@@zero_alloc]
+  val ( /% ) : t -> t -> t [@@zero_alloc]
 
   (** Float division of integers. *)
-  val ( // ) : t -> t -> float#
+  val ( // ) : t -> t -> float# [@@zero_alloc]
 
   (** Same as [shift_left] *)
-  val ( lsl ) : t -> int -> t
+  val ( lsl ) : t -> int -> t [@@zero_alloc]
 
   (** Same as [shift_right]. *)
-  val ( asr ) : t -> int -> t
+  val ( asr ) : t -> int -> t [@@zero_alloc]
 
   (** Same as [shift_right_logical]. *)
-  val ( lsr ) : t -> int -> t
+  val ( lsr ) : t -> int -> t [@@zero_alloc]
 
   external box : int64# -> (int64[@local_opt]) = "%box_int64"
   external unbox : (int64[@local_opt]) -> int64# = "%unbox_int64"
@@ -474,7 +474,7 @@ module Stable : sig
     val sexp_of_t : t -> Sexp.t
     val t_of_sexp : Sexp.t -> t
 
-    include%template Bin_prot.Binable.S_any [@mode local] with type t := t
+    include%template Bin_prot.Binable.S [@mode local] with type t := t
 
     include Ppx_hash_lib.Hashable.S_any with type t := t
 

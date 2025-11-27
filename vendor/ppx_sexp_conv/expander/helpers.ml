@@ -63,9 +63,9 @@ let make_type_rigid ~rigid_types =
 ;;
 
 (* Generates the quantified type [ ! 'a .. 'z . (make_mono_type t ('a .. 'z)) ] or
-   [type a .. z. make_mono_type t (a .. z)] when [use_rigid_variables] is true.
-   Annotation are needed for non regular recursive datatypes and gadt when the return type
-   of constructors are constrained. Unfortunately, putting rigid variables everywhere does
+   [type a .. z. make_mono_type t (a .. z)] when [use_rigid_variables] is true. Annotation
+   are needed for non regular recursive datatypes and gadt when the return type of
+   constructors are constrained. Unfortunately, putting rigid variables everywhere does
    not work because of certains types with constraints. We thus only use rigid variables
    for sum types without constraints, which includes all GADTs. *)
 
@@ -234,6 +234,8 @@ let rec is_value_expression expr =
   | Pexp_extension _
   | Pexp_comprehension _
   | Pexp_overwrite _
+  | Pexp_quote _
+  | Pexp_splice _
   | Pexp_hole -> false
 ;;
 
@@ -291,4 +293,8 @@ let strip_attributes =
             | _ -> true)
       }
   end
+;;
+
+let include_param_in_combinator param =
+  not (Option.is_some (Attribute.get Attrs.phantom param))
 ;;

@@ -9,11 +9,21 @@ open Hardcaml_risc_v
 open Signal
 
 module Make
+    (General_config : System_intf.Config)
+    (Memory_config : System_intf.Memory_config)
     (Memory : Memory_bus_intf.S)
     (Memory_to_packet8 : Memory_to_packet8_intf.M(Memory)(Axi8).S) =
 struct
   module Write_dpath = Datapath_register.Make (Memory.Write)
   module Memory_to_axi32 = Memory_to_axi32.Make (Memory) (Ethernet.Axi32)
+  module Prepend_address = Prepend_address.Make (Ethernet.Axi32)
+
+  module Udp_packet_decoder = Udp_packet_decoder.Make (struct
+      let filter_config =
+        Udp_packet_decoder_intf.Filter_config.Destination_mac_filter
+          General_config.fpga_mac_address
+      ;;
+    end)
 
   module Ethernet_tx = Ethernet.Tx.Make (struct
       let max_packets = 4
@@ -25,13 +35,18 @@ struct
       { clock : 'a
       ; clear : 'a
       ; uart_rx : 'a
+      ; eth_crsdv : 'a
+      ; eth_rxerr : 'a
+      ; eth_rxd : 'a [@bits 2]
       ; tx_input : 'a Memory_to_packet8.Input.With_valid.t
       ; uart_read_request : 'a Memory.Read_bus.Dest.t
       ; ethernet_read_request : 'a Memory.Read_bus.Dest.t
-      ; write_request : 'a Memory.Write_bus.Dest.t
+      ; uart_write_request : 'a Memory.Write_bus.Dest.t
+      ; ethernet_write_request : 'a Memory.Write_bus.Dest.t
       ; uart_read_response : 'a Memory.Read_response.With_valid.t
       ; ethernet_read_response : 'a Memory.Read_response.With_valid.t
-      ; write_response : 'a Memory.Write_response.With_valid.t
+      ; uart_write_response : 'a Memory.Write_response.With_valid.t
+      ; ethernet_write_response : 'a Memory.Write_response.With_valid.t
       }
     [@@deriving hardcaml]
   end
@@ -45,7 +60,9 @@ struct
       ; dma_tx_ready : 'a
       ; uart_read_request : 'a Memory.Read_bus.Source.t
       ; ethernet_read_request : 'a Memory.Read_bus.Source.t
-      ; write_request : 'a Memory.Write_bus.Source.t
+      ; uart_write_request : 'a Memory.Write_bus.Source.t
+      ; ethernet_write_request : 'a Memory.Write_bus.Source.t
+      ; frame_buffer_write_done : 'a
       ; clear_message : 'a
       }
     [@@deriving hardcaml, fields ~getters]
@@ -57,16 +74,22 @@ struct
     { I.clock
     ; clear
     ; uart_rx
+    ; eth_crsdv
+    ; eth_rxerr
+    ; eth_rxd
     ; tx_input
     ; uart_read_request
     ; ethernet_read_request
-    ; write_request
+    ; uart_write_request
+    ; ethernet_write_request
     ; uart_read_response
     ; ethernet_read_response
-    ; write_response
+    ; uart_write_response
+    ; ethernet_write_response
     }
     =
-    let module Packet_to_memory = Packet_to_memory.Make (Memory) (Axi8) in
+    let module Uart_packet_to_memory = Packet_to_memory.Make (Memory) (Axi8) in
+    let module Udp_packet_to_memory = Packet_to_memory.Make (Memory) (Ethernet.Axi32) in
     let module Serial_buffer =
       Serial_buffer.Make (struct
         let serial_input_width = 8
@@ -144,39 +167,97 @@ struct
         }
     in
     router_ready <-- router.up.tready;
-    let dma_ready = wire 1 in
-    let { Axi8.Datapath_register.IO.source = dma; dest = dpath_ready' } =
+    let uart_dma_ready = wire 1 in
+    let { Axi8.Datapath_register.IO.source = uart_dma; dest = dpath_ready' } =
       Axi8.Datapath_register.hierarchical
         scope
         { clock
         ; clear
         ; i =
             { Axi8.Datapath_register.IO.source = List.nth_exn router.dns 0
-            ; dest = { tready = dma_ready }
+            ; dest = { tready = uart_dma_ready }
             }
         }
     in
-    dma_dpath_ready <-- dpath_ready'.tready;
-    let dma_write_dpath_ready = wire 1 in
-    let dma =
-      Packet_to_memory.hierarchical
+    let { Ethernet.Rx.O.axi_tx = ethernet_rx_axi; _ } =
+      Ethernet.Rx.hierarchical
         scope
-        { Packet_to_memory.I.clock
-        ; clear
-        ; in_ = dma
-        ; out = { ready = dma_write_dpath_ready }
-        ; out_ack = write_response
+        { Ethernet.Rx.I.clocking = { clock; clear }
+        ; crsdv = eth_crsdv
+        ; rxerr = eth_rxerr
+        ; rxd = eth_rxd
         }
     in
-    dma_ready <-- dma.in_.tready;
+    let { Udp_packet_decoder.O.axi_tx = udp_dma; _ } =
+      Udp_packet_decoder.hierarchical
+        scope
+        { Udp_packet_decoder.I.clocking = { clock; clear }; axi_rx = ethernet_rx_axi }
+    in
+    let { Prepend_address.O.output_data_stream = udp_dma_with_address; _ } =
+      Prepend_address.hierarchical
+        scope
+        { Prepend_address.I.clock
+        ; clear
+        ; config =
+            { start_address = of_int_trunc ~width:32 Memory_config.ethernet_start_address
+            ; max_address =
+                of_int_trunc ~width:32 Memory_config.ethernet_start_address
+                +:. Memory_config.frame_buffer_bytes
+            }
+        ; input_data_stream = udp_dma
+        ; output_data_stream_ready = { tready = vdd }
+        }
+    in
+    let ethernet_dma_write_dpath_ready = wire 1 in
+    let ethernet_dma =
+      Udp_packet_to_memory.hierarchical
+        scope
+        { Udp_packet_to_memory.I.clock
+        ; clear
+        ; in_ = udp_dma_with_address
+        ; out = { ready = ethernet_dma_write_dpath_ready }
+        ; out_ack = ethernet_write_response
+        }
+    in
+    let ethernet_dma_write_dpath_reg =
+      Write_dpath.hierarchical
+        scope
+        { Write_dpath.I.clock
+        ; clear
+        ; i =
+            { valid = ethernet_dma.out.valid
+            ; data = ethernet_dma.out.data
+            ; ready = ethernet_write_request.ready
+            }
+        }
+    in
+    ethernet_dma_write_dpath_ready <-- ethernet_dma_write_dpath_reg.ready;
+    dma_dpath_ready <-- dpath_ready'.tready;
+    let dma_write_dpath_ready = wire 1 in
+    let uart_dma =
+      Uart_packet_to_memory.hierarchical
+        scope
+        { Uart_packet_to_memory.I.clock
+        ; clear
+        ; in_ = uart_dma
+        ; out = { ready = dma_write_dpath_ready }
+        ; out_ack = uart_write_response
+        }
+    in
+    uart_dma_ready <-- uart_dma.in_.tready;
     let dma_write_dpath_reg =
       Write_dpath.hierarchical
         scope
         { Write_dpath.I.clock
         ; clear
-        ; i = { valid = dma.out.valid; data = dma.out.data; ready = write_request.ready }
+        ; i =
+            { valid = uart_dma.out.valid
+            ; data = uart_dma.out.data
+            ; ready = uart_write_request.ready
+            }
         }
     in
+    let%hw uart_write_valid = dma_write_dpath_reg.valid in
     dma_write_dpath_ready <-- dma_write_dpath_reg.ready;
     let pulse =
       Pulse.hierarchical scope { Pulse.I.clock; clear; up = List.nth_exn router.dns 1 }
@@ -231,8 +312,11 @@ struct
     in
     uart_tx_ready <-- dma_out_uart_tx.data_in_ready;
     ethernet_tx_ready <-- dma_out_ethernet_tx.ready.tready;
-    { O.write_request =
-        { valid = dma_write_dpath_reg.valid; data = dma_write_dpath_reg.data }
+    { O.uart_write_request = { valid = uart_write_valid; data = dma_write_dpath_reg.data }
+    ; ethernet_write_request =
+        { valid = ethernet_dma_write_dpath_reg.valid
+        ; data = ethernet_dma_write_dpath_reg.data
+        }
     ; uart_read_request = dma_out_packet8.memory
     ; ethernet_read_request = dma_out_axi32.memory
     ; uart_tx = dma_out_uart_tx.txd
@@ -241,6 +325,7 @@ struct
     ; uart_rx_valid
     ; clear_message = pulse.signal
     ; dma_tx_ready = dma_out_packet8.ready
+    ; frame_buffer_write_done = udp_dma_with_address.tlast &: udp_dma_with_address.tvalid
     }
   ;;
 

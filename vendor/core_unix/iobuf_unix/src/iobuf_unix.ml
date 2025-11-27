@@ -119,7 +119,7 @@ module Recvmmsg_context = struct
   type ctx
 
   external unsafe_ctx
-    :  ([> write ], Iobuf.seek) Iobuf.t array
+    :  ([> write ], Iobuf.seek, Iobuf.global) Iobuf.t array
     -> ctx
     = "iobuf_recvmmsg_ctx"
 
@@ -130,7 +130,7 @@ module Recvmmsg_context = struct
       raise_s
         [%sexp
           "Recvmmsg_context.create: all buffers must be reset"
-          , (ts : (_, _) Iobuf.With_shallow_sexp.t array)]
+          , (ts : (_, _, Iobuf.global) Iobuf.With_shallow_sexp.t array)]
   ;;
 
   (* we retain a reference to the underlying bigstrings, in the event that callers
@@ -138,7 +138,7 @@ module Recvmmsg_context = struct
      referenced by the bigstring, we want to prevent it from being garbage collected and
      released. *)
   type t =
-    { iobufs : (read_write, Iobuf.seek) Iobuf.t array
+    { iobufs : (read_write, Iobuf.seek, Iobuf.global) Iobuf.t array
     ; bstrs : Bigstring.t array
     ; ctx : ctx
     }
@@ -153,7 +153,7 @@ end
 
 external unsafe_recvmmsg_assume_fd_is_nonblocking
   :  File_descr.t
-  -> (read_write, Iobuf.seek) Iobuf.t array
+  -> (read_write, Iobuf.seek, Iobuf.global) Iobuf.t array
   -> Recvmmsg_context.ctx
   -> Unix.Syscall_result.Int.t
   = "iobuf_recvmmsg_assume_fd_is_nonblocking_stub"
@@ -164,9 +164,9 @@ let recvmmsg_assume_fd_is_nonblocking fd { Recvmmsg_context.iobufs; ctx; _ } =
 ;;
 
 let recvmmsg_assume_fd_is_nonblocking =
-  (* We link with [--wrap recvmmsg].  If we have compiled on a machine with recvmmsg
-     (e.g., CentOS 6) but then run on a machine without (e.g., CentOS 5), our wrapped
-     [recvmmsg] always returns -1 and sets errno to ENOSYS. *)
+  (* We link with [--wrap recvmmsg]. If we have compiled on a machine with recvmmsg (e.g.,
+     CentOS 6) but then run on a machine without (e.g., CentOS 5), our wrapped [recvmmsg]
+     always returns -1 and sets errno to ENOSYS. *)
   match
     Unix.Syscall_result.Int.to_result
       (let fd = File_descr.of_int (-1) in
@@ -301,7 +301,7 @@ let pwrite_assume_fd_is_nonblocking t fd ~offset =
 
 module Expert = struct
   external unsafe_pokef_float
-    :  (read_write, _) Iobuf.t
+    :  (read_write, _, Iobuf.global) Iobuf.t
     -> c_format:string
     -> max_length:int
     -> (float[@unboxed])

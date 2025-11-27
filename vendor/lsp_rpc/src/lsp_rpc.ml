@@ -251,9 +251,9 @@ struct
                  | `Duplicate ->
                    (* If we receive a request with a duplicate ID, it is not obvious
                       whether to reply with one error or two. We are probably in an
-                      irrevocably bad state anyway if this happens, but for simplicity
-                      we reply with two, maintaining the 1:1 relationship between
-                      requests and responses. *)
+                      irrevocably bad state anyway if this happens, but for simplicity we
+                      reply with two, maintaining the 1:1 relationship between requests
+                      and responses. *)
                    Io.write
                      t.writer
                      (Response
@@ -284,8 +284,8 @@ struct
                        (* We only remove the request from the table after we finish
                           processing it so that we can still look it up if we receive a
                           cancel notification. Once we have the result, we need to make
-                          sure we haven't already returned a cancellation response so
-                          we don't send two responses. *)
+                          sure we haven't already returned a cancellation response so we
+                          don't send two responses. *)
                        let%map result =
                          match%map
                            t.on_request request' ~cancelled:(Ivar.read cancelled)
@@ -554,8 +554,8 @@ module Server = struct
 
   let encoding ~(here : [%call_pos]) t =
     (* [t.encoding] is set before any client callback is invoked, so this should always
-     succeed. If due to some bug it does not, we use [%call_pos] to attribute the location
-     properly. *)
+       succeed. If due to some bug it does not, we use [%call_pos] to attribute the
+       location properly. *)
     Set_once.get_exn t.encoding ~here
   ;;
 

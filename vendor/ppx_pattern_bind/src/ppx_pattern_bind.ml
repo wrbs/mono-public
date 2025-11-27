@@ -121,16 +121,16 @@ let replace_variable ~f x =
   replacer#pattern x
 ;;
 
+let warning_attribute ~loc str =
+  attribute
+    ~loc
+    ~name:(Loc.make ~loc "ocaml.warning")
+    ~payload:(PStr [ pstr_eval ~loc (estring ~loc str) [] ])
+;;
+
 let with_warning_attribute str expr =
   let loc = expr.pexp_loc in
-  { expr with
-    pexp_attributes =
-      attribute
-        ~loc
-        ~name:(Loc.make ~loc "ocaml.warning")
-        ~payload:(PStr [ pstr_eval ~loc (estring ~loc str) [] ])
-      :: expr.pexp_attributes
-  }
+  { expr with pexp_attributes = warning_attribute ~loc str :: expr.pexp_attributes }
 ;;
 
 let case_number ~loc ~modul exp ~reachable_cases ~unreachable_cases =
@@ -148,7 +148,63 @@ let case_number ~loc ~modul exp ~reachable_cases ~unreachable_cases =
         @ unreachable_cases))
 ;;
 
+let estimate_variables_used_in expr variables =
+  let vars_used = Hashtbl.create (module String) in
+  let find_vars =
+    object
+      inherit Ast_traverse.iter as super
+
+      method! expression_desc desc =
+        match desc with
+        | Pexp_ident { txt = Lident v; loc } ->
+          if Set.mem variables v then Hashtbl.add_exn vars_used ~key:v ~data:loc else ()
+        (* We just stop descending here since we don't know if someone is shadowing a
+           variable. If there's demand, we can implement most of the cases here, but
+           hopefully, nobody is using these in their when clauses. *)
+        | Pexp_let _
+        | Pexp_function _
+        | Pexp_match _
+        | Pexp_try _
+        | Pexp_for _
+        | Pexp_object _
+        | Pexp_open _
+        | Pexp_letop _ -> ()
+        | _ -> super#expression_desc desc
+    end
+  in
+  find_vars#expression expr;
+  Hashtbl.to_alist vars_used |> List.map ~f:(fun (txt, loc) -> { txt; loc })
+;;
+
+let add_dummy_usages expr = function
+  | [] -> expr
+  | _ :: _ as usages ->
+    let value_bindings =
+      List.map usages ~f:(fun { txt = var; loc } ->
+        let loc = { loc with loc_ghost = true } in
+        value_binding
+          ~loc
+          ~pat:[%pat? (_ : _)]
+          ~expr:(Ast_helper.Exp.ident ~loc { loc; txt = Lident var }))
+    in
+    pexp_let ~loc:{ expr.pexp_loc with loc_ghost = true } Nonrecursive value_bindings expr
+;;
+
+let add_usages_for_vars_definitely_used_in_when_clause case =
+  match case.pc_guard with
+  | None -> case
+  | Some guard ->
+    let lhs_vars =
+      pattern_variables case.pc_lhs
+      |> List.map ~f:(fun (_, l) -> l.txt)
+      |> Set.of_list (module String)
+    in
+    let vars_used_in_guard = estimate_variables_used_in guard lhs_vars in
+    { case with pc_rhs = add_dummy_usages case.pc_rhs vars_used_in_guard }
+;;
+
 let expand_case ~destruct expr idx match_case =
+  let match_case = add_usages_for_vars_definitely_used_in_when_clause match_case in
   let rhs =
     let loc = expr.pexp_loc in
     destruct ~lhs:match_case.pc_lhs ~rhs:expr ~body:match_case.pc_rhs
@@ -273,9 +329,8 @@ let project_pattern_variables ~assume_exhaustive ~modul ~with_location vbs =
 ;;
 
 module type Ext = sig
-  (* The part that goes after [let%] and [match%]. If the name is
-     "pattern_bind", then [let%pattern_bind] and [match%pattern_bind] are
-     what get expanded. *)
+  (* The part that goes after [let%] and [match%]. If the name is "pattern_bind", then
+     [let%pattern_bind] and [match%pattern_bind] are what get expanded. *)
   val name : string
 
   (* Given a list of variables bound to their corresponding "projection expression" (the
@@ -328,14 +383,13 @@ module Bind : Ext = struct
 
   let bind_pattern_projections ~loc ~modul:_ projection_bindings ~rhs =
     let loc = { loc with loc_ghost = true } in
-    (* For [let%pattern_bind], we don't bind on the match case, so nothing
-       constrains the resulting expression to be an incremental. We used to
-       generate [if false then return (assert false) else <expr>] to
-       compensate, but that causes problems with the defunctorized interface
-       of incremental, as [return] takes an extra argument. [if false then
-       map (assert false) ~f:Fn.id else <expr>] avoids that but causes type
-       errors in bonsai where they sort of abuse this preprocessor by using
-       this with this thing that's not a monad (see legacy_api.ml). *)
+    (* For [let%pattern_bind], we don't bind on the match case, so nothing constrains the
+       resulting expression to be an incremental. We used to generate
+       [if false then return (assert false) else <expr>] to compensate, but that causes
+       problems with the defunctorized interface of incremental, as [return] takes an
+       extra argument. [if false then map (assert false) ~f:Fn.id else <expr>] avoids that
+       but causes type errors in bonsai where they sort of abuse this preprocessor by
+       using this with this thing that's not a monad (see legacy_api.ml). *)
     pexp_let ~loc Nonrecursive projection_bindings rhs
   ;;
 
@@ -389,7 +443,7 @@ let error_if_invalid_pattern (module Ext : Ext) pattern =
   finder#pattern pattern
 ;;
 
-(* Translations for let%pattern_bind
+(*=Translations for let%pattern_bind
 
    let%pattern_bind (x, y, _) = e1
    and { z; _} = e2
@@ -427,7 +481,7 @@ let expand_let (module Ext : Ext) ~assume_exhaustive ~loc ~modul vbs rhs =
   |> pexp_let Nonrecursive ~loc save_bindings
 ;;
 
-(* Translations for match%pattern_bind
+(*=Translations for match%pattern_bind
 
 
    {[

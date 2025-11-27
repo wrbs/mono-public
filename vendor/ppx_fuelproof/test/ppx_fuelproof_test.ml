@@ -4,9 +4,8 @@
 
 type f = unit -> unit
 
-(* ppx_fuelproof works by annotating each contained field as crossing
-   the desired mode. If this succeeds, then the overall type is allowed
-   to cross.
+(* ppx_fuelproof works by annotating each contained field as crossing the desired mode. If
+   this succeeds, then the overall type is allowed to cross.
 *)
 
 module%test Portable = struct
@@ -365,11 +364,15 @@ module%test Kind_abbreviations = struct
       module Check__027_ = struct
         type _ t : immutable_data =
           { x :
-              int as (_ : any mod contended immutable many portable stateless unyielding)
+              int
+              as
+              (_ :
+              any mod contended forkable immutable many portable stateless unyielding)
           ; y :
               int t
               as
-              (_ : any mod contended immutable many portable stateless unyielding)
+              (_ :
+              any mod contended forkable immutable many portable stateless unyielding)
           }
         [@@unsafe_allow_any_mode_crossing]
       end
@@ -400,8 +403,8 @@ module%test Kind_abbreviations2 = struct
 
       module Check__031_ = struct
         type _ t : mutable_data =
-          { mutable x : int as (_ : any mod many portable stateless unyielding)
-          ; mutable y : int t as (_ : any mod many portable stateless unyielding)
+          { mutable x : int as (_ : any mod forkable many portable stateless unyielding)
+          ; mutable y : int t as (_ : any mod forkable many portable stateless unyielding)
           }
         [@@unsafe_allow_any_mode_crossing]
       end
@@ -435,9 +438,15 @@ module%test Recursive_unboxed = struct
       module Check__035_ = struct
         type t : immutable_data =
           | Nil of
-              (int as (_ : any mod contended immutable many portable stateless unyielding))
+              (int
+               as
+               (_ :
+               any mod contended forkable immutable many portable stateless unyielding))
           | Rec of
-              (u as (_ : any mod contended immutable many portable stateless unyielding))
+              (u
+               as
+               (_ :
+               any mod contended forkable immutable many portable stateless unyielding))
         [@@unsafe_allow_any_mode_crossing]
 
         and u : immutable_data =
@@ -445,12 +454,18 @@ module%test Recursive_unboxed = struct
               v
               as
               (_ :
-              any mod contended immutable many non_float portable stateless unyielding)
+              any
+              mod
+                 contended forkable immutable many non_float portable stateless unyielding)
           }
         [@@unboxed] [@@unsafe_allow_any_mode_crossing]
 
         and v : immutable_data =
-          { x : t as (_ : any mod contended immutable many portable stateless unyielding)
+          { x :
+              t
+              as
+              (_ :
+              any mod contended forkable immutable many portable stateless unyielding)
           }
         [@@unsafe_allow_any_mode_crossing]
       end
@@ -474,8 +489,8 @@ module%test Recursive_unboxed = struct
 end
 
 (* When recursive uses of a type under definition appear under immutable_data type
-   constructors, the constraint is pushed down to the recursive use. This
-   appears to help the type-checker infer useful kinds in more places.
+   constructors, the constraint is pushed down to the recursive use. This appears to help
+   the type-checker infer useful kinds in more places.
 *)
 module%test Recursive_with_immutable_data = struct
   module Iarray = struct
@@ -519,8 +534,7 @@ module%test Recursive_with_immutable_data = struct
   let cross_contention : t @ contended -> t = fun x -> x
 end
 
-(* [%fuelproof] doesn't error as long as at least one type in the knot has
-   an annotation.
+(* [%fuelproof] doesn't error as long as at least one type in the knot has an annotation.
 *)
 module%test Recursive_knot = struct
   [@@@expand_inline
@@ -702,8 +716,8 @@ end = struct
   [@@@end]
 end
 
-(* Fuelproof handles recursive knots even when it is not responsible for checking
-   all records in the knot (e.g. because it involves [unsafe_allow_any_mode_crossing].
+(* Fuelproof handles recursive knots even when it is not responsible for checking all
+   records in the knot (e.g. because it involves [unsafe_allow_any_mode_crossing].
 *)
 module Manifest : sig
   [@@@expand_inline:
@@ -742,6 +756,37 @@ end = struct
     [@@unsafe_allow_any_mode_crossing]
 
     and u : value mod portable = Check__078_.u = { x : t }
+    [@@unsafe_allow_any_mode_crossing]
+  end
+
+  [@@@end]
+end
+
+(* Mutable fields are allowed to be part of a record that crosses contention if atomic *)
+module Atomic : sig
+  [@@@expand_inline:
+    type%fuelproof t : value mod contended = { mutable x : int [@atomic] }]
+
+  type t : value mod contended = { mutable x : int as (_ : any mod contended) [@atomic] }
+  [@@unsafe_allow_any_mode_crossing]
+
+  [@@@end]
+end = struct
+  [@@@expand_inline
+    type%fuelproof t : value mod contended = { mutable x : int [@atomic] }]
+
+  include struct
+    open struct
+      [@@@warning "-34"]
+
+      module Check__080_ = struct
+        type t : value mod contended =
+          { mutable x : int as (_ : any mod contended) [@atomic] }
+        [@@unsafe_allow_any_mode_crossing]
+      end
+    end
+
+    type t : value mod contended = Check__080_.t = { mutable x : int [@atomic] }
     [@@unsafe_allow_any_mode_crossing]
   end
 

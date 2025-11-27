@@ -2,7 +2,8 @@ open! Core
 open! Async
 
 module Embed_file = struct
-  (* These functions were taken from embed_file_lib, which doesn't have a public_release name *)
+  (* These functions were taken from embed_file_lib, which doesn't have a public_release
+     name *)
   let chunk_len = 80
 
   let chunks str =

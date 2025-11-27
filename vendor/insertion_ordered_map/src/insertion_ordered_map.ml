@@ -5,17 +5,18 @@ include Insertion_ordered_map_intf
 type ('key, 'a, 'cmp) t =
   { insertion_ordered_map : ('key * 'a) Int.Map.t
       (* Represented as a map (as opposed to a list) to enable O(log N) deletion (see
-     [canonical_map]).
+         [canonical_map]).
 
-     It contains both keys and values to keep O(N) iteration complexity (as opposed to
-     referring to [canonical_map] on each iteration, making complexity O(N log(N))). *)
+         It contains both keys and values to keep O(N) iteration complexity (as opposed to
+         referring to [canonical_map] on each iteration, making complexity O(N log(N))).
+      *)
   ; canonical_map : ('key, int * 'a, 'cmp) Map.t
       (* Used for insertion-order-invariant accessors (i.e. to ensure O(log N) lookup,
-     addition, and deletion).
+         addition, and deletion).
 
-     It contains insertion indices to enable O(N) deletion from [insertion_ordered_map].
-     In particular, the first element of a key's tuple refers to its key in
-     [insertion_ordered_map]. *)
+         It contains insertion indices to enable O(N) deletion from
+         [insertion_ordered_map]. In particular, the first element of a key's tuple refers
+         to its key in [insertion_ordered_map]. *)
   ; latest_index : int
   (* Contains the index of the most recently added element in [t]
 

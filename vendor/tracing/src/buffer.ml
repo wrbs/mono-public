@@ -129,7 +129,7 @@ module Checkpoint = struct
   (** Data necessary to describe a span of tracing events. *)
   type t =
     { begin_state : State.t
-    ; data : (read_write, Iobuf.seek) Iobuf.t
+    ; data : (read_write, Iobuf.seek, Iobuf.global) Iobuf.t
     ; destination : (module Writer_intf.Destination)
     ; refs : State.References.t
     }
@@ -239,7 +239,7 @@ type t =
   ; errors : Parser_errors.t
   ; mutable empty : bool
       (* Store two checkpoints as a double buffer. When a dump is requested, we will
-     always be able to output all of [prev], even if [current] was just started. *)
+         always be able to output all of [prev], even if [current] was just started. *)
   ; mutable prev : Checkpoint.t
   ; mutable current : Checkpoint.t
   ; mutable size_bits : int
@@ -355,9 +355,9 @@ let try_consume t data =
   ret
 ;;
 
-(* Writing a trace with only tick init + interning events is valid, but
-   Perfetto will crash when interacting with it, so if the trace is empty we add
-   one real event telling the user this. *)
+(* Writing a trace with only tick init + interning events is valid, but Perfetto will
+   crash when interacting with it, so if the trace is empty we add one real event telling
+   the user this. *)
 let write_empty_trace_event writer =
   (* Overwriting string/thread slots doesn't matter; there are no other events. *)
   let name = Writer.set_temp_string_slot writer ~slot:0 "Empty trace!" in

@@ -78,8 +78,8 @@ module Stable = struct
         type t = T.t
 
         (* It shouldn't actually break anything if the [tags] field is called something
-           different to "tags". However, we currently don't think it's good form to
-           allow this field to be called anything different. So, forbid it. *)
+           different to "tags". However, we currently don't think it's good form to allow
+           this field to be called anything different. So, forbid it. *)
         let () =
           let tags_actual_field_name = Field.name T.Fields.tags in
           if String.( <> ) tags_actual_field_name "tags"

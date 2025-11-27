@@ -31,7 +31,7 @@ module Functions = struct
       in
       Jane_ast.tarrow
         [ arg "from"; arg "to_" ]
-        { result_modes = Modes.local; result_type = [%type: [%t t] Optional_diff.t] }
+        { result_modes = Modes.local ~loc; result_type = [%type: [%t t] Optional_diff.t] }
     in
     let apply_base (derived_on_modes, derived_on) t =
       Jane_ast.tarrow
@@ -44,16 +44,15 @@ module Functions = struct
       Jane_ast.tarrow
         [ { arg_label = Nolabel; arg_modes = Modes.none; arg_type = [%type: [%t t] list] }
         ]
-        { result_modes = Modes.local; result_type = [%type: [%t t] Optional_diff.t] }
+        { result_modes = Modes.local ~loc; result_type = [%type: [%t t] Optional_diff.t] }
     in
     let fun_type base ~var_functions =
       let v = Var.core_type ~builder in
       let derived_on_modes =
-        if derived_on_type_is_local then Modes.local else Modes.none
+        if derived_on_type_is_local then Modes.local ~loc else Modes.none
       in
-      (* Generate the parametrized functions, e.g.
-         (from:'a -> to_:'a -> local_ 'a_diff Optional_diff.t)
-         (from:'b -> to_:'b -> local_ 'b_diff Optional_diff.t)
+      (* Generate the parametrized functions, e.g. (from:'a -> to_:'a -> local_ 'a_diff
+         Optional_diff.t) (from:'b -> to_:'b -> local_ 'b_diff Optional_diff.t)
       *)
       Jane_ast.tarrow_maybe
         (List.concat_map vars ~f:(fun var ->
@@ -202,7 +201,7 @@ let to_items t ~context ~(type_to_diff_declaration : unit Type_declaration.t) =
                            (pmod_ident
                               (Located.mk
                                  (Longident_helper.to_longident
-                                    (Simple (Module_name.to_string single_module_name, [])))))
+                                    (Simple [ Module_name.to_string single_module_name ]))))
                          ~override:Fresh)
                   ]
             }
@@ -250,7 +249,7 @@ let to_items t ~context ~(type_to_diff_declaration : unit Type_declaration.t) =
                  [%type:
                    ([%t core_to_ppx row_type], [%t core_to_ppx single_type]) Of_variant.t]
                in
-               { arg_label = Labelled arg_name; arg_modes = Modes.local; arg_type }))
+               { arg_label = Labelled arg_name; arg_modes = Modes.local ~loc; arg_type }))
           t_
       in
       let create_arg_names =
@@ -258,7 +257,7 @@ let to_items t ~context ~(type_to_diff_declaration : unit Type_declaration.t) =
       in
       let variants txt =
         Longident_helper.to_expression
-          (Simple (Module_name.to_string single_module_name, [ "Variants"; txt ]))
+          (Simple [ Module_name.to_string single_module_name; "Variants"; txt ])
           ~builder
       in
       let create_fn ~row_diff ~args_are_optional option_or_optional_diff =
@@ -381,8 +380,8 @@ let to_items t ~context ~(type_to_diff_declaration : unit Type_declaration.t) =
           then [%str let t_of_sexp = [%e t_of_sexp]]
           else []
         in
-        (* Since the type is private, we also expose a [of_single_list_exn] function, and we need
-           to override [t_of_sexp] (if one exists) *)
+        (* Since the type is private, we also expose a [of_single_list_exn] function, and
+           we need to override [t_of_sexp] (if one exists) *)
         { Items.sig_items; struct_items = Ok struct_items }
       in
       ( diff_type_declaration
@@ -428,8 +427,8 @@ let to_items t ~context ~(type_to_diff_declaration : unit Type_declaration.t) =
       let { Items.sig_items; struct_items } = items in
       let struct_items =
         Result.map struct_items ~f:(fun struct_items ->
-          (* Add a signature in the [ml] as well in the private case. Otherwise, users would
-             be able to create illegal diffs in the ml. *)
+          (* Add a signature in the [ml] as well in the private case. Otherwise, users
+             would be able to create illegal diffs in the ml. *)
           let structure = pmod_structure struct_items in
           let module_expr =
             pmod_constraint

@@ -396,8 +396,8 @@ module Array = struct
   external unsafe_get : local_ 'a t -> int -> 'a @@ portable = "%array_unsafe_get"
   external unsafe_set : local_ 'a t -> int -> 'a -> unit @@ portable = "%array_unsafe_set"
 
-  (* Unsafe because this function may be used to create values of type ['a],
-     which may have user-defined invariants beyond the float32 layout. *)
+  (* Unsafe because this function may be used to create values of type ['a], which may
+     have user-defined invariants beyond the float32 layout. *)
   external unsafe_create_uninitialized
     :  len:int
     -> 'a t

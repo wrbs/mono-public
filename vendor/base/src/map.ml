@@ -82,10 +82,10 @@ module Tree0 = struct
      We define the weight comparisons below as [is_too_heavy] and [may_rotate_just_once].
 
      [1] Binary search trees of bounded balance, Nievergelt and Reingold, SIAM Journal on
-     Computing Vol. 2, Iss. 1 (1973). https://dl.acm.org/doi/pdf/10.1145/800152.804906
+         Computing Vol. 2, Iss. 1 (1973). https://dl.acm.org/doi/pdf/10.1145/800152.804906
 
      [2] Balancing weight-balanced trees, Hirai and Yamamoto, JFP 21 (3): 287–307, 2011.
-     https://yoichihirai.com/bst.pdf *)
+         https://yoichihirai.com/bst.pdf *)
 
   type ('k, 'v, 'cmp) t =
     | Empty
@@ -111,23 +111,33 @@ module Tree0 = struct
 
   (* Checks for failure of the balance invariant in one direction:
 
-     {[ not (wt(A) <= wt(B) * 5/2) ]}
+     {[
+       not (wt A <= wt B * 5 / 2)
+     ]}
 
      We negate it by changing [<=] to [>].
 
-     {[ wt(A) > wt(B) * 5/2 ]}
+     {[
+       wt A > wt B * 5 / 2
+     ]}
 
      We avoid division by multiplying both sides by two.
 
-     {[ wt(A) * 2 > wt(B) * 5 ]}
+     {[
+       wt A * 2 > wt B * 5
+     ]}
 
      We stick to powers of two by changing [x * 5] to [x * 4 + x].
 
-     {[ wt(A) * 2 > wt(B) * 4 + wt(B) ]}
+     {[
+       wt A * 2 > (wt B * 4) + wt B
+     ]}
 
      And we avoid multiplication by using shifts for multiplication by 2 and by 4.
 
-     {[ wt(A) << 1 > wt(B) << 2 + wt(B) ]}
+     {[
+       wt A << 1 > wt B << 2 + wt B
+     ]}
   *)
   let is_too_heavy ~weight:wtA ~for_weight:wtB =
     (* See? Just like above! *)
@@ -137,23 +147,33 @@ module Tree0 = struct
 
   (* Checks if we can use a single rotation for the currently-lower siblings:
 
-     {[ wt(A) < wt(B) * 3/2 ]}
+     {[
+       wt A < wt B * 3 / 2
+     ]}
 
      We avoid division by multiplying both sides by two.
 
-     {[ wt(A) * 2 < wt(B) * 3 ]}
+     {[
+       wt A * 2 < wt B * 3
+     ]}
 
      We stick to powers of two by changing [x * 3] to [x * 2 + x].
 
-     {[ wt(A) * 2 < wt(B) * 2 + wt(B) ]}
+     {[
+       wt A * 2 < (wt B * 2) + wt B
+     ]}
 
      We incur one fewer multiplication by moving [wt(B) * 2] to the left.
 
-     {[ (wt(A) - wt(B)) * 2 < wt(B) ]}
+     {[
+       (wt A - wt B) * 2 < wt B
+     ]}
 
      And we avoid multiplication by using shift for multiplication by 2.
 
-     {[ (wt(A) - wt(B)) << 1 < wt(B) ]}
+     {[
+       wt A - wt B << 1 < wt B
+     ]}
   *)
   let may_rotate_just_once ~inner_sibling_weight:wtA ~outer_sibling_weight:wtB =
     (* See? Just like above! *)
@@ -216,8 +236,8 @@ module Tree0 = struct
   let create l x d r = create_with_weights ~wl:(weight l) ~wr:(weight r) l x d r
   let singleton key data = Leaf { key; data }
 
-  (* We must call [f] with increasing indexes, because the bin_prot reader in
-     Core.Map needs it. *)
+  (* We must call [f] with increasing indexes, because the bin_prot reader in Core.Map
+     needs it. *)
   let of_increasing_iterator_unchecked ~len ~f =
     let rec loop n ~f i : (_, _, _) t =
       match n with
@@ -411,8 +431,8 @@ module Tree0 = struct
       bal l v d r
   ;;
 
-  (* specialization of [set'] for the case when [key] is greater than all the
-     existing keys  *)
+  (* specialization of [set'] for the case when [key] is greater than all the existing
+     keys *)
   let rec set_max t key data =
     match t with
     | Empty -> Leaf { key; data }
@@ -860,7 +880,7 @@ module Tree0 = struct
       | Empty -> init
       | Leaf { key = k; data = d } ->
         if compare_key k min < 0 || compare_key k max > 0
-        then (* k < min || k > max *)
+        then (*=k < min || k > max *)
           init
         else f ~key:k ~data:d init
       | Node { left = l; key = k; data = d; right = r; weight = _ } ->
@@ -1279,11 +1299,10 @@ module Tree0 = struct
 
     (* [drop_phys_equal_prefix tree1 acc1 tree2 acc2] drops the largest physically-equal
        prefix of tree1 and tree2 that they share, and then prepends the remaining data
-       into acc1 and acc2, respectively.
-       This can be asymptotically faster than [cons] even if it skips a small proportion
-       of the tree because [cons] is always O(log(n)) in the size of the tree, while
-       this function is O(log(n/m)) where [m] is the size of the part of the tree that
-       is skipped. *)
+       into acc1 and acc2, respectively. This can be asymptotically faster than [cons]
+       even if it skips a small proportion of the tree because [cons] is always O(log(n))
+       in the size of the tree, while this function is O(log(n/m)) where [m] is the size
+       of the part of the tree that is skipped. *)
     let rec drop_phys_equal_prefix tree1 acc1 tree2 acc2 =
       if phys_equal tree1 tree2
       then (* Trees are equal, drop them *)
@@ -1891,15 +1910,15 @@ module Tree0 = struct
     (type k a b c d)
     (tree1 : (k, a, d) tree)
     (tree2 : (k, b, d) tree)
-    ~(left : (k, a, c) When_unmatched.t @ local)
-    ~(right : (k, b, c) When_unmatched.t @ local)
+    ~(first : (k, a, c) When_unmatched.t @ local)
+    ~(second : (k, b, c) When_unmatched.t @ local)
     ~(both : (k, a, b, c) When_matched_internal.t @ local)
     ~(compare_key : k -> k -> int @ local)
     =
     (* Perform all our matching on GADTs once, before recurring. *)
-    let when_unmatched_left_key = When_unmatched.apply_to_node left in
-    let when_unmatched_left = When_unmatched.apply_to_subtree left in
-    let when_unmatched_right = When_unmatched.apply_to_subtree right in
+    let when_unmatched_first_key = When_unmatched.apply_to_node first in
+    let when_unmatched_first = When_unmatched.apply_to_subtree first in
+    let when_unmatched_second = When_unmatched.apply_to_subtree second in
     let when_matched = When_matched_internal.apply_to_node both in
     let rec merge (tree1 : (k, a, d) tree) (tree2 : (k, b, d) tree) =
       (* Walk [tree1] recursively. *)
@@ -1909,8 +1928,8 @@ module Tree0 = struct
         Empty, tree1, tree2
       with
       | _, Empty, Empty -> Empty
-      | _, Empty, _ -> when_unmatched_right tree2
-      | _, _, Empty -> when_unmatched_left tree1
+      | _, Empty, _ -> when_unmatched_second tree2
+      | _, _, Empty -> when_unmatched_first tree1
       | (_ as tree1_left as tree1_right), Leaf { key; data = tree1_data }, _
       | ( _
         , Node
@@ -1921,7 +1940,7 @@ module Tree0 = struct
         let left = merge tree1_left tree2_left in
         let right = merge tree1_right tree2_right in
         (match tree2_maybe_data with
-         | None -> when_unmatched_left_key ~key ~data:tree1_data ~left ~right
+         | None -> when_unmatched_first_key ~key ~data:tree1_data ~left ~right
          | Some (_, tree2_data) ->
            when_matched
              ~key
@@ -1937,15 +1956,15 @@ module Tree0 = struct
   ;;
 
   (* Dispatch to [merge_by_case_internal], case by case. Determine which tree to recur on
-     first by [both], then based on [weight tree1] and [weight tree2] if a choice
-     remains. We prefer to walk the larger tree so we don't have to repeat [split] on a
-     large tree more often than necessary in [merge_by_case_internal] above. *)
+     first by [both], then based on [weight tree1] and [weight tree2] if a choice remains.
+     We prefer to walk the larger tree so we don't have to repeat [split] on a large tree
+     more often than necessary in [merge_by_case_internal] above. *)
   let merge_by_case
     (type k a b c d)
     (tree1 : (k, a, d) tree)
     (tree2 : (k, b, d) tree)
-    ~(left : (k, a, c) When_unmatched.t @ local)
-    ~(right : (k, b, c) When_unmatched.t @ local)
+    ~(first : (k, a, c) When_unmatched.t @ local)
+    ~(second : (k, b, c) When_unmatched.t @ local)
     ~(both : (k, a, b, c) When_matched.t @ local)
     ~(compare_key : k -> k -> int @ local)
     =
@@ -1953,19 +1972,25 @@ module Tree0 = struct
     | Drop ->
       (* dispatch based on weight *)
       if weight tree1 >= weight tree2
-      then merge_by_case_internal tree1 tree2 ~left ~right ~both:Drop ~compare_key
+      then merge_by_case_internal tree1 tree2 ~first ~second ~both:Drop ~compare_key
       else
-        merge_by_case_internal tree2 tree1 ~left:right ~right:left ~both:Drop ~compare_key
+        merge_by_case_internal
+          tree2
+          tree1
+          ~first:second
+          ~second:first
+          ~both:Drop
+          ~compare_key
     | Keep_first ->
-      (* traverse left tree to keep unmodified nodes *)
-      merge_by_case_internal tree1 tree2 ~left ~right ~both:Keep_first ~compare_key
+      (* traverse first tree to keep unmodified nodes *)
+      merge_by_case_internal tree1 tree2 ~first ~second ~both:Keep_first ~compare_key
     | Keep_second ->
-      (* traverse right tree to keep unmodified nodes *)
+      (* traverse second tree to keep unmodified nodes *)
       merge_by_case_internal
         tree2
         tree1
-        ~left:right
-        ~right:left
+        ~first:second
+        ~second:first
         ~both:Keep_first
         ~compare_key
     | Map f ->
@@ -1975,34 +2000,34 @@ module Tree0 = struct
         merge_by_case_internal
           tree1
           tree2
-          ~left
-          ~right
+          ~first
+          ~second
           ~both:(Map f)
           ~compare_key [@nontail]
       else
         merge_by_case_internal
           tree2
           tree1
-          ~left:right
-          ~right:left
+          ~first:second
+          ~second:first
           ~both:(Map (fun ~key a b -> f ~key b a))
           ~compare_key [@nontail]
     | Filter_first f ->
-      (* traverse left tree to keep unmodified nodes *)
+      (* traverse first tree to keep unmodified nodes *)
       merge_by_case_internal
         tree1
         tree2
-        ~left
-        ~right
+        ~first
+        ~second
         ~both:(Filter_first f)
         ~compare_key [@nontail]
     | Filter_second f ->
-      (* traverse right tree to keep unmodified nodes *)
+      (* traverse second tree to keep unmodified nodes *)
       merge_by_case_internal
         tree2
         tree1
-        ~left:right
-        ~right:left
+        ~first:second
+        ~second:first
         ~both:(Filter_first (fun ~key a b -> f ~key b a))
         ~compare_key [@nontail]
     | Filter_map f ->
@@ -2012,16 +2037,16 @@ module Tree0 = struct
         merge_by_case_internal
           tree1
           tree2
-          ~left
-          ~right
+          ~first
+          ~second
           ~both:(Filter_map f)
           ~compare_key [@nontail]
       else
         merge_by_case_internal
           tree2
           tree1
-          ~left:right
-          ~right:left
+          ~first:second
+          ~second:first
           ~both:(Filter_map (fun ~key a b -> f ~key b a))
           ~compare_key [@nontail]
   ;;
@@ -2173,6 +2198,35 @@ module Tree0 = struct
     if n < 0 || n >= length t then None else Some (loop t n)
   ;;
 
+  let split_n t n =
+    if n <= 0
+    then Empty, t
+    else if n >= length t
+    then t, Empty
+    else (
+      (* Only call this when [0 < n && n < length t]. *)
+      let rec split_n_nontrivial t n =
+        match t with
+        | Empty | Leaf _ ->
+          (* Precondition cannot be met in these cases. *)
+          assert false
+        | Node { left; key; data; right; weight = _ } ->
+          let left_len = length left in
+          if n < left_len
+          then (
+            let prefix, suffix = split_n_nontrivial left n in
+            prefix, join suffix key data right)
+          else if n = left_len
+          then left, join Empty key data right
+          else if n = left_len + 1
+          then join left key data Empty, right
+          else (
+            let prefix, suffix = split_n_nontrivial right (n - left_len - 1) in
+            join left key data prefix, suffix)
+      in
+      split_n_nontrivial t n)
+  ;;
+
   let rec find_first_satisfying t ~f =
     match t with
     | Empty -> None
@@ -2304,8 +2358,8 @@ module Tree0 = struct
     match of_alist alist ~compare_key with
     | `Ok v -> v
     | `Duplicate_key k ->
-      (* find the sexp of a duplicate key, so the error is narrowed to a key and not
-         the whole map *)
+      (* find the sexp of a duplicate key, so the error is narrowed to a key and not the
+         whole map *)
       let alist_sexps = list_of_sexp (pair_of_sexp Fn.id Fn.id) sexp in
       let found_first_k = ref false in
       List.iter2_ok alist alist_sexps ~f:(fun (k2, _) (k2_sexp, _) ->
@@ -2413,10 +2467,9 @@ module Tree0 = struct
 end
 
 type ('k, 'v, 'comparator) t =
-  { (* [comparator] is the first field so that polymorphic equality fails on a map due
-       to the functional value in the comparator.
-       Note that this does not affect polymorphic [compare]: that still produces
-       nonsense. *)
+  { (* [comparator] is the first field so that polymorphic equality fails on a map due to
+       the functional value in the comparator. Note that this does not affect polymorphic
+       [compare]: that still produces nonsense. *)
     global_ comparator : ('k, 'comparator) Comparator.t
   ; tree : ('k, 'v, 'comparator) Tree0.t
   }
@@ -2596,8 +2649,14 @@ module Accessors = struct
       ~f
   ;;
 
-  let merge_by_case t1 t2 ~(local_ left) ~(local_ right) ~both =
-    (Tree0.merge_by_case t1.tree t2.tree ~left ~right ~both ~compare_key:(compare_key t1)
+  let merge_by_case t1 t2 ~(local_ first) ~(local_ second) ~both =
+    (Tree0.merge_by_case
+       t1.tree
+       t2.tree
+       ~first
+       ~second
+       ~both
+       ~compare_key:(compare_key t1)
      |> like t1)
     [@nontail]
   ;;
@@ -2682,6 +2741,7 @@ module Accessors = struct
   let nth t n = Tree0.nth t.tree n
   let nth_exn t n = Option.value_exn (nth t n)
   let rank t key = Tree0.rank t.tree key ~compare_key:(compare_key t)
+  let split_n t n = Tree0.split_n t.tree n |> like2 t
   let sexp_of_t sexp_of_k sexp_of_v _ t = Tree0.sexp_of_t sexp_of_k sexp_of_v t.tree
 
   let to_sequence ?order ?keys_greater_or_equal_to ?keys_less_or_equal_to t =
@@ -2729,8 +2789,8 @@ module Accessors = struct
   end
 end
 
-(* [0] is used as the [length] argument everywhere in this module, since trees do not
-   have their lengths stored at the root, unlike maps. The values are discarded always. *)
+(* [0] is used as the [length] argument everywhere in this module, since trees do not have
+   their lengths stored at the root, unlike maps. The values are discarded always. *)
 module Tree = struct
   type weight = int
 
@@ -2993,9 +3053,9 @@ module Tree = struct
       ~f
   ;;
 
-  let merge_by_case ~comparator t1 t2 ~left ~right ~both =
+  let merge_by_case ~comparator t1 t2 ~first ~second ~both =
     let compare_key = Comparator.compare comparator in
-    Tree0.merge_by_case t1 t2 ~left ~right ~both ~compare_key
+    Tree0.merge_by_case t1 t2 ~first ~second ~both ~compare_key
   ;;
 
   let merge ~comparator t1 t2 ~f =
@@ -3094,6 +3154,7 @@ module Tree = struct
     Tree0.rank t key ~compare_key:(Comparator.compare comparator)
   ;;
 
+  let split_n t n = Tree0.split_n t n
   let sexp_of_t sexp_of_k sexp_of_v _ t = Tree0.sexp_of_t sexp_of_k sexp_of_v t
 
   let t_of_sexp_direct ~comparator k_of_sexp v_of_sexp sexp =
@@ -3147,6 +3208,62 @@ module Tree = struct
     ;;
 
     let to_tree t = Tree0.Build_increasing.to_tree_unchecked t
+  end
+
+  module Expert = struct
+    type ('k, 'v, 'cmp) t = ('k, 'v, 'cmp) Tree0.t =
+      | Empty
+      | Leaf of
+          { global_ key : 'k
+          ; global_ data : 'v
+          }
+      | Node of
+          { global_ left : ('k, 'v, 'cmp) t
+          ; global_ key : 'k
+          ; global_ data : 'v
+          ; global_ right : ('k, 'v, 'cmp) t
+          ; weight : int
+          }
+    [@@deriving sexp_of]
+
+    let balance_invariants t = Tree0.balance_invariants t
+
+    let order_invariants ~comparator t =
+      Tree0.order_invariants t ~compare_key:(Comparator.compare comparator)
+    ;;
+
+    let are_balanced t1 t2 =
+      let w1 = Tree0.weight t1
+      and w2 = Tree0.weight t2 in
+      (not (Tree0.is_too_heavy ~weight:w1 ~for_weight:w2))
+      && not (Tree0.is_too_heavy ~weight:w2 ~for_weight:w1)
+    ;;
+
+    let need_rebalance_at_most_once t1 t2 =
+      let w1 = Tree0.weight t1
+      and w2 = Tree0.weight t2 in
+      match t1, t2 with
+      | Node node, _ when Tree0.is_too_heavy ~weight:w1 ~for_weight:w2 ->
+        (not (Tree0.is_too_heavy ~weight:(w1 - 1) ~for_weight:w2))
+        && Tree0.may_rotate_just_once
+             ~inner_sibling_weight:(Tree0.weight node.right)
+             ~outer_sibling_weight:(Tree0.weight node.left)
+      | _, Node node when Tree0.is_too_heavy ~weight:w2 ~for_weight:w1 ->
+        (not (Tree0.is_too_heavy ~weight:(w2 - 1) ~for_weight:w1))
+        && Tree0.may_rotate_just_once
+             ~inner_sibling_weight:(Tree0.weight node.left)
+             ~outer_sibling_weight:(Tree0.weight node.right)
+      | _ -> true
+    ;;
+
+    let create_assuming_balanced_unchecked = Tree0.create
+    let create_and_rebalance_at_most_once_unchecked = Tree0.bal
+    let create_and_rebalance_unchecked = Tree0.join
+    let concat_and_rebalance_at_most_once_unchecked = Tree0.concat_unchecked
+    let concat_and_rebalance_unchecked = Tree0.concat_and_balance_unchecked
+    let singleton = Tree0.singleton
+    let empty = Empty
+    let length_of_weight = Int.pred
   end
 end
 
@@ -3589,48 +3706,4 @@ module Poly = struct
   let map_keys t ~f = Using_comparator.map_keys ~comparator t ~f
   let map_keys_exn t ~f = Using_comparator.map_keys_exn ~comparator t ~f
   let transpose_keys t = Using_comparator.transpose_keys ~comparator t
-end
-
-module Private = struct
-  module Tree = struct
-    type ('k, 'v) t = ('k, 'v, Comparator.Poly.comparator_witness) Tree0.t
-
-    let balance_invariants t = Tree0.balance_invariants t
-
-    let are_balanced t1 t2 =
-      let w1 = Tree0.weight t1
-      and w2 = Tree0.weight t2 in
-      (not (Tree0.is_too_heavy ~weight:w1 ~for_weight:w2))
-      && not (Tree0.is_too_heavy ~weight:w2 ~for_weight:w1)
-    ;;
-
-    let are_almost_balanced t1 t2 =
-      let w1 = Tree0.weight t1
-      and w2 = Tree0.weight t2 in
-      match t1, t2 with
-      | Node node, _ when Tree0.is_too_heavy ~weight:w1 ~for_weight:w2 ->
-        (not (Tree0.is_too_heavy ~weight:(w1 - 1) ~for_weight:w2))
-        && Tree0.may_rotate_just_once
-             ~inner_sibling_weight:(Tree0.weight node.right)
-             ~outer_sibling_weight:(Tree0.weight node.left)
-      | _, Node node when Tree0.is_too_heavy ~weight:w2 ~for_weight:w1 ->
-        (not (Tree0.is_too_heavy ~weight:(w2 - 1) ~for_weight:w1))
-        && Tree0.may_rotate_just_once
-             ~inner_sibling_weight:(Tree0.weight node.left)
-             ~outer_sibling_weight:(Tree0.weight node.right)
-      | _ -> true
-    ;;
-
-    let expose t =
-      match (t : (_, _, _) Tree0.t) with
-      | Empty -> None
-      | Leaf { key; data } -> Some (Tree0.Empty, key, data, Tree0.Empty)
-      | Node { left; key; data; right; _ } -> Some (left, key, data, right)
-    ;;
-
-    let empty = Tree0.Empty
-    let create_if_balanced = Tree0.create
-    let create_if_almost_balanced = Tree0.bal
-    let create_even_if_completely_unbalanced = Tree0.join
-  end
 end

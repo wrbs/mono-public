@@ -18,10 +18,14 @@ type ('a : any) thunk = unit -> 'a
 module T : sig @@ portable
   type (+'a : any) t : value mod contended
 
-  val%template create : (size:int -> random:Splittable_random.t -> 'a) @ p -> 'a t @ p
+  val%template create
+    : ('a : value_or_null).
+    (size:int -> random:Splittable_random.t -> 'a) @ p -> 'a t @ p
   [@@mode p = (nonportable, portable)]
 
-  val generate : 'a t -> size:int -> random:Splittable_random.t -> 'a
+  val generate
+    : ('a : value_or_null).
+    'a t -> size:int -> random:Splittable_random.t -> 'a
 
   module Via_thunk : sig
     val%template create
@@ -71,7 +75,7 @@ end
 
 let%template size = (create [@mode portable]) (fun ~size ~random:_ -> size)
 
-let%template return (type a : value mod c) (x : a) =
+let%template return (type a : value_or_null mod c) (x : a) =
   (create [@mode p]) (fun ~size:_ ~random:_ -> x)
 [@@mode (p, c) = ((nonportable, uncontended), (portable, contended))]
 ;;
@@ -394,6 +398,11 @@ let option value_t =
     [ (map [@mode p]) unit ~f:(fun () -> None); (map [@mode p]) value_t ~f:Option.return ]
 ;;
 
+let or_null value_t =
+  (union [@mode p])
+    [ (map [@mode p]) unit ~f:(fun () -> Null); (map [@mode p]) value_t ~f:Or_null.this ]
+;;
+
 let either fst_t snd_t =
   (union [@mode p])
     [ (map [@mode p]) fst_t ~f:Either.first; (map [@mode p]) snd_t ~f:Either.second ]
@@ -481,9 +490,8 @@ let%template char_alpha = (union [@mode portable]) [ char_lowercase; char_upperc
 
 let%template char_alphanum =
   (weighted_union [@mode portable])
-    (* Most people probably expect this to be a uniform distribution, not weighted
-       toward digits like we would get with [union] (since there are fewer digits than
-       letters). *)
+    (* Most people probably expect this to be a uniform distribution, not weighted toward
+       digits like we would get with [union] (since there are fewer digits than letters). *)
     [ 52., char_alpha; 10., char_digit ]
 ;;
 
@@ -937,8 +945,8 @@ let%template sexp_of atom =
   (fixed_point [@mode p]) (fun self ->
     let open Syntax.Let_syntax [@mode p] in
     let%bind size in
-    (* choose a number weighted low so we have a decreasing, but not vanishing, chance
-       to generate atoms as size grows *)
+    (* choose a number weighted low so we have a decreasing, but not vanishing, chance to
+       generate atoms as size grows *)
     let open Syntax.Let_syntax in
     match%bind For_int.log_uniform_inclusive 0 (size + 1) with
     (* generate an atom using the given size *)

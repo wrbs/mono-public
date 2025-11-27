@@ -59,7 +59,7 @@ module Lch : sig
   val chroma : t -> float
   val alpha : t -> float
 
-  (* setters*)
+  (* setters *)
   val set_alpha : t -> float -> t
   val set_lightness : t -> float -> t
   val set_hue : t -> rad:float -> t

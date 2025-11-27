@@ -2,7 +2,7 @@
 
     This draws a simple snake pattern across the seven segment display. The width of the
     snake pattern is programmable from 1, 2, 4 and 8 wide. The snake is repeated as
-    necessary to fill all eigth seven segment displays . **)
+    necessary to fill all eigth seven segment displays . *)
 
 open Hardcaml
 

@@ -19,13 +19,18 @@ struct
         { clock : 'a
         ; clear : 'a
         ; uart_rx : 'a
+        ; eth_crsdv : 'a
+        ; eth_rxerr : 'a
+        ; eth_rxd : 'a
         ; tx_input : 'a Memory_to_packet8.Input.With_valid.t
         ; uart_read_request : 'a Memory.Read_bus.Dest.t
         ; ethernet_read_request : 'a Memory.Read_bus.Dest.t
-        ; write_request : 'a Memory.Write_bus.Dest.t
+        ; uart_write_request : 'a Memory.Write_bus.Dest.t
+        ; ethernet_write_request : 'a Memory.Write_bus.Dest.t
         ; uart_read_response : 'a Memory.Read_response.With_valid.t
         ; ethernet_read_response : 'a Memory.Read_response.With_valid.t
-        ; write_response : 'a Memory.Write_response.With_valid.t
+        ; uart_write_response : 'a Memory.Write_response.With_valid.t
+        ; ethernet_write_response : 'a Memory.Write_response.With_valid.t
         }
       [@@deriving hardcaml]
     end
@@ -39,7 +44,9 @@ struct
         ; dma_tx_ready : 'a
         ; uart_read_request : 'a Memory.Read_bus.Source.t
         ; ethernet_read_request : 'a Memory.Read_bus.Source.t
-        ; write_request : 'a Memory.Write_bus.Source.t
+        ; uart_write_request : 'a Memory.Write_bus.Source.t
+        ; ethernet_write_request : 'a Memory.Write_bus.Source.t
+        ; frame_buffer_write_done : 'a
         ; clear_message : 'a
         }
       [@@deriving hardcaml, fields ~getters]

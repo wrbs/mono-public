@@ -225,6 +225,7 @@ module%test _ : module type of Queue = struct
   let dequeue_back = dequeue_back
   let dequeue_back_exn = [%eta1 dequeue_back_exn]
   let peek = peek
+  let peek_or_null = [%eta1 peek_or_null]
   let peek_exn = [%eta1 peek_exn]
   let peek_back = peek_back
   let peek_back_exn = [%eta1 peek_back_exn]
@@ -261,6 +262,15 @@ module%test _ : module type of Queue = struct
     [%test_result: int] (dequeue_back_exn t) ~expect:5;
     [%test_result: int] (dequeue_back_exn t) ~expect:4;
     [%test_result: int] (dequeue_back_exn t) ~expect:3
+  ;;
+
+  let%test_unit _ =
+    let t = singleton 7 in
+    [%test_result: int] (length t) ~expect:1;
+    [%test_result: int] (capacity t) ~expect:1;
+    [%test_result: int Or_null.t] (peek_or_null t) ~expect:(This 7);
+    [%test_result: int] (dequeue_exn t) ~expect:7;
+    [%test_result: int Or_null.t] (peek_or_null t) ~expect:Null
   ;;
 
   let dequeue_and_ignore_exn = [%eta1 dequeue_and_ignore_exn]
@@ -1183,7 +1193,7 @@ module%test _ : module type of Queue = struct
     in
     assert (does_raise (fun () -> filter_inplace t ~f));
     (* even though we said to drop the first element, the aborted call to [filter_inplace]
-          shouldn't have made that change *)
+       shouldn't have made that change *)
     (match peek_exn t with
      | `drop_this -> ()
      | `new_element | `enqueue_new_element | `unreachable ->
@@ -1232,5 +1242,5 @@ module%test _ : module type of Queue = struct
     ;;
   end
 end
-(* This signature is here to remind us to update the unit tests whenever we
-      change [Queue]. *)
+(* This signature is here to remind us to update the unit tests whenever we change
+   [Queue]. *)

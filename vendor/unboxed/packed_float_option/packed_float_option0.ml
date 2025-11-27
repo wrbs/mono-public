@@ -108,21 +108,29 @@ module Infix = struct
   let ( * ) = Float.( * )
   let ( / ) = Float.( / )
 
-  (* We need to check both operands, because:
-     Float.nan ** 0. = 1.
+  (* We need to check both operands, because: Float.nan ** 0. = 1.
      1. ** Float.nan = 1. *)
   let ( ** ) t1 t2 = if is_none t1 || is_none t2 then none else Float.( ** ) t1 t2
-
-  (* These functions return false if either operand is [nan]. *)
-  let ( < ) = Float.( < )
-  let ( <= ) = Float.( <= )
-  let ( > ) = Float.( > )
-  let ( >= ) = Float.( >= )
 
   (* Although [Float.(nan <> nan)] is true, we define [Packed_float_option.(none = none)]
      to be true (per [equal] above). *)
   let ( = ) = equal
   let ( <> ) t1 t2 = not (t1 = t2)
+end
+
+module Ieee_nan = struct
+  module Infix = struct
+    (* These functions return false if either operand is [nan]. *)
+    let ( < ) = [%eta2 Float.( < )]
+    let ( <= ) = [%eta2 Float.( <= )]
+    let ( > ) = [%eta2 Float.( > )]
+    let ( >= ) = [%eta2 Float.( >= )]
+  end
+
+  include Infix
+
+  let max = Float.max
+  let clamp_exn = Float.clamp_exn
 end
 
 module Local = struct
@@ -138,10 +146,6 @@ module Local = struct
     let ( - ) = Stdlib.( -. )
     let ( * ) = Stdlib.( *. )
     let ( / ) = Stdlib.( /. )
-    let ( < ) (x : float) y = Stdlib.( < ) x y
-    let ( <= ) (x : float) y = Stdlib.( <= ) x y
-    let ( > ) (x : float) y = Stdlib.( > ) x y
-    let ( >= ) (x : float) y = Stdlib.( >= ) x y
     let ( = ) = equal
     let ( <> ) t1 t2 = not (t1 = t2)
   end
@@ -190,12 +194,12 @@ module Local = struct
 end
 
 (* Due to the arithmetic operations provided above, it's possible to get a different
-   representation of [None]. For hashing, we make sure to use a canonical [None],
-   although it is not necessary at the time, as [Float.hash] returns the same hash for
-   all representations of [NaN].
+   representation of [None]. For hashing, we make sure to use a canonical [None], although
+   it is not necessary at the time, as [Float.hash] returns the same hash for all
+   representations of [NaN].
 
-   The performance of keeping vs. removing this branching stays the same,
-   proved by benchmarking. *)
+   The performance of keeping vs. removing this branching stays the same, proved by
+   benchmarking. *)
 let none_hash = Float.hash none
 
 let hash t =
@@ -221,9 +225,6 @@ let is_non_negative = Float.is_non_negative
 let is_integer = Float.is_integer
 let is_finite = Float.is_finite
 let min = Float.min
-let max = Float.max
-let clamp = Float.clamp
-let clamp_exn = Float.clamp_exn
 let inv t = Infix.( / ) (of_float_nan_as_none 1.) t
 let scale t flt = Infix.( * ) t (of_float_nan_as_none flt)
 
@@ -269,11 +270,12 @@ module Unboxed = struct
 
       val globalize : local_ t -> t
 
-      include%template Bin_prot.Binable.S_any [@mode local] with type t := t
+      include%template Bin_prot.Binable.S [@mode local] with type t := t
 
       include Ppx_hash_lib.Hashable.S_any with type t := t
 
       val typerep_of_t : t Typerep.t
+      val typename_of_t : t Typerep_lib.Typename.t
     end)
 
   let[@inline] [@zero_alloc] equal t1 t2 = [%compare.equal: Float_u.t] t1 t2
@@ -302,7 +304,6 @@ module Unboxed = struct
   let[@inline] [@zero_alloc] abs t = Float_u.abs t
   let[@inline] [@zero_alloc] select cond t1 t2 = Float_u.select cond t1 t2
   let[@zero_alloc] min t1 t2 = Float_u.min t1 t2
-  let[@zero_alloc] max t1 t2 = Float_u.max t1 t2
   let[@inline] [@zero_alloc] unchecked_some v = v
   let[@inline] [@zero_alloc] some_if b v = select b v (none ())
 
@@ -329,15 +330,53 @@ module Unboxed = struct
   end
 
   module Infix = struct
-    include Float_u.O
+    open Float_u.O
 
-    (* We need to check both operands, because:
-       Float.nan ** 0. = 1.
+    let ( + ) = [%eta2 ( + )]
+    let ( - ) = [%eta2 ( - )]
+    let ( * ) = [%eta2 ( * )]
+    let ( / ) = [%eta2 ( / )]
+    let ( = ) = [%eta2 equal]
+    let[@inline] [@zero_alloc] ( <> ) t1 t2 = not (equal t1 t2)
+
+    (* We need to check both operands, because: Float.nan ** 0. = 1.
        1. ** Float.nan = 1. *)
-    let[@zero_alloc] ( ** ) t1 t2 = if is_none t1 || is_none t2 then none () else t1 ** t2
+    let[@zero_alloc] ( ** ) t1 t2 =
+      if Bool.Non_short_circuiting.(is_none t1 || is_none t2) then none () else t1 ** t2
+    ;;
   end
 
-  module O = Infix
+  module Ieee_nan = struct
+    module Infix = struct
+      open Float_u.O
+      (* These functions return false if either operand is [nan]. *)
+
+      let ( < ) = [%eta2 ( < )]
+      let ( <= ) = [%eta2 ( <= )]
+      let ( > ) = [%eta2 ( > )]
+      let ( >= ) = [%eta2 ( >= )]
+    end
+
+    include Infix
+
+    (* Returns [none] if either operand is [none] *)
+    let max = [%eta2 Float_u.max]
+  end
+
+  include Infix
+
+  module O = struct
+    include Infix
+    open Float_u.O
+
+    let abs t = abs t
+    let neg t = neg t
+    let unbox x = unbox x
+
+    let%template[@mode m = (global, local)] box (t @ m) =
+      (box [@mode m]) t [@exclave_if_local m]
+    ;;
+  end
 
   let merge x y ~f =
     let open Optional_syntax in
@@ -367,13 +406,20 @@ module Unboxed = struct
     | Some f -> f
   ;;
 
-  let[@inline] [@zero_alloc] neg t = Float_u.neg t
-  let[@inline] [@zero_alloc] zero () = Float_u.zero ()
-  let[@inline] [@zero_alloc] one () = Float_u.one ()
+  let neg = [%eta1 Float_u.neg]
+  let zero = [%eta1 Float_u.zero]
+  let one = [%eta1 Float_u.one]
   let[@inline] [@zero_alloc strict] of_float_nan_as_none (t : float#) : t = t
   let[@inline] [@zero_alloc] to_float_none_as_nan (t : t) : float# = t
-  let[@zero_alloc] scale t flt = Infix.( * ) t (of_float_nan_as_none flt)
-  let[@zero_alloc] div t flt = Infix.( / ) t (of_float_nan_as_none flt)
+  let[@zero_alloc] scale t flt = Infix.(t * of_float_nan_as_none flt)
+  let[@zero_alloc] div t flt = Infix.(t / of_float_nan_as_none flt)
+  let is_finite = [%eta1 Float_u.is_finite]
+  let is_inf = [%eta1 Float_u.is_inf]
+  let[@inline] [@zero_alloc] is_positive t = Ieee_nan.(t > zero ())
+  let[@inline] [@zero_alloc] is_non_negative t = Ieee_nan.(t >= zero ())
+  let[@inline] [@zero_alloc] is_negative t = Ieee_nan.(t < zero ())
+  let[@inline] [@zero_alloc] is_non_positive t = Ieee_nan.(t <= zero ())
+  let is_integer = [%eta1 Float_u.is_integer]
   let t_of_sexp sexp = t_of_sexp sexp |> unbox
   let sexp_of_t t = sexp_of_t (box t)
   let to_string t = Sexp.to_string (sexp_of_t t)
@@ -408,9 +454,15 @@ module Unboxed = struct
   end
 
   module Array = struct
+    let sexp_of_t' = sexp_of_t
+    let t_of_sexp' = t_of_sexp
+
     include Float_u.Array
 
-    let sexp_of_t t = custom_sexp_of_t sexp_of_t t
+    (* It's OK that [sexp_of_t] here differs from the [sexp_of_t] in [Float_u.Array],
+       because the equality between these types is not exposed by this module's interface. *)
+    let sexp_of_t t = custom_sexp_of_t sexp_of_t' t
+    let t_of_sexp sexp = custom_t_of_sexp t_of_sexp' sexp
   end
 
   module Ref = struct
@@ -431,11 +483,12 @@ module Unboxed = struct
         F :
         sig
         @@ portable
-          include%template Bin_prot.Binable.S_any [@mode local] with type t := t
+          include%template Bin_prot.Binable.S [@mode local] with type t := t
 
           include Ppx_hash_lib.Hashable.S_any with type t := t
 
           val typerep_of_t : t Typerep.t
+          val typename_of_t : t Typerep_lib.Typename.t
           val equal : t -> t -> bool
           val compare : t -> t -> int
         end)

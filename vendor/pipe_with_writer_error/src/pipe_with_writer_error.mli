@@ -172,6 +172,7 @@ val map'
   -> ('b, 'error) t
 
 val map_error : ('a, 'error1) t -> f:('error1 -> 'error2) -> ('a, 'error2) t
+val map_error' : ('a, 'error1) t -> f:('error1 -> 'error2 Deferred.t) -> ('a, 'error2) t
 
 val folding_map
   :  ('a, 'error) t

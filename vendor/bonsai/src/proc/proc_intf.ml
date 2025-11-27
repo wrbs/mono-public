@@ -676,9 +676,6 @@ module type S = sig
       -> unit
       -> Time_ns.t Computation.t
 
-    (** The current time, update as frequently as possible. *)
-    val now : here:[%call_pos] -> unit -> Time_ns.t Computation.t
-
     module Before_or_after : sig
       type t = Ui_incr.Before_or_after.t =
         | Before
@@ -725,6 +722,11 @@ module type S = sig
 
     (** Like [sleep], but waits until a specific time, rather than a time relative to now. *)
     val until : here:[%call_pos] -> unit -> (Time_ns.t -> unit Effect.t) Computation.t
+
+    module Expert : sig
+      (** The current time, update as frequently as possible. *)
+      val now : here:[%call_pos] -> unit -> Time_ns.t Computation.t
+    end
   end
 
   module Edge : sig
@@ -743,6 +745,7 @@ module type S = sig
     val on_change
       :  here:[%call_pos]
       -> ?sexp_of_model:('a -> Sexp.t)
+      -> ?trigger:[ `Before_display | `After_display ]
       -> equal:('a -> 'a -> bool)
       -> 'a Value.t
       -> callback:('a -> unit Effect.t) Value.t
@@ -753,6 +756,7 @@ module type S = sig
     val on_change'
       :  here:[%call_pos]
       -> ?sexp_of_model:('a -> Sexp.t)
+      -> ?trigger:[ `Before_display | `After_display ]
       -> equal:('a -> 'a -> bool)
       -> 'a Value.t
       -> callback:('a option -> 'a -> unit Effect.t) Value.t
@@ -774,6 +778,7 @@ module type S = sig
       :  here:[%call_pos]
       -> ?on_activate:unit Effect.t Value.t
       -> ?on_deactivate:unit Effect.t Value.t
+      -> ?before_display:unit Effect.t Value.t
       -> ?after_display:unit Effect.t Value.t
       -> unit
       -> unit Computation.t
@@ -784,8 +789,18 @@ module type S = sig
       :  here:[%call_pos]
       -> ?on_activate:unit Effect.t option Value.t
       -> ?on_deactivate:unit Effect.t option Value.t
+      -> ?before_display:unit Effect.t option Value.t
       -> ?after_display:unit Effect.t option Value.t
       -> unit
+      -> unit Computation.t
+
+    (** [before_display] and [before_display'] are lower-level functions that can be used
+        to register an event to occur once-per-frame (before the vdom is mounted) *)
+    val before_display : here:[%call_pos] -> unit Effect.t Value.t -> unit Computation.t
+
+    val before_display'
+      :  here:[%call_pos]
+      -> unit Effect.t option Value.t
       -> unit Computation.t
 
     (** [after_display] and [after_display'] are lower-level functions that can be used to
@@ -1009,7 +1024,7 @@ module type S = sig
       In the code above, [b] has type ['a Computation.t], and [a] has type ['a Value.t]. *)
   module Let_syntax : sig
     (*_ [let%pattern_bind] requires that a function named [return] with these semantics
-      exist here. *)
+        exist here. *)
     val return : here:[%call_pos] -> 'a Value.t -> 'a Computation.t
     val ( >>| ) : here:[%call_pos] -> 'a Value.t -> ('a -> 'b) -> 'b Value.t
     val ( <*> ) : here:[%call_pos] -> ('a -> 'b) Value.t -> 'a Value.t -> 'b Value.t

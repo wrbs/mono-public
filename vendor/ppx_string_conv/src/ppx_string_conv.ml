@@ -22,8 +22,8 @@ module Fn_name = struct
     let loc = type_.loc in
     match type_.txt with
     | Lident "string" ->
-      (* Special case for the type 'string' -- there's no 'string_of_string' function,
-         so we use the identity function instead *)
+      (* Special case for the type 'string' -- there's no 'string_of_string' function, so
+         we use the identity function instead *)
       (match args with
        | [ expr ] -> expr
        | _ -> A.eapply ~loc [%expr fun s -> s] args)
@@ -93,7 +93,8 @@ let make_stringable_sig_for_type
              (Loc.map decl.ptype_name ~f:(fun type_name ->
                 Fn_name.for_type fn_name ~type_name))
            ~prim:[]
-           ~modalities:(if portable then [ Ppxlib_jane.Modality "portable" ] else [])
+           ~modalities:
+             (if portable then Ppxlib_jane.Shim.Modalities.portable ~loc else [])
            ~type_:(sig_ t))
     in
     let build_fn (fn_name : Fn_name.t) =
@@ -289,9 +290,8 @@ module Generic_variant_renderer = struct
     (* If there are constructors with invalid parameters, we don't bother generate a
        [to_string] for them, making the match non-exhaustive
 
-       To avoid generating a confusing error about that that's shown to the user, we
-       need to add a dummy wildcard case if there are any errors to make the match
-       exhaustive. *)
+       To avoid generating a confusing error about that that's shown to the user, we need
+       to add a dummy wildcard case if there are any errors to make the match exhaustive. *)
     match errors with
     | [] -> []
     | _ :: _ -> [ A.case ~lhs:[%pat? _] ~guard:None ~rhs:[%expr assert false] ]
@@ -551,7 +551,16 @@ module Variant_impl = struct
       Ok
         (Option.value_or_thunk name ~default:(fun () ->
            maybe_capitalize ~capitalization:t.capitalization pcd_name))
-    | _ -> Error (error_ext ~loc:constr.pcd_loc "expected unit variant without arguments")
+    | { pcd_args = Pcstr_tuple [ _arg ]; pcd_vars = []; pcd_res = None; pcd_name = _; _ }
+      ->
+      Error
+        (error_ext
+           ~loc:constr.pcd_loc
+           "expected variant without arguments: to take an argument, add [@nested] or \
+            [@nested \"your_prefix_here\"]")
+    | { pcd_args = _; pcd_vars = _; pcd_res = Some _; pcd_name = _; _ } ->
+      Error (error_ext ~loc:constr.pcd_loc "GADTs not supported")
+    | _ -> Error (error_ext ~loc:constr.pcd_loc "expected variant without arguments")
   ;;
 
   let get_nested_type constr =
@@ -559,6 +568,8 @@ module Variant_impl = struct
     | { pcd_args = Pcstr_tuple [ arg ]; pcd_vars = []; pcd_res = None; _ } ->
       let ty = Ppxlib_jane.Shim.Pcstr_tuple_arg.to_core_type arg in
       get_nested_type ~loc:ty.ptyp_loc ty
+    | { pcd_args = _; pcd_vars = _; pcd_res = Some _; pcd_name = _; _ } ->
+      Error (error_ext ~loc:constr.pcd_loc "GADTs not supported")
     | _ ->
       Error
         (error_ext
@@ -935,6 +946,18 @@ let build_impl_or_error
   ~portable
   (decl : type_declaration)
   =
+  let%bind.Result () =
+    match (what_to_generate : What_to_generate.t) with
+    | Only Of_string | Both -> Ok ()
+    | Only To_string ->
+      if list_options_on_error
+      then
+        Error
+          [%string
+            "[%{Argument_names.list_options_on_error}] is not meaningful when only \
+             deriving [to_string]"]
+      else Ok ()
+  in
   match
     ( Ppxlib_jane.Shim.Type_kind.of_parsetree decl.ptype_kind
     , decl.ptype_params
@@ -987,8 +1010,8 @@ let build_impl_or_error
          ~portable
      | Ptyp_constr (_, _ :: _) -> Error "aliases to types with parameters not supported"
      | _ ->
-       (* There's a few other niche cases (objects/class/package types) which we
-            can give a generic message to *)
+       (* There's a few other niche cases (objects/class/package types) which we can give
+          a generic message to *)
        Error "type not supported")
 ;;
 

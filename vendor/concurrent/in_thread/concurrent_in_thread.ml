@@ -2,30 +2,30 @@ open Base
 open Await
 module Expert = Multicore
 
-let rec spawn : type a. (a, unit) Concurrent.spawn_fn =
-  fun scope ~f ->
+let rec spawn : type r a. (r, a, unit) Concurrent.spawn_fn =
+  fun scope ~f r ->
   match
     Expert.spawn
-      (fun token ->
+      (fun ({ many = token }, r) ->
         (* Always record backtraces in concurrent threads *)
         Stdlib.Printexc.record_backtrace true;
         Scope.Token.use token ~f:(fun terminator scope ->
-          with_concurrent terminator ~f:(fun [@inline] c -> f scope () c [@nontail])
+          with_blocking terminator ~f:(fun [@inline] c -> f scope () c r [@nontail])
           [@nontail])
         [@nontail])
-      (Scope.add scope)
+      ({ many = Scope.add scope }, r)
   with
-  | Spawned -> ()
-  | Failed (token, exn, bt) ->
+  | Spawned -> Spawned
+  | Failed (({ many = token }, r), exn, bt) ->
     Scope.Token.drop token;
-    Exn.raise_with_original_backtrace exn bt
+    Failed (r, exn, bt)
 
 and[@inline] create await = exclave_
   (Concurrent.create [@mode portable])
     await
     ~scheduler:((Concurrent.Scheduler.create [@mode portable]) ~spawn)
 
-and[@inline] with_concurrent
+and[@inline] with_blocking
   : 'r.
   Terminator.t @ local -> f:(unit Concurrent.t @ local portable -> 'r) @ local once -> 'r
   =

@@ -4,6 +4,7 @@ module Ethernet_rx = Ethernet_rx
 module Ethernet_tx = Ethernet_tx
 module Risc_v = Risc_v
 module Risc_v_ethernet = Risc_v_ethernet
+module Risc_v_vga = Risc_v_vga
 module Seven_segment_display = Seven_segment_display
 module Snakes = Snakes
 module Uart = Uart

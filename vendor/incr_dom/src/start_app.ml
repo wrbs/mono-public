@@ -106,7 +106,12 @@ let start_bonsai
          let handle = viewport_changed
        end)
      in
-     let get_view, get_apply_action, get_update_visibility, get_on_display =
+     let ( get_view
+         , get_apply_action
+         , get_update_visibility
+         , get_before_display
+         , get_on_display )
+       =
        let obs =
          Performance_measure.time Incr_app_creation ~profile ~debug:false ~f:(fun () ->
            Incr.observe
@@ -118,6 +123,7 @@ let start_bonsai
        ( fetch (fun { view; _ } -> view)
        , fetch (fun { apply_action; _ } -> apply_action)
        , fetch (fun { update_visibility; _ } -> update_visibility)
+       , fetch (fun { before_display; _ } -> before_display)
        , fetch (fun { on_display; _ } -> on_display) )
      in
      Performance_measure.time First_stabilization ~profile ~debug:false ~f:(fun () ->
@@ -197,9 +203,9 @@ let start_bonsai
        App.on_stabilize ()
      in
      (* It's important that we don't call [Incr.Var.set] within [apply_action] unless
-        we're also going to stabilize. Some code in Bonsai relies on this assumption
-        as part of its [action_requires_stabilization] logic. Breaking this invariant
-        won't break Bonsai code, but it will effectively remove an optimization. *)
+        we're also going to stabilize. Some code in Bonsai relies on this assumption as
+        part of its [action_requires_stabilization] logic. Breaking this invariant won't
+        break Bonsai code, but it will effectively remove an optimization. *)
      let apply_action action model =
        Debug_logging.maybe_log_action
          action_logging
@@ -248,8 +254,8 @@ let start_bonsai
        time Stabilize_for_clock ~f:(fun () ->
          (match am_running_test with
           | false ->
-            (* The clock is set only once per call to perform_update, so that all actions that
-               occur before each display update occur "at the same time." *)
+            (* The clock is set only once per call to perform_update, so that all actions
+               that occur before each display update occur "at the same time." *)
             let now =
               let date = new%js Js.date_now in
               Time_ns.Span.of_ms (Js.to_float date##getTime)
@@ -264,9 +270,23 @@ let start_bonsai
        App.on_stabilize ();
        time Update_visibility ~f:(fun () ->
          if Visibility.is_dirty visibility then update_visibility ());
-       time Apply_actions ~f:(fun () -> apply_actions (Incr.Var.value model_v));
-       time Stabilize_after_all_apply_actions ~f:(fun () -> Incr.stabilize ());
-       App.on_stabilize ();
+       let apply_actions () =
+         time Apply_actions ~f:(fun () -> apply_actions (Incr.Var.value model_v));
+         time Stabilize_after_all_apply_actions ~f:(fun () -> Incr.stabilize ());
+         App.on_stabilize ()
+       in
+       apply_actions ();
+       let rec before_display_loop () =
+         (get_before_display ())
+           state
+           ~schedule_event:
+             (Ui_effect.Expert.handle ~on_exn:(fun exn ->
+                Exn.reraise exn "Unhandled exception raised in effect"))
+           ~apply_actions_recursor:(fun () ->
+             apply_actions ();
+             before_display_loop ())
+       in
+       before_display_loop ();
        let html = get_view () |> Focus_stealer.maybe_wrap_root_element focus_stealer in
        let patch =
          time Diff_vdom ~f:(fun () ->
@@ -294,16 +314,17 @@ let start_bonsai
        Incr.Var.set model_from_last_display_v (Incr.Var.value model_v);
        if should_debug () then Console.console##debug (Js.string "-------");
        (* Restoring focus from the [<body />] to the app root should mostly be handled by
-          the [blur] listener above, but we additionally run this check every frame because:
+          the [blur] listener above, but we additionally run this check every frame
+          because:
 
           - We want the root element to start out focused, so perform an initial
-          update/render, then immediately focus the root (unless a non-body element
-          already has focus).
+            update/render, then immediately focus the root (unless a non-body element
+            already has focus).
           - [blur] doesn't run if the currently focused element is removed from the DOM,
-          so we might need to possibly focus-steal after every frame.
+            so we might need to possibly focus-steal after every frame.
 
-          We still want [refocus_on_blur], so that we can respond immediately to most blurs
-          without waiting ~16ms for the next frame.
+          We still want [refocus_on_blur], so that we can respond immediately to most
+          blurs without waiting ~16ms for the next frame.
        *)
        Focus_stealer.maybe_refocus_root_element focus_stealer !prev_elt;
        Performance_measure.timer_stop animation_frame_loop_timer;
@@ -372,11 +393,24 @@ let start
           let schedule_action a = schedule_event (inject a) in
           Component.update_visibility component ~schedule_action
         in
+        let before_display state ~schedule_event ~apply_actions_recursor =
+          let schedule_action a = schedule_event (inject a) in
+          Component.before_display
+            component
+            state
+            ~schedule_action
+            ~apply_actions_recursor
+        in
         let on_display state ~schedule_event =
           let schedule_action a = schedule_event (inject a) in
           Component.on_display component state ~schedule_action
         in
-        { App_intf.Private.view; apply_action; update_visibility; on_display }
+        { App_intf.Private.view
+        ; apply_action
+        ; update_visibility
+        ; on_display
+        ; before_display
+        }
       ;;
     end)
 ;;

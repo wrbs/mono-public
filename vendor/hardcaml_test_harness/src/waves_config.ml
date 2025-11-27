@@ -69,6 +69,10 @@ let to_home_subdirectory ?(subdirectory = "waves/") ~(here : [%call_pos]) () =
   sprintf "%s/%s/" home_dir subdirectory |> to_directory ~here
 ;;
 
+let to_home_subdirectory_when ?subdirectory ~(here : [%call_pos]) condition =
+  if condition then to_home_subdirectory ?subdirectory ~here () else no_waves
+;;
+
 let rewrite ~f t =
   match t with
   | No_waves -> No_waves

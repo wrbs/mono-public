@@ -39,13 +39,26 @@ val until : t -> Time_ns.t -> unit Effect.t
 (** An effect that waits to complete until the clock advances by the specified time span. *)
 val sleep : t -> Time_ns.Span.t -> unit Effect.t
 
-(** An effect that waits to complete until the next [after_display] lifecycle is run. *)
+(** An effect that waits to complete until after the next [before_display] lifecycle is
+    run. *)
+val wait_before_display : t -> unit Effect.t
+
+(** An effect that waits to complete until after the next [after_display] lifecycle is
+    run. *)
 val wait_after_display : t -> unit Effect.t
 
 module Private : sig
   (** Users should not need to call this function, since it is managed by Bonsai. Triggers
       any alarms that have been enqueued. *)
   val flush : t -> unit
+
+  (** Users should not need to call this function, since it is managed by Bonsai. Triggers
+      any [wait_before_display] effects that are waiting to run. *)
+  val trigger_before_display : t -> unit
+
+  (** Users should not need to call this function, since it is managed by Bonsai. Says
+      whether there are any [wait_before_display] effects that are waiting to run. *)
+  val has_before_display_events : t -> bool
 
   (** Users should not need to call this function, since it is managed by Bonsai. Triggers
       any [wait_after_display] effects that are waiting to run. *)

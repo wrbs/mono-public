@@ -2,15 +2,16 @@ open! Import
 open Container.Export
 module Array = Array0
 module List = List1
+module%template Derived = Container.Derived [@kind.explicit value_or_null]
 
 module Step = struct
-  (* 'a is an item in the sequence, 's is the state that will produce the remainder of
-     the sequence *)
-  type (+'a : any, 's) t =
+  (* 'a is an item in the sequence, 's is the state that will produce the remainder of the
+     sequence *)
+  type (+'a : any, 's : any) t =
     | Done
-    | Skip of { state : 's }
+    | Skip : ('a : any) ('s : value_or_null). { state : 's } -> ('a, 's) t
     | Yield :
-        ('a : value) 's.
+        ('a : value_or_null) ('s : value_or_null).
         { value : 'a
         ; state : 's
         }
@@ -25,7 +26,7 @@ module T = struct
      sequence *)
   type (+_ : any) t =
     | Sequence :
-        ('a : any) 's.
+        ('a : any) ('s : value_or_null).
         { global_ state : 's
         ; global_ next : 's -> ('a, 's) Step.t
         }
@@ -425,8 +426,9 @@ let return x =
     | Some x -> Yield { value = x; state = None })
 ;;
 
-include%template Monad.Make [@modality portable] (struct
-    type nonrec 'a t = 'a t
+include%template
+  Monad.Make [@kind value_or_null mod maybe_null] [@modality portable] (struct
+    type nonrec ('a : value_or_null) t = 'a t
 
     let map = `Custom map
     let bind = bind
@@ -458,7 +460,7 @@ let nth_exn s n =
 ;;
 
 module Merge_with_duplicates_element = struct
-  type ('a, 'b) t =
+  type ('a : value_or_null, 'b : value_or_null) t =
     | Left of 'a
     | Right of 'b
     | Both of 'a * 'b
@@ -786,9 +788,9 @@ let counti t ~f =
   foldi t ~init:0 ~f:(fun i acc elt -> acc + Bool.to_int (f i elt)) [@nontail]
 ;;
 
-let sum m t ~f = Container.sum ~fold m t ~f
-let min_elt t ~compare = Container.min_elt ~fold t ~compare
-let max_elt t ~compare = Container.max_elt ~fold t ~compare
+let sum m t ~f = Derived.sum ~fold m t ~f
+let min_elt t ~compare = Derived.min_elt ~fold t ~compare
+let max_elt t ~compare = Derived.max_elt ~fold t ~compare
 
 let init n ~f =
   unfold_step ~init:0 ~f:(fun i ->
@@ -1036,7 +1038,7 @@ let iteri_until s ~f ~finish =
 
 let force_eagerly t = of_list (to_list t)
 
-let memoize (type a) (Sequence { state = s; next }) =
+let memoize (type a : value_or_null) (Sequence { state = s; next }) =
   let module M = struct
     type t = T of (a, t) Step.t Lazy.t
   end

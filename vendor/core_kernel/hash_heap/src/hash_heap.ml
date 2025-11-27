@@ -28,7 +28,7 @@ module Make (Key : Key) : S with module Key = Key = struct
 
   let comparator t = t.cmp
 
-  (* [push_new_key] adds an entry to the heap without checking for duplicates.  Thus it
+  (* [push_new_key] adds an entry to the heap without checking for duplicates. Thus it
      should only be called when the key is known not to be present already. *)
   let push_new_key t ~key ~data =
     let el = Heap.add_removable t.heap (key, data) in
@@ -168,5 +168,10 @@ module Make (Key : Key) : S with module Key = Key = struct
   let clear t =
     Heap.clear t.heap;
     Hashtbl.clear t.tbl
+  ;;
+
+  let invariant (f : 'a Invariant.t) t =
+    let f_with_key (_key, data) = f data in
+    Heap.invariant f_with_key t.heap
   ;;
 end

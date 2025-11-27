@@ -1,3 +1,20 @@
+module Stable = struct
+  open Core.Core_stable
+
+  module V1 = struct
+    type 'a t =
+      | Pending
+      | Error of Error.V1.t
+      | Ok of 'a
+    [@@deriving sexp, bin_io, stable_witness]
+
+    let%expect_test _ =
+      print_endline [%bin_digest: unit t];
+      [%expect {| e334ce2b399db41f0b4dfff798073875 |}]
+    ;;
+  end
+end
+
 open! Core
 
 module Error = struct
@@ -9,7 +26,7 @@ module Error = struct
 end
 
 module T = struct
-  type 'a t =
+  type 'a t = 'a Stable.V1.t =
     | Pending
     | Error of Error.t
     | Ok of 'a [@quickcheck.weight 10.]
@@ -26,6 +43,12 @@ module T = struct
     | Some (Error e) -> Error e
   ;;
 
+  let to_or_error : 'a t -> 'a Or_error.t = function
+    | Pending -> Or_error.error_string "Pending"
+    | Error e -> Error e
+    | Ok x -> Ok x
+  ;;
+
   let to_or_error_option : 'a t -> 'a Or_error.t option = function
     | Pending -> None
     | Error e -> Some (Error e)
@@ -39,6 +62,13 @@ module T = struct
   ;;
 
   let error_s sexp = Error (Error.create_s sexp)
+
+  let tag_error t ~tag =
+    match t with
+    | Pending -> Pending
+    | Error error -> Error (Error.tag error ~tag)
+    | Ok x -> Ok x
+  ;;
 
   let map t ~f =
     match t with
@@ -134,3 +164,12 @@ module T = struct
 end
 
 include T
+
+let of_map t =
+  Map.fold
+    t
+    ~init:(Ok (Map.empty (Map.comparator_s t)))
+    ~f:(fun ~key ~data accum ->
+      let%map.T accum and data in
+      Map.set accum ~key ~data)
+;;

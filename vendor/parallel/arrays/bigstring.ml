@@ -4,21 +4,22 @@ module Bigstring = Base_bigstring
 
 module Kind = struct
   type 'a t =
-    | Int8 : Int_repr.int8 t
-    | Int16 : Int_repr.int16 t
+    | Int8 : int8 t
+    | Int16 : int16 t
     | Int32 : int32 t
     | Int64 : int64 t
     | Float32 : float32 t
     | Float64 : float t
   [@@deriving sexp_of]
 
-  let[@inline] width (type a) : a t -> int = function
+  let width (type a) : a t -> int = function
     | Int8 -> 1
     | Int16 -> 2
     | Int32 -> 4
     | Int64 -> 8
     | Float32 -> 4
     | Float64 -> 8
+  [@@inline]
   ;;
 end
 
@@ -62,53 +63,60 @@ let%template[@inline] copy { kind; data } =
 
 let[@inline] length { kind; data } = length data / Kind.width kind
 
-let%template[@inline] get (type a) { kind : a Kind.t; data } pos : a =
-  let pos = pos * Kind.width kind in
-  match kind with
-  | Int8 -> (Bigstring.get_int8 [@inlined]) data ~pos |> Int_repr.Int8.of_base_int_exn
-  | Int16 ->
-    (Bigstring.get_int16_le [@inlined]) data ~pos |> Int_repr.Int16.of_base_int_exn
-  | Int32 -> (Bigstring.get_int32_t_le [@inlined]) data ~pos
-  | Int64 -> (Bigstring.get_int64_t_le [@inlined]) data ~pos
-  | Float32 -> Float32.Bigstring.get data ~pos
-  | Float64 -> Int64.float_of_bits ((Bigstring.get_int64_t_le [@inlined]) data ~pos)
-;;
+(* Bigstrings are usually allocated by [malloc], which provides 16-byte alignment.
+   However, custom bigstrings or slices of bigstrings may not be aligned, so we must use
+   unaligned instructions. Fortunately, they have no penalty when the address is aligned,
+   which is the common case for 16-byte operations. *)
 
-let[@inline] set (type a) { kind : a Kind.t; data } pos (a : a) =
+[%%template
+  let get (type a) { kind : a Kind.t; data } pos : a =
+    let pos = pos * Kind.width kind in
+    match kind with
+    | Int8 -> (Bigstring.get_int8 [@inlined]) data ~pos |> Int8.of_int
+    | Int16 -> (Bigstring.get_int16_le [@inlined]) data ~pos |> Int16.of_int
+    | Int32 -> (Bigstring.get_int32_t_le [@inlined]) data ~pos
+    | Int64 -> (Bigstring.get_int64_t_le [@inlined]) data ~pos
+    | Float32 -> Float32.Bigstring.get data ~pos
+    | Float64 -> Int64.float_of_bits ((Bigstring.get_int64_t_le [@inlined]) data ~pos)
+  [@@inline]
+  ;;]
+
+let set (type a) { kind : a Kind.t; data } pos (a : a) =
   let pos = pos * Kind.width kind in
   match kind with
-  | Int8 -> (Bigstring.Int_repr.set_int8 [@inlined]) data ~pos a
-  | Int16 -> (Bigstring.Int_repr.set_int16_le [@inlined]) data ~pos a
+  | Int8 -> (Bigstring.set_int8_exn [@inlined]) data ~pos (Int8.to_int a)
+  | Int16 -> (Bigstring.set_int16_le_exn [@inlined]) data ~pos (Int16.to_int a)
   | Int32 -> (Bigstring.set_int32_t_le [@inlined]) data ~pos a
   | Int64 -> (Bigstring.set_int64_t_le [@inlined]) data ~pos a
   | Float32 -> Float32.Bigstring.set data ~pos a
   | Float64 -> (Bigstring.set_int64_t_le [@inlined]) data ~pos (Int64.bits_of_float a)
+[@@inline]
 ;;
 
-let[@inline] unsafe_get (type a) { kind : a Kind.t; data } pos : a =
+let unsafe_get (type a) { kind : a Kind.t; data } pos : a =
   let pos = pos * Kind.width kind in
   match kind with
-  | Int8 ->
-    (Bigstring.unsafe_get_int8 [@inlined]) data ~pos |> Int_repr.Int8.of_base_int_exn
-  | Int16 ->
-    (Bigstring.unsafe_get_int16_le [@inlined]) data ~pos |> Int_repr.Int16.of_base_int_exn
+  | Int8 -> (Bigstring.unsafe_get_int8 [@inlined]) data ~pos |> Int8.of_int
+  | Int16 -> (Bigstring.unsafe_get_int16_le [@inlined]) data ~pos |> Int16.of_int
   | Int32 -> (Bigstring.unsafe_get_int32_t_le [@inlined]) data ~pos
   | Int64 -> (Bigstring.unsafe_get_int64_t_le [@inlined]) data ~pos
   | Float32 -> Float32.Bigstring.unsafe_get data ~pos
   | Float64 ->
     Int64.float_of_bits ((Bigstring.unsafe_get_int64_t_le [@inlined]) data ~pos)
+[@@inline]
 ;;
 
-let[@inline] unsafe_set (type a) { kind : a Kind.t; data } pos (a : a) =
+let unsafe_set (type a) { kind : a Kind.t; data } pos (a : a) =
   let pos = pos * Kind.width kind in
   match kind with
-  | Int8 -> (Bigstring.Int_repr.Unsafe.set_int8 [@inlined]) data ~pos a
-  | Int16 -> (Bigstring.Int_repr.Unsafe.set_int16_le [@inlined]) data ~pos a
+  | Int8 -> (Bigstring.unsafe_set_int8 [@inlined]) data ~pos (Int8.to_int a)
+  | Int16 -> (Bigstring.unsafe_set_int16_le [@inlined]) data ~pos (Int16.to_int a)
   | Int32 -> (Bigstring.unsafe_set_int32_t_le [@inlined]) data ~pos a
   | Int64 -> (Bigstring.unsafe_set_int64_t_le [@inlined]) data ~pos a
   | Float32 -> Float32.Bigstring.unsafe_set data ~pos a
   | Float64 ->
     (Bigstring.unsafe_set_int64_t_le [@inlined]) data ~pos (Int64.bits_of_float a)
+[@@inline]
 ;;
 
 module Expert = struct

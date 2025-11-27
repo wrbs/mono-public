@@ -1,6 +1,15 @@
 open! Core
 open Types
 
+module Sigil : sig
+  type t =
+    | Percent
+    | Hash
+  [@@deriving equal, compare, variants, sexp_of, typed_variants]
+
+  val to_sigil_string : t -> string
+end
+
 type t =
   | WHITESPACE of string
   | URL of string
@@ -10,7 +19,7 @@ type t =
   | RIGHT_BRACKET
   | RIGHT_BRACE
   | PERCENTAGE of (string * Numeric_value.t * Exponent.t option)
-  | OCAML_CODE of string
+  | OCAML_CODE of (string * Sigil.t)
   | NUMBER of (string * Numeric_value.t * Exponent.t option)
   | LEFT_PAREN
   | LEFT_BRACKET
@@ -18,7 +27,8 @@ type t =
   | IDENT of Ident_like.t
   | HASH of (Ident_like.t * Hash_flag.t)
   | FUNCTION of Ident_like.t
-    (* Function tokens do not need to be ident-like due to the fact that they're terminated by a ( *)
+    (* Function tokens do not need to be ident-like due to the fact that they're
+       terminated by a ( *)
   | EOF
   | DIMENSION of (string * Numeric_value.t * Exponent.t option * Ident_like.t)
   | DELIM of string

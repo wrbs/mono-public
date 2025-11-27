@@ -22,6 +22,11 @@ module Spec : sig
   [@@deriving sexp_of]
 
   val testing : t
+  val testing_no_scaling : t
+  val testing_4x4y : t
+  val testing_2x4y : t
+  val testing_4x2y : t
+  val testing_3x5y : t
   val t640x480_60hz : t
   val t800x600_60hz : t
   val t1024x768_60hz : t

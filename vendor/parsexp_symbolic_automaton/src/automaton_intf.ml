@@ -1,7 +1,7 @@
 open! Base
 
 (** Action associated to transitions. Actions correspond to the similarly named functions
-    in [Parsexp.Automaton_actions]. **)
+    in [Parsexp.Automaton_actions]. *)
 module Action = struct
   type t =
     | Nop
@@ -30,7 +30,7 @@ end
 
     Actions correspond to the similarly named functions in [Parsexp.Automaton_actions].
 
-    Having epsilon actions makes the definition of the automaton much simpler. **)
+    Having epsilon actions makes the definition of the automaton much simpler. *)
 module Epsilon_action = struct
   type t =
     | Nop
@@ -47,8 +47,7 @@ module Transition = struct
     | E of Epsilon_action.t * State.t
     | Error of Parse_error_reason.t
     | End_block_comment
-      (* can't be a normal transition, as the new state isn't known
-       statically *)
+      (* can't be a normal transition, as the new state isn't known statically *)
   [@@deriving compare ~localize]
 end
 

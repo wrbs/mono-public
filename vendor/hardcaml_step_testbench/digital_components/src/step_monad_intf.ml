@@ -11,8 +11,9 @@ open! Base
 module type S = sig
   module Input_monad : Monad.S
   module Component : Component.M(Input_monad).S
+  module Step_core : Step_core.M(Input_monad)(Component).S
 
-  type ('a, 'i, 'o) t [@@deriving sexp_of]
+  type ('a, 'i, 'o) t = ('a, 'i, 'o) Step_core.Computation.Monadic.t [@@deriving sexp_of]
 
   include Monad.S3 with type ('a, 'b, 'c) t := ('a, 'b, 'c) t
 
@@ -46,13 +47,7 @@ module type S = sig
       determined, at which point the [wait_for] proceeds. *)
   val wait_for : 'a Event.t -> output:'o -> ('a, _, 'o) t
 
-  module Component_finished : sig
-    type ('a, 'o) t =
-      { output : 'o
-      ; result : 'a
-      }
-    [@@deriving sexp_of]
-  end
+  module Component_finished = Component_finished
 
   (** [spawn] creates a child computation that runs [start]. [spawn] returns on the
       current step, and the child starts on the next step. The parent computation uses
@@ -63,6 +58,7 @@ module type S = sig
       will be executed even after [start] completes. *)
   val spawn
     :  ?update_children_after_finish:bool (** default is [false] *)
+    -> ?period:int (** defaults to the period of the parent at run time *)
     -> Source_code_position.t
     -> start:('i_c -> (('a, 'o_c) Component_finished.t, 'i_c, 'o_c) t)
     -> input:'i_c Data.t
@@ -76,21 +72,36 @@ module type S = sig
       children will be updated even after the child terminates. This will result in tasks
       spawned from within the child task to execute even after the child terminates. *)
   val create_component
-    :  created_at:Source_code_position.t
+    :  ?period:int (** defaults to the period of the parent at run time *)
+    -> created_at:Source_code_position.t
     -> update_children_after_finish:bool
     -> start:('i -> (('a, 'o) Component_finished.t, 'i, 'o) t)
     -> input:'i Data.t
     -> output:'o Data.t
+    -> unit
     -> ('i, 'o) Component.t * ('a, 'o) Component_finished.t Event.t
 end
 
-module M (Input_monad : Monad.S) = struct
-  module type S = S with module Input_monad = Input_monad
+module M
+    (Input_monad : Monad.S)
+    (Component : Component.M(Input_monad).S)
+    (Step_core : Step_core.M(Input_monad)(Component).S) =
+struct
+  module type S =
+    S
+    with module Input_monad = Input_monad
+     and module Component = Component
+     and module Step_core := Step_core
 end
 
 module type Step_monad = sig
   module type S = S
 
   module M = M
-  module Make (Input_monad : Monad.S) : M(Input_monad).S
+
+  module Make
+      (Input_monad : Monad.S)
+      (Component : Component.M(Input_monad).S)
+      (Step_core : Step_core.M(Input_monad)(Component).S) :
+    M(Input_monad)(Component)(Step_core).S
 end

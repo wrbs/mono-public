@@ -121,4 +121,10 @@ module For_testing : sig
     -> packet:string
     -> Bits.t ref Ethernet.Rx.I.t
     -> unit
+
+  val sim_udp_packet
+    :  ('a, 'b) Cyclesim.t
+    -> packet:string
+    -> Bits.t ref Ethernet.Rx.I.t
+    -> unit
 end

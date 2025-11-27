@@ -113,10 +113,8 @@ let () =
 
                 It also makes the code here a lot messier if we try to do something like
                 {[
-
                   type nonrec implicit_unboxed = t#
                   and t = implicit_unboxed array
-
                 ]}
              *)
              pmod_structure ~loc (items @ [ pstr_type ~loc Nonrecursive [ type_decl ] ])

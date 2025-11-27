@@ -15,7 +15,7 @@ module type Destination = sig
 
       All writers are expected to update the Iobuf's [lo], either manually or using
       [Iobuf.Fill]. Data will only be consumed up to the new [lo]. *)
-  val next_buf : ensure_capacity:int -> (read_write, Iobuf.seek) Iobuf.t
+  val next_buf : ensure_capacity:int -> (read_write, Iobuf.seek, Iobuf.global) Iobuf.t
 
   (** We will no longer be writing anything. Resources should be flushed and freed. *)
   val close : unit -> unit
@@ -34,6 +34,7 @@ module type Arg_writers = sig
   val int64 : t -> name:string_id -> int64 -> unit
   val pointer : t -> name:string_id -> int64 -> unit
   val float : t -> name:string_id -> float -> unit
+  val bool : t -> name:string_id -> bool -> unit
 end
 
 module Tick_translation = struct
@@ -146,6 +147,7 @@ module type S = sig
     val create
       :  ?int64s:int
       -> ?int32s:int
+      -> ?bools:int
       -> ?floats:int
       -> ?interned_strings:int
       -> ?inlined_strings:int
@@ -238,7 +240,7 @@ module type S = sig
     val write_bytes : t -> bytes:Bytes.t -> unit
 
     (** Writes raw byte stream to the current destination. *)
-    val write_iobuf : t -> buf:(read, Iobuf.seek) Iobuf.t -> unit
+    val write_iobuf : t -> buf:(read, Iobuf.seek, Iobuf.global) Iobuf.t -> unit
 
     (** Interns a string directly to the specified slot (whereas [set_temp_string_slot]
         may shift the index since certain indices are reserved for internal use). Will

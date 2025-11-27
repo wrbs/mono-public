@@ -1,5 +1,4 @@
 open! Base
-module Capsule = Portable.Capsule.Expert
 
 let rec fib n =
   match n with
@@ -136,9 +135,7 @@ let rec for_forkjoin parallel ~f ~start ~stop =
 ;;
 
 module Bench_parallel (Scheduler : Parallel.Scheduler.S) = struct
-  let scheduler =
-    (Scheduler.create [@alert "-experimental"]) ~max_domains:Env.max_domains ()
-  ;;
+  let scheduler = Scheduler.create ~max_domains:Env.max_domains ()
 
   let%bench "work2" =
     Scheduler.parallel scheduler ~f:(fun parallel ->
@@ -178,15 +175,14 @@ module Bench_parallel (Scheduler : Parallel.Scheduler.S) = struct
       ())
   ;;
 
-  (* [n = 14] chosen so the benchmarks take some hundreds of us each, since the default
-     heartbeat interval is 100us. *)
+  (* [n = 16] chosen so each iteration takes about one default heartbeat interval (250us) *)
   let%bench "fast_tree" =
     Scheduler.parallel scheduler ~f:(fun parallel ->
-      let _ : int = fast_tree parallel 14 in
+      let _ : int = fast_tree parallel 16 in
       ())
   ;;
 
-  (* [n = 10] chosen since 3^n grows faster than 2^n.*)
+  (* [n = 10] chosen since 3^n grows faster than 2^n. *)
   let%bench "fast_tree3" =
     Scheduler.parallel scheduler ~f:(fun parallel ->
       let _ : int = fast_tree3 parallel 10 in
@@ -257,6 +253,14 @@ module Bench_parallel (Scheduler : Parallel.Scheduler.S) = struct
         Parallel.for_ parallel ~f:(fun _ _ -> ()) ~start:0 ~stop:5_000)
     done
   ;;
+
+  let%bench "unbalanced fork_join3" =
+    Scheduler.parallel scheduler ~f:(fun parallel ->
+      let #((), _, _) =
+        Parallel.fork_join3 parallel (fun _ -> ()) (fun _ -> work ()) (fun _ -> work ())
+      in
+      ())
+  ;;
 end
 
 let%bench "fast_tree_seq" = fast_tree_seq 14
@@ -272,4 +276,4 @@ let%bench "slow_for_seq" =
 ;;
 
 module%bench Bench_sequential = Bench_parallel (Parallel.Scheduler.Sequential)
-module%bench Bench_work_stealing = Bench_parallel (Parallel_scheduler_work_stealing)
+module%bench Bench_work_stealing = Bench_parallel (Parallel_scheduler)

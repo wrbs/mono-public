@@ -1,8 +1,8 @@
 (ox (
   (full_repo
-   git+https://github.com/oxcaml/opam-repository.git#a1ea0d33dd5662b89183f751c3fec566d7860b75)
+   git+https://github.com/oxcaml/opam-repository.git#fec0e1ab7a249b11dfb0786baa0f1ab4502f1796)
   (single_file_http
-   https://raw.githubusercontent.com/oxcaml/opam-repository/a1ea0d33dd5662b89183f751c3fec566d7860b75/)))
+   https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/)))
 
 (dune-overlays (
   (full_repo
@@ -15,6 +15,6 @@
 
 (opam (
   (full_repo
-   git+https://github.com/ocaml/opam-repository.git#ee3428377a13c3c9716b6f791c33441cfb542498)
+   git+https://github.com/ocaml/opam-repository.git#e4ede991030ce8363f75a54f15eee4d86e998b5e)
   (single_file_http
-   https://raw.githubusercontent.com/ocaml/opam-repository/ee3428377a13c3c9716b6f791c33441cfb542498/)))
+   https://raw.githubusercontent.com/ocaml/opam-repository/e4ede991030ce8363f75a54f15eee4d86e998b5e/)))

@@ -32,7 +32,7 @@ let sig_of_td td ~portable =
        ~loc
        ~name:(Located.mk ~loc name)
        ~type_:enumeration_type
-       ~modalities:(if portable then [ Ppxlib_jane.Modality "portable" ] else [])
+       ~modalities:(if portable then Ppxlib_jane.Shim.Modalities.portable ~loc else [])
        ~prim:[])
 ;;
 
@@ -96,9 +96,8 @@ let list_map loc l ~f =
     map [%e l] []]
 ;;
 
-(* [cartesian_product_map l's f loc] takes a list of expressions of type list, and
-   returns code generating the Cartesian product of those lists, with [f] applied to each
-   tuple.
+(* [cartesian_product_map l's f loc] takes a list of expressions of type list, and returns
+   code generating the Cartesian product of those lists, with [f] applied to each tuple.
 *)
 let cartesian_product_map ~exhaust_check l's ~f loc =
   match l's with

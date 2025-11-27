@@ -1,5 +1,7 @@
 @@ portable
 
+(** A scope for structured concurrency. *)
+
 open Base
 open Await_kernel
 
@@ -14,7 +16,7 @@ open Await_kernel
     spawned into it and close the scope. This way error handling becomes simpler as one
     doesn't have to otherwise explicitly arrange for termination of siblings and children
     in case of unhandled errors. *)
-type 'a t : value mod contended portable
+type !'a t : value mod contended portable
 
 (** [with_ await context ~f] calls [f scope] with a new scope for concurrency and does not
     return until all the tasks added to the scope have exited. An uncaught exception from
@@ -53,6 +55,9 @@ val context : 'a t @ local -> 'a @ contended local portable
 (** [terminator scope] returns the terminator of the scope. *)
 val terminator : 'a t @ local -> Terminator.t @ local
 
+(** [terminate scope] terminates the scope. *)
+val terminate : 'a t @ local -> unit
+
 module Task_handle : sig
   type 'a scope := 'a t
 
@@ -71,7 +76,7 @@ end
 
 module Token : sig
   (** Represents an ongoing process to add a task to the scope. *)
-  type 'a t : value mod contended portable
+  type !'a t : value mod contended many portable
 
   (** [use token ~f] consumes the token and turns it into a task by calling
       [f terminator task_handle]. *)

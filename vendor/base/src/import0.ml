@@ -1,4 +1,4 @@
-(* This module is included in [Import].  It is aimed at modules that define the standard
+(* This module is included in [Import]. It is aimed at modules that define the standard
    combinators for [sexp_of], [of_sexp], [compare] and [hash] and are included in
    [Import]. *)
 
@@ -58,12 +58,13 @@ module Stdlib = struct
   include Stdlib.StdLabels
   include Stdlib.MoreLabels
 
-  (* Shadow unsafe [Stdlib] functions with their safe versions from [Basement.Stdlib_shim]. *)
+  (* Shadow unsafe [Stdlib] functions with their safe versions from
+     [Basement.Stdlib_shim]. *)
 
   module Atomic = struct
     include Stdlib.Atomic
+    include Basement.Stdlib_shim.Atomic
     include Basement.Stdlib_shim.Atomic.Local
-    module Contended = Basement.Stdlib_shim.Atomic.Contended
   end
 
   module Domain = struct
@@ -174,8 +175,7 @@ external ( := )
   @@ portable
   = "%setfield0"
 
-(* These need to be defined as an external otherwise the compiler won't unbox
-   references. *)
+(* These need to be defined as an external otherwise the compiler won't unbox references. *)
 external ( ! ) : ('a : value_or_null). ('a ref[@local_opt]) -> 'a @@ portable = "%field0"
 
 external ref
@@ -226,7 +226,7 @@ external snd
 (* [raise] needs to be defined as an external as the compiler automatically replaces
    '%raise' by '%reraise' when appropriate. *)
   external%template raise : ('a : k). exn -> 'a @ portable unique @@ portable = "%reraise"
-  [@@kind k = (value_or_null, immediate, immediate64)]
+  [@@kind k = value_or_null_with_imm]
 
 [%%template
 [@@@kind kr1 = (value & value)]
@@ -237,23 +237,7 @@ let raise : ('a : k). (exn -> 'a @ portable unique) @ portable =
   fun exn ->
   match (raise exn : Nothing0.t) with
   | _ -> .
-[@@kind
-  k
-  = ( bits32
-    , bits64
-    , float64
-    , word
-    , value & bits32
-    , value & bits64
-    , value & float64
-    , value & word
-    , value & immediate
-    , value & immediate64
-    , value & value
-    , value & kr1
-    , value & kr2
-    , value & kr3
-    , bits32 & bits32 )]
+[@@kind k = (base_non_value, value & (base_with_imm, kr1, kr2, kr3), bits32 & bits32)]
 ;;]
 
 external phys_equal : ('a[@local_opt]) -> ('a[@local_opt]) -> bool @@ portable = "%eq"
@@ -264,7 +248,7 @@ external incr : (int ref[@local_opt]) -> unit @@ portable = "%incr"
 let float_of_string = Stdlib.float_of_string
 
 (* [am_testing] is used in a few places to behave differently when in testing mode, such
-   as in [random.ml].  [am_testing] is implemented using [Base_am_testing], a weak C/js
+   as in [random.ml]. [am_testing] is implemented using [Base_am_testing], a weak C/js
    primitive that returns [false], but when linking an inline-test-runner executable, is
    overridden by another primitive that returns [true]. *)
 external am_testing : unit -> bool @@ portable = "Base_am_testing"
