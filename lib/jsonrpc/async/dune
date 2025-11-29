@@ -1,0 +1,6 @@
+(library
+ (name jsonrpc_async)
+ (libraries core jsonrpc async)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane ppx_jsonaf_conv)))

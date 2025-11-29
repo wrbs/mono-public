@@ -1,0 +1,5 @@
+(executable
+ (name main)
+ (libraries core_unix.command_unix jsonrpc jsonrpc_async)
+ (preprocess
+  (pps ppx_jane ppx_jsonaf_conv)))

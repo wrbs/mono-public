@@ -1,0 +1,6 @@
+(library
+ (name test_structured_error)
+ (libraries core expectree structured_error jsonaf)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane ppx_jsonaf_conv)))

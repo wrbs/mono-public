@@ -1,0 +1,6 @@
+(library
+ (name jsonrpc)
+ (libraries core jsonaf json_to_sexp structured_error)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane ppx_jsonaf_conv)))

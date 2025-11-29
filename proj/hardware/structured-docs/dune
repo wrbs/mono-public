@@ -1,0 +1,18 @@
+(executable
+ (name generator)
+ (libraries core_unix.command_unix core async re)
+ (preprocess
+  (pps ppx_jane)))
+
+(rule
+ (alias slow-gen)
+ (target
+  (dir out))
+ (deps
+  (glob_files %{workspace_root}/vendor/hardcaml/docs/*.md))
+ (mode promote)
+ (action
+  (run
+   %{exe:./generator.exe}
+   %{workspace_root}/vendor/hardcaml/docs
+   %{target})))

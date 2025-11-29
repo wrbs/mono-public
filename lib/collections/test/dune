@@ -1,0 +1,6 @@
+(library
+ (name collections_test)
+ (libraries core async collection collector vec)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane)))
