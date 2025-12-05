@@ -23,7 +23,7 @@ module Port = struct
     | Port18
     | Port19
     | Port20
-  [@@deriving enumerate, sexp_of, compare ~localize, equal ~localize]
+  [@@deriving enumerate, compare ~localize, equal ~localize, bin_io ~localize, hash]
 
   let index = function
     | Port1 -> 0
@@ -48,10 +48,58 @@ module Port = struct
     | Port20 -> 19
   ;;
 
+  let of_index = function
+    | 0 -> Some Port1
+    | 1 -> Some Port2
+    | 2 -> Some Port3
+    | 3 -> Some Port4
+    | 4 -> Some Port5
+    | 5 -> Some Port6
+    | 6 -> Some Port7
+    | 7 -> Some Port8
+    | 8 -> Some Port9
+    | 9 -> Some Port10
+    | 10 -> Some Port11
+    | 11 -> Some Port12
+    | 12 -> Some Port13
+    | 13 -> Some Port14
+    | 14 -> Some Port15
+    | 15 -> Some Port16
+    | 16 -> Some Port17
+    | 17 -> Some Port18
+    | 18 -> Some Port19
+    | 19 -> Some Port20
+    | _ -> None
+  ;;
+
+  let to_int t = index t + 1
+  let of_int n = of_index (n - 1)
+
+  let of_int_exn n =
+    match of_int n with
+    | None -> raise_s [%message "Ipmidi.Port.of_int_exn: out of range 1-20" (n : int)]
+    | Some t -> t
+  ;;
+
+  let to_string t = t |> to_int |> Int.to_string
+  let of_string s = s |> Int.of_string |> of_int_exn
+
+  include functor Sexpable.Of_stringable [@modality portable]
+
+  let module_name = "Ipmidi.Port"
+
+  include functor Identifiable.Make [@mode local] [@modality portable]
+
   let first_port = 21928
   let port t = index t + first_port
   let ipmidi_addr = Unix.Inet_addr.of_string "225.0.0.37"
   let sockaddr t = Socket.Address.Inet.create ipmidi_addr ~port:(port t)
+
+  let arg_type =
+    (Command.Arg_type.create_with_additional_documentation [@modality portable])
+      of_string
+      ~additional_documentation:(lazy "range 1-20")
+  ;;
 end
 
 module Port_sender = struct
@@ -65,7 +113,7 @@ module Port_sender = struct
     ; shutdown : unit -> unit
     }
 
-  let create ~port ~send_sync =
+  let create' ~port ~send_sync =
     let%map socket =
       Socket.connect (Socket.create Socket.Type.udp) (Port.sockaddr port)
     in
@@ -76,9 +124,15 @@ module Port_sender = struct
     { port; fd; send_sync; buffer; running_status = None; shutdown }
   ;;
 
+  let create port =
+    let send_sync = Async_udp.send_sync () |> Or_error.ok_exn in
+    create' ~port ~send_sync
+  ;;
+
   let flush_exn t =
     if Iobuf.length_lo t.buffer > 0
     then (
+      Iobuf.flip_lo t.buffer;
       let result = t.send_sync t.fd (Iobuf.read_only t.buffer) in
       Unix.Syscall_result.Unit.ok_or_unix_error_with_args_exn
         result
@@ -107,8 +161,10 @@ module Port_sender = struct
       f ()
   ;;
 
-  let write_and_flush_exn t message =
-    write_exn t message;
+  let write_all_exn t messages = Collection.iter messages ~f:(write_exn t)
+
+  let write_and_flush_exn t messages =
+    write_all_exn t messages;
     flush_exn t
   ;;
 
@@ -122,16 +178,17 @@ module Sender = struct
     let send_sync = Async_udp.send_sync () |> Or_error.ok_exn in
     let%map port_list =
       Deferred.List.map Port.all ~how:`Parallel ~f:(fun port ->
-        Port_sender.create ~port ~send_sync)
+        Port_sender.create' ~port ~send_sync)
     in
     { ports = Iarray.of_list port_list }
   ;;
 
   let sender t ~port = t.ports.:(Port.index port)
   let write_exn t message ~port = Port_sender.write_exn (sender t ~port) message
+  let write_all_exn t messages ~port = Port_sender.write_all_exn (sender t ~port) messages
 
-  let write_and_flush_exn t message ~port =
-    Port_sender.write_and_flush_exn (sender t ~port) message
+  let write_and_flush_exn t messages ~port =
+    Port_sender.write_and_flush_exn (sender t ~port) messages
   ;;
 
   let flush_exn t = Iarray.iter t.ports ~f:Port_sender.flush_exn

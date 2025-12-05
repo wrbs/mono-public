@@ -2,8 +2,8 @@ open! Core
 
 module Kind = struct
   type t =
-    | Note_on
     | Note_off
+    | Note_on
     | Aftertouch
     | Controller
     | Program_change
@@ -22,8 +22,8 @@ module Kind = struct
 
   module Double = struct
     type t =
-      | Note_on
       | Note_off
+      | Note_on
       | Aftertouch
       | Controller
       | Pitch_wheel
@@ -40,8 +40,8 @@ module Kind = struct
   end
 
   let to_typed : t -> Typed.packed = function
-    | Note_on -> T (Double Note_on)
-    | Note_off -> T (Double Note_off)
+    | Note_on -> T (Double Note_off)
+    | Note_off -> T (Double Note_on)
     | Aftertouch -> T (Double Aftertouch)
     | Controller -> T (Double Controller)
     | Program_change -> T (Single Program_change)
@@ -52,11 +52,11 @@ end
 
 module T = struct
   type t =
-    | Note_on of
+    | Note_off of
         { note : Value.t
         ; velocity : Value.t
         }
-    | Note_off of
+    | Note_on of
         { note : Value.t
         ; velocity : Value.t
         }
@@ -110,8 +110,8 @@ let decode_payload (type a) (kind : a Kind.Typed.t) (payload : a) : t =
 ;;
 
 let kind : t -> Kind.t = function
-  | Note_on _ -> Note_on
   | Note_off _ -> Note_off
+  | Note_on _ -> Note_on
   | Aftertouch _ -> Aftertouch
   | Controller _ -> Controller
   | Program_change _ -> Program_change
@@ -127,8 +127,8 @@ module Status = struct
   let to_byte ((channel, kind) : t) =
     let base =
       match kind with
-      | Note_on -> '\x80'
-      | Note_off -> '\x90'
+      | Note_off -> '\x80'
+      | Note_on -> '\x90'
       | Aftertouch -> '\xA0'
       | Controller -> '\xB0'
       | Program_change -> '\xC0'

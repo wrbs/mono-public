@@ -109,10 +109,17 @@ module T = struct
       let uuid = "d7908373-264f-49f0-858c-e43a0f4ce59e"
     end)
 
+  let zero = min_value
   let all = List.init max_int ~f:of_int_exn
   let to_byte (t : t) = Char.unsafe_of_int (t :> int)
   let of_byte c = of_int (Byte.to_int c)
   let of_byte_exn c = of_int_exn (Byte.to_int c)
+
+  let arg_type =
+    (Command.Arg_type.create_with_additional_documentation [@modality portable])
+      of_string
+      ~additional_documentation:(lazy "(range 0-127)")
+  ;;
 end
 
 include T

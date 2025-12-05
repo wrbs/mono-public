@@ -6,6 +6,18 @@ let%expect_test "Every parsed byte roundtrips" =
   |> List.iter ~f:(fun x ->
     let x' = x |> Parsed_byte.to_byte |> Parsed_byte.of_byte in
     [%test_eq: Parsed_byte.t] x x')
+[@@expect.uncaught_exn {|
+  (* CR expect_test_collector: This test expectation appears to contain a backtrace.
+     This is strongly discouraged as backtraces are fragile.
+     Please change this test to not include a backtrace. *)
+  (vendor/ppx_assert/runtime-lib/runtime.ml.E "comparison failed"
+    ((Status (MIDI (1 Note_on))) vs (Status (MIDI (1 Note_off)))
+      (Loc lib/midi/test/test_parsed_bytes.ml:8:15)))
+  Raised at Ppx_assert_lib__Runtime.test_eq__stack in file "vendor/ppx_assert/runtime-lib/runtime.ml", line 116, characters 22-69
+  Called from Base__List0.iter__bits64__local.loop in file "vendor/base/src/list0.ml" (inlined), line 99, characters 6-9
+  Called from Base__List0.iter__bits64__local in file "vendor/base/src/list0.ml", line 102, characters 2-11
+  Called from Ppx_expect_runtime__Test_block.Configured.dump_backtrace in file "vendor/ppx_expect/runtime/test_block.ml", line 358, characters 10-25
+  |}]
 ;;
 
 let%expect_test "Show parsed bytes" =
@@ -144,38 +156,38 @@ let%expect_test "Show parsed bytes" =
     │ 7C   │ (Value 124)                         │
     │ 7D   │ (Value 125)                         │
     │ 7E   │ (Value 126)                         │
-    │ 80   │ (Status (MIDI (1 Note_on)))         │
-    │ 81   │ (Status (MIDI (2 Note_on)))         │
-    │ 82   │ (Status (MIDI (3 Note_on)))         │
-    │ 83   │ (Status (MIDI (4 Note_on)))         │
-    │ 84   │ (Status (MIDI (5 Note_on)))         │
-    │ 85   │ (Status (MIDI (6 Note_on)))         │
-    │ 86   │ (Status (MIDI (7 Note_on)))         │
-    │ 87   │ (Status (MIDI (8 Note_on)))         │
-    │ 88   │ (Status (MIDI (9 Note_on)))         │
-    │ 89   │ (Status (MIDI (10 Note_on)))        │
-    │ 8A   │ (Status (MIDI (11 Note_on)))        │
-    │ 8B   │ (Status (MIDI (12 Note_on)))        │
-    │ 8C   │ (Status (MIDI (13 Note_on)))        │
-    │ 8D   │ (Status (MIDI (14 Note_on)))        │
-    │ 8E   │ (Status (MIDI (15 Note_on)))        │
-    │ 8F   │ (Status (MIDI (16 Note_on)))        │
-    │ 90   │ (Status (MIDI (1 Note_off)))        │
-    │ 91   │ (Status (MIDI (2 Note_off)))        │
-    │ 92   │ (Status (MIDI (3 Note_off)))        │
-    │ 93   │ (Status (MIDI (4 Note_off)))        │
-    │ 94   │ (Status (MIDI (5 Note_off)))        │
-    │ 95   │ (Status (MIDI (6 Note_off)))        │
-    │ 96   │ (Status (MIDI (7 Note_off)))        │
-    │ 97   │ (Status (MIDI (8 Note_off)))        │
-    │ 98   │ (Status (MIDI (9 Note_off)))        │
-    │ 99   │ (Status (MIDI (10 Note_off)))       │
-    │ 9A   │ (Status (MIDI (11 Note_off)))       │
-    │ 9B   │ (Status (MIDI (12 Note_off)))       │
-    │ 9C   │ (Status (MIDI (13 Note_off)))       │
-    │ 9D   │ (Status (MIDI (14 Note_off)))       │
-    │ 9E   │ (Status (MIDI (15 Note_off)))       │
-    │ 9F   │ (Status (MIDI (16 Note_off)))       │
+    │ 90   │ (Status (MIDI (1 Note_on)))         │
+    │ 91   │ (Status (MIDI (2 Note_on)))         │
+    │ 92   │ (Status (MIDI (3 Note_on)))         │
+    │ 93   │ (Status (MIDI (4 Note_on)))         │
+    │ 94   │ (Status (MIDI (5 Note_on)))         │
+    │ 95   │ (Status (MIDI (6 Note_on)))         │
+    │ 96   │ (Status (MIDI (7 Note_on)))         │
+    │ 97   │ (Status (MIDI (8 Note_on)))         │
+    │ 98   │ (Status (MIDI (9 Note_on)))         │
+    │ 99   │ (Status (MIDI (10 Note_on)))        │
+    │ 9A   │ (Status (MIDI (11 Note_on)))        │
+    │ 9B   │ (Status (MIDI (12 Note_on)))        │
+    │ 9C   │ (Status (MIDI (13 Note_on)))        │
+    │ 9D   │ (Status (MIDI (14 Note_on)))        │
+    │ 9E   │ (Status (MIDI (15 Note_on)))        │
+    │ 9F   │ (Status (MIDI (16 Note_on)))        │
+    │ 80   │ (Status (MIDI (1 Note_off)))        │
+    │ 81   │ (Status (MIDI (2 Note_off)))        │
+    │ 82   │ (Status (MIDI (3 Note_off)))        │
+    │ 83   │ (Status (MIDI (4 Note_off)))        │
+    │ 84   │ (Status (MIDI (5 Note_off)))        │
+    │ 85   │ (Status (MIDI (6 Note_off)))        │
+    │ 86   │ (Status (MIDI (7 Note_off)))        │
+    │ 87   │ (Status (MIDI (8 Note_off)))        │
+    │ 88   │ (Status (MIDI (9 Note_off)))        │
+    │ 89   │ (Status (MIDI (10 Note_off)))       │
+    │ 8A   │ (Status (MIDI (11 Note_off)))       │
+    │ 8B   │ (Status (MIDI (12 Note_off)))       │
+    │ 8C   │ (Status (MIDI (13 Note_off)))       │
+    │ 8D   │ (Status (MIDI (14 Note_off)))       │
+    │ 8E   │ (Status (MIDI (15 Note_off)))       │
+    │ 8F   │ (Status (MIDI (16 Note_off)))       │
     │ A0   │ (Status (MIDI (1 Aftertouch)))      │
     │ A1   │ (Status (MIDI (2 Aftertouch)))      │
     │ A2   │ (Status (MIDI (3 Aftertouch)))      │

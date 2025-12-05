@@ -137,3 +137,9 @@ let prev_wrap = function
 
 let of_lower_bits byte = (Byte.to_int byte land 0xF) + 1 |> of_int_exn
 let to_lower_bits t = to_int t - 1 |> Byte.of_int_exn
+
+let arg_type =
+  (Command.Arg_type.create_with_additional_documentation [@modality portable])
+    of_string
+    ~additional_documentation:(lazy "range 1-16")
+;;

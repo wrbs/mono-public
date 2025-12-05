@@ -4,8 +4,8 @@ open! Core
 
 module Kind : sig
   type t =
-    | Note_on
     | Note_off
+    | Note_on
     | Aftertouch
     | Controller
     | Program_change
@@ -22,8 +22,8 @@ module Kind : sig
 
   module Double : sig
     type t =
-      | Note_on
       | Note_off
+      | Note_on
       | Aftertouch
       | Controller
       | Pitch_wheel
@@ -42,11 +42,11 @@ module Kind : sig
 end
 
 type t =
-  | Note_on of
+  | Note_off of
       { note : Value.t
       ; velocity : Value.t
       }
-  | Note_off of
+  | Note_on of
       { note : Value.t
       ; velocity : Value.t
       }

@@ -30,3 +30,4 @@ val of_lower_bits : Byte.t -> t
 val to_lower_bits : t -> Byte.t
 val next_wrap : t -> t
 val prev_wrap : t -> t
+val arg_type : t Command.Arg_type.t

@@ -1,0 +1,5 @@
+(executable
+ (name main)
+ (libraries core_unix.command_unix midi async core ipmidi collection)
+ (preprocess
+  (pps ppx_jane)))

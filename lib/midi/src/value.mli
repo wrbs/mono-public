@@ -16,6 +16,8 @@ val min_value : t
 val max_value : t
 val min_int : int
 val max_int : int
+val zero : t
+val arg_type : t Command.Arg_type.t
 
 module Encoding : sig
   type _ t =

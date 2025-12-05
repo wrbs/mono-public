@@ -32,22 +32,32 @@ module Port : sig @@ portable
     | Port18
     | Port19
     | Port20
-  [@@deriving enumerate, sexp_of, compare ~localize, equal ~localize]
+  [@@deriving enumerate]
+
+  (** int 1-20 *)
+
+  val to_int : t -> int
+  val of_int : int -> t option
+  val of_int_exn : int -> t
+
+  (** int 0-19 *)
+
+  val index : t -> int
+  val of_index : int -> t option
+
+  include Identifiable.S [@mode local] with type t := t
+
+  val arg_type : t Command.Arg_type.t
 end
 
 module Port_sender : sig
   type t
 
-  val create
-    :  port:Port.t
-    -> send_sync:
-         (Async.Fd.t
-          -> (Core.read, Iobuf.seek, Iobuf.global) Iobuf.t
-          -> Core_unix.Syscall_result.Unit.t)
-    -> t Async.Deferred.t
-
+  val create : Port.t -> t Async.Deferred.t
   val flush_exn : t -> unit
   val write_exn : t -> Midi.Live_message.t -> unit
+  val write_all_exn : t -> Midi.Live_message.t Collection.t -> unit
+  val write_and_flush_exn : t -> Midi.Live_message.t Collection.t -> unit
   val close : t @ unique -> unit
 end
 
@@ -56,7 +66,8 @@ module Sender : sig
 
   val create : unit -> t Async.Deferred.t
   val write_exn : t -> Midi.Live_message.t -> port:Port.t -> unit
-  val write_and_flush_exn : t -> Midi.Live_message.t -> port:Port.t -> unit
+  val write_all_exn : t -> Midi.Live_message.t Collection.t -> port:Port.t -> unit
+  val write_and_flush_exn : t -> Midi.Live_message.t Collection.t -> port:Port.t -> unit
   val flush_exn : t -> unit
   val flush_port_exn : t -> port:Port.t -> unit
   val close : t @ unique -> unit
