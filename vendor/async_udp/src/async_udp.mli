@@ -214,7 +214,7 @@ val custom_on_readable_loop
   -> f:(Core_unix.File_descr.t -> Ready_iter.t)
   -> Loop_result.t Deferred.t
 
-(**/**)
+(** /**)
 
 (*_ See the Jane Street Style Guide for an explanation of [Private] submodules:
 

@@ -1,0 +1,6 @@
+(library
+ (name midi_file)
+ (libraries core async midi vec collector)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane)))

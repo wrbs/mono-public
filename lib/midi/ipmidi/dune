@@ -1,0 +1,6 @@
+(library
+ (name ipmidi)
+ (libraries core midi async async_udp)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane)))

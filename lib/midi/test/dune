@@ -1,0 +1,8 @@
+(library
+ (name test_midi)
+ (libraries core midi midi_file byte expectable async sexp_pretty)
+ (inline_tests
+  (deps
+   (glob_files test-files/*.mid)))
+ (preprocess
+  (pps ppx_jane)))

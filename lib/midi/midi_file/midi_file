@@ -1,0 +1,11 @@
+open! Core
+module U28 = Num.U28
+module U24 = Num.U24
+module Event = Event
+module Smtpe = Smtpe
+module Header = Header
+
+type t =
+  { header : Header.t
+  ; tracks : Event.t iarray iarray
+  }
