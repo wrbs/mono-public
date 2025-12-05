@@ -1,0 +1,6 @@
+(library
+ (name json_to_sexp)
+ (libraries core jsonaf)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane)))
