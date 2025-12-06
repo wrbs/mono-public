@@ -1,6 +1,6 @@
 (library
  (name midi)
- (libraries core byte vec)
+ (libraries core byte vec collection)
  (inline_tests)
  (preprocess
   (pps ppx_jane)))

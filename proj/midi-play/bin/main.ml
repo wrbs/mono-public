@@ -1,0 +1,1 @@
+let () =  Midi_play.run ()

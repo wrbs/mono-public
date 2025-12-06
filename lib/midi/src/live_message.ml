@@ -34,6 +34,12 @@ let stop = Realtime Stop
 let active_sense = Realtime Active_sense
 let reset = Realtime Reset
 
+let panic () =
+  Collection.list Channel.all
+  |> Collection.map ~f:(fun channel ->
+    cc Value.zero ~controller:(Value.of_int_exn 123) ~channel)
+;;
+
 let payload_length = function
   | MIDI (_, cmd) -> Message.payload_length cmd
   | Sysex payload -> Iarray.length payload + 1

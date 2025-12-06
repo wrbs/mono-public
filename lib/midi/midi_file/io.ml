@@ -80,7 +80,7 @@ module Read = struct
     let rec aux ~cur ~left =
       let%bind b = byte ~next in
       let n = Byte.to_int b in
-      let new_ = (cur lsr 7) lor (n land 0x7F) in
+      let new_ = (cur lsl 7) lor (n land 0x7F) in
       match n >= 128 with
       | false -> Ok (Num.U28.of_int_exn new_)
       | true ->

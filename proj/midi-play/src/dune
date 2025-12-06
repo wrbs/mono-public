@@ -1,0 +1,6 @@
+(library
+ (name midi_play)
+ (libraries core async midi ipmidi midi_file vec core_unix.command_unix)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane)))

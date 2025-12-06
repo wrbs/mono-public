@@ -48,6 +48,9 @@ module Port : sig @@ portable
   include Identifiable.S [@mode local] with type t := t
 
   val arg_type : t Command.Arg_type.t
+
+  (** provides [-port] defaulting to 1 *)
+  val param : ?default:t -> unit -> t Command.Param.t @@ nonportable
 end
 
 module Port_sender : sig

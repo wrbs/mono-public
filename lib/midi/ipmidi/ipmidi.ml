@@ -100,6 +100,15 @@ module Port = struct
       of_string
       ~additional_documentation:(lazy "range 1-20")
   ;;
+
+  let param ?(default = Port1) () =
+    Command.Param.flag_optional_with_default_doc_string
+      "port"
+      arg_type
+      to_string
+      ~default
+      ~doc:"_ port to send to"
+  ;;
 end
 
 module Port_sender = struct
@@ -109,7 +118,6 @@ module Port_sender = struct
     ; send_sync :
         Fd.t -> (read, Iobuf.seek, Iobuf.global) Iobuf.t -> Unix.Syscall_result.Unit.t
     ; buffer : (read_write, Iobuf.seek, Iobuf.global) Iobuf.t
-    ; mutable running_status : Midi.Message.Status.t option
     ; shutdown : unit -> unit
     }
 
@@ -121,7 +129,7 @@ module Port_sender = struct
     (* Small buffer for MIDI messages (3 bytes for most messages) *)
     let buffer = Iobuf.create ~len:Async_udp.default_capacity in
     let shutdown () = Socket.shutdown socket `Both in
-    { port; fd; send_sync; buffer; running_status = None; shutdown }
+    { port; fd; send_sync; buffer; shutdown }
   ;;
 
   let create port =
@@ -139,16 +147,13 @@ module Port_sender = struct
         ~syscall_name:"send"
         t.port
         [%sexp_of: Port.t];
-      Iobuf.reset t.buffer;
-      t.running_status <- None)
+      Iobuf.reset t.buffer)
     else ()
   ;;
 
   let write_exn t message =
     let f () =
-      t.running_status
-      <- Midi.Live_message.Running_status.encode t.running_status message ~f:(fun byte ->
-           Iobuf.Fill.char t.buffer byte)
+      Midi.Live_message.encode message ~f:(fun byte -> Iobuf.Fill.char t.buffer byte)
     in
     match f () with
     | () -> ()

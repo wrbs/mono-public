@@ -26,15 +26,6 @@ let panic_command =
     return ()
 ;;
 
-let port_flag =
-  Command.Param.flag_optional_with_default_doc_string
-    "port"
-    Ipmidi.Port.arg_type
-    Ipmidi.Port.to_string
-    ~default:Port1
-    ~doc:"_ port to send to"
-;;
-
 let channel_flag =
   Command.Param.flag_optional_with_default_doc_string
     "channel"
@@ -47,7 +38,7 @@ let channel_flag =
 let send_note_command =
   Command.async ~summary:"Sends a 'note on' message. Velocity defaults to 0 (note off)"
   @@
-  let%map_open.Command port = port_flag
+  let%map_open.Command port = Ipmidi.Port.param ()
   and channel = channel_flag
   and note = anon ("NOTE" %: Midi.Value.arg_type)
   and velocity =
@@ -61,10 +52,20 @@ let send_note_command =
     return ()
 ;;
 
+let sexp_command =
+  Command.async ~summary:"dump a midi file as sexp"
+  @@
+  let%map_open.Command file = anon ("FILE_PATH" %: string) in
+  fun () ->
+    let%map contents = Reader.file_contents file in
+    let midi = Midi_file.of_string contents |> Or_error.ok_exn in
+    print_s [%sexp (midi : Midi_file.t)]
+;;
+
 let command =
   Command.group
     ~summary:"sample midi stuff"
-    [ "panic", panic_command; "send-note", send_note_command ]
+    [ "panic", panic_command; "send-note", send_note_command; "sexp", sexp_command ]
 ;;
 
 let () = Command_unix.run command

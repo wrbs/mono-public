@@ -43,6 +43,7 @@ val continue : t
 val stop : t
 val active_sense : t
 val reset : t
+val panic : unit -> t Collection.t
 
 type message := t
 

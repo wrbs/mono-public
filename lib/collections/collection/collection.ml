@@ -82,7 +82,7 @@ let fold t ~init ~f =
 ;;
 
 include struct
-  open Container.Make (struct
+  open Container.Make [@mode portable] (struct
       type nonrec 'a t = 'a t
 
       let fold_until = fold_until
@@ -112,9 +112,9 @@ include struct
 end
 
 let empty =
-  create
-    ~fold:(fun ~init ~f:_ -> init)
-    ~fold_until:(fun ~init ~f:_ ~finish -> finish init)
+  { fold' = This { fold = (fun ~init ~f:_ -> init) }
+  ; fold_until = (fun ~init ~f:_ ~finish -> finish init)
+  }
 ;;
 
 let singleton x =
