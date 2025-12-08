@@ -1,0 +1,6 @@
+(library
+ (name snmidi)
+ (libraries core async midi jsonaf async_udp collection)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane ppx_jsonaf_conv)))

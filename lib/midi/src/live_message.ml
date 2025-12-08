@@ -124,7 +124,7 @@ module Running_status = struct
 
   let initial = None
 
-  let length' t msg =
+  let length t msg =
     match msg with
     | MIDI (channel, cmd) ->
       let kind = Message.kind cmd in
@@ -138,7 +138,7 @@ module Running_status = struct
     | _ -> length msg, None
   ;;
 
-  let length t msg = length' t msg |> Tuple2.get1
+  let length' t msg = length t msg |> Tuple2.get1
 
   let encode' t msg ~f =
     match msg with
@@ -158,15 +158,15 @@ module Running_status = struct
   let encode t msg ~f = encode' t msg ~f:(fun b -> f (Parsed_byte.to_byte b))
 
   let to_iarray t msg =
-    make_iarray_res (encode' t msg) ~init:(Value Value.min_value) ~len:(length t msg)
+    make_iarray_res (encode' t msg) ~init:(Value Value.min_value) ~len:(length' t msg)
   ;;
 
-  let to_string t msg = make_string_res (encode t msg) ~len:(length t msg)
+  let to_string t msg = make_string_res (encode t msg) ~len:(length' t msg)
 
   let to_string_many t msgs =
     let len, _ =
       Iarray.fold msgs ~init:(0, t) ~f:(fun (acc, t) msg ->
-        let x, t' = length' t msg in
+        let x, t' = length t msg in
         acc + x, t')
     in
     make_string_res ~len (fun ~f ->

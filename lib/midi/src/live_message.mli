@@ -51,7 +51,7 @@ module Running_status : sig
   type t = Message.Status.t option [@@deriving equal ~localize, sexp_of]
 
   val initial : t
-  val length : t -> message -> int
+  val length : t -> message -> int * t
   val encode' : t -> message -> f:(Parsed_byte.t -> unit) -> t
   val encode : t -> message -> f:(Byte.t -> unit) -> t
   val to_iarray : t -> message -> Parsed_byte.t iarray * t
