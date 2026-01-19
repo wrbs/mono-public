@@ -1,0 +1,6 @@
+(library
+ (name hardnes_rp2a03)
+ (libraries core hardcaml)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane ppx_hardcaml ppx_typed_fields)))

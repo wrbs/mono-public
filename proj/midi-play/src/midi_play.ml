@@ -104,7 +104,39 @@ let ipmidi_command =
     playback messages ~port
 ;;
 
-let playback_snmidi midi ~messages =
+let playback_snmidi_live midi ~messages:queue =
+  let t0 = Time_ns.now () in
+  let now () = Time_ns.diff (Time_ns.now ()) t0 |> Time_ns.Span.to_sec in
+  let to_send = Queue.create () in
+  let rec flush_pending ~cur_time =
+    match Queue.peek_or_null queue with
+    | Null -> `Finished
+    | This (event_time, message) ->
+      (match Float.O.(event_time <= cur_time + lookahead) with
+       | true ->
+         Queue.enqueue to_send message;
+         Queue.dequeue_and_ignore_exn queue;
+         flush_pending ~cur_time
+       | false -> `Next_event event_time)
+  and write_then_flush ~cur_time =
+    let result = flush_pending ~cur_time in
+    Snmidi.send_if_connected midi (Collection.queue to_send);
+    Queue.clear to_send;
+    match result with
+    | `Finished -> return ()
+    | `Next_event next_time ->
+      let actual_time = now () in
+      if Float.O.(next_time <= actual_time)
+      then write_then_flush ~cur_time
+      else (
+        let next_wakeup = Time_ns.add t0 (Time_ns.Span.of_sec next_time) in
+        let%bind () = Clock_ns.at next_wakeup in
+        write_then_flush ~cur_time:(now ()))
+  in
+  write_then_flush ~cur_time:(now ())
+;;
+
+let playback_snmidi_queued midi ~messages =
   (* prepare chunks *)
   match Queue.is_empty messages with
   | true -> return ()
@@ -149,6 +181,11 @@ let snmidi_command =
       ~doc:"(int) port to connect to"
   and host = anon ("HOST" %: Unix.Inet_addr.arg_type)
   and midi_file = anon ("MIDI_FILE" %: string)
+  and live =
+    flag
+      [%var_dash_name]
+      no_arg
+      ~doc:"send out messages live rather than queuing in the future"
   and () = Log.Global.set_level_via_param () in
   fun () ->
     Signal.handle [ Signal.term; Signal.int ] ~f:(fun _ -> Shutdown.shutdown 0);
@@ -163,7 +200,13 @@ let snmidi_command =
            let options = List.map ports ~f:(fun { id; name } -> name, id) in
            match%map Fzf.pick_one (Assoc options) >>| Or_error.ok_exn with
            | None -> `Don't_connect ()
-           | Some id -> `Connect (id, fun t -> playback_snmidi t ~messages))
+           | Some id ->
+             `Connect
+               ( id
+               , fun t ->
+                   match live with
+                   | false -> playback_snmidi_queued t ~messages
+                   | true -> playback_snmidi_live t ~messages ))
     in
     match result with
     | Ok () -> return ()

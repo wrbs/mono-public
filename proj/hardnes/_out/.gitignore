@@ -1,0 +1,7 @@
+.Xil
+*.jou
+*.log
+*.timing.rpt
+*.bit
+.gen
+.srcs

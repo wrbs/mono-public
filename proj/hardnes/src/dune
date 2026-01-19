@@ -1,0 +1,13 @@
+(library
+ (name hardnes)
+ (libraries
+  core
+  hardcaml
+  hardcaml_hobby_boards
+  core_unix.command_unix
+  hardcaml_xilinx
+  nes_file
+  hardnes_rp2a03)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane ppx_hardcaml)))

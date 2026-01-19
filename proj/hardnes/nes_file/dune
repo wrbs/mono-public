@@ -1,0 +1,6 @@
+(library
+ (name nes_file)
+ (libraries core core_kernel.iobuf)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane)))
