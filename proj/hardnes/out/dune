@@ -1,0 +1,6 @@
+(rule
+ (alias default)
+ (targets hardnes_nexys.v hardnes_nexys.xdc)
+ (mode promote)
+ (action
+  (run %{exe:../bin/main.exe} build-files -name hardnes_nexys -dir .)))

@@ -298,3 +298,11 @@ let generate_top ?dir board =
     ~custom_constraints
     board
 ;;
+
+let generate_files board ~name =
+  Xilinx_top.generate_files
+    ~name
+    ~pins:(Xml_pins.Part_and_pins.pins part_info)
+    ~custom_constraints
+    board
+;;

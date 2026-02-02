@@ -14,7 +14,7 @@ open struct
 end
 
 open struct
-  module Cpu = Hardnes_rp2a03.Cpu
+  module Cpu = Hardnes.Cpu
 end
 
 module Memory = struct
@@ -49,7 +49,7 @@ module Memory = struct
         ~clock:i.clock
         ~enable:(i.enable &: rom_range)
         ~reset:gnd
-        ~init_file:"prg-rom.mem"
+        ~init_file:"../prg-rom.mem"
     in
     let ram =
       Ram.create
@@ -68,13 +68,9 @@ module Memory = struct
     in
     Always.(
       compile
-        [ last_bus <-- data_out.value
-        ; if_
-            i.write
-            [ last_bus <-- i.data_in ]
-            [ when_ ram_range [ data_out <-- ram.(0) ]
-            ; when_ rom_range [ data_out <-- rom_data ]
-            ]
+        [ when_ ram_range [ data_out <-- ram.(0) ]
+        ; when_ rom_range [ data_out <-- rom_data ]
+        ; if_ i.write [ last_bus <-- i.data_in ] [ last_bus <-- data_out.value ]
         ]);
     { data = data_out.value }
   ;;
@@ -408,7 +404,7 @@ let create_uart board scope ~clock ~clear ~tx ~tx_start =
   uart_tx.data_in_ready, uart_rx.data_out_valid
 ;;
 
-module Clk_wiz = struct
+(* module Clk_wiz = struct
   module I = struct
     type 'a t =
       { clk_in1 : 'a
@@ -429,12 +425,16 @@ module Clk_wiz = struct
     let module Inst = Hardcaml.Instantiation.With_interface (I) (O) in
     Inst.create ~name:"clk_wiz" i
   ;;
-end
+end *)
 
 let get_master_clock board =
   let clocking = Nexys.Clock_and_reset.create board in
-  let o = Clk_wiz.create { clk_in1 = clocking.clock_100; reset = ~:(clocking.reset_n) } in
-  ~clock:o.clk_out1, ~clear:~:(o.locked)
+  let%tydi { clock; locked } =
+    Clockgen.Nes_master_clock.hierarchical
+      (Board.scope board)
+      { clock_100 = clocking.clock_100; reset = ~:(clocking.reset_n) }
+  in
+  ~clock, ~clear:~:locked
 ;;
 
 let create () =

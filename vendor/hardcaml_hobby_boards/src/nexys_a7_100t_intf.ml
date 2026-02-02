@@ -190,4 +190,5 @@ module type Nexys_a7_100t = sig
   end
 
   val generate_top : ?dir:string -> Board.t -> unit
+  val generate_files : Board.t -> name:string -> verilog:string * xdc:string
 end

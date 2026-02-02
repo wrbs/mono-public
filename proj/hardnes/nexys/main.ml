@@ -40,10 +40,24 @@ let dump_rom =
     done
 ;;
 
+let build_files =
+  Command.basic ~summary:"save the toplevel v and xdc"
+  @@
+  let%map_open.Command name =
+    flag "name" (required string) ~doc:"_ name of the toplevel part"
+  and dir = flag "dir" (required string) ~doc:"_ dir to write files in" in
+  fun () ->
+    let board = Top.create () in
+    let ~verilog, ~xdc = Nexys.generate_files board ~name in
+    let filename ext = dir ^/ [%string "%{name}.%{ext}"] in
+    Out_channel.write_all (filename "v") ~data:verilog;
+    Out_channel.write_all (filename "xdc") ~data:xdc
+;;
+
 let command =
   Command.group
     ~summary:"Hardnes commands"
-    [ "generate-top", generate_top; "dump-rom", dump_rom ]
+    [ "generate-top", generate_top; "build-files", build_files; "dump-rom", dump_rom ]
 ;;
 
 let run () = Command_unix.run command

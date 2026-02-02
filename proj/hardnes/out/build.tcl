@@ -1,13 +1,11 @@
-# vivado -mode batch -source nexys_a7_100t.tcl
-
-set PROJECT_NAME "nexys_a7_100t"
+set PROJECT_NAME "hardnes_nexys"
 set FPGA_PART "xc7a100tcsg324-1"
+set OUT_DIR "_out"
 set DEBUG false
 
 set_part $FPGA_PART
-read_verilog ${PROJECT_NAME}.v
-read_xdc ${PROJECT_NAME}.xdc
-read_ip clk_wiz.xci
+read_verilog ../${PROJECT_NAME}.v
+read_xdc ../${PROJECT_NAME}.xdc
 synth_design -top ${PROJECT_NAME}_top -part $FPGA_PART
 opt_design
 if {$DEBUG} { write_checkpoint -force ${PROJECT_NAME}.synth.dcp }

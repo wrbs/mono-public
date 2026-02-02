@@ -123,7 +123,7 @@ module Rx = struct
                          srl data_counter_delayed.value ~by:input_data_width
                        in
                        axi_tx.tkeep
-                       <-- (List.init word_bytes ~f:(fun i -> valid_data_bytes >=:. i)
+                       <-- (List.init word_bytes ~f:(fun i -> valid_data_bytes >:. i)
                             |> concat_msb))
                     ; axi_tx.tdata
                       <-- mux

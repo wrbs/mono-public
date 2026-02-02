@@ -1,6 +1,6 @@
 open! Core
 open! Hardcaml
-module Cpu = Hardnes_rp2a03.Cpu
+module Cpu = Hardnes.Cpu
 
 module U8 = struct
   type t = Int_repr.Uint8.t [@@deriving equal]

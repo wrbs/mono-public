@@ -1,5 +1,5 @@
 (library
- (name hardnes)
+ (name hardnes_nexys)
  (libraries
   core
   hardcaml
@@ -7,7 +7,7 @@
   core_unix.command_unix
   hardcaml_xilinx
   nes_file
-  hardnes_rp2a03)
+  hardnes)
  (inline_tests)
  (preprocess
   (pps ppx_jane ppx_hardcaml)))

@@ -10,6 +10,13 @@ val generate
   -> Board.t
   -> unit
 
+val generate_files
+  :  ?custom_constraints:Rope.t
+  -> name:string
+  -> pins:Pin.t list
+  -> Board.t
+  -> verilog:string * xdc:string
+
 module For_testing : sig
   val rtl_of_hardcaml_circuit : Board.t -> String.t
 end
