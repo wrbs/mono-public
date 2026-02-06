@@ -6,7 +6,6 @@ open Helpers
 open struct
   open Hardcaml_hobby_boards
   module Axi32 = Ethernet.Axi32
-  module Udp_packet_generator = Udp_packet_generator
   module Ethernet_types = Ethernet_types
 end
 

@@ -1,0 +1,6 @@
+(library
+ (name byte_ethernet)
+ (libraries core hardcaml hardcaml_wr)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane ppx_hardcaml ppx_typed_fields)))
