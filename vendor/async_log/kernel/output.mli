@@ -48,6 +48,13 @@ module Private : sig
 end
 
 module For_testing : sig
-  val create : map_output:(string -> string) -> t
+  val create
+    :  ?map_output:(string -> string)
+    -> ?time:[ `Keep | `Omit ]
+    -> ?tags:[ `Keep | `Omit ]
+    -> ?level:[ `Keep | `Omit ]
+    -> unit
+    -> t
+
   val is_async_stderr_output_set : unit -> bool
 end

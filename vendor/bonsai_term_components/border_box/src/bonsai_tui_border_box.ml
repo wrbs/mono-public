@@ -8,44 +8,68 @@ module Line_type = struct
     | Double
     | Round_corners
 
-  let vbar = function
+  let vertical_bar = function
     | Thin | Round_corners -> "│"
     | Thick -> "┃"
     | Double -> "║"
   ;;
 
-  let hbar = function
+  let horizontal_bar = function
     | Thin | Round_corners -> "─"
     | Thick -> "━"
     | Double -> "═"
   ;;
 
-  let tl = function
+  let top_left = function
     | Thin -> "┌"
     | Thick -> "┏"
     | Double -> "╔"
     | Round_corners -> "╭"
   ;;
 
-  let bl = function
+  let bottom_left = function
     | Thin -> "└"
     | Thick -> "┗"
     | Double -> "╚"
     | Round_corners -> "╰"
   ;;
 
-  let br = function
+  let bottom_right = function
     | Thin -> "┘"
     | Thick -> "┛"
     | Double -> "╝"
     | Round_corners -> "╯"
   ;;
 
-  let tr = function
+  let top_right = function
     | Thin -> "┐"
     | Thick -> "┓"
     | Double -> "╗"
     | Round_corners -> "╮"
+  ;;
+
+  let vertical_right = function
+    | Thin | Round_corners -> "├"
+    | Thick -> "┣"
+    | Double -> "╠"
+  ;;
+
+  let vertical_left = function
+    | Thin | Round_corners -> "┤"
+    | Thick -> "┫"
+    | Double -> "╣"
+  ;;
+
+  let horizontal_down = function
+    | Thin | Round_corners -> "┬"
+    | Thick -> "┳"
+    | Double -> "╦"
+  ;;
+
+  let horizontal_up = function
+    | Thin | Round_corners -> "┴"
+    | Thick -> "┻"
+    | Double -> "╩"
   ;;
 end
 
@@ -55,6 +79,12 @@ let view
   ?(hide_right = false)
   ?(hide_top = false)
   ?(hide_bottom = false)
+  ?(left_padding = 0)
+  ?(right_padding = 0)
+  ?(top_padding = 0)
+  ?(bottom_padding = 0)
+  ?title
+  ?subtitle
   ?(attrs = [])
   content
   =
@@ -62,32 +92,79 @@ let view
     if hide_side_1 || hide_side_2 then View.none else View.text ~attrs char_if_shown
   in
   let { Dimensions.height; width } = View.dimensions content in
-  let hbar = Line_type.hbar line_type in
-  let vbar = Line_type.vbar line_type in
+  let width = width + left_padding + right_padding in
+  let height = height + top_padding + bottom_padding in
+  let hbar = Line_type.horizontal_bar line_type in
+  let vbar = Line_type.vertical_bar line_type in
   let horizontal_border = List.create ~len:width (View.text ~attrs hbar) |> View.hcat in
   let vertical_border = List.create ~len:height (View.text ~attrs vbar) |> View.vcat in
   let top_border =
     if hide_top
     then View.none
-    else
-      View.hcat
-        [ get_corner_view hide_left hide_top (Line_type.tl line_type)
-        ; horizontal_border
-        ; get_corner_view hide_right hide_top (Line_type.tr line_type)
-        ]
+    else (
+      match title with
+      | None ->
+        View.hcat
+          [ get_corner_view hide_left hide_top (Line_type.top_left line_type)
+          ; horizontal_border
+          ; get_corner_view hide_right hide_top (Line_type.top_right line_type)
+          ]
+      | Some title ->
+        let title_view = View.hcat [ View.text " "; title; View.text " " ] in
+        let rest_length = width - View.width title_view in
+        (match Int.sign rest_length with
+         | Neg ->
+           View.hcat
+             [ get_corner_view hide_left hide_top (Line_type.top_left line_type)
+             ; title_view
+             ]
+         | Zero ->
+           View.hcat
+             [ get_corner_view hide_left hide_top (Line_type.top_left line_type)
+             ; title_view
+             ; get_corner_view hide_right hide_top (Line_type.top_right line_type)
+             ]
+         | Pos ->
+           let rest_line =
+             List.create ~len:(Int.max 0 rest_length) hbar |> String.concat
+           in
+           View.hcat
+             [ get_corner_view hide_left hide_top (Line_type.top_left line_type)
+             ; title_view
+             ; View.text rest_line
+             ; get_corner_view hide_right hide_top (Line_type.top_right line_type)
+             ]))
+  in
+  let top_border =
+    match subtitle with
+    | None -> top_border
+    | Some subtitle ->
+      let len = View.width subtitle in
+      View.zcat
+        [ View.pad ~l:(Int.max 0 (View.width top_border - len - 2)) subtitle; top_border ]
   in
   let bottom_border =
     if hide_bottom
     then View.none
     else
       View.hcat
-        [ get_corner_view hide_left hide_bottom (Line_type.bl line_type)
+        [ get_corner_view hide_left hide_bottom (Line_type.bottom_left line_type)
         ; horizontal_border
-        ; get_corner_view hide_right hide_bottom (Line_type.br line_type)
+        ; get_corner_view hide_right hide_bottom (Line_type.bottom_right line_type)
         ]
   in
   let left_border = if hide_left then View.none else vertical_border in
   let right_border = if hide_right then View.none else vertical_border in
+  let rectangle = View.rectangle ~width ~height () in
+  let content_with_padding =
+    View.zcat
+      [ View.pad ~l:left_padding ~r:right_padding ~t:top_padding ~b:bottom_padding content
+      ; rectangle
+      ]
+  in
   View.vcat
-    [ top_border; View.hcat [ left_border; content; right_border ]; bottom_border ]
+    [ top_border
+    ; View.hcat [ left_border; content_with_padding; right_border ]
+    ; bottom_border
+    ]
 ;;

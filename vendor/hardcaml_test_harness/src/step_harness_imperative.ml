@@ -2,7 +2,7 @@ open! Core
 open Hardcaml
 
 module Make_monadic (I : Interface.S) (O : Interface.S) = struct
-  open Hardcaml_step_testbench
+  open Hardcaml_step_testbench.Monadic
   module Sim = Cyclesim.With_interface (I) (O)
   module Step = Imperative.Cyclesim
 
@@ -78,7 +78,7 @@ module Make_monadic (I : Interface.S) (O : Interface.S) = struct
 end
 
 module Make_effectful (I : Interface.S) (O : Interface.S) = struct
-  open Hardcaml_step_testbench_effectful
+  open Hardcaml_step_testbench.Effectful
   module Sim = Cyclesim.With_interface (I) (O)
   module Step = Imperative.Cyclesim
 

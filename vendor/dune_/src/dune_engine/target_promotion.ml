@@ -1,4 +1,4 @@
-open! Import
+open Import
 
 (* [To_delete] is used mostly to implement [dune clean]. It is an imperfect
    heuristic, in particular it can go wrong if:
@@ -141,11 +141,9 @@ let promote ~(targets : _ Targets.Produced.t) ~(promote : Rule.Promote.t) ~promo
       in
       Memo.run (Fs_memo.path_kind (In_source_dir into_dir))
       >>| (function
-       | Ok S_DIR -> fun src -> Path.Source.relative into_dir (Path.Build.basename src)
+       | Ok S_DIR | Error (ENOENT, _, _) ->
+         fun src -> Path.Source.relative into_dir (Path.Build.basename src)
        | Ok _other_kind -> promote_into_error (Pp.textf "%S is not a directory.")
-       | Error (ENOENT, _, _) ->
-         promote_into_error
-           (Pp.textf "Directory %S does not exist. Please create it manually.")
        | Error unix_error ->
          promote_into_error ~unix_error (Pp.textf "Cannot promote to directory %S."))
   in

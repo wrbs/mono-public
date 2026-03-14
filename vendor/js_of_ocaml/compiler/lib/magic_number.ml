@@ -64,21 +64,14 @@ let compare (p1, n1) (p2, n2) =
 
 let equal a b = compare a b = 0
 
-let v = 569
-  (* let current = Ocaml_version.current in
-  match current with
-  | 4 :: 13 :: _ -> 30
-  | 4 :: 14 :: _ -> 31
-  | 5 :: 00 :: _ -> 32
-  | 5 :: 01 :: _ -> 33
-  | 5 :: 02 :: _ -> 34
-  | 5 :: 03 :: _ -> 35
-  | _ ->
-      if Ocaml_version.compare current [ 4; 13 ] < 0
-      then failwith "OCaml version unsupported. Upgrade to OCaml 4.13 or newer."
-      else (
-        assert (Ocaml_version.compare current [ 5; 4 ] >= 0);
-        failwith "OCaml version unsupported. Upgrade js_of_ocaml.") *)
+let () =
+  let current = Ocaml_version.current in
+  if Ocaml_version.compare current [ 4; 13 ] < 0
+  then failwith "OCaml version unsupported. Upgrade to OCaml 4.13 or newer."
+  else if Ocaml_version.compare current [ 5; 5 ] >= 0
+  then failwith "OCaml version unsupported. Upgrade js_of_ocaml."
+
+let v = snd (of_string Ocaml_common.Config.exec_magic_number)
 
 let current_exe = "Caml1999X", v
 

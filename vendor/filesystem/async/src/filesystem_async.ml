@@ -226,7 +226,7 @@ include struct
             ~backtrace
             ~exn
             ~log_s:(fun sexp ->
-              [%log.global.error_sexp sexp];
+              [%log.error_sexp sexp];
               return ())
             ~path
             ~return)

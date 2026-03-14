@@ -56,6 +56,7 @@ The following pages describe the available stanzas and their meanings.
       dynamic_include
       env
       dirs
+      files
       data_only_dirs
       ignored_subdirs
       include_subdirs
@@ -69,11 +70,18 @@ The following pages describe the available stanzas and their meanings.
       :maxdepth: 1
 
       cinaps
+      rocq_theory
       coq_theory
       mdx
       menhir
       ocamllex
       ocamlyacc
+
+    .. toctree::
+      :caption: Experimental
+      :maxdepth: 1
+
+      library_parameter
 
     .. toctree::
       :caption: Deprecated

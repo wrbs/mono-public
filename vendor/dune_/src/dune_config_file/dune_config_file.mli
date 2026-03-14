@@ -55,7 +55,18 @@ module Dune_config : sig
   end
 
   module Pkg_enabled : sig
-    type t = bool
+    (** Configuration for Dune's package management features.
+        
+        - [Set (loc, `Enabled)]: Package management is explicitly enabled. Forces package 
+          management to be active even if no lock directories are present.
+
+        - [Set (loc, `Disabled)]: Package management is explicitly disabled. Forces package 
+          management to be inactive even if lock directories are present.
+
+        - [Unset]: Package management enablement is not explicitly configured.  *)
+    type t =
+      | Set of Loc.t * Dune_config.Config.Toggle.t
+      | Unset
   end
 
   module Terminal_persistence : sig
@@ -116,7 +127,7 @@ module Dune_config : sig
 
   val superpose : t -> Partial.t -> t
   val default : t
-  val user_config_file : Path.t
+  val user_config_file : Path.t Lazy.t
 
   (** We return a [Partial.t] here so that the result can easily be merged with
       other sources of configurations. *)
@@ -141,7 +152,7 @@ module Dune_config : sig
   val for_scheduler
     :  t
     -> watch_exclusions:string list
-    -> Dune_stats.t option
+    -> Dune_trace.t option
     -> print_ctrl_c_warning:bool
     -> Dune_engine.Scheduler.Config.t
 end

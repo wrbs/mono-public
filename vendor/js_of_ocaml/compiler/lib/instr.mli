@@ -209,5 +209,3 @@ val getu : string -> int -> int
 val gets32 : string -> int -> int32
 
 val getu32 : string -> int -> int32
-
-val get_instr_name : int -> string

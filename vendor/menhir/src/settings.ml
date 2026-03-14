@@ -9,9 +9,13 @@
 (******************************************************************************)
 
 open Printf
+open PlainSyntaxPrinter
 
 let error format =
   ksprintf (fun s -> prerr_string s; exit 1) format
+
+let unsupported feature () =
+  error "Error: %s is no longer supported.\n" feature
 
 (* ------------------------------------------------------------------------- *)
 (* Prepare for parsing the command line. *)
@@ -22,16 +26,15 @@ let backend =
 let set_backend b () =
   backend := b
 
-type token_type_mode =
-  | TokenTypeAndCode   (* produce the definition of the [token] type and code for the parser *)
-  | TokenTypeOnly      (* produce the type definition only *)
-  | CodeOnly of string (* produce the code only; import token type from specified module *)
+let mode =
+  ref `DefineTokenType
 
-let token_type_mode =
-  ref TokenTypeAndCode
+let token_type_only =
+  ref false
 
-let tokentypeonly () =
-  token_type_mode := TokenTypeOnly
+let only_tokens () =
+  mode := `DefineTokenType;
+  token_type_only := true
 
 let is_uppercase_ascii c =
   c >= 'A' && c <= 'Z'
@@ -41,29 +44,20 @@ let is_capitalized_ascii s =
   is_uppercase_ascii s.[0]
 
 let codeonly m =
-  if not (is_capitalized_ascii m) then begin
+  if not (is_capitalized_ascii m) then
     (* Not using module [Error] to avoid a circular dependency. *)
-    fprintf stderr "Error: %s is not a valid OCaml module name.\n" m;
-    exit 1
-  end;
-  token_type_mode := CodeOnly m
+    error "Error: %s is not a valid OCaml module name.\n" m;
+  mode := `UseExternalTokenType m;
+  token_type_only := false
 
 let version =
   ref false
-
-type construction_mode =
-  | ModeCanonical     (* --canonical: canonical Knuth LR(1) automaton *)
-  | ModeInclusionOnly (* --no-pager : states are merged when there is an inclusion
-                                      relationship *)
-  | ModePager         (* normal mode: states are merged as per Pager's criterion *)
-  | ModeLALR          (* --lalr     : states are merged as in an LALR generator,
-                                      i.e. as soon as they have the same LR(0) core *)
 
 (* Note that --canonical overrides --no-pager. If both are specified, the result
    is a canonical automaton. *)
 
 let construction_mode =
-  ref ModePager
+  ref `Pager
 
 let explain =
   ref false
@@ -92,20 +86,12 @@ let trace =
 let noprefix =
   ref false
 
-type print_mode =
-    | PrintNormal
-    | PrintForOCamlyacc
-    | PrintUnitActions of bool       (* if true, declare unit tokens *)
-
 type preprocess_mode =
-    | PMNormal                       (* preprocess and continue *)
-    | PMOnlyPreprocess of print_mode (* preprocess, print grammar, stop *)
+  | PMNormal
+  | PMOnlyPreprocess of mode
 
 let preprocess_mode =
   ref PMNormal
-
-let recovery =
-  ref false
 
 let v () =
   dump := true;
@@ -156,10 +142,9 @@ let set_infer_mode mode2 =
   | (IMDependRaw | IMDependPostprocess), IMInfer ->
       ()
   | _, _ ->
-      fprintf stderr "Error: you cannot use both %s and %s.\n"
+      error "Error: you cannot use both %s and %s.\n"
         (show_infer_mode mode1)
-        (show_infer_mode mode2);
-      exit 1
+        (show_infer_mode mode2)
 
 let enable_infer () =
   set_infer_mode IMInfer
@@ -202,12 +187,6 @@ let ocamlc =
 let ocamldep =
   ref "ocamldep"
 
-let logG, logA, logC =
-  ref 0, ref 0, ref 0
-
-let timings =
-  ref None
-
 let filenames =
   ref StringSet.empty
 
@@ -232,16 +211,13 @@ let inspection =
 let unparsing =
   ref false
 
-let coq_no_version_check =
+let rocq_no_version_check =
   ref false
 
-let coq_no_complete =
+let rocq_no_complete =
   ref false
 
-let coq_no_actions =
-  ref false
-
-let strict =
+let rocq_no_actions =
   ref false
 
 let fixedexc =
@@ -274,26 +250,6 @@ let ignore_all_unused_precedence_levels =
 
 let list_errors =
   ref false
-
-type list_errors_algorithm = [
-  | `Fast
-  | `Classic
-  | `Validate
-]
-
-let list_errors_algorithm =
-  ref `Fast
-
-let set_list_errors_algorithm (algorithm: string) : unit =
-  let algorithm = match algorithm with
-    | "fast"     -> `Fast
-    | "classic"  -> `Classic
-    | "validate" -> `Validate
-    | algorithm ->
-        error "Error: --list-errors-algorithm should be followed with \
-               fast | classic | validate (got %S).\n" algorithm
-  in
-  list_errors_algorithm := algorithm
 
 let compile_errors =
   ref None
@@ -334,15 +290,8 @@ let set_echo_errors_concrete filename =
 let cmly =
   ref false
 
-let coq_lib_path =
+let rocq_lib_path =
   ref (Some "MenhirLib")
-
-type dollars =
-  | DollarsDisallowed
-  | DollarsAllowed
-
-let dollars =
-  ref DollarsAllowed
 
 let require_aliases =
   ref false
@@ -391,58 +340,102 @@ let specialize_token =
 let pack_classic =
   ref false
 
+let expand_nullable =
+  ref None
+
+let test_GLR =
+  ref false
+
+let kill_priorities =
+  ref false
+
+let avoid_eos =
+  ref false
+
 (* When new command line options are added, please update both the manual
    in [doc/manual.tex] and the man page in [doc/menhir.1]. *)
 
 (* Please note that there is a very short length limit on the explanations
    here, since the output of [menhir -help] must fit in 80 columns. *)
 
-let options = Arg.align [
+let unsupported switch =
+  switch, Arg.Unit (unsupported switch), " (no longer supported)"
+
+let rocq_options (rocq : string) =
+  let prefix = sprintf "--%s" rocq in
+  [
+    prefix ^ "",
+    Arg.Unit (set_backend `RocqBackend),
+    " Generate a verified Rocq parser"
+    ;
+    prefix ^ "-lib-path",
+    Arg.String (fun path -> rocq_lib_path := Some path),
+    "<path> Set the path to the Rocq library MenhirLib"
+    ;
+    prefix ^ "-lib-no-path",
+    Arg.Unit (fun () -> rocq_lib_path := None),
+    " Use unqualified references to the Rocq library MenhirLib"
+    ;
+    prefix ^ "-no-version-check",
+    Arg.Set rocq_no_version_check,
+    " Do not generate a version check in the Rocq parser"
+    ;
+    prefix ^ "-no-actions",
+    Arg.Set rocq_no_actions,
+    " Ignore the semantic actions in the Rocq parser"
+    ;
+    prefix ^ "-no-complete",
+    Arg.Set rocq_no_complete,
+    " Do not generate a proof of completeness of the Rocq parser"
+    ;
+  ]
+
+let options = [
   "--automaton-graph", Arg.Set automaton_graph, " (undocumented)";
+  "--avoid-eos", Arg.Set avoid_eos, " (undocumented)";
   "--base", Arg.Set_string base, "<basename> Specifies a base name for the output file(s)";
-  "--canonical", Arg.Unit (fun () -> construction_mode := ModeCanonical), " Construct a canonical Knuth LR(1) automaton";
+  "--canonical", Arg.Unit (fun () -> construction_mode := `Canonical), " Construct a canonical Knuth LR(1) automaton";
   "--cmly", Arg.Set cmly, " Write a .cmly file";
-  "--code", Arg.Unit (set_backend `NewCodeBackend), " Use the code back-end (default)";
-  "--code-ancient", Arg.Unit (set_backend `OldCodeBackend), " Use the ancient code back-end";
+  "--code", Arg.Unit (set_backend `CodeBackend), " Use the code back-end (default)";
+  unsupported "--code-ancient";
   "--comment", Arg.Set comment, " Include comments in the generated code";
   "--compare-errors", Arg.String add_compare_errors, "<filename> (used twice) Compare two .messages files";
   "--compile-errors", Arg.String set_compile_errors, "<filename> Compile a .messages file to OCaml code";
-  "--coq", Arg.Unit (set_backend `CoqBackend), " Generate a formally verified parser, in Coq";
-  "--coq-lib-path", Arg.String (fun path -> coq_lib_path := Some path), "<path> How to qualify references to MenhirLib";
-  "--coq-lib-no-path", Arg.Unit (fun () -> coq_lib_path := None), " Do *not* qualify references to MenhirLib";
-  "--coq-no-version-check", Arg.Set coq_no_version_check, " Do not generate a version check.";
-  "--coq-no-actions", Arg.Set coq_no_actions, " Ignore semantic actions in the Coq output";
-  "--coq-no-complete", Arg.Set coq_no_complete, " Do not generate a proof of completeness";
   "--depend", Arg.Unit enable_depend, " Invoke ocamldep and display dependencies";
   "--dump", Arg.Set dump, " Write an .automaton file";
   "--dump-menhirLib", Arg.String (fun path -> dump_menhirLib := Some path), "<path> Dump menhirLib.{ml,mli} at <path>";
   "--dump-resolved", Arg.Set dump_resolved, " Write an .automaton.resolved file";
   "--echo-errors", Arg.String set_echo_errors, "<filename> Echo the sentences in a .messages file";
   "--echo-errors-concrete", Arg.String set_echo_errors_concrete, "<filename> Echo the sentences in a .messages file";
-  "--error-recovery", Arg.Set recovery, " (no longer supported)";
+  unsupported "--error-recovery";
   "--exn-carries-state", Arg.Set exn_carries_state, " Declares exception Error of int";
+  "--expand-nullable-symbols", Arg.Unit (fun () -> expand_nullable := Some `ExpandNullableSymbols), " (undocumented)";
+  "--expand-nullable-suffix-participants", Arg.Unit (fun () -> expand_nullable := Some `ExpandNullableSuffixParticipants), " (undocumented)";
+  "--expand-nullable-suffixes", Arg.Unit (fun () -> expand_nullable := Some `ExpandNullableSuffixes), " (undocumented)";
   "--explain", Arg.Set explain, " Explain conflicts in <basename>.conflicts";
   "--external-tokens", Arg.String codeonly, "<module> Import token type definition from <module>";
   "--fixed-exception", Arg.Set fixedexc, " Declares Error = Parsing.Parse_error";
+  "--GLR", Arg.Unit (set_backend `GLRBackend), " Use the GLR back-end";
   "--infer", Arg.Unit enable_infer, " Invoke ocamlc to do type inference";
   "--infer-protocol-supported", Arg.Unit (fun () -> exit 0), " Stop with exit code 0";
   "--infer-write-query", Arg.String enable_write_query, "<filename> Write mock .ml file";
   "--infer-read-reply", Arg.String enable_read_reply, "<filename> Read inferred .mli file";
   "--inspection", Arg.Set inspection, " Generate the inspection API";
-  "--interpret", Arg.Unit (fun () -> interpret := `Normal `DoNotShowCST), " Interpret the sentences provided on stdin";
-  "--interpret-show-cst", Arg.Unit (fun () -> interpret := `Normal `ShowCST), " Show a concrete syntax tree upon acceptance";
-  "--interpret-error", Arg.Unit (fun () -> interpret := `Error), " Interpret an error sentence";
-  "--lalr", Arg.Unit (fun () -> construction_mode := ModeLALR), " Construct an LALR(1) automaton";
+  "--interpret", Arg.Unit (fun () -> interpret := `Interpret `DoNotShowCST), " Interpret the sentences provided on stdin";
+  "--interpret-show-cst", Arg.Unit (fun () -> interpret := `Interpret `ShowCST), " Show a concrete syntax tree upon acceptance";
+  "--interpret-error", Arg.Unit (fun () -> interpret := `InterpretError), " Interpret an error sentence";
+  "--kill-priorities", Arg.Set kill_priorities, " (undocumented)";
+  "--lalr", Arg.Unit (fun () -> construction_mode := `LALR), " Construct an LALR(1) automaton";
   "--list-errors", Arg.Set list_errors, " Produce a list of erroneous inputs";
-  "--list-errors-algorithm", Arg.String set_list_errors_algorithm, " (undocumented)";
-  "--log-automaton", Arg.Set_int logA, "<level> Log information about the automaton";
-  "--log-code", Arg.Set_int logC, "<level> Log information about the generated code";
-  "--log-grammar", Arg.Set_int logG, "<level> Log information about the grammar";
+  "--log-automaton", Arg.Set_int Channels.logA, "<level> Log information about the automaton";
+  "--log-code", Arg.Set_int Channels.logC, "<level> Log information about the generated code";
+  "--log-grammar", Arg.Set_int Channels.logG, "<level> Log information about the grammar";
   "--merge-errors", Arg.String add_merge_errors, "<filename> (used twice) Merge two .messages files";
+  "--no-code-generation", Arg.Unit (set_backend `NoBackend), " Do not produce any code";
   "--no-code-inlining", Arg.Clear code_inlining, " (undocumented)";
-  "--no-dollars", Arg.Unit (fun () -> dollars := DollarsDisallowed), " Disallow $i in semantic actions";
+  "--no-dollars", Arg.Unit (fun () -> ParserAux.dollars := `DollarsDisallowed), " Disallow $i in semantic actions";
   "--no-inline", Arg.Clear inline, " Ignore the %inline keyword";
-  "--no-pager", Arg.Unit (fun () -> if !construction_mode = ModePager then construction_mode := ModeInclusionOnly), " (undocumented)";
+  "--no-pager", Arg.Unit (fun () -> if !construction_mode = `Pager then construction_mode := `InclusionOnly), " (undocumented)";
   "--no-prefix", Arg.Set noprefix, " (undocumented)";
   "--no-stdlib", Arg.Set no_stdlib, " Do not load the standard library";
   "--ocamlc", Arg.Set_string ocamlc, "<command> Specifies how ocamlc should be invoked";
@@ -455,7 +448,7 @@ let options = Arg.align [
                          " Print grammar with unit actions and exit";
   "--only-preprocess-uu", Arg.Unit (fun () -> preprocess_mode := PMOnlyPreprocess (PrintUnitActions true)),
                           " Print grammar with unit actions & tokens";
-  "--only-tokens", Arg.Unit tokentypeonly, " Generate token type definition only, no code";
+  "--only-tokens", Arg.Unit only_tokens, " Generate token type definition only, no code";
   "--pack-classic", Arg.Set pack_classic, " (undocumented)";
   "--unparsing", Arg.Set unparsing, " Generate the unparsing API";
   "--random-seed", Arg.Int Random.init, "<seed> Set the random seed";
@@ -476,7 +469,7 @@ let options = Arg.align [
   "--stacklang-test", Arg.Set stacklang_test, " (undocumented)";
   "--stdlib", Arg.String ignore, "<directory> Ignored (deprecated)";
   "--strategy", Arg.String set_strategy, "<strategy> Choose an error-handling strategy";
-  "--strict", Arg.Set strict, " Warnings about the grammar are errors";
+  "--strict", Arg.Set Channels.strict, " Change warnings into errors";
   "--suggest-comp-flags", Arg.Unit (fun () -> suggestion := SuggestCompFlags),
                           " Suggest compilation flags for ocaml{c,opt}";
   "--suggest-link-flags-byte", Arg.Unit (fun () -> suggestion := SuggestLinkFlags "cma"),
@@ -488,8 +481,9 @@ let options = Arg.align [
   "--suggest-ocamlfind", Arg.Unit (fun () -> suggestion := SuggestUseOcamlfind),
                          " (deprecated)";
   "--table", Arg.Unit (set_backend `TableBackend), " Use the table back-end";
-  "--timings", Arg.Unit (fun () -> timings := Some stderr), " Output internal timings to stderr";
-  "--timings-to", Arg.String (fun filename -> timings := Some (open_out filename)), "<filename> Output internal timings to <filename>";
+  "--test-GLR", Arg.Set test_GLR, " (undocumented)";
+  "--timings", Arg.Unit (fun () -> Time.set_output_channel (Some stderr)), " Output internal timings to stderr";
+  "--timings-to", Arg.String (fun filename -> Time.set_output_channel (Some (open_out filename))), "<filename> Output internal timings to <filename>";
   "--trace", Arg.Set trace, " Generate tracing instructions";
   "--unused-precedence-levels", Arg.Set ignore_all_unused_precedence_levels, " Do not warn about unused precedence levels";
   "--unused-token", Arg.String ignore_unused_token, "<token> Do not warn that <token> is unused";
@@ -497,13 +491,22 @@ let options = Arg.align [
   "--update-errors", Arg.String set_update_errors, "<filename> Update auto-comments in a .messages file";
   "--version", Arg.Set version, " Show version number and exit";
   "-b", Arg.Set_string base, "<basename> Synonymous with --base <basename>";
-  "-lg", Arg.Set_int logG, " Synonymous with --log-grammar";
-  "-la", Arg.Set_int logA, " Synonymous with --log-automaton";
-  "-lc", Arg.Set_int logC, " Synonymous with --log-code";
+  "-lg", Arg.Set_int Channels.logG, " Synonymous with --log-grammar";
+  "-la", Arg.Set_int Channels.logA, " Synonymous with --log-automaton";
+  "-lc", Arg.Set_int Channels.logC, " Synonymous with --log-code";
   "-O", Arg.Set_int optimization_level, " (0|1|2) Set optimization level";
   "-t", Arg.Unit (set_backend `TableBackend), " Synonymous with --table";
   "-v", Arg.Unit v, " Synonymous with --dump --explain";
 ]
+
+let compare (key1, _, _) (key2, _, _) =
+  String.compare key1 key2
+
+let options =
+  Arg.align (
+    options @ rocq_options "coq" @ rocq_options "rocq"
+    |> List.sort compare
+  )
 
 let usage =
   sprintf "Usage: %s <options> <filenames>" Sys.argv.(0)
@@ -527,47 +530,53 @@ let () =
 
 (* Decide which back-end is used. *)
 
-let backend =
-  (* If any of the [--interpret] flags is used, then we consider that
-     the back-end is [`ReferenceInterpreter]. Indeed, in that case,
-     we are not using any of the other back-ends. *)
-  match !interpret with
-  | `Normal _ | `Error ->
-      `ReferenceInterpreter
-  | `No ->
-      match !backend with
-      | `Unspecified ->
-          (* The new code back-end is the default. *)
-          `NewCodeBackend
-      | `CoqBackend
-      | `NewCodeBackend
-      | `OldCodeBackend
-      | `TableBackend
-        as backend ->
-          backend
+let enabled_GLR =
+  !backend = `GLRBackend
 
-let extension =
+let backend =
+  match !interpret, !backend with
+  | `Interpret show, `GLRBackend ->
+      (* This is --interpret --GLR. *)
+      `InterpretGLR show
+  | `Interpret show, _ ->
+      (* This is --interpret without --GLR. *)
+      `Interpret show
+  | `InterpretError, `GLRBackend ->
+      (* This is --interpret-error --GLR. *)
+      error "Error: the combination --interpret-error --GLR is not supported.\n"
+  | `InterpretError, _ ->
+      (* This is --interpret-error without --GLR. *)
+      `InterpretError
+  | `No, `Unspecified ->
+      (* The code back-end is the default. *)
+      `CodeBackend
+  | `No, (`RocqBackend | `CodeBackend | `TableBackend | `GLRBackend | `NoBackend as backend) ->
+      backend
+
+let () =
   match backend with
-  | `CoqBackend ->
-      ".vy"
-  | `ReferenceInterpreter
-  | `NewCodeBackend
-  | `OldCodeBackend
-  | `TableBackend ->
-      ".mly"
+  | `GLRBackend | `InterpretGLR _ ->
+      assert enabled_GLR
+  | _ ->
+      assert (not enabled_GLR)
 
 let print_backend backend =
   match backend with
-  | `ReferenceInterpreter ->
+  | `Interpret _
+  | `InterpretError ->
       "reference interpreter"
-  | `OldCodeBackend ->
-      "ancient code back-end"
-  | `NewCodeBackend ->
-      "new code back-end"
-  | `CoqBackend ->
-      "Coq back-end"
+  | `InterpretGLR _ ->
+      "GLR reference interpreter"
+  | `CodeBackend ->
+      "code back-end"
+  | `RocqBackend ->
+      "Rocq back-end"
   | `TableBackend ->
       "table back-end"
+  | `GLRBackend ->
+      "GLR back-end"
+  | `NoBackend ->
+      "no back-end"
 
 let print_strategy strategy =
   match strategy with
@@ -579,45 +588,36 @@ let print_strategy strategy =
 let strategy =
   let strategy = !strategy in
   match strategy, backend with
-  | (`Unspecified | `Simplified), `NewCodeBackend ->
-      (* The new code back-end supports only the simplified strategy. *)
+  | (`Unspecified | `Simplified), `CodeBackend ->
+      (* The code back-end supports only the simplified strategy. *)
       `Simplified
-  | (`Unspecified | `Legacy), `OldCodeBackend ->
-      (* The old code back-end supports only the legacy strategy. *)
-      `Legacy
-  | `Simplified, (`ReferenceInterpreter | `TableBackend) ->
+  | `Simplified, (`Interpret _ | `InterpretError | `TableBackend) ->
       (* The reference interpreter and the table back-end support both
          strategies. *)
       `Simplified
-  | (`Unspecified | `Legacy), (`ReferenceInterpreter | `TableBackend) ->
+  | (`Unspecified | `Legacy), (`Interpret _ | `InterpretError | `TableBackend) ->
       (* The reference interpreter and the table back-end support both
-         strategies; legacy is the default, for backward
-         compatibility. *)
+         strategies; legacy is the default, for backward compatibility. *)
       `Legacy
-  | _, `CoqBackend ->
-      (* The Coq back-end does not care. *)
-      `Legacy
-  | (`Legacy as strategy), `NewCodeBackend
-  | (`Simplified as strategy), `OldCodeBackend ->
+  | _, `RocqBackend
+  | _, `GLRBackend
+  | _, `InterpretGLR _
+  | _, `NoBackend ->
+      (* These back-ends do not care. *)
+      `Simplified
+  | (`Legacy as strategy), `CodeBackend ->
       error "Error: the %s does not allow --strategy %s.\n"
         (print_backend backend)
         (print_strategy strategy)
 
 (* ------------------------------------------------------------------------- *)
 
-(* [--exn-carries-state] is supported only by the new code back-end,
+(* [--exn-carries-state] is supported only by the code back-end,
    and is incompatible with [--fixed-exception]. *)
 
 let () =
   if !exn_carries_state
-  && backend = `TableBackend then
-    error
-      "Error: --exn-carries-state is supported only by the code back-end.\n\
-       It is not compatible with --table.\n"
-
-let () =
-  if !exn_carries_state
-  && backend <> `NewCodeBackend then
+  && backend <> `CodeBackend then
     error
       "Error: --exn-carries-state is supported only by the code back-end.\n"
 
@@ -626,6 +626,20 @@ let () =
   && !fixedexc then
     error
       "Error: --fixed-exception and --exn-carries-state are incompatible.\n"
+
+(* [--fixed-exception] is not compatible with the GLR back-end. *)
+
+let () =
+  if !fixedexc
+  && backend = `GLRBackend then
+    error
+      "Error: --fixed-exception is not supported by the GLR back-end.\n"
+
+(* When the GLR back-end is active, the exception [Error] carries a list of
+   top nodes. *)
+
+let exn_carries_top_nodes =
+  backend = `GLRBackend
 
 (* ------------------------------------------------------------------------- *)
 
@@ -672,9 +686,6 @@ let () =
 (* ------------------------------------------------------------------------- *)
 (* Export the settings. *)
 
-let stdlib_filename =
-  "<standard.mly>"
-
 let filenames =
   StringSet.elements !filenames
 
@@ -682,18 +693,19 @@ let base =
   if !base = "" then
     match filenames with
     | [] ->
-        fprintf stderr "%s\n" usage;
-        exit 1
+        error "%s\n" usage
     | [ filename ] ->
-        Filename.chop_suffix filename extension
+        Filename.remove_extension filename
     | _ ->
-        fprintf stderr "Error: you must specify --base when providing multiple input files.\n";
-        exit 1
+        error "Error: you must specify --base when providing multiple input files.\n"
   else
     !base
 
-let token_type_mode =
-  !token_type_mode
+let mode =
+  !mode
+
+let token_type_only =
+  !token_type_only
 
 let construction_mode =
   !construction_mode
@@ -716,12 +728,6 @@ let automaton_graph =
 let trace =
   !trace
 
-let () =
-  if !recovery then begin
-    fprintf stderr "Error: --error-recovery mode is no longer supported.\n";
-    exit 1
-  end
-
 let noprefix =
   !noprefix
 
@@ -743,15 +749,6 @@ let ocamlc =
 let ocamldep =
   !ocamldep
 
-let logG, logA, logC =
-  !logG, !logA, !logC
-
-let timings =
-  !timings
-
-let interpret =
-  !interpret
-
 let optimization_level =
   !optimization_level
 
@@ -759,34 +756,27 @@ let inspection =
   !inspection
 
 let () =
-  if inspection && backend <> `TableBackend then begin
-    fprintf stderr "Error: --inspection requires --table.\n";
-    exit 1
-  end
+  if inspection && backend <> `TableBackend then
+    error "Error: --inspection requires --table.\n"
 
 let unparsing =
   !unparsing
 
 let () =
-  if unparsing && backend <> `TableBackend then begin
-    fprintf stderr "Error: --unparsing requires --table.\n";
-    exit 1
-  end
+  if unparsing && backend <> `TableBackend then
+    error "Error: --unparsing requires --table.\n"
 
 let no_stdlib =
   !no_stdlib
 
-let coq_no_version_check =
-  !coq_no_version_check
+let rocq_no_version_check =
+  !rocq_no_version_check
 
-let coq_no_complete =
-  !coq_no_complete
+let rocq_no_complete =
+  !rocq_no_complete
 
-let coq_no_actions =
-  !coq_no_actions
-
-let strict =
-  !strict
+let rocq_no_actions =
+  !rocq_no_actions
 
 let fixedexc =
   !fixedexc
@@ -800,14 +790,16 @@ let ignored_unused_tokens =
 let ignore_all_unused_tokens =
   !ignore_all_unused_tokens
 
+let ignore_unused_token t =
+  ignore_all_unused_tokens ||
+  token_type_only ||
+  StringSet.mem t ignored_unused_tokens
+
 let ignore_all_unused_precedence_levels =
   !ignore_all_unused_precedence_levels
 
 let list_errors =
   !list_errors
-
-let list_errors_algorithm : list_errors_algorithm =
-  !list_errors_algorithm
 
 let compile_errors =
   !compile_errors
@@ -846,11 +838,8 @@ let echo_errors_concrete =
 let cmly =
   !cmly
 
-let coq_lib_path =
-  !coq_lib_path
-
-let dollars =
-  !dollars
+let rocq_lib_path =
+  !rocq_lib_path
 
 let require_aliases =
   !require_aliases
@@ -873,7 +862,7 @@ let infer =
 
 let skipping_parser_generation =
   backend = `ReferenceInterpreter ||
-  backend = `CoqBackend ||
+  backend = `RocqBackend ||
   compile_errors <> None ||
   list_errors ||
   compare_errors <> None ||
@@ -890,19 +879,16 @@ let infer =
   | _ ->
       infer
 
-(* [--table] or [--coq] implies [--represent-everything]. Indeed, only the
-   code back-ends need clever computations of which states, values, and
-   positions are represented as part of stack cells. *)
+(* Only the code back-end needs clever computations of which states, values,
+   and positions are represented as part of stack cells. Thus, if any other
+   back-end is requested, [represent_everything()] is called. *)
 
 let () =
   match backend with
-  | `ReferenceInterpreter
-  | `TableBackend
-  | `CoqBackend ->
-      represent_everything()
-  | `OldCodeBackend
-  | `NewCodeBackend ->
+  | `CodeBackend ->
       ()
+  | _ ->
+      represent_everything()
 
 let represent_positions =
   !represent_positions
@@ -927,3 +913,40 @@ let specialize_token =
 
 let pack_classic =
   !pack_classic
+
+let incremental =
+  backend = `TableBackend
+
+let expand_nullable =
+  !expand_nullable
+
+(* [--GLR] implies [--expand-nullable-suffix-participants]
+   or [--expand-nullable-symbols]. Indeed, our GLR engine
+   does not support right nullable rules. *)
+
+let expand_nullable =
+  if enabled_GLR then
+    match expand_nullable with
+    | None
+    | Some `ExpandNullableSuffixes ->
+        Some `ExpandNullableSuffixParticipants
+    | Some `ExpandNullableSuffixParticipants
+    | Some `ExpandNullableSymbols ->
+        expand_nullable
+  else
+    expand_nullable
+
+(* [--test-GLR] requires [--GLR]. *)
+
+let test_GLR =
+  !test_GLR
+
+let () =
+  if test_GLR then
+    assert (backend = `GLRBackend)
+
+let kill_priorities =
+  !kill_priorities
+
+let avoid_eos =
+  !avoid_eos

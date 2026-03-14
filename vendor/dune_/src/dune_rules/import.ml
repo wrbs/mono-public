@@ -73,7 +73,6 @@ include struct
   module Version = Version
 end
 
-module Re = Dune_re
 module Syntax = Dune_sexp.Syntax
 
 include struct
@@ -122,16 +121,19 @@ include struct
   module File_binding = File_binding
   module Foreign_language = Foreign_language
   module Coq_env = Coq_env
+  module Rocq_env = Rocq_env
   module Menhir_env = Menhir_env
   module Dune_env = Dune_env
   module Js_of_ocaml = Js_of_ocaml
   module Copy_files = Copy_files
   module Enabled_if = Enabled_if
+  module Rule_mode = Rule_mode
   module Rule_mode_decoder = Rule_mode_decoder
   module Alias_conf = Alias_conf
-  module Stanza_common = Stanza_common
+  module Stanza_pkg = Stanza_pkg
   module Include_subdirs = Include_subdirs
   module Mode_conf = Mode_conf
+  module Modules_settings = Modules_settings
 end
 
 include Dune_engine.No_io

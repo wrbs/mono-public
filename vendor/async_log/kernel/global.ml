@@ -51,25 +51,26 @@ module Make () = struct
   let raw ?time ?tags k = Log.raw ?time ?tags (Lazy.force log) k
   let info ?time ?tags k = Log.info ?time ?tags (Lazy.force log) k
   let error ?time ?tags k = Log.error ?time ?tags (Lazy.force log) k
-  let async_command_error_output_names = ref []
 
-  let register_async_command_error_output_name output_name =
-    async_command_error_output_names := output_name :: !async_command_error_output_names
-  ;;
+  module For_async_shutdown = struct
+    let error_output_names = ref []
 
-  let error_from_async_command ?time ?tags fmt =
-    ksprintf
-      (fun msg ->
-        let log = Lazy.force log in
-        let outputs =
-          List.filter_map
-            !async_command_error_output_names
-            ~f:(Log.Private.get_named_output log)
-        in
-        Log.Private.with_temporary_outputs log outputs ~f:(fun () ->
-          Log.string log ~level:`Error ?time ?tags msg))
-      fmt
-  ;;
+    let register_error_output_name output_name =
+      error_output_names := output_name :: !error_output_names
+    ;;
+
+    let log_error ?time ?tags fmt =
+      ksprintf
+        (fun msg ->
+          let log = Lazy.force log in
+          let outputs =
+            List.filter_map !error_output_names ~f:(Log.Private.get_named_output log)
+          in
+          Log.Private.with_temporary_outputs log outputs ~f:(fun () ->
+            Log.string log ~level:`Error ?time ?tags msg))
+        fmt
+    ;;
+  end
 
   let debug ?time ?tags k = Log.debug ?time ?tags (Lazy.force log) k
   let raw_s ?time ?tags the_sexp = Log.sexp ?time ?tags (Lazy.force log) the_sexp
@@ -108,8 +109,14 @@ module Make () = struct
   let set_level_via_param ?default () = Log.Private.set_level_via_param_lazy ~default log
 
   module For_testing = struct
-    let use_test_output ?(map_output = Fn.id) () =
-      set_output [ Output.For_testing.create ~map_output ]
+    let use_test_output
+      ?(map_output = Fn.id)
+      ?(time : [ `Keep | `Omit ] = `Omit)
+      ?(tags : [ `Keep | `Omit ] = `Omit)
+      ?(level : [ `Keep | `Omit ] = `Omit)
+      ()
+      =
+      set_output [ Output.For_testing.create ~map_output ~time ~tags ~level () ]
     ;;
   end
 end

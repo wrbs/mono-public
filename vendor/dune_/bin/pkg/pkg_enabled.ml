@@ -14,12 +14,16 @@ let term =
         workspace
     in
     let any_lockdir_exists =
-      List.exists lock_dir_paths ~f:(fun lock_dir_path ->
-        Path.exists (Path.source lock_dir_path))
+      List.exists lock_dir_paths ~f:(fun p -> Path.exists (Path.source p))
     in
     (* CR-Leonidas-from-XIV: change this logic when we stop detecting lock
        directories in the source tree *)
-    let enabled = any_lockdir_exists || workspace.config.pkg_enabled in
+    let enabled =
+      match workspace.config.pkg_enabled with
+      | Set (_, `Enabled) -> true
+      | Set (_, `Disabled) -> false
+      | Unset -> any_lockdir_exists
+    in
     match enabled with
     | true -> ()
     | false -> exit 1)

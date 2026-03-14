@@ -314,7 +314,6 @@ let trim_semi s =
 type unit_data =
   { unit_name : string
   ; unit_info : Unit_info.t
-  ; strings : string list
   ; fragments : (string * Javascript.expression) list
   }
 
@@ -322,14 +321,10 @@ let info_to_sexp ~predefined_exceptions ~build_info ~unit_data =
   let add nm skip v rem = if skip then rem else Sexp.List (Atom nm :: v) :: rem in
   let units =
     List.map
-      ~f:(fun { unit_name; unit_info; strings; fragments } ->
+      ~f:(fun { unit_name; unit_info; fragments } ->
         Sexp.List
           (Unit_info.to_sexp unit_info
           |> add "name" false [ Atom unit_name ]
-          |> add
-               "strings"
-               (List.is_empty strings)
-               (List.map ~f:(fun s -> Sexp.Atom s) strings)
           |> add
                "fragments"
                (List.is_empty fragments)
@@ -362,28 +357,23 @@ let info_from_sexp info =
     |> member "units"
     |> Option.value ~default:[]
     |> List.map ~f:(fun u ->
-           let unit_info = u |> Unit_info.from_sexp in
-           let unit_name =
-             u |> member "name" |> Option.value ~default:[] |> single string
-           in
-           let strings =
-             u |> member "strings" |> Option.value ~default:[] |> List.map ~f:string
-           in
-           let fragments =
-             u
-             |> member "fragments"
-             |> Option.map ~f:(single string)
-             |> Option.map ~f:(fun s -> Marshal.from_string (Base64.decode_exn s) 0)
-             |> Option.value ~default:[]
-             (*
+        let unit_info = u |> Unit_info.from_sexp in
+        let unit_name = u |> member "name" |> Option.value ~default:[] |> single string in
+        let fragments =
+          u
+          |> member "fragments"
+          |> Option.map ~f:(single string)
+          |> Option.map ~f:(fun s -> Marshal.from_string (Base64.decode_exn s) 0)
+          |> Option.value ~default:[]
+          (*
                            |> to_option to_assoc
                            |> Option.value ~default:[]
                            |> List.map ~f:(fun (nm, e) ->
                                   ( nm
                                   , let lex = Parse_js.Lexer.of_string (to_string e) in
                                     Parse_js.parse_expr lex ))*)
-           in
-           { unit_name; unit_info; strings; fragments })
+        in
+        { unit_name; unit_info; fragments })
   in
   build_info, predefined_exceptions, unit_data
 
@@ -417,12 +407,15 @@ let output_js js =
 
 let report_missing_primitives missing =
   if not (List.is_empty missing)
-  then (
-    warn "There are some missing Wasm primitives@.";
-    warn "Dummy implementations (raising an exception) ";
-    warn "will be provided.@.";
-    warn "Missing primitives:@.";
-    List.iter ~f:(fun nm -> warn "  %s@." nm) missing)
+  then
+    Warning.warn
+      `Missing_primitive
+      "There are some missing Wasm primitives\n\
+       Dummy implementations (raising an exception) will be provided.\n\
+       Missing primitives:\n\
+       %a"
+      (Format.pp_print_list Format.pp_print_string)
+      missing
 
 let build_runtime_arguments
     ~link_spec
@@ -444,28 +437,13 @@ let build_runtime_arguments
   let generated_js =
     List.concat
     @@ List.map
-         ~f:(fun (unit_name, (strings, fragments)) ->
+         ~f:(fun (unit_name, fragments) ->
            let name s =
              match unit_name with
              | None -> s
              | Some nm -> nm ^ "." ^ s
            in
-           let strings =
-             if List.is_empty strings
-             then []
-             else
-               [ ( name "strings"
-                 , Javascript.EArr
-                     (List.map
-                        ~f:(fun s ->
-                          Javascript.Element (EStr (Utf8_string.of_string_exn s)))
-                        strings) )
-               ]
-           in
-           let fragments =
-             if List.is_empty fragments then [] else [ name "fragments", obj fragments ]
-           in
-           strings @ fragments)
+           if List.is_empty fragments then [] else [ name "fragments", obj fragments ])
          generated_js
   in
   let generated_js =
@@ -533,7 +511,7 @@ let build_runtime_arguments
         [ EVar (Javascript.ident Global_constant.global_object_) ]
         N
   in
-  obj
+  let props : (string * Javascript.expression) list =
     [ ( "link"
       , EArr
           (List.map
@@ -559,6 +537,14 @@ let build_runtime_arguments
     ; "generated", generated_js
     ; "src", EStr (Utf8_string.of_string_exn (Filename.basename wasm_dir))
     ]
+  in
+  let props =
+    match Config.effects () with
+    | `Disabled -> ("disable_effects", Javascript.EBool true) :: props
+    | `Jspi | `Cps -> props
+    | `Double_translation -> assert false
+  in
+  obj props
 
 let source_name i j file =
   let prefix =
@@ -603,15 +589,15 @@ let link_to_directory ~files_to_link ~files ~enable_source_maps ~dir =
   let lst =
     List.tl files
     |> List.map ~f:(fun (file, _) ->
-           if StringSet.mem file files_to_link
-           then (
-             let z = Zip.open_in file in
-             let name' = file |> Filename.basename |> Filename.remove_extension in
-             let ((name', _) as res) = process_file z ~name:"code" ~name' in
-             if enable_source_maps then extract_source_map ~dir ~name:name' z;
-             Zip.close_in z;
-             Some res)
-           else None)
+        if StringSet.mem file files_to_link
+        then (
+          let z = Zip.open_in file in
+          let name' = file |> Filename.basename |> Filename.remove_extension in
+          let ((name', _) as res) = process_file z ~name:"code" ~name' in
+          if enable_source_maps then extract_source_map ~dir ~name:name' z;
+          Zip.close_in z;
+          Some res)
+        else None)
     |> List.filter_map ~f:(fun x -> x)
   in
   runtime :: prelude :: List.map ~f:fst lst, (runtime_intf, List.map ~f:snd lst)
@@ -665,10 +651,10 @@ let load_information files =
       ( predefined_exceptions
       , (runtime, (build_info, []))
         :: List.map other_files ~f:(fun file ->
-               let build_info, _predefined_exceptions, unit_data =
-                 Zip.with_open_in file read_info
-               in
-               file, (build_info, unit_data)) )
+            let build_info, _predefined_exceptions, unit_data =
+              Zip.with_open_in file read_info
+            in
+            file, (build_info, unit_data)) )
 
 let remove_directory path =
   try
@@ -813,8 +799,7 @@ let link ~output_file ~linkall ~enable_source_maps ~files =
   let generated_js =
     List.concat
     @@ List.map files ~f:(fun (_, (_, units)) ->
-           List.map units ~f:(fun { unit_name; strings; fragments; _ } ->
-               Some unit_name, (strings, fragments)))
+        List.map units ~f:(fun { unit_name; fragments; _ } -> Some unit_name, fragments))
   in
   let runtime_args =
     let js =

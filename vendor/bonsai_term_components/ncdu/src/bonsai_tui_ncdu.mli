@@ -53,7 +53,7 @@ module type Key = sig
   include Comparable.S_plain with type t := t
 
   val to_string_hum : t -> string
-  val catpuccin_color : t -> Bonsai_tui_catpuccin.t option
+  val catppuccin_color : t -> Bonsai_tui_catppuccin.t option
 end
 
 module type Size = sig

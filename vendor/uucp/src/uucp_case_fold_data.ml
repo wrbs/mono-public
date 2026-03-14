@@ -1,6 +1,6 @@
 (*---------------------------------------------------------------------------
-   Copyright (c) 2025 The uucp programmers. All rights reserved.
-   SPDX-License-Identifier: ISC
+   Copyright (c) 2020 The uucp programmers. All rights reserved.
+   Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
 (* WARNING do not edit. This file was automatically generated. *)
@@ -400,8 +400,7 @@ let fold_map_map : Uchar.t list t =
            [Uchar.unsafe_of_int 0x043E;]; [Uchar.unsafe_of_int 0x0441;];
            [Uchar.unsafe_of_int 0x0442;]; [Uchar.unsafe_of_int 0x0442;];
            [Uchar.unsafe_of_int 0x044A;]; [Uchar.unsafe_of_int 0x0463;];
-           [Uchar.unsafe_of_int 0xA64B;]; [Uchar.unsafe_of_int 0x1C8A;]; 
-           []; []; []; []; []; []|];
+           [Uchar.unsafe_of_int 0xA64B;]; []; []; []; []; []; []; []|];
          [|[Uchar.unsafe_of_int 0x10D0;]; [Uchar.unsafe_of_int 0x10D1;];
            [Uchar.unsafe_of_int 0x10D2;]; [Uchar.unsafe_of_int 0x10D3;];
            [Uchar.unsafe_of_int 0x10D4;]; [Uchar.unsafe_of_int 0x10D5;];
@@ -892,14 +891,10 @@ let fold_map_map : Uchar.t list t =
          [|[Uchar.unsafe_of_int 0xA7C1;]; []; [Uchar.unsafe_of_int 0xA7C3;];
            []; [Uchar.unsafe_of_int 0xA794;]; [Uchar.unsafe_of_int 0x0282;];
            [Uchar.unsafe_of_int 0x1D8E;]; [Uchar.unsafe_of_int 0xA7C8;]; 
-           []; [Uchar.unsafe_of_int 0xA7CA;]; [];
-           [Uchar.unsafe_of_int 0x0264;]; [Uchar.unsafe_of_int 0xA7CD;]; 
-           []; [Uchar.unsafe_of_int 0xA7CF;]; []|];
-         [|[Uchar.unsafe_of_int 0xA7D1;]; []; [Uchar.unsafe_of_int 0xA7D3;];
-           []; [Uchar.unsafe_of_int 0xA7D5;]; [];
+           []; [Uchar.unsafe_of_int 0xA7CA;]; []; []; []; []; []; []|];
+         [|[Uchar.unsafe_of_int 0xA7D1;]; []; []; []; []; [];
            [Uchar.unsafe_of_int 0xA7D7;]; []; [Uchar.unsafe_of_int 0xA7D9;];
-           []; [Uchar.unsafe_of_int 0xA7DB;]; [];
-           [Uchar.unsafe_of_int 0x019B;]; []; []; []|];
+           []; []; []; []; []; []; []|];
          nil;
          [|[]; []; []; []; []; [Uchar.unsafe_of_int 0xA7F6;]; []; []; 
            []; []; []; []; []; []; []; []|];
@@ -1109,23 +1104,10 @@ let fold_map_map : Uchar.t list t =
          [|[Uchar.unsafe_of_int 0x10CF0;]; [Uchar.unsafe_of_int 0x10CF1;];
            [Uchar.unsafe_of_int 0x10CF2;]; []; []; []; []; []; []; []; 
            []; []; []; []; []; []|];
-         nil; nil; nil; nil; nil; nil; nil; nil; nil;
-         [|[Uchar.unsafe_of_int 0x10D70;]; [Uchar.unsafe_of_int 0x10D71;];
-           [Uchar.unsafe_of_int 0x10D72;]; [Uchar.unsafe_of_int 0x10D73;];
-           [Uchar.unsafe_of_int 0x10D74;]; [Uchar.unsafe_of_int 0x10D75;];
-           [Uchar.unsafe_of_int 0x10D76;]; [Uchar.unsafe_of_int 0x10D77;];
-           [Uchar.unsafe_of_int 0x10D78;]; [Uchar.unsafe_of_int 0x10D79;];
-           [Uchar.unsafe_of_int 0x10D7A;]; [Uchar.unsafe_of_int 0x10D7B;];
-           [Uchar.unsafe_of_int 0x10D7C;]; [Uchar.unsafe_of_int 0x10D7D;];
-           [Uchar.unsafe_of_int 0x10D7E;]; [Uchar.unsafe_of_int 0x10D7F;]|];
-         [|[Uchar.unsafe_of_int 0x10D80;]; [Uchar.unsafe_of_int 0x10D81;];
-           [Uchar.unsafe_of_int 0x10D82;]; [Uchar.unsafe_of_int 0x10D83;];
-           [Uchar.unsafe_of_int 0x10D84;]; [Uchar.unsafe_of_int 0x10D85;];
-           []; []; []; []; []; []; []; []; []; []|];
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
-         nil; nil|];
+         nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil|];
        [|nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
@@ -1197,22 +1179,8 @@ let fold_map_map : Uchar.t list t =
            [Uchar.unsafe_of_int 0x16E7A;]; [Uchar.unsafe_of_int 0x16E7B;];
            [Uchar.unsafe_of_int 0x16E7C;]; [Uchar.unsafe_of_int 0x16E7D;];
            [Uchar.unsafe_of_int 0x16E7E;]; [Uchar.unsafe_of_int 0x16E7F;]|];
-         nil; nil; nil; nil;
-         [|[Uchar.unsafe_of_int 0x16EBB;]; [Uchar.unsafe_of_int 0x16EBC;];
-           [Uchar.unsafe_of_int 0x16EBD;]; [Uchar.unsafe_of_int 0x16EBE;];
-           [Uchar.unsafe_of_int 0x16EBF;]; [Uchar.unsafe_of_int 0x16EC0;];
-           [Uchar.unsafe_of_int 0x16EC1;]; [Uchar.unsafe_of_int 0x16EC2;];
-           [Uchar.unsafe_of_int 0x16EC3;]; [Uchar.unsafe_of_int 0x16EC4;];
-           [Uchar.unsafe_of_int 0x16EC5;]; [Uchar.unsafe_of_int 0x16EC6;];
-           [Uchar.unsafe_of_int 0x16EC7;]; [Uchar.unsafe_of_int 0x16EC8;];
-           [Uchar.unsafe_of_int 0x16EC9;]; [Uchar.unsafe_of_int 0x16ECA;]|];
-         [|[Uchar.unsafe_of_int 0x16ECB;]; [Uchar.unsafe_of_int 0x16ECC;];
-           [Uchar.unsafe_of_int 0x16ECD;]; [Uchar.unsafe_of_int 0x16ECE;];
-           [Uchar.unsafe_of_int 0x16ECF;]; [Uchar.unsafe_of_int 0x16ED0;];
-           [Uchar.unsafe_of_int 0x16ED1;]; [Uchar.unsafe_of_int 0x16ED2;];
-           [Uchar.unsafe_of_int 0x16ED3;]; []; []; []; []; []; []; []|];
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
-         nil; nil; nil; nil; nil; nil; nil|];
+         nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil|];
        nil; nil; nil; nil; nil; nil; nil;
        [|nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
@@ -1273,3 +1241,19 @@ let fold_map_map : Uchar.t list t =
        nil; nil; nil|] }
 
 
+
+(*---------------------------------------------------------------------------
+   Copyright (c) 2020 The uucp programmers
+
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
+
+   THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+   WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+   MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+   ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+   WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+   ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+  ---------------------------------------------------------------------------*)

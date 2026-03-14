@@ -1,9 +1,3 @@
 open! Core
 open! Import
-
-include
-  String_id.Make
-    (struct
-      let module_name = __MODULE__
-    end)
-    ()
+include (val String_id.make ~module_name:__MODULE__ ~include_default_validation:true ())

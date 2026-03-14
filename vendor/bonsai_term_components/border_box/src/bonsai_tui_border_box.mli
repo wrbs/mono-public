@@ -21,6 +21,17 @@ module Line_type : sig
     | Thick
     | Double
     | Round_corners
+
+  val vertical_bar : t -> string
+  val horizontal_bar : t -> string
+  val top_left : t -> string
+  val bottom_left : t -> string
+  val bottom_right : t -> string
+  val top_right : t -> string
+  val vertical_right : t -> string
+  val vertical_left : t -> string
+  val horizontal_down : t -> string
+  val horizontal_up : t -> string
 end
 
 (** [line_type] defaults to [Thin].
@@ -37,6 +48,17 @@ val view
   -> ?hide_right:bool
   -> ?hide_top:bool
   -> ?hide_bottom:bool
+  -> ?left_padding:int
+       (** Adds padding to the left side of the box. Padding is opaque and not transparent *)
+  -> ?right_padding:int
+       (** Adds padding to the right side of the box. Padding is opaque and not
+           transparent *)
+  -> ?top_padding:int
+       (** Adds padding to the top of the box. Padding is opaque and not transparent *)
+  -> ?bottom_padding:int
+       (** Adds padding to the bottom of the box. Padding is opaque and not transparent *)
+  -> ?title:View.t (** Adds a title to the box. Should be 1 line width high *)
+  -> ?subtitle:View.t (** Adds a subtitle under the title. Should be 1 line width high *)
   -> ?attrs:Attr.t list
   -> View.t
   -> View.t

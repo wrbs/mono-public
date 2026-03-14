@@ -12,21 +12,22 @@ DEMOS := \
   calc-syntax-errors \
   calc-two \
   generate-printers \
+  calc-GLR \
 
-COQDEMOS := \
-  coq-minicalc \
-  coq-syntax-errors \
+ROCQDEMOS := \
+  rocq-minicalc \
+  rocq-syntax-errors \
 
 all test:
 	@ for d in $(DEMOS) ; do echo "Building $$d..." && make -C $$d --no-print-directory $@ ; done
 	@ if command -v coqc >/dev/null ; then \
 	    if opam list --installed --check coq-menhirlib ; then \
-	      for d in $(COQDEMOS) ; do echo "Building $$d..." && make -C $$d --no-print-directory $@ ; done ; \
+	      for d in $(ROCQDEMOS) ; do echo "Building $$d..." && make -C $$d --no-print-directory $@ ; done ; \
 	    else \
-	      echo "Skipping the Coq demos, because coq-menhirlib is not installed." ; \
+	      echo "Skipping the Rocq demos, because coq-menhirlib is not installed." ; \
 	    fi \
 	  else \
-	    echo "Skipping the Coq demos, because Coq is not installed." ; \
+	    echo "Skipping the Rocq demos, because Rocq is not installed." ; \
 	  fi
 
 clean:

@@ -5,7 +5,7 @@ module Rpc_error = Dune_rpc.Response.Error
 let active_server () =
   match Dune_rpc_impl.Where.get () with
   | Some p -> Ok p
-  | None -> Error (User_error.make [ Pp.text "RPC server not running." ])
+  | None -> Error (User_error.make [ Pp.paragraph "RPC server not running." ])
 ;;
 
 let active_server_exn () = active_server () |> User_error.ok_exn
@@ -19,17 +19,36 @@ let interpret_kind = function
 
 let raise_rpc_error (e : Rpc_error.t) =
   User_error.raise
-    [ Pp.text "Server returned error: "
-    ; Pp.textf "%s (error kind: %s)" e.message (interpret_kind e.kind)
+    [ Pp.paragraph "Server returned error: "
+    ; Pp.paragraphf "%s (error kind: %s)" e.message (interpret_kind e.kind)
+      (* CR-soon ElectreAAS: Should we be printing the payload? *)
     ]
 ;;
 
-let request_exn client witness n =
+let request_exn client request arg =
   let open Fiber.O in
-  let* decl = Client.Versioned.prepare_request client witness in
+  let* decl =
+    Client.Versioned.prepare_request client (Dune_rpc.Decl.Request.witness request)
+  in
   match decl with
+  | Ok decl ->
+    Client.request client decl arg
+    >>| (function
+     | Ok response -> response
+     | Error e -> raise_rpc_error e)
   | Error e -> raise (Dune_rpc.Version_error.E e)
-  | Ok decl -> Client.request client decl n
+;;
+
+let notify_exn client notification arg =
+  let open Fiber.O in
+  let* res =
+    Client.Versioned.prepare_notification
+      client
+      (Dune_rpc.Decl.Notification.witness notification)
+  in
+  match res with
+  | Ok decl -> Client.notification client decl arg
+  | Error e -> raise (Dune_rpc.Version_error.E e)
 ;;
 
 let client_term builder f =
@@ -40,8 +59,8 @@ let client_term builder f =
 ;;
 
 let wait_term =
-  let doc = "poll until server starts listening and then establish connection." in
-  Arg.(value & flag & info [ "wait" ] ~doc)
+  let doc = "Poll until server starts listening and then establish connection." in
+  Arg.(value & flag & info [ "wait" ] ~doc:(Some doc))
 ;;
 
 let establish_connection () =
@@ -63,7 +82,7 @@ let establish_connection_with_retry () =
     >>= function
     | Ok x -> Fiber.return x
     | Error _ ->
-      let* () = Scheduler.sleep ~seconds:pause_between_retries_s in
+      let* () = Dune_engine.Scheduler.sleep ~seconds:pause_between_retries_s in
       loop ()
   in
   loop ()
@@ -73,53 +92,80 @@ let establish_client_session ~wait =
   if wait then establish_connection_with_retry () else establish_connection_exn ()
 ;;
 
-let fire_request ~name ~wait request arg =
-  let open Fiber.O in
-  let* connection = establish_client_session ~wait in
+let prepare_targets targets =
+  List.map targets ~f:(fun target ->
+    let sexp = Dune_lang.Dep_conf.encode target in
+    Dune_lang.to_string sexp)
+;;
+
+let warn_ignore_arguments lock_held_by =
+  User_warning.emit
+    [ Pp.paragraphf
+        "Your build request is being forwarded to a running Dune instance%s. Note that \
+         certain command line arguments may be ignored."
+        (match lock_held_by with
+         | Dune_util.Global_lock.Lock_held_by.Unknown -> ""
+         | Pid_from_lockfile pid -> sprintf " (pid: %d)" pid)
+    ]
+;;
+
+let should_warn ~warn_forwarding builder =
+  warn_forwarding && not (Common.Builder.equal builder Common.Builder.default)
+;;
+
+let send_request ~f connection name =
   Dune_rpc_impl.Client.client
     connection
     (Dune_rpc.Initialize.Request.create ~id:(Dune_rpc.Id.make (Sexp.Atom name)))
-    ~f:(fun client -> request_exn client (Dune_rpc.Decl.Request.witness request) arg)
+    ~f
 ;;
 
-let wrap_build_outcome_exn ~print_on_success f args () =
+let fire_request
+      ~name
+      ~wait
+      ?(warn_forwarding = true)
+      ?(lock_held_by = Dune_util.Global_lock.Lock_held_by.Unknown)
+      builder
+      request
+      arg
+  =
   let open Fiber.O in
-  let+ response = f args in
-  match response with
-  | Error (error : Rpc_error.t) ->
-    Printf.eprintf "Error: %s\n%!" (Dyn.to_string (Rpc_error.to_dyn error))
-  | Ok Dune_rpc.Build_outcome_with_diagnostics.Success ->
+  let* connection = establish_client_session ~wait in
+  if should_warn ~warn_forwarding builder then warn_ignore_arguments lock_held_by;
+  send_request connection name ~f:(fun client -> request_exn client request arg)
+;;
+
+let fire_notification
+      ~name
+      ~wait
+      ?(warn_forwarding = true)
+      ?(lock_held_by = Dune_util.Global_lock.Lock_held_by.Unknown)
+      builder
+      notification
+      arg
+  =
+  let open Fiber.O in
+  let* connection = establish_client_session ~wait in
+  if should_warn ~warn_forwarding builder then warn_ignore_arguments lock_held_by;
+  send_request connection name ~f:(fun client -> notify_exn client notification arg)
+;;
+
+let wrap_build_outcome_exn ~print_on_success build_outcome =
+  match build_outcome with
+  | Dune_rpc.Build_outcome_with_diagnostics.Success ->
     if print_on_success
-    then
-      Console.print_user_message
-        (User_message.make [ Pp.text "Success" |> Pp.tag User_message.Style.Success ])
-  | Ok (Failure errors) ->
+    then Console.print [ Pp.text "Success" |> Pp.tag User_message.Style.Success ]
+  | Failure errors ->
+    let error_msg =
+      match List.length errors with
+      | 0 ->
+        Code_error.raise
+          "Build via RPC failed, but the RPC server did not send an error message."
+          []
+      | 1 -> Pp.paragraph "Build failed with 1 error."
+      | n -> Pp.paragraphf "Build failed with %d errors." n
+    in
     List.iter errors ~f:(fun { Dune_rpc.Compound_user_error.main; _ } ->
       Console.print_user_message main);
-    User_error.raise
-      [ (match List.length errors with
-         | 0 ->
-           Code_error.raise
-             "Build via RPC failed, but the RPC server did not send an error message."
-             []
-         | 1 -> Pp.textf "Build failed with 1 error."
-         | n -> Pp.textf "Build failed with %d errors." n)
-      ]
-;;
-
-let run_via_rpc ~builder ~common ~config lock_held_by f args =
-  if not (Common.Builder.equal builder Common.Builder.default)
-  then
-    User_warning.emit
-      [ Pp.textf
-          "Your build request is being forwarded to a running Dune instance%s. Note that \
-           certain command line arguments may be ignored."
-          (match lock_held_by with
-           | Dune_util.Global_lock.Lock_held_by.Unknown -> ""
-           | Pid_from_lockfile pid -> sprintf " (pid: %d)" pid)
-      ];
-  Scheduler.go_without_rpc_server
-    ~common
-    ~config
-    (wrap_build_outcome_exn ~print_on_success:true f args)
+    User_error.raise [ error_msg |> Pp.tag User_message.Style.Error ]
 ;;

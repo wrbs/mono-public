@@ -1,5 +1,4 @@
 open Import
-open! Action_builder.O
 
 (* This module interprets [(menhir ...)] stanzas -- that is, it provides build
    rules for Menhir parsers. *)
@@ -142,9 +141,7 @@ module Run (P : PARAMS) = struct
     Command.run_dyn_prog ~sandbox ~dir:(Path.build build_dir) menhir_binary args
   ;;
 
-  let rule ?(mode = stanza.mode)
-    : Action.Full.t Action_builder.With_targets.t -> unit Memo.t
-    =
+  let rule ~mode : Action.Full.t Action_builder.With_targets.t -> unit Memo.t =
     Super_context.add_rule sctx ~dir ~mode ~loc:stanza.loc
   ;;
 
@@ -258,7 +255,7 @@ module Run (P : PARAMS) = struct
     let mock_module : Module.t =
       let source =
         let impl = Module.File.make Dialect.ocaml (Path.build (mock_ml base)) in
-        Module.Source.make ~impl [ name ]
+        Module.Source.make ~impl:(Some impl) ~intf:None [ name ]
       in
       Module.of_source ~visibility:Public ~kind:Impl source
     in
@@ -276,14 +273,19 @@ module Run (P : PARAMS) = struct
     let* deps =
       let obj_dir = Compilation_context.obj_dir cctx in
       let modules = Compilation_context.modules cctx in
-      let vimpl = Compilation_context.vimpl cctx in
+      let impl = Compilation_context.implements cctx in
       let dir = Obj_dir.dir obj_dir in
-      Dep_rules.for_module ~obj_dir ~modules ~sandbox ~vimpl ~dir ~sctx mock_module
+      Dep_rules.for_module ~obj_dir ~modules ~sandbox ~impl ~dir ~sctx mock_module
     in
     let* () =
       Module_compilation.ocamlc_i ~deps cctx mock_module ~output:(inferred_mli base)
     in
-    let* explain_flags = explain_flags base stanza in
+    let* explain_flags = explain_flags base stanza
+    and* mode =
+      let sctx = Compilation_context.super_context cctx in
+      let* expander = Super_context.expander sctx ~dir in
+      Rule_mode_expand.expand_path ~expander ~dir stanza.mode
+    in
     (* 3. A second invocation of Menhir reads the inferred [.mli] file. *)
     menhir
       [ Command.Args.dyn expanded_flags
@@ -295,7 +297,7 @@ module Run (P : PARAMS) = struct
       ; Dep (Path.build (inferred_mli base))
       ; Hidden_targets (targets base ~cmly)
       ]
-    |> rule
+    |> rule ~mode
   ;;
 
   (* ------------------------------------------------------------------------ *)
@@ -306,7 +308,12 @@ module Run (P : PARAMS) = struct
   let process1 base ~cmly (stanza : stanza) : unit Memo.t =
     let open Memo.O in
     let* expanded_flags = expand_flags stanza.flags
-    and* explain_flags = explain_flags base stanza in
+    and* explain_flags = explain_flags base stanza
+    and* mode =
+      let sctx = Compilation_context.super_context cctx in
+      let* expander = Super_context.expander sctx ~dir in
+      Rule_mode_expand.expand_path ~expander ~dir stanza.mode
+    in
     menhir
       [ Command.Args.dyn expanded_flags
       ; S explain_flags
@@ -315,7 +322,7 @@ module Run (P : PARAMS) = struct
       ; Path (Path.relative (Path.build dir) base)
       ; Hidden_targets (targets base ~cmly)
       ]
-    |> rule
+    |> rule ~mode
   ;;
 
   (* ------------------------------------------------------------------------ *)

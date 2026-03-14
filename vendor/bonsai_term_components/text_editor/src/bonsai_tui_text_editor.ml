@@ -26,6 +26,7 @@ module Action = struct
     | Delete_prev_char
     | Delete_next_line
     | Delete_prev_line
+    | Kill_next_char
     | Kill_next_line
     | Kill_prev_line
     | Next_word
@@ -37,12 +38,19 @@ module Action = struct
     | Yank
     | Undo
     | Replace_char of string
+    | Prev_char_in_line
   [@@deriving sexp_of]
 
   let to_zed_action
     :  t
     -> [ `Forward_to_zed of Zed_edit.action
-       | `Custom of [ `prev_line | `next_line | `replace_char of string ]
+       | `Custom of
+         [ `prev_line
+         | `next_line
+         | `replace_char of string
+         | `kill_next_char
+         | `prev_char_in_line
+         ]
        ]
     = function
     | Insert s -> `Forward_to_zed (`insert s)
@@ -59,6 +67,7 @@ module Action = struct
     | Delete_prev_char -> `Forward_to_zed `delete_prev_char
     | Delete_next_line -> `Forward_to_zed `delete_next_line
     | Delete_prev_line -> `Forward_to_zed `delete_prev_line
+    | Kill_next_char -> `Custom `kill_next_char
     | Kill_next_line -> `Forward_to_zed `kill_next_line
     | Kill_prev_line -> `Forward_to_zed `kill_prev_line
     | Next_word -> `Forward_to_zed `next_word
@@ -70,6 +79,7 @@ module Action = struct
     | Yank -> `Forward_to_zed `yank
     | Undo -> `Forward_to_zed `undo
     | Replace_char s -> `Custom (`replace_char s)
+    | Prev_char_in_line -> `Custom `prev_char_in_line
   ;;
 end
 
@@ -380,10 +390,18 @@ module State_manager = struct
                  ~ideal_visual_column:model.ideal_visual_column
                  ~width
                  ~zed_context
+             | `Custom `kill_next_char ->
+               (Zed.Zed_edit.get_action `set_mark) zed_context;
+               (Zed.Zed_edit.get_action `next_char) zed_context;
+               (Zed.Zed_edit.get_action `kill) zed_context
              | `Custom (`replace_char s) ->
                (Zed.Zed_edit.get_action `delete_next_char) zed_context;
                (Zed.Zed_edit.get_action (`insert s)) zed_context;
-               (Zed.Zed_edit.get_action `prev_char) zed_context)
+               (Zed.Zed_edit.get_action `prev_char) zed_context
+             | `Custom `prev_char_in_line ->
+               if Zed_edit.at_bol zed_context
+               then ()
+               else (Zed.Zed_edit.get_action `prev_char) zed_context)
         in
         Nonempty_list.iter actions ~f:apply_action
       | Set_text text ->
@@ -563,12 +581,15 @@ let default_keybindings_handler
     | Key_press { key = Backspace; mods = [ Meta ] }
     | Key_press { key = Backspace; mods = [ Ctrl ] }
     | Key_press
-        { key = ASCII 'W' (* NOTE: In VSCode Ctrl+Basckspace is Ctrl+W. *)
+        { key = ASCII 'W' (* NOTE: In VSCode Ctrl+Backspace is Ctrl+W. *)
         ; mods = [ Ctrl ]
         } -> send_action Delete_prev_word
-    | Key_press { key = Delete; mods = [ Ctrl ] } -> send_action Delete_next_word
+    | Key_press { key = Delete; mods = [ Ctrl ] }
+    | Key_press { key = ASCII 'd'; mods = [ Meta ] } -> send_action Delete_next_word
     | Key_press { key = Arrow `Left; mods = [ Ctrl ] } -> send_action Prev_word
     | Key_press { key = Arrow `Right; mods = [ Ctrl ] } -> send_action Next_word
+    | Key_press { key = ASCII 'b'; mods = [ Meta ] } -> send_action Prev_word
+    | Key_press { key = ASCII 'f'; mods = [ Meta ] } -> send_action Next_word
     | Key_press { key = Arrow `Left; mods = [] } -> send_action Prev_char
     | Key_press { key = Arrow `Right; mods = [] } -> send_action Next_char
     | Key_press { key = Arrow `Up; mods = [] } -> send_action Prev_line
@@ -599,6 +620,13 @@ module Vim = struct
     [@@deriving sexp_of]
   end
 
+  module Yank_type = struct
+    type t =
+      | Line
+      | Char
+    [@@deriving sexp_of]
+  end
+
   type t =
     { handler : (Event.t -> unit Effect.t) Bonsai.t
     ; mode : Mode.t Bonsai.t
@@ -608,6 +636,7 @@ module Vim = struct
     type t =
       { mode : Mode.t
       ; command_state : Command_state.t
+      ; last_yank_type : Yank_type.t
       }
 
     module Input = struct
@@ -628,11 +657,15 @@ module Vim = struct
            | Active { send_action } -> send_action action)
       in
       let model =
-        let%tydi { mode; command_state } = model in
+        let%tydi { mode; command_state; last_yank_type } = model in
         match mode, event with
         (* Insert mode handling *)
         | Insert, Key_press { key = Escape; mods = [] } ->
-          { mode = Normal; command_state = None }
+          (* NOTE: This is not intuitive, but repeatedly pressing [esc,i,esc,i,esc,i] will
+             gradually move your cursor backwards because pressing [esc] will put you into
+             normal mode, but _also_ move your cursor backwards! *)
+          send_action Prev_char_in_line;
+          { mode = Normal; command_state = None; last_yank_type }
         | Insert, Key_press { key = ASCII c; mods = [] } ->
           send_action (Insert (Char.to_string c));
           model
@@ -702,14 +735,14 @@ module Vim = struct
              { model with mode = Insert }
            | None, 'S' ->
              send_action Goto_bol;
-             send_action Delete_next_line;
-             { model with mode = Insert }
+             send_action Kill_next_line;
+             { mode = Insert; command_state = None; last_yank_type = Line }
            | None, 'D' ->
-             send_action Delete_next_line;
-             model
+             send_action Kill_next_line;
+             { model with last_yank_type = Char }
            | None, 'C' ->
-             send_action Delete_next_line;
-             { model with mode = Insert }
+             send_action Kill_next_line;
+             { mode = Insert; command_state = None; last_yank_type = Char }
            | None, 'O' ->
              send_action Goto_bol;
              send_action (Insert "\n");
@@ -717,10 +750,40 @@ module Vim = struct
              { model with mode = Insert }
            (* Single character commands *)
            | None, 'x' ->
-             send_action Delete_next_char;
+             send_action Kill_next_char;
+             { model with last_yank_type = Char }
+           | None, 'X' ->
+             send_action Delete_prev_char;
              model
+           | None, 's' ->
+             send_action Delete_next_char;
+             { model with mode = Insert }
            | None, 'u' ->
              send_action Undo;
+             model
+           | None, 'p' ->
+             (match last_yank_type with
+              | Line ->
+                (* line-wise paste below current line *)
+                send_action Goto_eol;
+                send_action Newline;
+                send_action Yank
+              | Char ->
+                (* character-wise paste after cursor, cursor on last char of pasted text *)
+                send_action Next_char;
+                send_action Yank;
+                send_action Prev_char);
+             model
+           | None, 'P' ->
+             (match last_yank_type with
+              | Line ->
+                (* line-wise paste above current line *)
+                send_action Goto_bol;
+                send_action Yank
+              | Char ->
+                (* character-wise paste at cursor, cursor on last char of pasted text *)
+                send_action Yank;
+                send_action Prev_char);
              model
            (* Multi-character commands - first char *)
            | None, 'd' -> { model with command_state = Waiting_for_second_char 'd' }
@@ -730,27 +793,34 @@ module Vim = struct
            | None, 'r' -> { model with command_state = Waiting_for_second_char 'r' }
            (* Multi-character commands - second char *)
            | Waiting_for_second_char 'd', 'd' ->
-             send_action Delete_next_line;
-             send_action Delete_prev_line;
-             { model with command_state = None }
+             send_action Goto_bol;
+             send_action Kill_next_line;
+             { mode = Normal; command_state = None; last_yank_type = Line }
            | Waiting_for_second_char 'd', 'b' ->
-             send_action Delete_prev_word;
-             { model with command_state = None }
+             send_action Kill_prev_word;
+             { mode = Normal; command_state = None; last_yank_type = Char }
            | Waiting_for_second_char 'd', '0' ->
-             send_action Delete_prev_line;
-             { model with command_state = None }
+             send_action Kill_prev_line;
+             { mode = Normal; command_state = None; last_yank_type = Char }
            | Waiting_for_second_char 'd', '$' ->
-             send_action Delete_next_line;
-             { model with command_state = None }
+             send_action Kill_next_line;
+             { mode = Normal; command_state = None; last_yank_type = Char }
            | Waiting_for_second_char 'd', 'w' ->
-             send_action Delete_next_word;
+             send_action Kill_next_word;
              { model with command_state = None }
+           | Waiting_for_second_char 'c', 'e' ->
+             send_action Kill_next_word;
+             { mode = Insert; command_state = None; last_yank_type = Line }
            | Waiting_for_second_char 'c', 'w' ->
-             send_action Delete_next_word;
-             { mode = Insert; command_state = None }
+             send_action Kill_next_word;
+             { mode = Insert; command_state = None; last_yank_type = Char }
            | Waiting_for_second_char 'c', 'b' ->
-             send_action Delete_prev_word;
-             { mode = Insert; command_state = None }
+             send_action Kill_prev_word;
+             { mode = Insert; command_state = None; last_yank_type = Char }
+           | Waiting_for_second_char 'c', 'c' ->
+             send_action Goto_bol;
+             send_action Kill_next_line;
+             { mode = Insert; command_state = None; last_yank_type = Line }
            | Waiting_for_second_char 'g', 'g' ->
              send_action Goto_bot;
              { model with command_state = None }
@@ -823,14 +893,15 @@ module Vim = struct
          switching modes / performing sequences of keystrokes. It is somewhat important to
          make this as snappy as we can (within reason). *)
       Bonsai.state_machine_with_input
-        ~default_model:{ Model.mode = default_mode; command_state = None }
+        ~default_model:
+          { Model.mode = default_mode; command_state = None; last_yank_type = Char }
         (let%arr send_action in
          { Model.Input.send_action })
         ~apply_action:Model.apply_action
         graph
     in
     let mode =
-      let%arr { mode; command_state = _ } = model in
+      let%arr { mode; command_state = _; last_yank_type = _ } = model in
       mode
     in
     { mode; handler }
@@ -871,6 +942,7 @@ module Emacs = struct
       | Key_press { key = ASCII 'f'; mods = [ Meta ] } -> send_action Next_word
       | Key_press { key = ASCII 'b'; mods = [ Meta ] } -> send_action Prev_word
       (* Word deletion *)
+      | Key_press { key = Delete; mods = [ Ctrl ] }
       | Key_press { key = ASCII 'd'; mods = [ Meta ] } -> send_action Kill_next_word
       | Key_press { key = ASCII 'W'; mods = [ Ctrl ] }
       | Key_press { key = Backspace; mods = [ Meta ] } -> send_action Kill_prev_word

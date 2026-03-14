@@ -54,10 +54,10 @@ Here are the most common commands you'll be running:
    $ ./dune.exe build @foo
 
 
-Note that tests are currently written for version 5.3.0 of the OCaml compiler.
+Note that tests are currently written for version 5.4.0 of the OCaml compiler.
 Some tests depend on the specific wording of compilation errors which can change
 between compiler versions, so to reliably run the tests make sure that
-``ocaml.5.3.0`` is installed. The ``TEST_OCAMLVERSION`` in the ``Makefile`` at
+``ocaml.5.4.0`` is installed. The ``TEST_OCAMLVERSION`` in the ``Makefile`` at
 the root of the Dune repo contains the current compiler version for which tests
 are written.
 
@@ -194,6 +194,10 @@ We have the following shells for specific tasks:
 - For running the Coq tests, you can use ``nix develop .#coq``. NB: Coq native
   is not currently installed; this will cause some of the tests to fail. It's
   currently better to fallback to opam in this case.
+- We don't have yet a Nix setup for running the Rocq tests, as of
+  today, there are two classes of tests:
+  + ``make test-rocq``: these work well on a regular Dune opam dev switch
+  + ``make test-rocq-native``: these require the Rocq native compiler to run, and thus need OCaml 4.x
 
 Releasing Dune
 ==============
@@ -286,7 +290,7 @@ Such languages must be enabled in the ``dune`` project file separately:
 
 .. code:: dune
 
-   (lang dune 3.20)
+   (lang dune {{latest}})
    (using coq 0.8)
 
 If such extensions are experimental, it's recommended that they pass

@@ -93,6 +93,9 @@ module Make (M : IMPERATIVE_MAPS) = struct
 
 end
 
+module ForNumberedType (T : NUMBERING) =
+  Make(Glue.ArraysAsImperativeMapsWithNumbering(T))
+
 module ForOrderedType (T : OrderedType) =
   Make(Glue.PersistentMapsToImperativeMaps(Map.Make(T)))
 
@@ -101,3 +104,84 @@ module ForHashedType (T : HashedType) =
 
 module ForType (T : TYPE) =
   ForHashedType(Glue.TrivialHashedType(T))
+
+module type OPERATIONS =
+  NUMBERING_OPERATIONS
+
+module Operations (T : NUMBERING) = struct
+
+  open T
+
+  let equal t1 t2 =
+    encode t1 = encode t2
+
+  let compare t1 t2 =
+    encode t1 - encode t2
+    (* overflow is impossible if [n] is small *)
+
+  let init (f : t -> 'a) : 'a array =
+    Array.init n @@ fun i ->
+    f (decode i)
+
+  let tabulate (f : t -> 'a) : t -> 'a =
+    let table = init f in
+    fun x -> table.(encode x)
+
+  let iter yield =
+    for i = 0 to n - 1 do yield (decode i) done
+
+  let fold yield accu =
+    let accu = ref accu in
+    for i = 0 to n - 1 do accu := yield (decode i) !accu done;
+    !accu
+
+  let map f =
+    let accu = ref [] in
+    for i = 0 to n - 1 do accu := f (decode i) :: !accu done;
+    List.rev !accu
+
+end
+
+module OperationsForIntSegment (T : sig val n: int end) = struct
+
+  include T
+
+  (* Define [encode] and [decode]. *)
+
+  let[@inline] encode i = i
+
+  let decode i =
+    assert (0 <= i && i < n);
+    i
+
+  (* One could call [Operations] and include its result, but I am not sure
+     whether OCaml would optimize away the calls to [encode] and [decode]. *)
+
+  let equal (x : int) (y : int) =
+    x = y
+
+  let compare =
+    (-)
+    (* overflow is impossible if [n] is small *)
+
+  let[@inline] init f =
+    Array.init n f
+
+  let tabulate f =
+    let table = init f in
+    fun x -> table.(x)
+
+  let iter yield =
+    for i = 0 to n - 1 do yield i done
+
+  let fold yield accu =
+    let accu = ref accu in
+    for i = 0 to n - 1 do accu := yield i !accu done;
+    !accu
+
+  let map f =
+    let accu = ref [] in
+    for i = 0 to n - 1 do accu := f i :: !accu done;
+    List.rev !accu
+
+end

@@ -21,3 +21,7 @@ module List : sig
   val all_unit : unit t list -> unit t
   val iter : how:Monad_sequence.how -> 'a list -> f:('a -> unit t) -> unit t
 end
+
+module Queue : sig
+  val iter : how:Monad_sequence.how -> 'a Queue.t -> f:('a -> unit t) -> unit t
+end

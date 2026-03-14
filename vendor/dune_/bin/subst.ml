@@ -120,8 +120,8 @@ let subst_string s path ~map =
 ;;
 
 let subst_file path ~map opam_package_files =
-  match Io.with_file_in (Path.source path) ~f:Io.read_all_unless_large with
-  | Error () ->
+  match Io.with_file_in (Path.source path) ~f:Fs_io.read_all_unless_large with
+  | Error exn ->
     let hints =
       if Sys.word_size = 32
       then
@@ -133,7 +133,7 @@ let subst_file path ~map opam_package_files =
     in
     User_warning.emit
       ~hints
-      [ Pp.textf "Ignoring large file: %s" (Path.Source.to_string path) ]
+      [ Pp.textf "Ignoring file: %s" (Path.Source.to_string path); Exn.pp exn ]
   | Ok s ->
     let version =
       if Path.Source.Set.mem opam_package_files path
@@ -449,7 +449,7 @@ let subst vcs =
 
 let subst () = Source_tree.nearest_vcs Path.Source.root |> Memo.bind ~f:subst |> Memo.run
 
-(** A string that is "3.20.2" but not expanded by [dune subst] *)
+(** A string that is "3.21.0" but not expanded by [dune subst] *)
 let literal_version = "%%" ^ "VERSION%%"
 
 let doc = "Substitute watermarks in source files."

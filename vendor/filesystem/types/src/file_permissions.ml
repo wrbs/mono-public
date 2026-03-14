@@ -1,7 +1,9 @@
 open! Core
 include File_permissions_intf
 
-type t = { perm : int } [@@unboxed] [@@deriving compare ~localize, equal ~localize, hash]
+type t = { perm : int }
+[@@unboxed]
+[@@deriving compare ~portable ~localize, equal ~portable ~localize, hash ~portable]
 
 let mask = 0o7777
 let is_ok int = int land mask = int
@@ -101,12 +103,18 @@ let to_string t =
 ;;
 
 let sexp_of_t t = Sexp.Atom (to_string t)
-let quickcheck_generator = Quickcheck.Generator.map (Int.gen_incl 0 mask) ~f:of_int_exn
-let quickcheck_observer = Quickcheck.Observer.unmap Int.quickcheck_observer ~f:to_int
+
+let quickcheck_generator =
+  Quickcheck.Generator.(map [@mode portable]) (Int.gen_incl 0 mask) ~f:of_int_exn
+;;
+
+let quickcheck_observer =
+  Quickcheck.Observer.(unmap [@mode portable]) Int.quickcheck_observer ~f:to_int
+;;
 
 let quickcheck_shrinker =
   let singletons = List.init (Int.popcount mask) ~f:(fun i -> of_int_exn (1 lsl i)) in
-  Quickcheck.Shrinker.create (fun t ->
+  Quickcheck.Shrinker.(create [@mode portable]) (fun t ->
     List.filter_map singletons ~f:(fun bit ->
       if is_subset bit ~of_:t then Some (t lxor bit) else None)
     |> Sequence.of_list)

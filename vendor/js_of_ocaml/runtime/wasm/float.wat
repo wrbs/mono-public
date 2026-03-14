@@ -216,21 +216,25 @@
                   (local.set $sign_style (i32.const 2))
                   (local.set $i (i32.add (local.get $i) (i32.const 1)))))
             (br_if $bad_format (i32.eq (local.get $i) (local.get $len)))
-            (br_if $bad_format
-               (i32.ne (array.get_u $bytes (local.get $s) (local.get $i))
-                       (@char ".")))
-            (loop $precision
-               (local.set $i (i32.add (local.get $i) (i32.const 1)))
-               (br_if $bad_format (i32.eq (local.get $i) (local.get $len)))
-               (local.set $c
-                  (array.get_u $bytes (local.get $s) (local.get $i)))
-               (if (i32.and (i32.ge_u (local.get $c) (@char "0"))
-                            (i32.le_u (local.get $c) (@char "9")))
-                  (then
-                     (local.set $precision
-                        (i32.add (i32.mul (local.get $precision) (i32.const 10))
+            (if (i32.eq (array.get_u $bytes (local.get $s) (local.get $i))
+                   (@char "."))
+               (then
+                  (loop $precision
+                     (local.set $i (i32.add (local.get $i) (i32.const 1)))
+                     (br_if $bad_format
+                        (i32.eq (local.get $i) (local.get $len)))
+                     (local.set $c
+                        (array.get_u $bytes (local.get $s) (local.get $i)))
+                     (if (i32.and (i32.ge_u (local.get $c) (@char "0"))
+                                  (i32.le_u (local.get $c) (@char "9")))
+                        (then
+                           (local.set $precision
+                              (i32.add
+                                 (i32.mul (local.get $precision) (i32.const 10))
                                  (i32.sub (local.get $c) (@char "0"))))
-                     (br $precision))))
+                           (br $precision)))))
+               (else
+                  (local.set $precision (i32.const 6))))
             (br_if $bad_format
               (i32.ne (i32.add (local.get $i) (i32.const 1)) (local.get $len)))
             (local.set $uppercase (i32.lt_s (local.get $c) (@char "a")))
@@ -330,9 +334,9 @@
                (br_if $uppercase (i32.lt_u (local.get $i) (local.get $len))))))
       (local.get $s))
 
-   (@string $float_of_string "float_of_string")
-
-   (func $caml_float_of_hex (param $s (ref $bytes)) (param $i i32) (result f64)
+   (func $caml_float_of_hex
+      (param $err_msg (ref eq)) (param $s (ref $bytes)) (param $i i32)
+      (result f64)
       (local $len i32) (local $c i32) (local $d i32) (local $m i64)
       (local $f f64) (local $negative i32)
       (local $dec_point i32) (local $exp i32) (local $adj i32)
@@ -471,7 +475,7 @@
          (if (local.get $exp)
             (then (local.set $f (call $ldexp (local.get $f) (local.get $exp)))))
          (return (local.get $f)))
-      (call $caml_failwith (global.get $float_of_string))
+      (call $caml_failwith (local.get $err_msg))
       (f64.const 0))
 
    (func $on_whitespace (param $s (ref $bytes)) (param $i i32) (result i32)
@@ -480,12 +484,13 @@
       (i32.or (i32.eq (local.get $c) (@char " "))
          (i32.le_u (i32.sub (local.get $c) (i32.const 9)) (i32.const 4))))
 
-   (func (export "caml_float_of_string") (param (ref eq)) (result (ref eq))
+   (func $caml_parse_float (export "caml_parse_float")
+      (param $err_msg (ref eq)) (param (ref eq)) (result (ref eq))
       (local $s (ref $bytes)) (local $len i32) (local $i i32) (local $j i32)
       (local $s' (ref $bytes))
       (local $negative i32) (local $c i32)
       (local $f f64)
-      (local.set $s (ref.cast (ref $bytes) (local.get 0)))
+      (local.set $s (ref.cast (ref $bytes) (local.get 1)))
       (local.set $len (array.len (local.get $s)))
       (loop $count
          (if (i32.lt_u (local.get $i) (local.get $len))
@@ -551,7 +556,8 @@
                                  (@char "X"))
                         (then
                            (local.set $f
-                              (call $caml_float_of_hex (local.get $s)
+                              (call $caml_float_of_hex (local.get $err_msg)
+                                 (local.get $s)
                                  (i32.add (local.get $i) (i32.const 2))))
                            (if (local.get $negative)
                               (then (local.set $f (f64.neg (local.get $f)))))
@@ -655,8 +661,14 @@
             (call $parse_float (call $jsstring_of_bytes (local.get $s))))
          (br_if $error (f64.ne (local.get $f) (local.get $f)))
          (return (struct.new $float (local.get $f))))
-      (call $caml_failwith (global.get $float_of_string))
+      (call $caml_failwith (local.get $err_msg))
       (return (ref.i31 (i32.const 0))))
+
+   (@string $float_of_string "float_of_string")
+
+   (func (export "caml_float_of_string") (param $s (ref eq)) (result (ref eq))
+      (return_call $caml_parse_float
+         (global.get $float_of_string) (local.get $s)))
 
    (func (export "caml_nextafter_float")
       (param $x f64) (param $y f64) (result f64)
@@ -679,22 +691,21 @@
                (else (local.set $i (i64.sub (local.get $i) (i64.const 1)))))
             (return (f64.reinterpret_i64 (local.get $i))))))
 
-   (func (export "caml_classify_float") (param $x f64) (result (ref eq))
+   (func (export "caml_classify_float") (param $x f64) (result i32)
       (local $a f64)
       (local.set $a (f64.abs (local.get $x)))
-      (ref.i31
-         (if (result i32) (f64.ge (local.get $a) (f64.const 0x1p-1022))
-            (then
-               (if (result i32) (f64.lt (local.get $a) (f64.const inf))
-                  (then (i32.const 0)) ;; normal
-                  (else (i32.const 3)))) ;; infinity
-            (else
-               (if (result i32) (f64.eq (local.get $a) (f64.const 0))
-                  (then (i32.const 2)) ;; zero
-                  (else
-                     (if (result i32) (f64.eq (local.get $a) (local.get $a))
-                        (then (i32.const 1)) ;; subnormal
-                        (else (i32.const 4))))))))) ;; nan
+      (if (result i32) (f64.ge (local.get $a) (f64.const 0x1p-1022))
+         (then
+            (if (result i32) (f64.lt (local.get $a) (f64.const inf))
+               (then (i32.const 0)) ;; normal
+               (else (i32.const 3)))) ;; infinity
+         (else
+            (if (result i32) (f64.eq (local.get $a) (f64.const 0))
+               (then (i32.const 2)) ;; zero
+               (else
+                  (if (result i32) (f64.eq (local.get $a) (local.get $a))
+                     (then (i32.const 1)) ;; subnormal
+                     (else (i32.const 4)))))))) ;; nan
 
    (func (export "caml_modf_float") (param (ref eq)) (result (ref eq))
       (local $x f64) (local $a f64) (local $i f64) (local $f f64)
@@ -717,7 +728,8 @@
       (array.new_fixed $block 3 (ref.i31 (i32.const 0))
          (struct.new $float (local.get $f)) (struct.new $float (local.get $i))))
 
-   (func $ldexp (param $x f64) (param $n i32) (result f64)
+   (func $ldexp (export "caml_ldexp_float")
+      (param $x f64) (param $n i32) (result f64)
       (if (i32.gt_s (local.get $n) (i32.const 1023))
          (then
             (local.set $x (f64.mul (local.get $x) (f64.const 0x1p1023)))
@@ -746,12 +758,6 @@
             (i64.shl (i64.add (i64.extend_i32_s (local.get $n))
                               (i64.const 0x3ff))
                      (i64.const 52)))))
-
-   (func (export "caml_ldexp_float")
-      (param $x f64) (param $i (ref eq)) (result f64)
-      (call $ldexp
-         (local.get $x)
-         (i31.get_s (ref.cast (ref i31) (local.get $i)))))
 
    (func $frexp (param $x f64) (result f64 i32)
       (local $y i64)
@@ -1132,15 +1138,14 @@
       (struct.new $float (local.get $y)))
 
    (func (export "caml_float_compare")
-      (param $x f64) (param $y f64) (result (ref eq))
-      (ref.i31
-         (i32.add
-            (i32.sub (f64.gt (local.get $x) (local.get $y))
-                     (f64.lt (local.get $x) (local.get $y)))
-            (i32.sub (f64.eq (local.get $x) (local.get $x))
-                     (f64.eq (local.get $y) (local.get $y))))))
+      (param $x f64) (param $y f64) (result i32)
+      (i32.add
+         (i32.sub (f64.gt (local.get $x) (local.get $y))
+                  (f64.lt (local.get $x) (local.get $y)))
+         (i32.sub (f64.eq (local.get $x) (local.get $x))
+                  (f64.eq (local.get $y) (local.get $y)))))
 
-   (func (export "caml_round") (param $x f64) (result f64)
+   (func (export "caml_round_float") (param $x f64) (result f64)
       (local $y f64)
       (if (result f64) (f64.ge (local.get $x) (f64.const 0))
          (then

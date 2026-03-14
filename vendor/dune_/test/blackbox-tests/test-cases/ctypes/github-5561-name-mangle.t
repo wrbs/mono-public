@@ -16,8 +16,8 @@
   > EOF
 
   $ bash -c 'set -o pipefail; dune build 2>&1 | head -n 20'
-  File "fooBar__type_gen.ml", line 3, characters 12-34:
+  File "fooBar__type_gen.ml", line 3, characters 12-28:
   3 |     (module Type_description.Types)
-                  ^^^^^^^^^^^^^^^^^^^^^^
+                  ^^^^^^^^^^^^^^^^
   Error: Unbound module Type_description
   [1]

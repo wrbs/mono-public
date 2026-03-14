@@ -8,722 +8,238 @@
 (*                                                                            *)
 (******************************************************************************)
 
+open Channels
+open MiddleAPI
 open Grammar
-open LR1Sigs
 
 (* -------------------------------------------------------------------------- *)
 
-(* Run the SLR(1) check first. *)
+(* This channel is used to report and count warnings and errors. *)
+
+let main =
+  create()
+
+(* -------------------------------------------------------------------------- *)
+
+(* At log level 1, test whether the grammar is in the class SLR(1). *)
+
+(* This feature is not very useful; it is here mainly for fun. *)
 
 let () =
-  Slr.check()
+  if Report.live (getG 1) then
+    let module SLR = SLR.Make(Lr0) in
+    let count = SLR.count_violations() in
+    if count = 0 then
+      Report.log (getG 1) "The grammar is SLR(1)."
+    else
+      Report.log (getG 1)
+        "The grammar is not SLR(1) -- %d states have a conflict."
+        count
 
 (* -------------------------------------------------------------------------- *)
 
-(* Select a construction algorithm based on the command-line settings. *)
+(* 0. Run one of of our LR(1) construction algorithms. *)
 
-module type ALGORITHM = sig
-  module Run () : LR1_AUTOMATON
-end
-
-let algo, mode =
-  Settings.(match construction_mode with
-  | ModeCanonical ->
-      (module LR1Canonical : ALGORITHM),
+let print_mode mode =
+  match mode with
+  | `Canonical ->
       "canonical"
-  | ModeInclusionOnly ->
-      (module LR1Pager : ALGORITHM),
+  | `InclusionOnly ->
       "no-pager"
-  | ModePager ->
-      (module LR1Pager : ALGORITHM),
+  | `Pager ->
       "pager"
-  | ModeLALR ->
-      (module LALR : ALGORITHM),
+  | `LALR ->
       "lalr"
-  )
-
-module Algorithm =
-  (val algo : ALGORITHM)
 
 let () =
-  Error.logA 1 (fun f ->
-    Printf.fprintf f
-      "The construction mode is %s.\n"
-      mode
-  )
+  Report.log (getA 1)
+    "The construction mode is %s."
+    (print_mode Settings.construction_mode)
 
-(* -------------------------------------------------------------------------- *)
-
-(* Run the construction algorithm. *)
-
-module Raw =
-  Algorithm.Run()
+module A0 =
+  LR1Construction.Make(Lr0)(Settings)()
 
 let () =
-  Error.logA 1 (fun f ->
-    Printf.fprintf f "Built an LR(1) automaton with %d states.\n" Raw.n
-  )
+  Report.log (getA 1)
+    "Built an LR(1) automaton with %d states."
+    A0.n
 
 (* -------------------------------------------------------------------------- *)
 
-(* In the following, we perform a depth-first traversal of the raw automaton
-   that was built above. As we go, we perform silent conflict resolution
-   (which can remove some transitions and therefore make some raw nodes
-   unreachable) and we assign consecutive numbers to the reachable nodes. *)
+(* 1. Perform silent conflict resolution. *)
 
-(* We define our own type [node] to be the number of a reachable node in this
-   new numbering system. *)
+(* A conflict can be silently resolved (that is, resolved without a warning)
+   if it is a shift/reduce conflict and the user has indicated how it should
+   be solved by prodiving precedence declarations. *)
 
-type node =
-  int
+module Precedence =
+  Precedence.Make(Front)(Grammar)
 
-(* -------------------------------------------------------------------------- *)
+module A1 =
+  SilentConflictResolution.Run(A0)(Precedence)
 
-(* All of the following mutable state is modified or initialized during the
-   depth-first traversal below. *)
-
-(* All of the arrays below are indexed by raw node numbers. *)
-
-module M = struct
-  let marked : bool array =
-    Array.make Raw.n false
-  let mark (node : Raw.node) =
-    marked.(Raw.number node) <- true
-  let is_marked (node : Raw.node) =
-    marked.(Raw.number node)
-end
-
-(* This array is initialized during the traversal. We assign new consecutive
-   numbers to the reachable nodes. *)
-
-let unreachable =
-  -1
-
-let _number : node array =
-  Array.make Raw.n unreachable
-
-let transport (raw_node : Raw.node) : node =
-  _number.(Raw.number raw_node)
-
-(* This array of transitions is initialized here with the data supplied by
-   [Raw.transitions]. Then, some transitions are *removed* (because of
-   conflict resolution) during the traversal. *)
-
-let transitions : Raw.node SymbolMap.t array =
-  Array.init Raw.n (fun i ->
-    Raw.transitions (Raw.node i)
-  )
-
-(* Transitions are also stored in reverse, so as to allow reverse traversals
-   of the automaton. This array is populated during the traversal. *)
-
-let predecessors : node list array =
-  Array.make Raw.n []
-
-(* This array is initialized during the traversal. *)
-
-let reductions : Lr0.reductions array =
-  Array.make Raw.n TerminalMap.empty (* dummy *)
-
-(* Tokens for which there are several possible actions in the raw LR(1)
-   automaton are known as conflict tokens. This array is populated during the
-   traversal. *)
-
-let _conflict_tokens : TerminalSet.t array =
-  Array.make Raw.n TerminalSet.empty
-
-(* Information about end-of-stream conflicts in each state. *)
-
-let _has_eos_conflict : (Production.index list * TerminalSet.t) option array =
-  Array.make Raw.n None
-
-(* (New as of 2012/01/23.) This flag records whether a shift/reduce conflict
-   in this node was solved in favor of neither (%nonassoc). This is later used
-   to forbid a default reduction at this node. *)
-
-let forbid_default_reduction : bool array =
-  Array.make Raw.n false
-
-(* A count of all reachable nodes. *)
-
-let n =
-  ref 0
-
-(* A list of nodes with conflicts. *)
-
-let conflict_nodes : node list ref =
-  ref []
-
-(* Counts of nodes with shift/reduce and reduce/reduce conflicts. *)
-
-let shift_reduce =
-  ref 0
-
-let reduce_reduce =
-  ref 0
-
-(* Count of the shift/reduce conflicts that could be silently
-   resolved. *)
-
-let silently_solved =
-  ref 0
+let () =
+  A1.log (getA 1) (* info *)
 
 (* -------------------------------------------------------------------------- *)
 
-(* A view of the raw LR(1) automaton as a graph. *)
+(* 2. Eliminate the unreachable states and renumber the reachable states. *)
 
-(* This view relies on the [transitions] array, as opposed to the function
-   [Raw.transitions]. This means that, once an edge has been removed, it can
-   no longer be followed. *)
+module A2 =
+  Renumber.Run(A1)
 
-module RawForwardEdges = struct
-  type node = Raw.node
-  type label = Symbol.t
-  let foreach_outgoing_edge node f =
-    let i = Raw.number node in
-    SymbolMap.iter f transitions.(i)
-  let foreach_root f =
-    ProductionMap.iter (fun _prod node -> f node) Raw.entry
-end
+let () =
+  A2.diagnostics (getA 1) (* info *)
+
+(* Warn about unused precedence declarations. *)
+
+let () =
+  if not Settings.ignore_all_unused_precedence_levels then
+    Precedence.diagnostics main (* warnings *)
+
+let () =
+  A1.warnings main (* warnings *)
 
 (* -------------------------------------------------------------------------- *)
 
-(* This function is invoked during the traversal when a node is discovered. *)
+(* Explain the conflicts that remain after silent conflict resolution. *)
 
-(* It is in charge of detecting and resolving conflicts at this node. *)
+let () =
+  if Settings.explain then
+    Time.time "Explaining conflicts" @@ fun () ->
+    let module C = ConflictExplanation.Run(A2)(Settings) in
+    C.write (getA 2) (Settings.base ^ ".conflicts")
 
-let discover (raw_node : Raw.node) =
-  let i = Raw.number raw_node
-  and state = Raw.state raw_node in
+(* -------------------------------------------------------------------------- *)
 
-  (* Number this node. *)
+(* If [--dump] is present, dump a description of this automaton, after
+   silent conflict resolution and before severe conflict resolution. *)
 
-  let node : node = Misc.postincrement n in
-  _number.(i) <- node;
+let () =
+  if Settings.dump then
+    Time.time "Dumping the automaton" @@ fun () ->
+    let module D = Dump.Make(A2)() in
+    D.dump (Settings.base ^ ".automaton")
 
-  (* Detect conflicts. We iterate over the table [Lr0.reductions_table state],
-     which gives us all potential reductions. The code is written in such a
-     way that we are aware of multi-way shift/reduce/reduce conflicts. We
-     solve conflicts, when unambiguously allowed by priorities, by removing
-     certain transitions and reductions. *)
+(* -------------------------------------------------------------------------- *)
 
-  let has_shift_reduce = ref false
-  and has_reduce_reduce = ref false in
+(* 3. Perform severe conflict resolution. *)
 
-  let foreach_reduction f =
-    TerminalMap.fold f (Lr0.reductions_table state) TerminalMap.empty
-  in
+(* When --GLR is selected, this step is skipped. *)
 
-  reductions.(i) <- foreach_reduction begin fun tok prods reductions ->
-    assert (prods <> []);
-    if SymbolMap.mem (Symbol.T tok) transitions.(i) then begin
+(* This requires a module-level conditional construct,
+   which in OCaml today must be encoded in an ugly way. *)
 
-      (* There is a transition in addition to the reduction(s). We have (at
-         least) a shift/reduce conflict. *)
+module type AUTOMATON =
+  LR1_AUTOMATON with module Lr0 = Lr0
 
-      assert (not (Terminal.equal tok Terminal.sharp));
-      if List.length prods = 1 then begin
-        let prod = List.hd prods in
-
-        (* This is a single shift/reduce conflict. If priorities tell
-           us how to solve it, we follow that and modify the automaton. *)
-
-        match Precedence.shift_reduce tok prod with
-
-        | Precedence.ChooseShift ->
-
-            (* Suppress the reduce action. *)
-
-            incr silently_solved;
-            reductions
-
-        | Precedence.ChooseReduce ->
-
-            (* Record the reduce action and suppress the shift transition.
-               The automaton is modified in place. This can have the subtle
-               effect of making some nodes unreachable. Any conflicts in these
-               nodes are then ignored (as they should be). *)
-
-            incr silently_solved;
-            transitions.(i) <- SymbolMap.remove (Symbol.T tok) transitions.(i);
-            TerminalMap.add tok prods reductions
-
-        | Precedence.ChooseNeither ->
-
-            (* Suppress both the reduce action and the shift transition. *)
-
-            incr silently_solved;
-            transitions.(i) <- SymbolMap.remove (Symbol.T tok) transitions.(i);
-            forbid_default_reduction.(i) <- true;
-            reductions
-
-        | Precedence.DontKnow ->
-
-            (* Priorities don't allow concluding. Record the existence of a
-               shift/reduce conflict. *)
-
-            _conflict_tokens.(i) <- Grammar.TerminalSet.add tok _conflict_tokens.(i);
-            has_shift_reduce := true;
-            TerminalMap.add tok prods reductions
-
-      end
-      else begin
-
-        (* At least two reductions are enabled, so this is a
-           shift/reduce/reduce conflict. If the priorities are such that
-           each individual shift/reduce conflict is solved in favor of
-           shifting or in favor of neither, then solve the entire composite
-           conflict in the same way. Otherwise, report the conflict. *)
-
-        let choices = List.map (Precedence.shift_reduce tok) prods in
-
-        if List.for_all (fun choice ->
-          match choice with
-          | Precedence.ChooseShift -> true
-          | _ -> false
-        ) choices then begin
-
-          (* Suppress the reduce action. *)
-
-          silently_solved := !silently_solved + List.length prods;
-          reductions
-
-        end
-        else if List.for_all ((=) Precedence.ChooseNeither) choices then begin
-
-          (* Suppress the reduce action and the shift transition. *)
-
-          silently_solved := !silently_solved + List.length prods;
-          transitions.(i) <- SymbolMap.remove (Symbol.T tok) transitions.(i);
-          reductions
-
-        end
-        else begin
-
-          (* Record a shift/reduce/reduce conflict. Keep all reductions. *)
-
-          _conflict_tokens.(i) <- Grammar.TerminalSet.add tok _conflict_tokens.(i);
-          has_shift_reduce := true;
-          has_reduce_reduce := true;
-          TerminalMap.add tok prods reductions
-
-        end
-
-      end
-
-    end
-    else begin
-
-      (* There is no transition in addition to the reduction(s). *)
-
-      if List.length prods >= 2 then begin
-        (* If there are multiple reductions, then we have a pure
-           reduce/reduce conflict. Do nothing about it at this point. *)
-        _conflict_tokens.(i) <- Grammar.TerminalSet.add tok _conflict_tokens.(i);
-        has_reduce_reduce := true
-      end;
-
-      TerminalMap.add tok prods reductions
-
-    end
-
-  end;
-
-  (* Detect end-of-stream conflicts at this node. If it has both a reduce
-     action at [#] and some other (shift or reduce) action, this is an
-     end-of-stream conflict. *)
-
-  let transitions = transitions.(i)
-  and reductions = reductions.(i) in
-
-  if Lr0.has_eos_conflict transitions reductions then begin
-    (* Conceptually suppress the reduce action at [#]. *)
-      let prods, reductions =
-        TerminalMap.lookup_and_remove Terminal.sharp reductions in
-    (* Compute the tokens involved in the transitions and remaining
-       reductions. *)
-    let toks =
-      TerminalSet.union
-        (Lr0.transition_tokens transitions)
-        (Lr0.reduction_tokens reductions)
+let a3 =
+  if Settings.enabled_GLR then
+    (* Skip severe conflict resolution; define [A3] as [A2]. *)
+    (module A2 : AUTOMATON)
+  else
+    (* Perform severe conflict resolution. *)
+    let module A3 =
+      SevereConflictResolution.Run(A2)(Precedence)
+        (struct let main = main end)
     in
-    (* Record this end-of-stream conflict. *)
-    _has_eos_conflict.(i) <- Some (prods, toks)
-  end;
+    A3.diagnostics(); (* warnings *)
+    (module A3 : AUTOMATON)
 
-  (* Record statistics about conflicts. *)
-
-  if not (TerminalSet.is_empty _conflict_tokens.(i)) then begin
-    conflict_nodes := node :: !conflict_nodes;
-    if !has_shift_reduce then
-      incr shift_reduce;
-    if !has_reduce_reduce then
-      incr reduce_reduce
-  end
+module A3 = (val a3)
 
 (* -------------------------------------------------------------------------- *)
 
-(* This function is invoked during the traversal when an edge is traversed. *)
+(* Compute in which states each production may be reduced,
+   and warn about productions that are definitely never reduced. *)
 
-(* It records an edge in the predecessor array. *)
+module S =
+  ReductionSites.Run(A3)
 
-let traverse (source : Raw.node) _symbol (target : Raw.node) =
-  (* The source node has been discovered and numbered already, so it can be
-     transported. (This is not necessarily true of the target node.) *)
-  let j = Raw.number target in
-  predecessors.(j) <- transport source :: predecessors.(j)
+let () =
+  S.diagnostics main (* warnings *)
+
+(* The function [S.reduction_sites] returns a list of nodes. We wrap it,
+   later on, so as to produce a set of nodes. Note that it is important
+   that the types [A3.node], [A4.node] and [A5.node] are the same type. *)
 
 (* -------------------------------------------------------------------------- *)
 
-(* Perform the depth-first traversal of the raw automaton. *)
+(* 4. Insert extra reductions on error
+      so as to obey [%on_error_reduce] declarations. *)
+
+module A4 =
+  ExtraReductions.Run(A3)
 
 let () =
-  let module D = struct
-    let traverse = traverse
-    let discover = discover
-  end in
-  let module R = DFS.Run(RawForwardEdges)(M)(D) in
-  ()
+  A4.warn main (* warnings *)
 
 let () =
-  if !silently_solved = 1 then
-    Error.logA 1 (fun f ->
-      Printf.fprintf f "One shift/reduce conflict was silently solved.\n"
-    )
-  else if !silently_solved > 1 then
-    Error.logA 1 (fun f ->
-      Printf.fprintf f "%d shift/reduce conflicts were silently solved.\n"
-        !silently_solved
-    );
-  if !n < Raw.n then
-    Error.logA 1 (fun f ->
-      Printf.fprintf f
-        "Only %d states remain after resolving shift/reduce conflicts.\n"
-        !n
-    )
-
-let () =
-  Grammar.diagnostics()
+  A4.info (getA 1) (* info *)
 
 (* -------------------------------------------------------------------------- *)
 
-(* Most of our mutable state becomes frozen at this point. Some transitions
-   and reductions can still be removed further on, when default conflict
-   resolution is performed. Also, some reductions can still be added further
-   on, when [%on_error_reduce] declarations are obeyed. *)
+(* 5. Decide which states can have a default reduction. *)
 
-let n =
-  !n
-
-let conflict_nodes =
-  !conflict_nodes
-
-(* We need a mapping of nodes to raw node numbers -- the inverse of the array
-   [number]. *)
-
-(* While building this mapping, we must remember that [number.(i)] is
-   [unreachable] if the raw node number [i] has never been reached by the
-   traversal. *)
-
-let raw : node -> int =
-  let raw = Array.make n (-1) (* dummy *) in
-  Array.iteri (fun i (* raw index *) (node : node) ->
-    assert (0 <= i && i < Raw.n);
-    if node <> unreachable then begin
-      assert (0 <= node && node < n);
-      raw.(node) <- i
-    end
-  ) _number;
-  fun node ->
-    assert (0 <= node && node < n);
-    raw.(node)
-
-(* The array [transitions] is re-constructed so as to map nodes to nodes
-   (instead of raw nodes to raw nodes). This array is now frozen; it is
-   no longer modified. *)
-
-let transitions : node SymbolMap.t array =
-  Array.init n (fun node ->
-    SymbolMap.map transport transitions.(raw node)
-  )
-
-(* The array [predecessors] is now frozen. *)
-
-(* The array [reductions] is *not* yet frozen. *)
-
-(* The array [conflict_tokens] is now frozen. *)
+module A5 =
+  DefaultReductionIntroduction.Run(A4)
 
 let () =
-  Time.tick "Construction of the LR(1) automaton"
+  A5.diagnostics (getC 1) (* info *)
 
 (* -------------------------------------------------------------------------- *)
 
-(* Accessors. *)
+(* The automaton is now final. It will no longer be transformed. *)
 
-let number node =
-  node
+(* If [--dump-resolved] is present, dump a description of this automaton. *)
 
-let of_number node =
-  assert (node < n);
-  node
+let () =
+  if Settings.dump_resolved then
+    Time.time "Dumping the automaton" @@ fun () ->
+    let module D = Dump.Make(A5)() in
+    D.dump (Settings.base ^ ".automaton.resolved")
+
+(* -------------------------------------------------------------------------- *)
+
+(* If any errors have been emitted up to this point, stop now. This includes
+   the case where warnings have been emitted and [--strict] has been passed. *)
+
+let () =
+  Report.exit_if main
+
+(* -------------------------------------------------------------------------- *)
+
+(* This is us. *)
+
+module  Final = A5
+include Final
+include Fix.Numbering.Operations(Final)
 
 let print node =
-  Printf.sprintf "%d" (number node)
-
-let entry =
-  ProductionMap.map transport Raw.entry
-
-let state node =
-  Raw.state (Raw.node (raw node))
-
-let transitions node =
-  assert (0 <= node && node < n);
-  transitions.(node)
-
-let set_reductions node table =
-  reductions.(raw node) <- table
-
-let reductions node =
-  reductions.(raw node)
-
-let predecessors node =
-  predecessors.(raw node)
-
-let conflict_tokens node =
-  _conflict_tokens.(raw node)
-
-let conflicts f =
-  List.iter (fun node ->
-    f (conflict_tokens node) node
-  ) conflict_nodes
-
-let forbid_default_reduction node =
-  forbid_default_reduction.(raw node)
-
-let has_eos_conflict node =
-  _has_eos_conflict.(raw node)
+  Printf.sprintf "%d" (encode node)
 
 (* -------------------------------------------------------------------------- *)
 
-(* The incoming symbol of a node can be computed by going through its LR(0)
-   core. For this reason, we do not need to explicitly record it here. *)
-
-let incoming_symbol node =
-  Lr0.incoming_symbol (Lr0.core (state node))
-
-let is_start node =
-  match incoming_symbol node with
-  | None ->
-      true
-  | Some _ ->
-      false
-
-(* -------------------------------------------------------------------------- *)
-
-(* Graph views. *)
-
-module ForwardEdges = struct
-  type nonrec node = node
-  type label = Symbol.t
-  let foreach_outgoing_edge node f =
-    SymbolMap.iter f (transitions node)
-end
-
-module BackwardEdges = struct
-  type nonrec node = node
-  type label = unit (* could be changed to [Symbol.t option] if needed *)
-  let foreach_outgoing_edge node f =
-    List.iter (fun node -> f () node) (predecessors node)
-end
-
-(* -------------------------------------------------------------------------- *)
-
-(* With each start production [S' -> S], exactly two states are
-   associated: a start state, which contains the item [S' -> . S [#]],
-   and an exit state, which contains the item [S' -> S . [#]]. *)
-
-(* The following function recognizes these two states and returns the
-   corresponding start symbol [S]. *)
-
-let is_start_or_exit node =
-  let items = Lr0.items (Lr0.core (state node)) in
-  if Item.Set.cardinal items = 1 then
-    let item = Item.Set.choose items in
-    let prod, _, _, _, _ = Item.def item in
-    Production.classify prod
-  else
-    None
-
-(* -------------------------------------------------------------------------- *)
-
-(* Iteration over all nodes. *)
-
-let fold f accu =
-  let accu = ref accu in
-  for node = 0 to n - 1 do
-    accu := f !accu node
-  done;
-  !accu
-
-let iter f =
-  for node = 0 to n - 1 do
-    f node
-  done
-
-let map f =
-  List.rev (
-    fold (fun accu node ->
-      f node :: accu
-    ) []
-  )
-
-let foldx f =
-  fold (fun accu node ->
-    match incoming_symbol node with
-    | None -> accu
-    | Some _ -> f accu node
-  )
-
-let iterx f =
-  iter (fun node ->
-    match incoming_symbol node with
-    | None -> ()
-    | Some _ -> f node
-  )
-
-let tabulate (f : node -> 'a) =
-  Misc.tabulate n f
-
-let sum (f : node -> int) =
-  Misc.sum n f
-
-(* -------------------------------------------------------------------------- *)
-
-(* We build a map of each symbol to the (reachable) nodes that have this
-   incoming symbol. *)
-
-let lookup symbol index =
-  try SymbolMap.find symbol index with Not_found -> []
-
-let index : node list SymbolMap.t =
-  fold (fun index node ->
-    match incoming_symbol node with
-    | None ->
-        index
-    | Some symbol ->
-        SymbolMap.add symbol (node :: lookup symbol index) index
-  ) SymbolMap.empty
-
-(* This allows iterating over all nodes that are targets of edges carrying a
-   certain symbol. The sources of the corresponding edges are also provided. *)
-
-let targets f accu symbol =
-  (* There are no incoming transitions on the start symbols. *)
-  let targets = lookup symbol index in
-  List.fold_left (fun accu target ->
-    f accu (predecessors target) target
-  ) accu targets
-
-let ntargets symbol =
-  targets (fun count _ _ -> count + 1) 0 symbol
-
-exception FoundSingleTarget of node
-
-let single_target symbol =
-  try
-    targets (fun () _ target -> raise (FoundSingleTarget target)) () symbol;
-    assert false
-  with FoundSingleTarget target ->
-    target
-
-(* -------------------------------------------------------------------------- *)
-
-(* Converting a start node into the single item that it contains. *)
-
-let start2item node =
-  let state : Lr0.lr1state = state node in
-  let core : Lr0.node = Lr0.core state in
-  let items : Item.Set.t = Lr0.items core in
-  assert (Item.Set.cardinal items = 1);
-  Item.Set.choose items
-
-(* -------------------------------------------------------------------------- *)
-(* Computing which terminal symbols a state is willing to act upon.
-
-   One must keep in mind that, due to the merging of states, a state might be
-   willing to perform a reduction on a certain token, yet the reduction can
-   take us to another state where this token causes an error. In other words,
-   the set of terminal symbols that is computed here is really an
-   over-approximation of the set of symbols that will not cause an error. And
-   there seems to be no way of performing an exact computation, as we would
-   need to know not only the current state, but the contents of the stack as
-   well. *)
-
-let acceptable_tokens (s : node) =
-
-  (* If this state is willing to act on the error token, ignore it -- we do
-     not wish to report that an error would be accepted in this state :-) *)
-
-  let transitions =
-    SymbolMap.remove (Symbol.T Terminal.error) (transitions s)
-  and reductions =
-    TerminalMap.remove Terminal.error (reductions s)
-  in
-
-  (* Accumulate the tokens carried by outgoing transitions. *)
-
-  let covered =
-    SymbolMap.fold (fun symbol _ covered ->
-      match symbol with
-      | Symbol.T tok ->
-          TerminalSet.add tok covered
-      | Symbol.N _ ->
-          covered
-    ) transitions TerminalSet.empty
-  in
-
-  (* Accumulate the tokens that permit reduction. *)
-
-  let covered =
-    ProductionMap.fold (fun _ toks covered ->
-      TerminalSet.union toks covered
-    ) (Lr0.invert reductions) covered
-  in
-
-  (* That's it. *)
-
-  covered
-
-(* -------------------------------------------------------------------------- *)
-(* Report statistics. *)
-
-(* Produce the reports. *)
-
-let () =
-  if !shift_reduce = 1 then
-    Error.grammar_warning [] "one state has shift/reduce conflicts."
-  else if !shift_reduce > 1 then
-    Error.grammar_warning [] "%d states have shift/reduce conflicts."
-      !shift_reduce;
-  if !reduce_reduce = 1 then
-    Error.grammar_warning [] "one state has reduce/reduce conflicts."
-  else if !reduce_reduce > 1 then
-    Error.grammar_warning [] "%d states have reduce/reduce conflicts."
-      !reduce_reduce
+(* Now implement the facilities that are needed to satisfy the
+   signature [LR1], as opposed to just [LR1_AUTOMATON]. *)
 
 (* -------------------------------------------------------------------------- *)
 
 (* Instantiate [Set] and [Map] on the type [node]. *)
 
+(* Because nodes are numbered between 0 and [n], instead of implementing
+   [NodeSet] by using balanced binary trees, one could perhaps use some form
+   of bit sets. However, the sparse bit sets in [Bitsets.SparseBitSet] can be
+   slow when [n] becomes large, so I prefer to be cautious. *)
+
 module Node = struct
-  type t = node
-  let compare = (-)
+  type nonrec t = t
+  let compare = compare
 end
 
 module NodeSet = struct
 
   include Set.Make(Node)
-
 
   (* [union] does not guarantee physical equality between its second
      argument and its result when a logical equality holds. We wrap it
@@ -734,7 +250,7 @@ module NodeSet = struct
 
   let print s =
     Printf.sprintf "{ %s }" (
-      Misc.separated_iter_to_string print ", " (fun f -> iter f s)
+      MString.separated_iter print ", " (fun f -> iter f s)
     )
 
 end
@@ -742,361 +258,90 @@ end
 module NodeMap =
   Map.Make(Node)
 
-module ImperativeNodeMap =
-  Fix.Glue.ArraysAsImperativeMaps(struct let n = n end)
-
-let all_sources symbol =
-  targets (fun accu sources _target ->
-    List.fold_left (fun accu source -> NodeSet.add source accu) accu sources
-  ) NodeSet.empty symbol
-
-let all_targets symbol =
-  targets (fun accu _sources target ->
-    NodeSet.add target accu
-  ) NodeSet.empty symbol
-
 (* -------------------------------------------------------------------------- *)
 
-(* For each production, compute where (that is, in which states) this
-   production can be reduced. This computation is done AFTER default conflict
-   resolution (see below). It is an error to call the accessor function
-   [production_where] before default conflict resolution has taken place. *)
+(* Accessors. *)
 
-let production_where : NodeSet.t ProductionMap.t option ref =
-  ref None
+(* The computations that follow (up to the end of this file) are not timed. *)
 
-let initialize_production_where () =
-  production_where := Some (
-    fold (fun accu node ->
-      TerminalMap.fold (fun _ prods accu ->
-        let prod = Misc.single prods in
-        let nodes =
-          try
-            ProductionMap.lookup prod accu
-          with Not_found ->
-            NodeSet.empty
-        in
-        ProductionMap.add prod (NodeSet.add node nodes) accu
-      ) (reductions node) accu
-    ) ProductionMap.empty
-  )
+let reduction_sites =
+  Production.tabulate @@ fun prod ->
+  NodeSet.of_list (S.reduction_sites prod)
 
-let production_where (prod : Production.index) : NodeSet.t =
-  match !production_where with
+let start_node nt =
+  let prod = Production.start_production nt in
+  ProductionMap.find prod entry
+
+let core node =
+  Lr0.ALR1.core (state node)
+
+let incoming_symbol node =
+  Lr0.incoming_symbol (core node)
+
+let is_start node =
+  incoming_symbol node = None
+
+let get_start node =
+  assert (is_start node);
+  Lr0.get_start (core node)
+
+let has_default_reduction node =
+  match test_default_reduction node with
+  | Some _ ->
+      true
   | None ->
-      (* It is an error to call this function before conflict resolution. *)
-      assert false
-  | Some production_where ->
-      try
-        (* Production [prod] may be reduced at [nodes]. *)
-        let nodes = ProductionMap.lookup prod production_where in
-        assert (not (NodeSet.is_empty nodes));
-        nodes
-      with Not_found ->
-        (* The production [prod] is never reduced. *)
-        NodeSet.empty
+      false
+
+let has_default_reduction_on_sharp node =
+  match test_default_reduction node with
+  | Some (_, toks) when TerminalSet.mem Terminal.sharp toks ->
+      assert (TerminalSet.cardinal toks = 1);
+      true
+  | _ ->
+      false
+
+let has_conflict_or_eos_conflict node =
+  let transitions = transitions node
+  and reductions = reductions node in
+  Reductions.has_conflict transitions reductions ||
+  Reductions.has_eos_conflict transitions reductions
+
+let deterministic () =
+  MRef.with_state true @@ fun deterministic ->
+  iter @@ fun node ->
+  if has_conflict_or_eos_conflict node then
+    deterministic := false
 
 (* -------------------------------------------------------------------------- *)
-(* Warn about productions that are never reduced. *)
 
-(* These are productions that can never, ever be reduced, because there is
-   no state that is willing to reduce them. There could be other productions
-   that are never reduced because the only states that are willing to reduce
-   them are unreachable. We do not report those. In fact, through the use of
-   the inspection API, it might be possible to bring the automaton into a
-   state where one of those productions can be reduced. *)
+(* The map [targets] maps a symbol [symbol] to the set of all nodes
+   whose incoming symbol is [symbol]. *)
 
-let warn_about_productions_never_reduced () =
-  let count = ref 0 in
-  Production.iter (fun prod ->
-    if NodeSet.is_empty (production_where prod) then
-      match Production.classify prod with
-      | Some nt ->
-          incr count;
-          Error.grammar_warning
-            (Nonterminal.positions nt)
-            "symbol %s is never accepted." (Nonterminal.print false nt)
-      | None ->
-          incr count;
-          Error.grammar_warning
-            (Production.positions prod)
-            "production %s is never reduced." (Production.print prod)
-  );
-  if !count > 0 then
-    let plural_mark, be = if !count > 1 then ("s", "are") else ("", "is") in
-    Error.grammar_warning []
-      "in total, %d production%s %s never reduced." !count plural_mark be
+let[@inline] lookup symbol targets =
+  try SymbolMap.find symbol targets with Not_found -> NodeSet.empty
+
+let targets : NodeSet.t SymbolMap.t =
+  fold (fun node targets ->
+    match incoming_symbol node with
+    | None ->
+        targets
+    | Some symbol ->
+        SymbolMap.add symbol (NodeSet.add node (lookup symbol targets)) targets
+  ) SymbolMap.empty
+
+let targets symbol =
+  lookup symbol targets
 
 (* -------------------------------------------------------------------------- *)
-(* When requested by the code generator, apply default conflict
-   resolution to ensure that the automaton is deterministic. *)
 
-(* [best prod prods] chooses which production should be reduced
-   among the list [prod :: prods]. It fails if no best choice
-   exists. *)
+(* The array [predecessors] maps a node to the set of its predecessors. *)
 
-let rec best choice = function
-  | [] ->
-      choice
-  | prod :: prods ->
-      match Precedence.reduce_reduce choice prod with
-      | Some choice ->
-          best choice prods
-      | None ->
-          (* The cause for not knowing which production is best could be:
-             1- the productions originate in different source files;
-             2- they are derived, via inlining, from the same production. *)
-          Error.signal Error.grammatical_error
-            (Production.positions choice @ Production.positions prod)
-               "do not know how to resolve a reduce/reduce conflict\n\
-                between the following two productions:\n%s\n%s"
-                  (Production.print choice)
-                  (Production.print prod);
-          choice (* dummy *)
+(* [Predecessors.Make] yields a [predecessors] function that returns a list
+   of nodes. Although this is by no means crucial, I find it more elegant to
+   return a set of nodes. *)
 
-(* Go ahead. *)
+include Predecessors.Make(Final)
 
-let default_conflict_resolution () =
-
-  let shift_reduce =
-    ref 0
-  and reduce_reduce =
-    ref 0
-  in
-
-  conflict_nodes |> List.iter (fun node ->
-    _conflict_tokens.(raw node) <- TerminalSet.empty;
-    set_reductions node (
-      TerminalMap.fold (fun tok prods reductions ->
-
-        try
-          let (_ : node) =
-            SymbolMap.find (Symbol.T tok) (transitions node)
-          in
-          (* There is a transition at this symbol, so this
-             is a (possibly multiway) shift/reduce conflict.
-             Resolve in favor of shifting by suppressing all
-             reductions. *)
-          shift_reduce := List.length prods + !shift_reduce;
-          reductions
-        with Not_found ->
-          (* There is no transition at this symbol. Check
-             whether we have multiple reductions. *)
-          match prods with
-          | [] ->
-              assert false
-          | [ _ ] ->
-              TerminalMap.add tok prods reductions
-          | prod :: ((_ :: _) as prods) ->
-              (* We have a reduce/reduce conflict. Resolve, if
-                 possible, in favor of a single reduction.
-                 This reduction must be preferrable to each
-                 of the others. *)
-              reduce_reduce := List.length prods + !reduce_reduce;
-              TerminalMap.add tok [ best prod prods ] reductions
-
-      ) (reductions node) TerminalMap.empty
-    )
-  );
-
-  if !shift_reduce = 1 then
-    Error.warning [] "one shift/reduce conflict was arbitrarily resolved."
-  else if !shift_reduce > 1 then
-    Error.warning [] "%d shift/reduce conflicts were arbitrarily resolved."
-      !shift_reduce;
-  if !reduce_reduce = 1 then
-    Error.warning [] "one reduce/reduce conflict was arbitrarily resolved."
-  else if !reduce_reduce > 1 then
-    Error.warning [] "%d reduce/reduce conflicts were arbitrarily resolved."
-      !reduce_reduce;
-
-  (* Now, detect and remove end-of-stream conflicts. If a state has both a
-     reduce action at [#] and some other (shift or reduce) action, this is
-     an end-of-stream conflict. This conflict is resolved by suppressing
-     the reduce action at [#]. *)
-
-  (* Because we have already removed some reductions above, we may find
-     fewer end-of-stream conflicts than we did during our first pass. *)
-
-  let eos_conflicts = ref 0 in
-
-  iter begin fun node ->
-    let transitions = transitions node
-    and reductions = reductions node in
-
-    if Lr0.has_eos_conflict transitions reductions then begin
-
-      (* Suppress the reduce action at [#]. *)
-      let _, reductions =
-        TerminalMap.lookup_and_remove Terminal.sharp reductions in
-      set_reductions node reductions;
-
-      (* Mark this end-of-stream conflict as resolved. *)
-      _has_eos_conflict.(raw node) <- None;
-
-      (* Count this end-of-stream conflict. *)
-      incr eos_conflicts
-
-    end
-  end;
-
-  if !eos_conflicts = 1 then
-    Error.grammar_warning []
-      "one state end-of-stream conflict was arbitrarily resolved."
-  else if !eos_conflicts > 1 then
-    Error.grammar_warning []
-      "%d end-of-stream conflicts were arbitrarily resolved."
-      !eos_conflicts;
-
-  (* We can now compute where productions are reduced. *)
-  initialize_production_where();
-  warn_about_productions_never_reduced()
-
-(* -------------------------------------------------------------------------- *)
-(* Extra reductions. *)
-
-(* 2015/10/19 Original implementation. *)
-(* 2016/07/13 Use priority levels to choose which productions to reduce
-              when several productions are eligible. *)
-
-(* If a state can reduce some productions whose left-hand symbol has been
-   marked [%on_error_reduce], and if one such production [prod] is preferable
-   to every other (according to the priority rules of [%on_error_reduce]
-   declarations), then every error action in this state is replaced with a
-   reduction of [prod]. This is done even though this state may have outgoing
-   shift transitions: thus, we are forcing one interpretation of the past,
-   among several possible interpretations. *)
-
-(* The code below looks like the decision on a default reduction in
-   [Default], except we do not impose the absence of outgoing terminal
-   transitions. Also, we actually modify the automaton, so the back-ends, the
-   reference interpreter, etc., need not be aware of this feature, whereas
-   they are aware of default reductions. *)
-
-(* This code can run before we decide on the default reductions; this does
-   not affect which default reductions will be permitted. *)
-
-(* This code does not affect which productions can be reduced where. Thus,
-   it is OK for it to run after [initialize_production_where()]. *)
-
-(* A count of how many states receive extra reductions through this mechanism. *)
-
-let extra =
-  ref 0
-
-(* A count of how many states have more than one eligible production, but one
-   is preferable to every other (so priority plays a role). *)
-
-let prioritized =
-  ref []
-
-(* The set of nonterminal symbols in the left-hand side of an extra reduction. *)
-
-let extra_nts =
-  ref NonterminalSet.empty
-
-let extra_reductions_in_node node =
-  (* Compute the productions which this node can reduce. *)
-  let productions : _ ProductionMap.t = Lr0.invert (reductions node) in
-  let prods : Production.index list =
-    ProductionMap.fold (fun prod _ prods -> prod :: prods) productions []
-  in
-  (* Keep only those whose left-hand symbol is marked [%on_error_reduce]. *)
-  let prods = List.filter OnErrorReduce.reduce prods in
-  (* Check if one of them is preferable to every other one. *)
-  match Misc.best OnErrorReduce.preferable prods with
-  | None ->
-      (* Either no production is marked [%on_error_reduce], or several of them
-         are marked and none is preferable. *)
-      ()
-  | Some prod ->
-      let acceptable = acceptable_tokens node in
-      (* An extra reduction is possible. Replace every error action with
-         a reduction of [prod]. If we replace at least one error action
-         with a reduction, update [extra] and [extra_nts]. *)
-      let triggered = lazy (
-        incr extra;
-        if List.length prods > 1 then
-          prioritized := node :: !prioritized;
-        extra_nts := NonterminalSet.add (Production.nt prod) !extra_nts
-      ) in
-      Terminal.iter_real (fun tok ->
-        if not (TerminalSet.mem tok acceptable) then begin
-          set_reductions node (TerminalMap.add tok [ prod ] (reductions node));
-          Lazy.force triggered
-        end
-      )
-
-let extra_reductions () =
-  (* Examine every node. *)
-  iter (fun node ->
-    (* Just like a default reduction, an extra reduction should be forbidden
-       (it seems) if [forbid_default_reduction] is set. *)
-    if not (forbid_default_reduction node) then
-      extra_reductions_in_node node
-  );
-  (* Info message. *)
-  if !extra > 0 then begin
-    Error.logA 1 (fun f ->
-      Printf.fprintf f "Extra reductions on error were added in %d states.\n"
-        !extra;
-      Printf.fprintf f "Priority played a role in %d of these states.\n"
-        (List.length !prioritized)
-    );
-    Error.logA 2 (fun f ->
-      if !prioritized <> [] then
-        Printf.fprintf f "These states are %s.\n"
-          (NodeSet.print (NodeSet.of_list !prioritized))
-    )
-  end;
-  (* Warn about useless %on_error_reduce declarations. *)
-  OnErrorReduce.iter (fun nt ->
-    if not (NonterminalSet.mem nt !extra_nts) then
-      Error.grammar_warning []
-        "the declaration %%on_error_reduce %s is never useful."
-        (Nonterminal.print false nt)
-  )
-
-(* -------------------------------------------------------------------------- *)
-(* Define [fold_entry], which in some cases facilitates the use of [entry]. *)
-
-let fold_entry f accu =
-  ProductionMap.fold (fun prod state accu ->
-    let nt : Nonterminal.t =
-      match Production.classify prod with
-      | Some nt ->
-          nt
-      | None ->
-          assert false (* this is a start production *)
-    in
-    let t : Stretch.ocamltype =
-      Nonterminal.ocamltype_of_start_symbol nt
-    in
-    f prod state nt t accu
-  ) entry accu
-
-let entry_of_nt nt =
-  (* Find the entry state that corresponds to [nt]. *)
-  try
-    ProductionMap.find (Production.startsymbol2startprod nt) entry
-  with Not_found ->
-    assert false
-
-exception Found of Nonterminal.t
-
-let nt_of_entry s =
-  (* [s] should be an initial state. *)
-  assert (incoming_symbol s = None);
-  try
-    ProductionMap.iter (fun prod entry ->
-      if Node.compare s entry = 0 then
-        match Production.classify prod with
-        | None ->
-            assert false
-        | Some nt ->
-            raise (Found nt)
-    ) entry;
-    (* This should not happen if [s] is indeed an initial state. *)
-    assert false
-  with Found nt ->
-    nt
+let predecessors =
+  tabulate @@ fun node ->
+  NodeSet.of_list (predecessors node)

@@ -5,8 +5,8 @@
  (libraries
   action_ext
   build_path_prefix_map
-  chrome_trace
   csexp
+  action_plugin
   dune_action_plugin
   dune_cache
   dune_cache_storage
@@ -18,14 +18,13 @@
   dune_findlib
   dune_glob
   dune_lang
-  dune_meta_parser
   dune_patch
   dune_pkg
-  dune_re
+  re
   dune_rpc_private
   dune_section
   dune_site_private
-  dune_stats
+  dune_trace
   dune_targets
   dune_util
   dune_vcs

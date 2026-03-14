@@ -246,7 +246,7 @@ let monitor ~quit_on_disconnect () =
       Console.Status_line.set
         (Console.Status_line.Live
            (fun () -> Pp.verbatim ("Waiting for RPC server" ^ String.make (i mod 4) '.')));
-      let+ () = Scheduler.sleep ~seconds:0.3 in
+      let+ () = Dune_engine.Scheduler.sleep ~seconds:0.3 in
       Some (i + 1))
 ;;
 
@@ -272,7 +272,7 @@ let command =
         & flag
         & info
             [ "quit-on-disconnect" ]
-            ~doc:"Quit if the connection to the server is lost.")
+            ~doc:(Some "Quit if the connection to the server is lost."))
     in
     let builder = Common.Builder.forbid_builds builder in
     let builder = Common.Builder.disable_log_file builder in
@@ -285,7 +285,7 @@ let command =
         ~print_ctrl_c_warning:true
         ~watch_exclusions:[]
     in
-    Scheduler.Run.go
+    Dune_engine.Scheduler.Run.go
       config
       ~on_event:(fun _ _ -> ())
       ~file_watcher:No_watcher

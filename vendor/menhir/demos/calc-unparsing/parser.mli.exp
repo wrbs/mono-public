@@ -38,15 +38,25 @@ end
 
 (* The unparsing API. *)
 
+(* Constructing disjunctive concrete syntax trees (DCSTs). *)
+
 module DCST : sig
+  
+  (* The type of DCSTs for the nonterminal symbol [main]. *)
+  
+  type main
   
   (* The type of DCSTs for the nonterminal symbol [expr]. *)
   
   type expr
   
-  (* The type of DCSTs for the nonterminal symbol [main]. *)
+  (* The binary choice constructor at type [main]. *)
   
-  type main
+  val main_choice: main -> main -> main
+  
+  (* main -> expr EOL *)
+  
+  val eol: expr -> main
   
   (* The binary choice constructor at type [expr]. *)
   
@@ -80,25 +90,19 @@ module DCST : sig
   
   val div: expr -> expr -> expr
   
-  (* The binary choice constructor at type [main]. *)
-  
-  val main_choice: main -> main -> main
-  
-  (* main -> expr EOL *)
-  
-  val eol: expr -> main
-  
 end
 
+(* Deconstructing concrete syntax trees (CSTs). *)
+
 module CST : sig
-  
-  (* The type of CSTs for the nonterminal symbol [expr]. *)
-  
-  type expr
   
   (* The type of CSTs for the nonterminal symbol [main]. *)
   
   type main
+  
+  (* The type of CSTs for the nonterminal symbol [expr]. *)
+  
+  type expr
   
   (* This visitor helps transform concrete syntax trees into something else. *)
   
@@ -136,9 +140,9 @@ module CST : sig
     
     (* One method per nonterminal symbol. *)
     
-    method visit_expr : expr -> 'r
-    
     method visit_main : main -> 'r
+    
+    method visit_expr : expr -> 'r
     
     (* One method per production. *)
     
@@ -162,8 +166,18 @@ module CST : sig
   
 end
 
+(* Transforming DCSTs to CSTs. *)
+
 module Settle : sig
   
   val main: DCST.main -> CST.main option
   
 end
+
+(* The parse tables. *)
+
+(* Warning: this submodule is undocumented. In the future,
+   its type could change, or it could disappear altogether. *)
+
+module Tables : MenhirLib.TableFormat.TABLES
+  with type token = token

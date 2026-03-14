@@ -3,15 +3,15 @@
  (public_name js_of_ocaml-compiler)
  (synopsis "Js_of_ocaml compiler library")
  (libraries
-  compiler-libs.common
-  compiler-libs.bytecomp
+  ocaml-compiler-libs.common
+  ocaml-compiler-libs.bytecomp
   menhirLib
   sedlex
   yojson)
  (flags
   (:standard -w -7-37 -safe-string))
  (preprocess
-  (pps ppx_optcomp_light -no-check sedlex.ppx)))
+  (pps ppx_optcomp_light sedlex.ppx)))
 
 (ocamllex annot_lexer)
 

@@ -11,8 +11,9 @@
   dune_cache_storage
   dune_engine
   dune_rpc_private
-  dune_stats
+  dune_trace
   dune_tui
   dune_util
-  dune_spawn)
+  spawn
+  unix)
  (synopsis "Internal Dune library, do not use!"))

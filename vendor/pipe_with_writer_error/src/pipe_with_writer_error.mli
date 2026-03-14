@@ -108,6 +108,12 @@ val read_exactly
     writer had an error and no elements remain in the pipe. *)
 val peek : ('a, 'error) t -> ('a option, 'error) Result.t
 
+(** [read_now] reads a value from the pipe that is immediately available. If the pipe is
+    empty, [read_now] returns [`Eof] if reader is closed and [`Nothing_available] if not. *)
+val read_now
+  :  ('a, 'error) t
+  -> ([ `Eof | `Nothing_available | `Ok of 'a ], 'error) Result.t
+
 (** [read_all] keeps reading elements from the pipe until the pipe is closed. *)
 val read_all : ('a, 'error) t -> ('a Queue.t, 'error) Deferred.Result.t
 

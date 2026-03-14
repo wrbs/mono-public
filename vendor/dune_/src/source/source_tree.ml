@@ -5,20 +5,20 @@ module Dirs_visited : sig
   (** Unique set of all directories visited *)
   type t
 
-  val singleton : Path.Source.t -> Readdir.File.t -> t
+  val singleton : Path.Source.t -> Dir_contents.File.t -> t
   val empty : t
-  val add : t -> Path.Source.t -> Readdir.File.t -> t
+  val add : t -> Path.Source.t -> Dir_contents.File.t -> t
 end = struct
-  type t = Path.Source.t Readdir.File.Map.t
+  type t = Path.Source.t Dir_contents.File.Map.t
 
-  let empty = Readdir.File.Map.empty
-  let singleton path file = Readdir.File.Map.singleton file path
+  let empty = Dir_contents.File.Map.empty
+  let singleton path file = Dir_contents.File.Map.singleton file path
 
   let add (t : t) (path : Path.Source.t) file =
     if Sys.win32
     then t
     else
-      Readdir.File.Map.update t file ~f:(function
+      Dir_contents.File.Map.update t file ~f:(function
         | None -> Some path
         | Some first_path ->
           User_error.raise
@@ -40,8 +40,8 @@ module Dir0 = struct
     let get_vcs ~default:vcs ~readdir ~path =
       match
         Filename.Set.union
-          (Readdir.files readdir)
-          (Filename.Set.of_list_map (Readdir.dirs readdir) ~f:fst)
+          (Dir_contents.files readdir)
+          (Filename.Set.of_list_map (Dir_contents.dirs readdir) ~f:fst)
         |> Vcs.Kind.of_dir_contents
       with
       | None -> vcs
@@ -192,8 +192,16 @@ and contents
       ~project
       ~(dir_status : Source_dir_status.t)
   =
-  let files = Readdir.files readdir in
+  let files = Dir_contents.files readdir in
   let+ dune_file = Dune_file.load ~dir:path dir_status project ~files ~parent:dune_file in
+  let files =
+    let predicate =
+      match dune_file with
+      | None -> Dune_file.Files.default
+      | Some dune_file -> Dune_file.files dune_file
+    in
+    Dune_file.Files.eval predicate ~files
+  in
   let vcs = Dir0.Vcs.get_vcs ~default:default_vcs ~readdir ~path in
   let sub_dirs =
     let sub_dirs =
@@ -207,7 +215,7 @@ and contents
         ~project
         ~dir:path
         ~dirs_visited
-        ~dirs:(Readdir.dirs readdir)
+        ~dirs:(Dir_contents.dirs readdir)
         ~sub_dirs
         ~dune_file
         ~parent_status:dir_status
@@ -234,12 +242,12 @@ and find_dir_raw
   in
   let* readdir =
     if virtual_
-    then Memo.return Readdir.empty
+    then Memo.return Dir_contents.empty
     else
-      Readdir.of_source_path path
+      Dir_contents.of_source_path path
       >>| function
       | Ok dir -> dir
-      | Error _ -> Readdir.empty
+      | Error _ -> Dir_contents.empty
   in
   let* project =
     if status = Data_only
@@ -247,7 +255,7 @@ and find_dir_raw
     else
       Dune_project.load
         ~dir:path
-        ~files:(Readdir.files readdir)
+        ~files:(Dir_contents.files readdir)
         ~infer_from_opam_files:false
         ~load_opam_file_with_contents:Dune_pkg.Opam_file.load_opam_file_with_contents
       >>| Option.map
@@ -263,7 +271,7 @@ let root =
   let path = Path.Source.root in
   let dir_status : Source_dir_status.t = Normal in
   let* readdir =
-    Readdir.of_source_path path
+    Dir_contents.of_source_path path
     >>| function
     | Ok dir -> dir
     | Error unix_error -> error_unable_to_load ~path unix_error
@@ -272,7 +280,7 @@ let root =
   let* project =
     Dune_project.load
       ~dir:path
-      ~files:(Readdir.files readdir)
+      ~files:(Dir_contents.files readdir)
       ~infer_from_opam_files:true
       ~load_opam_file_with_contents:Dune_pkg.Opam_file.load_opam_file_with_contents
     >>| (function
@@ -281,7 +289,7 @@ let root =
     >>| Only_packages.filter_packages_in_project ~vendored:(dir_status = Vendored)
   in
   let* dirs_visited =
-    Readdir.File.of_source_path path
+    Dir_contents.File.of_source_path path
     >>| function
     | Ok file -> Dirs_visited.singleton path file
     | Error unix_error -> error_unable_to_load ~path unix_error
@@ -350,27 +358,21 @@ module Dir = struct
       in
       let impl =
         lazy
-          (match Dune_stats.global () with
+          (match Dune_trace.global () with
            | None -> map_reduce
            | Some stats ->
              fun t ~traverse ~trace_event_name ~f ->
                let start = Unix.gettimeofday () in
                let+ res = map_reduce t ~traverse ~trace_event_name ~f in
+               let stop = Unix.gettimeofday () in
                let event =
-                 let stop = Unix.gettimeofday () in
-                 let module Event = Chrome_trace.Event in
-                 let module Timestamp = Event.Timestamp in
-                 let dur = Timestamp.of_float_seconds (stop -. start) in
-                 let common =
-                   Event.common_fields
-                     ~name:(trace_event_name ^ ": " ^ Path.Source.to_string t.path)
-                     ~ts:(Timestamp.of_float_seconds start)
-                     ()
-                 in
-                 let args = [ "dir", `String (Path.Source.to_string t.path) ] in
-                 Event.complete common ~args ~dur
+                 Dune_trace.Event.scan_source
+                   ~name:trace_event_name
+                   ~start
+                   ~stop
+                   ~dir:t.path
                in
-               Dune_stats.emit stats event;
+               Dune_trace.emit stats event;
                res)
       in
       fun t ~traverse ~trace_event_name ~f ->

@@ -329,7 +329,7 @@ type constant =
   | Int64 of Int64.t
   | NativeInt of Int32.t (* Native int are 32bit on all known backend *)
   | Tuple of int * constant array * array_or_not
-  | Null
+  | Null_
 
 module Constant = struct
   type t = constant
@@ -364,7 +364,7 @@ module Constant = struct
         Some (Float.ieee_equal (Int64.float_of_bits a) (Int64.float_of_bits b))
     | Float32 a, Float32 b ->
         Some (Float.ieee_equal (Int64.float_of_bits a) (Int64.float_of_bits b))
-    | Null, Null -> Some true
+    | Null_, Null_ -> Some true
     | String _, NativeString _ | NativeString _, String _ -> None
     | Int _, Float _ | Float _, Int _ -> None
     | Int _, Float32 _ | Float32 _, Int _ -> None
@@ -391,11 +391,23 @@ module Constant = struct
         | Float32 _
         | Tuple _ ) ) -> Some false
     | ( String _
-      , (Int64 _ | Int _ | Int32 _ | NativeInt _ | Float _ | Float32 _ | Tuple _ | Float_array _) ) ->
-        Some false
+      , ( Int64 _
+        | Int _
+        | Int32 _
+        | NativeInt _
+        | Float _
+        | Float32 _
+        | Tuple _
+        | Float_array _ ) ) -> Some false
     | ( NativeString _
-      , (Int64 _ | Int _ | Int32 _ | NativeInt _ | Float _ | Float32 _ | Tuple _ | Float_array _) ) ->
-        Some false
+      , ( Int64 _
+        | Int _
+        | Int32 _
+        | NativeInt _
+        | Float _
+        | Float32 _
+        | Tuple _
+        | Float_array _ ) ) -> Some false
     | ( Int64 _
       , ( String _
         | NativeString _
@@ -406,14 +418,16 @@ module Constant = struct
         | Float32 _
         | Tuple _
         | Float_array _ ) ) -> Some false
-    | Float _, (Float32 _ | String _ | NativeString _ | Float_array _ | Int64 _ | Tuple (_, _, _)) ->
-        Some false
-    | Float32 _, (Float _ | String _ | NativeString _ | Float_array _ | Int64 _ | Tuple (_, _, _)) ->
-        Some false
+    | ( Float _
+      , (Float32 _ | String _ | NativeString _ | Float_array _ | Int64 _ | Tuple (_, _, _))
+      ) -> Some false
+    | ( Float32 _
+      , (Float _ | String _ | NativeString _ | Float_array _ | Int64 _ | Tuple (_, _, _))
+      ) -> Some false
     | ( (Int _ | Int32 _ | NativeInt _)
       , (String _ | NativeString _ | Float_array _ | Int64 _ | Tuple (_, _, _)) ) ->
         Some false
-    | (Null, _) | (_, Null) -> Some false
+    | Null_, _ | _, Null_ -> Some false
     (* Note: the following cases should not occur when compiling to Javascript *)
     | Int _, (Int32 _ | NativeInt _)
     | Int32 _, (Int _ | NativeInt _)
@@ -534,7 +548,7 @@ module Print = struct
               constant f a.(i)
             done;
             Format.fprintf f ")")
-    | Null -> Format.fprintf f "null"
+    | Null_ -> Format.fprintf f "null"
 
   let arg f a =
     match a with
@@ -858,6 +872,30 @@ let rec last_instr l =
   | [] | [ Event _ ] -> None
   | [ i ] | [ i; Event _ ] -> Some i
   | _ :: rem -> last_instr rem
+
+(* Compute the list of variables containing the return values of each
+   function *)
+let return_values p =
+  fold_closures
+    p
+    (fun name_opt _ (pc, _) _ rets ->
+      match name_opt with
+      | None -> rets
+      | Some name ->
+          let s =
+            traverse
+              { fold = fold_children }
+              (fun pc s ->
+                let block = Addr.Map.find pc p.blocks in
+                match block.branch with
+                | Return x -> Var.Set.add x s
+                | _ -> s)
+              pc
+              p.blocks
+              Var.Set.empty
+          in
+          Var.Map.add name s rets)
+    Var.Map.empty
 
 let equal p1 p2 =
   p1.start = p2.start

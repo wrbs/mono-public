@@ -9,21 +9,28 @@
 (******************************************************************************)
 
 open Printf
+open Channels
 let map, concat = List.(map, concat)
-let if1, ifn = MList.(if1, ifn)
+let if1 = MList.if1
+let provided = MList.provided
+
 (* Our source language: *)
 open Grammar
 open StackLang
 let mem, elements = Reg.Set.(mem, elements)
 let state = EmitStackLang.state
+
 (* Our target language: *)
 open IL
-open CodeBits
-let semvtype, call_stop, tokpat, tokspat, tok_bind_unit, basics, mbasics =
-  CodePieces.(semvtype, call_stop, tokpat, tokspat, tok_bind_unit,
-              basics, mbasics)
-let print_token, call_assertfalse, printtokendef, assertfalsedef =
-  CodeBackend.(print_token, call_assertfalse, printtokendef, assertfalsedef)
+open ILConstruction
+module TokenType  = TokenType.Make(Settings)
+module ILTokens   = ILTokens.Make(Grammar)(Settings)
+open ILTokens
+module Basics     = Interface.Basics(Settings)
+open Basics
+module Conventions = Conventions.Make(Grammar)(Settings)
+let prefix, dataprefix, tvprefix, semvtypes =
+  Conventions.(prefix, dataprefix, tvprefix, semvtypes)
 let exvar (r : register) = EVar (Reg.export r)
 let pxvar (r : register) = PVar (Reg.export r)
 let exvars rs = map exvar rs
@@ -77,15 +84,77 @@ let tag_branch tag body =
 (* The name of the semantic action function for production [prod]. *)
 
 let actionname prod =
-  let prod = Misc.padded_index Production.n (Production.p2i prod) in
+  let prod = MString.padded_index Production.n (Production.encode prod) in
   prefix (sprintf "action_%s" prod)
 
 (* A type scheme for the type [token], qualified with the module name
    [MenhirBasics], so as to avoid the risk of a capture. *)
 
 let stoken =
-  let tctoken = sprintf "%s.%s" basics TokenType.tctoken in
+  let tctoken = sprintf "%s.%s" basics_submodule_name TokenType.tctoken in
   type2scheme (IL.TypApp (tctoken, []))
+
+(* ------------------------------------------------------------------------ *)
+
+(* If [Settings.trace] is [true] then [trace format args] expands to a
+   local definition [() = eprintf format args]. If [Settings.trace] is
+   [false] then [trace format args] expands to nothing at all. *)
+
+let trace (format : string) (args : expr list) : (pattern * expr) list =
+  if Settings.trace then
+    [ PUnit, eprintf format args ]
+  else
+    []
+
+(* -------------------------------------------------------------------------- *)
+
+(* The function [assertfalse] represents a fatal dynamic failure. Defining
+   such a function allows us to have just one copy of [assert false] in the
+   generated code. I believe that this reduces the code size. *)
+
+(* The name of this function. *)
+
+let assertfalse =
+  prefix "fail"
+
+(* The definition of this function. *)
+
+let internal_failure =
+  "Internal failure -- please contact the parser generator's developers."
+
+let assertfalsedef =
+  def assertfalse @@
+  EAnnot (
+    EFun ([ PUnit ],
+      blet
+        [ PUnit, eprintf internal_failure []]
+        eassertfalse
+    ),
+    scheme [ "a" ] (arrow tunit (tvar "a"))
+  )
+
+(* A call to the function [assertfalse]. *)
+
+let call_assertfalse =
+  EApp (EVar assertfalse, [ EUnit ])
+
+(* -------------------------------------------------------------------------- *)
+
+(* The function [print_token] is used in [--trace] mode. *)
+
+(* The name of this function. *)
+
+let print_token =
+  prefix "print_token"
+
+(* The definition of this function. *)
+
+let printtokendef =
+  Conventions.destruct_token_def
+    print_token
+    tstring
+    false
+    (fun tok -> EStringConst (Terminal.print tok))
 
 (* -------------------------------------------------------------------------- *)
 
@@ -114,22 +183,20 @@ let discard =
   prefix "discard"
 
 let discarddef =
-  def discard (
-    let lexer, lexbuf, token = "lexer", "lexbuf", "token" in
-    EFun (
-      [ PVar lexer; PVar lexbuf ],
-      let lexer, lexbuf = EVar lexer, EVar lexbuf in
-      blet (
-        [ (PVar token, EApp (lexer, [ lexbuf ])) ],
-        let token = EVar token in
-        blet (
-          trace
-            "Lookahead token is now %s (%d-%d)"
-            [ EApp (EVar print_token, [ token ]);
-              lexbuf |> lex_start_p |> pos_cnum;
-              lexbuf |> lex_curr_p  |> pos_cnum ],
-          token
-  ))))
+  def discard @@
+  let lexer, lexbuf, token = "lexer", "lexbuf", "token" in
+  efun [ PVar lexer; PVar lexbuf ] @@
+  let lexer, lexbuf = EVar lexer, EVar lexbuf in
+  blet [ (PVar token, EApp (lexer, [ lexbuf ])) ] @@
+  let token = EVar token in
+  blet (
+    trace
+      "Lookahead token is now %s (%d-%d)"
+      [ EApp (EVar print_token, [ token ]);
+        lexbuf |> lex_start_p |> pos_cnum;
+        lexbuf |> lex_curr_p  |> pos_cnum ]
+  )
+  token
 
 (* -------------------------------------------------------------------------- *)
 
@@ -142,25 +209,10 @@ module Run (P : sig val program : StackLang.program end) = struct open P
 (* -------------------------------------------------------------------------- *)
 
 (* Generating the [state] GADT requires that the type of every nonterminal
-   symbol be known. Check that this is indeed the case. *)
+   symbol be known. *)
 
 let () =
-  let nts = Nonterminal.symbols_without_ocamltype() in
-  if nts <> [] then begin
-    let b = Buffer.create 1024 in
-    bprintf b "\
-      the code back-end requires the type of every nonterminal symbol to be\n\
-      known. Please specify the type of every symbol via %%type declarations, or\n\
-      enable type inference (look up --infer in the manual).\n\
-      Type inference is automatically enabled when Menhir is used via Dune,\n\
-      provided the dune-project file says (using menhir 2.0) or later.\n"
-    ;
-    bprintf b "The types of the following nonterminal symbols are unknown:";
-    nts |> List.iter begin fun nt ->
-      bprintf b "\n%s" (Nonterminal.print false nt)
-    end;
-    Error.error [] "%s" (Buffer.contents b)
-  end
+  Nonterminal.check_every_symbol_has_ocaml_type "code back-end"
 
 (* -------------------------------------------------------------------------- *)
 
@@ -236,7 +288,7 @@ let celltypedef cell =
     datavalparams =
       tvar tvtail ::
       if1 holds_state (TypApp (tcstate, [ tvar tvtail; tvar tvfinal ])) @
-      ifn holds_semv (semvtype symbol) @
+      provided holds_semv (fun () -> semvtypes symbol) @
       if1 holds_startp tposition @
       if1 holds_endp tposition ;
     datatypeparams = None;
@@ -285,7 +337,7 @@ let finaldatadef nt =
   (* The data constructor definition. *)
   let datadef = {
     dataname       = finaldataname nt;
-    datavalparams  = semvtype (Symbol.N nt);
+    datavalparams  = semvtypes (Symbol.N nt);
     datatypeparams = None;
     comment        = None;
     unboxed        = true;
@@ -346,9 +398,9 @@ let statetypedef =
           ];
         comment =
           Some (sprintf
-            "State %s.\n        Stack shape : %s.\n        Start symbol: %s."
+            "State %s.\n        Stack shape :%s.\n        Start symbol: %s."
             (Tag.print tag)
-            (Invariant.print stack)
+            (Invariant.show_shape stack)
             (StackLangPrinter.ToString.final final)
           );
         unboxed =
@@ -397,12 +449,14 @@ let entrydef (nt : string) label defs =
   let lexer, lexbuf = EmitStackLang.(lexer, lexbuf) in
   let data = finaldataname (Nonterminal.lookup nt) in
   let semv = "v" in
-  defpublic nt (EFun (
-    [ pxvar lexer; pxvar lexbuf ],
-    blet ([ pxvar stack, EUnit ],
-    blet ([ PData (data, [pvar semv]), jump label ],
+  let def =
+    def nt @@
+    efun [ pxvar lexer; pxvar lexbuf ] @@
+    blet [ pxvar stack, EUnit ] @@
+    blet [ PData (data, [pvar semv]), jump label ] @@
     evar semv
-  )))) :: defs
+  in
+  def :: defs
 
 (* -------------------------------------------------------------------------- *)
 
@@ -438,10 +492,10 @@ let eactionparams action =
   let xs = actionparams action in
   match xs with [] -> [EUnit] | _ -> evars xs
 
-let annotate e nt =
+let annotate nt e =
   match Nonterminal.ocamltype nt with
   | Some ty ->
-      CodeBits.annotate e (TypTextual ty)
+      ILConstruction.annotate (TypTextual ty) e
   | None ->
       e
       (* In principle, this won't happen. We check at the beginning of [Run]
@@ -450,10 +504,11 @@ let annotate e nt =
 let actionbody prod =
   let action = Production.action prod
   and nt = Production.nt prod in
-  annotate (EComment (
+  annotate nt @@
+  EComment (
     Production.print prod,
-    Action.to_il_expr action
-  )) nt
+    Action.expr action
+  )
 
 (* [must_not_return e msg] has the same semantics as [e] if [e] raises
    an exception or aborts the program. If [e] returns a value, then
@@ -466,7 +521,7 @@ let must_not_return e msg =
       PWildcard, e;
       PUnit, EApp (EVar "prerr_string", [EStringConst msg]);
     ],
-    eassert efalse
+    eassertfalse
   )
 
 (* In the simplified strategy, a production that contains the [error] token
@@ -474,7 +529,7 @@ let must_not_return e msg =
    an exception. We check this at runtime, and if this check fails, we blame
    the user. *)
 
-(* For the moment, this is done only here, in the new code back-end, but it
+(* For the moment, this is done only here, in the code back-end, but it
    could in principle be done uniformly for every back-end. *)
 
 let blame prod =
@@ -632,7 +687,7 @@ let rec compile_block block =
           exvar stack :: compile_values vs
         )
       in
-      blet ([ pxvar stack, data ], compile_block block)
+      blet [ pxvar stack, data ] (compile_block block)
 
   | IPop (ps, cell, block) ->
       assert (ps <> []);
@@ -642,7 +697,7 @@ let rec compile_block block =
           pxvar stack :: compile_patterns ps
         )
       in
-      blet ([ data, exvar stack ], compile_block block)
+      blet [ data, exvar stack ] (compile_block block)
 
   | IPeek (ps, cell, block) ->
       assert (ps <> []);
@@ -652,7 +707,7 @@ let rec compile_block block =
           PWildcard :: compile_patterns ps
         )
       in
-      blet ([ data, exvar stack ], compile_block block)
+      blet [ data, exvar stack ] (compile_block block)
 
   | IDef (bs, IJump label) ->
       (* We identify the pattern [IDef (_, IJump _)], that is, a set of
@@ -666,19 +721,17 @@ let rec compile_block block =
       compile_bindings bs (compile_block block)
 
   | IPrim (p, prim, block) ->
-      blet (
-        [ compile_pattern p, compile_prim prim ],
-        compile_block block
-      )
+      blet
+        [ compile_pattern p, compile_prim prim ]
+        (compile_block block)
 
   | ITrace (message, block) ->
       (* An [ITrace] instruction is compiled to either an [eprintf]
          instruction or a comment. *)
       if Settings.trace then
-        blet (
-          trace message [],
-          compile_block block
-        )
+        blet
+          (trace message [])
+          (compile_block block)
       else
         EComment (message, compile_block block)
 
@@ -831,7 +884,7 @@ module G = struct
   type node = label
   let count = ref 0
   let index =
-    Label.Map.map (fun _block -> Misc.postincrement count) program.cfg
+    Label.Map.map (fun _block -> MInt.postincrement count) program.cfg
   let n = !count
   let index label =
     Label.Map.find label index
@@ -841,11 +894,14 @@ module G = struct
     Label.Map.iter (fun label _block -> yield label) program.cfg
 end
 
+let start_time =
+  Time.start()
+
 module S =
-  Tarjan.Run(G)
+  Fix.SCC.Run(G)
 
 let () =
-  Time.tick "StackLang: computing the mutually recursive groups"
+  Time.stop start_time "StackLang: computing the mutually recursive groups"
 
 (* [recursive labels] determines whether the strongly connected component
    [labels] needs a [rec] flag. *)
@@ -861,10 +917,9 @@ let recursive labels =
   | [label] ->
       (* There is one only one function in this component. A [rec] flag
          is required if and only if this function is recursive. *)
-      let recursive = ref false in
+      MRef.with_state false @@ fun recursive ->
       let yield label' = if Label.equal label label' then recursive := true in
-      G.successors yield label;
-      !recursive
+      G.successors yield label
 
 (* Build the toplevel definitions. *)
 
@@ -875,10 +930,9 @@ let blocks : structure_item list =
   ))
 
 let () =
-  Error.logC 1 (fun f ->
-    fprintf f "The StackLang code comprises %d mutually recursive groups.\n"
-      (List.length blocks)
-  )
+  Report.log (getC 1)
+    "The StackLang code comprises %d mutually recursive groups."
+    (List.length blocks)
 
 (* -------------------------------------------------------------------------- *)
 
@@ -904,7 +958,7 @@ let celltypedefs =
    the prelude, postlude, and semantic actions lie outside of this area.
    We could disable other warnings as well if desired. *)
 
-open BasicSyntax
+open PlainSyntax
 
 let grammar =
   Front.grammar
@@ -912,11 +966,11 @@ let grammar =
 let program =
   [ SIFunctor (grammar.parameters,
 
-      mbasics grammar @
+      basics_submodule_def grammar @
 
-      SIStretch grammar.preludes ::
+      SIFragment grammar.preludes ::
 
-      SITypeDefs (statetypedef :: celltypedefs @ finaldatadefs) ::
+      SITypeDefs (`Rec, statetypedef :: celltypedefs @ finaldatadefs) ::
 
       valdefs (Production.mapx actiondef) @
 
@@ -931,7 +985,7 @@ let program =
 
       valdefs (StringMap.fold entrydef program.entry []) @
 
-      SIStretch grammar.postludes ::
+      SIFragment grammar.postludes ::
 
       []
 
@@ -944,6 +998,6 @@ end (* Run *)
 (* Wrap up. *)
 
 let compile program =
+  Time.time "StackLang: compiling down to IL" @@ fun () ->
   let module R = Run (struct let program = program end) in
-  Time.tick "StackLang: compiling down to IL";
   R.program

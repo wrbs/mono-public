@@ -27,13 +27,13 @@ module Stable = struct
               "You can't create a generator that never generates the [Other] constructor \
                by passing an empty list to this function. Instead, annotate the [Other] \
                constructor with [@quickcheck.do_not_generate]."];
-        let open Quickcheck.Generator.Let_syntax in
-        let%bind other_constructor_name =
-          Quickcheck.Generator.of_list other_constructor_names
-        in
-        Quickcheck.Generator.union
+        let open Base_quickcheck.Generator.Portable.Let_syntax in
+        let%bind_open other_constructor_name = of_list other_constructor_names in
+        (Quickcheck.Generator.union [@mode portable])
           [ return (Sexp.Atom other_constructor_name)
-          ; (let%map args = List.gen_non_empty Sexp.quickcheck_generator in
+          ; (let%map args =
+               (List.gen_non_empty [@mode portable]) Sexp.quickcheck_generator
+             in
              Sexp.List (Atom other_constructor_name :: args))
           ]
       ;;

@@ -96,7 +96,7 @@
  (modules effects)
  (libraries js_of_ocaml_compiler unix str jsoo_compiler_expect_tests_helper)
  (inline_tests
-  (enabled_if true)
+  (enabled_if (not %{oxcaml_supported}))
   (deps
    (file %{project_root}/compiler/bin-js_of_ocaml/js_of_ocaml.exe)
    (file %{project_root}/compiler/bin-jsoo_minify/jsoo_minify.exe)))
@@ -111,7 +111,7 @@
  (modules effects_continuations)
  (libraries js_of_ocaml_compiler unix str jsoo_compiler_expect_tests_helper)
  (inline_tests
-  (enabled_if true)
+  (enabled_if (not %{oxcaml_supported}))
   (deps
    (file %{project_root}/compiler/bin-js_of_ocaml/js_of_ocaml.exe)
    (file %{project_root}/compiler/bin-jsoo_minify/jsoo_minify.exe)))
@@ -126,7 +126,7 @@
  (modules effects_exceptions)
  (libraries js_of_ocaml_compiler unix str jsoo_compiler_expect_tests_helper)
  (inline_tests
-  (enabled_if true)
+  (enabled_if (not %{oxcaml_supported}))
   (deps
    (file %{project_root}/compiler/bin-js_of_ocaml/js_of_ocaml.exe)
    (file %{project_root}/compiler/bin-jsoo_minify/jsoo_minify.exe)))
@@ -156,7 +156,7 @@
  (modules eliminate_exception_handler)
  (libraries js_of_ocaml_compiler unix str jsoo_compiler_expect_tests_helper)
  (inline_tests
-  (enabled_if true)
+  (enabled_if (not %{oxcaml_supported}))
   (deps
    (file %{project_root}/compiler/bin-js_of_ocaml/js_of_ocaml.exe)
    (file %{project_root}/compiler/bin-jsoo_minify/jsoo_minify.exe)))
@@ -231,7 +231,7 @@
  (modules exceptions)
  (libraries js_of_ocaml_compiler unix str jsoo_compiler_expect_tests_helper)
  (inline_tests
-  (enabled_if true)
+  (enabled_if (not %{oxcaml_supported}))
   (deps
    (file %{project_root}/compiler/bin-js_of_ocaml/js_of_ocaml.exe)
    (file %{project_root}/compiler/bin-jsoo_minify/jsoo_minify.exe)))
@@ -336,7 +336,7 @@
  (modules gh1354)
  (libraries js_of_ocaml_compiler unix str jsoo_compiler_expect_tests_helper)
  (inline_tests
-  (enabled_if true)
+  (enabled_if (not %{oxcaml_supported}))
   (deps
    (file %{project_root}/compiler/bin-js_of_ocaml/js_of_ocaml.exe)
    (file %{project_root}/compiler/bin-jsoo_minify/jsoo_minify.exe)))
@@ -456,6 +456,21 @@
  (modules gh1868)
  (libraries js_of_ocaml_compiler unix str jsoo_compiler_expect_tests_helper)
  (inline_tests
+  (enabled_if (not %{oxcaml_supported}))
+  (deps
+   (file %{project_root}/compiler/bin-js_of_ocaml/js_of_ocaml.exe)
+   (file %{project_root}/compiler/bin-jsoo_minify/jsoo_minify.exe)))
+ (flags (:standard -open Jsoo_compiler_expect_tests_helper))
+ (preprocess
+  (pps ppx_expect)))
+
+(library
+ ;; compiler/tests-compiler/gh2106.ml
+ (name gh2106_15)
+ (enabled_if true)
+ (modules gh2106)
+ (libraries js_of_ocaml_compiler unix str jsoo_compiler_expect_tests_helper)
+ (inline_tests
   (enabled_if true)
   (deps
    (file %{project_root}/compiler/bin-js_of_ocaml/js_of_ocaml.exe)
@@ -471,7 +486,7 @@
  (modules gh747)
  (libraries js_of_ocaml_compiler unix str jsoo_compiler_expect_tests_helper)
  (inline_tests
-  (enabled_if true)
+  (enabled_if (not %{oxcaml_supported}))
   (deps
    (file %{project_root}/compiler/bin-js_of_ocaml/js_of_ocaml.exe)
    (file %{project_root}/compiler/bin-jsoo_minify/jsoo_minify.exe)))
@@ -501,7 +516,7 @@
  (modules global_deadcode)
  (libraries js_of_ocaml_compiler unix str jsoo_compiler_expect_tests_helper)
  (inline_tests
-  (enabled_if true)
+  (enabled_if (not %{oxcaml_supported}))
   (deps
    (file %{project_root}/compiler/bin-js_of_ocaml/js_of_ocaml.exe)
    (file %{project_root}/compiler/bin-jsoo_minify/jsoo_minify.exe)))
@@ -591,7 +606,7 @@
  (modules loops)
  (libraries js_of_ocaml_compiler unix str jsoo_compiler_expect_tests_helper)
  (inline_tests
-  (enabled_if true)
+  (enabled_if (not %{oxcaml_supported}))
   (deps
    (file %{project_root}/compiler/bin-js_of_ocaml/js_of_ocaml.exe)
    (file %{project_root}/compiler/bin-jsoo_minify/jsoo_minify.exe)))
@@ -666,7 +681,7 @@
  (modules obj)
  (libraries js_of_ocaml_compiler unix str jsoo_compiler_expect_tests_helper)
  (inline_tests
-  (enabled_if (>= %{ocaml_version} 5))
+  (enabled_if (and (>= %{ocaml_version} 5) (not %{oxcaml_supported})))
   (deps
    (file %{project_root}/compiler/bin-js_of_ocaml/js_of_ocaml.exe)
    (file %{project_root}/compiler/bin-jsoo_minify/jsoo_minify.exe)))
@@ -679,6 +694,21 @@
  (name obj_dup_15)
  (enabled_if true)
  (modules obj_dup)
+ (libraries js_of_ocaml_compiler unix str jsoo_compiler_expect_tests_helper)
+ (inline_tests
+  (enabled_if true)
+  (deps
+   (file %{project_root}/compiler/bin-js_of_ocaml/js_of_ocaml.exe)
+   (file %{project_root}/compiler/bin-jsoo_minify/jsoo_minify.exe)))
+ (flags (:standard -open Jsoo_compiler_expect_tests_helper))
+ (preprocess
+  (pps ppx_expect)))
+
+(library
+ ;; compiler/tests-compiler/oo.ml
+ (name oo_15)
+ (enabled_if true)
+ (modules oo)
  (libraries js_of_ocaml_compiler unix str jsoo_compiler_expect_tests_helper)
  (inline_tests
   (enabled_if true)

@@ -23,7 +23,6 @@ module Lib_flags = Lib_flags
 module Lib_info = Lib_info
 module Lib_id = Lib_id
 module Modules = Modules
-module Module_compilation = Module_compilation
 module Exe_rules = Exe_rules
 module Lib_rules = Lib_rules
 module Obj_dir = Obj_dir
@@ -32,7 +31,6 @@ module Merlin = Merlin
 module Ml_sources = Ml_sources
 module Scope = Scope
 module Module = Module
-module Module_name = Dune_lang.Module_name
 module Dune_file = Dune_file
 module Artifact_substitution = Artifact_substitution
 module Dune_load = Dune_load
@@ -57,7 +55,6 @@ module Private_context = Private_context
 module Odoc = Odoc
 module Library = Library
 module Melange = Melange
-module Melange_stanzas = Melange_stanzas
 module Executables = Executables
 module Tests = Tests
 module Stanzas = Stanzas
@@ -66,7 +63,10 @@ module Pkg_dev_tool = Pkg_dev_tool
 module Pkg_build_progress = Pkg_build_progress
 module Compile_time = Compile_time
 module Cram_rules = Cram_rules
+module Cram_stanza = Cram_stanza
 module Instrumentation = Instrumentation
+module Sub_system_name = Sub_system_name
+module Inline_tests_info = Inline_tests_info
 
 module Install_rules = struct
   let install_file = Install_rules.install_file
@@ -75,12 +75,16 @@ end
 
 module Pkg_rules = struct
   let all_filtered_depexts = Pkg_rules.all_filtered_depexts
+  let pkg_digest_of_project_dependency = Pkg_rules.pkg_digest_of_project_dependency
+
+  module Pkg_digest = Pkg_rules.Pkg_digest
 end
 
 module For_tests = struct
   module Dynlink_supported = Dynlink_supported
   module Ocamlobjinfo = Ocamlobjinfo
   module Action_unexpanded = Action_unexpanded
+  module Cram_exec = Cram_exec
 end
 
 module Coq = struct
@@ -91,4 +95,14 @@ module Coq = struct
   module Coq_lib_name = Coq_lib_name
   module Coq_lib = Coq_lib
   module Coq_flags = Coq_flags
+end
+
+module Rocq = struct
+  module Rocq_mode = Rocq_mode
+  module Rocq_rules = Rocq_rules
+  module Rocq_module = Rocq_module
+  module Rocq_sources = Rocq_sources
+  module Rocq_lib_name = Rocq_lib_name
+  module Rocq_lib = Rocq_lib
+  module Rocq_flags = Rocq_flags
 end

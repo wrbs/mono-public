@@ -1,44 +1,14 @@
-# New Unicode release
+The distribution contains generated data. If you want to contribute
+please hack your way directly via the source repository.
 
-The files `src/uucd_*_data.ml` contain generated data. These files need 
-to be regenerated on new Unicode releases, as well as the `opam` file.
+For developing, you will need to install [uucd][1] and download a copy
+of the XML Unicode character database to `support/ucd.xml` (this will
+be done automatically if the file doesn't exist). Type:
 
-In order to do so you need to install an updated version of the [uucd]
-OCaml package which is capable of reading the latest XML Unicode
-character database.
+    ocaml ./pkg/build_support.ml
 
-You can then bump the Unicode release number at the top of the `B0.ml`
-file. Verify that everything is as expected with:
+The result are in files `src/uucp_*_data.ml`. They contain data
+extracted from the Unicode character database. These files are ignored 
+by git. 
 
-    b0 -- unicode-version
-
-You should then download a copy of the XML Unicode character database
-to the `support/ucd.xml` file which is ignored by git. If you have
-`curl` and `unzip` in your `PATH` you can simply issue:
-
-    b0 -- download-ucdxml
-
-You can now proceed to generate the `src/uucd_*_data.ml` and update the opam 
-file by issuing:
-
-    b0 -- generate-data
-    b0 -- .opam file > opam
-
-[uucd]: http://erratique.ch/software/uucd
-
-
-# Tests and performance
-
-To check Uucp against the data of the Unicode character database to
-ensure they agree make sure you have a copy of the XML Unicode
-character database in `support/ucd.xml` (use `b0 -- download-ucdxml`
-or specify it on the cli) and run:
-
-    b0 test
-
-If you are tweaking the datastructures, the performance lookup of Uucp 
-can be tested with: 
-
-    time $(b0 --path -- perf)
-  
-See `b0 -- perf --help` for more options.
+[1]: http://erratique.ch/software/uucd

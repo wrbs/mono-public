@@ -10,7 +10,14 @@
 (rule
  (targets test_toplevel.js)
  (action
-  (run %{bin:js_of_ocaml} --toplevel %{dep:test_toplevel.bc} -o %{targets})))
+  (run
+   %{bin:js_of_ocaml}
+   --toplevel
+   -w
+   no-missing-effects-backend
+   %{dep:test_toplevel.bc}
+   -o
+   %{targets})))
 
 (rule
  (target test_toplevel.bc.js.actual)
@@ -33,8 +40,19 @@
 (rule
  (alias runtest-js)
  (enabled_if
-  (>= %{ocaml_version} 5.2))
+  (>= %{ocaml_version} 5.4))
  (action
   (progn
    (diff test_toplevel.expected test_toplevel.bc.js.actual)
    (diff test_toplevel.expected test_toplevel.js.actual))))
+
+(rule
+ (alias runtest-js)
+ (enabled_if
+  (and
+   (>= %{ocaml_version} 5.2)
+   (< %{ocaml_version} 5.3)))
+ (action
+  (progn
+   (diff test_toplevel-5.2.expected test_toplevel.bc.js.actual)
+   (diff test_toplevel-5.2.expected test_toplevel.js.actual))))

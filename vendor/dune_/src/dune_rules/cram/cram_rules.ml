@@ -12,6 +12,8 @@ module Spec = struct
     ; locks : Path.Set.t Action_builder.t
     ; packages : Package.Name.Set.t
     ; timeout : (Loc.t * float) option
+    ; conflict_markers : Cram_stanza.Conflict_markers.t
+    ; setup_scripts : Path.t list
     }
 
   let make_empty ~test_name_alias =
@@ -24,6 +26,8 @@ module Spec = struct
     ; sandbox = Sandbox_config.needs_sandboxing
     ; packages = Package.Name.Set.empty
     ; timeout = None
+    ; conflict_markers = Ignore
+    ; setup_scripts = []
     }
   ;;
 end
@@ -31,23 +35,19 @@ end
 type error = Missing_run_t of Cram_test.t
 
 let missing_run_t (error : Cram_test.t) =
-  Action_builder.fail
-    { fail =
-        (fun () ->
-          let dir =
-            match error with
-            | File _ ->
-              (* This error is impossible for file tests *)
-              assert false
-            | Dir { dir; file = _ } -> dir
-          in
-          User_error.raise
-            ~loc:(Loc.in_dir (Path.source dir))
-            [ Pp.textf
-                "Cram test directory %s does not contain a run.t file."
-                (Path.Source.to_string dir)
-            ])
-    }
+  let dir =
+    match error with
+    | File _ ->
+      (* This error is impossible for file tests *)
+      assert false
+    | Dir { dir; file = _ } -> dir
+  in
+  User_error.raise
+    ~loc:(Loc.in_dir (Path.source dir))
+    [ Pp.textf
+        "Cram test directory %s does not contain a run.t file."
+        (Path.Source.to_string dir)
+    ]
 ;;
 
 let test_rule
@@ -62,6 +62,8 @@ let test_rule
        ; sandbox
        ; packages = _
        ; timeout
+       ; conflict_markers
+       ; setup_scripts
        } :
         Spec.t)
       (test : (Cram_test.t, error) result)
@@ -81,7 +83,8 @@ let test_rule
   match test with
   | Error (Missing_run_t test) ->
     (* We error out on invalid tests even if they are disabled. *)
-    Alias_rules.add sctx ~alias ~loc (missing_run_t test)
+    Action_builder.fail { fail = (fun () -> missing_run_t test) }
+    |> Alias_rules.add sctx ~alias ~loc
   | Ok test ->
     (* Morally, this is equivalent to evaluating them all concurrently and
        taking the conjunction, but we do it this way to avoid evaluating things
@@ -110,7 +113,10 @@ let test_rule
        let* () =
          (let open Action_builder.O in
           let+ () = Action_builder.path (Path.build script) in
-          Cram_exec.make_script ~src:(Path.build script) ~script:script_sh
+          Cram_exec.make_script
+            ~src:(Path.build script)
+            ~script:script_sh
+            ~conflict_markers
           |> Action.Full.make)
          |> Action_builder.with_file_targets ~file_targets:[ script_sh ]
          |> Super_context.add_rule sctx ~dir ~loc
@@ -132,6 +138,7 @@ let test_rule
               in
               let+ (_ : Path.Set.t) = Action_builder.dyn_memo_deps deps in
               ()
+          and+ () = Action_builder.paths setup_scripts
           and+ locks = locks >>| Path.Set.to_list in
           Cram_exec.run
             ~src:(Path.build script)
@@ -143,6 +150,7 @@ let test_rule
             ~script:(Path.build script_sh)
             ~output
             ~timeout
+            ~setup_scripts
           |> Action.Full.make ~locks ~sandbox)
          |> Action_builder.with_file_targets ~file_targets:[ output ]
          |> Super_context.add_rule sctx ~dir ~loc
@@ -193,10 +201,10 @@ let rules ~sctx ~dir tests =
   let* stanzas = collect_stanzas ~dir
   and* with_package_mask =
     Dune_load.mask ()
+    >>| Only_packages.enumerate
     >>| function
-    | None -> fun _packages f -> f ()
-    | Some only ->
-      let only = Package.Name.Set.of_keys only in
+    | `All -> fun _packages f -> f ()
+    | `Set only ->
       fun packages f ->
         Memo.when_
           (Package.Name.Set.is_empty packages
@@ -291,6 +299,23 @@ let rules ~sctx ~dir tests =
                   stanza.timeout
                   ~f:(Ordering.min (fun x y -> Float.compare (snd x) (snd y)))
               in
+              let conflict_markers =
+                Option.value ~default:acc.conflict_markers stanza.conflict_markers
+              in
+              let setup_scripts =
+                let more_current_scripts =
+                  List.map stanza.setup_scripts ~f:(fun (_loc, script) ->
+                    (* Handle both relative and absolute paths *)
+                    if Filename.is_relative script
+                    then Path.build (Path.Build.relative dir script)
+                    else Path.external_ (Path.External.of_string script))
+                in
+                (* This is a silly way to dedupe, but we aim to preserve the
+                   order as much as possible. *)
+                more_current_scripts
+                @ List.filter acc.setup_scripts ~f:(fun x ->
+                  not (List.mem more_current_scripts x ~equal:Path.equal))
+              in
               ( runtest_alias
               , { acc with
                   enabled_if
@@ -301,6 +326,8 @@ let rules ~sctx ~dir tests =
                 ; packages
                 ; sandbox
                 ; timeout
+                ; conflict_markers
+                ; setup_scripts
                 } ))
       in
       let extra_aliases =

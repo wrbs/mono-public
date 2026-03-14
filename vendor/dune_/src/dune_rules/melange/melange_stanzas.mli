@@ -7,7 +7,7 @@ module Emit : sig
     ; target : string
     ; alias : Alias.Name.t option
     ; module_systems : (Melange.Module_system.t * string) list
-    ; modules : Stanza_common.Modules_settings.t
+    ; modules : Modules_settings.t
     ; emit_stdlib : bool
     ; libraries : Lib_dep.t list
     ; package : Package.t option
@@ -15,7 +15,7 @@ module Emit : sig
     ; runtime_deps : Loc.t * Dep_conf.t list
     ; preprocessor_deps : Dep_conf.t list
     ; lint : Preprocess.Without_instrumentation.t Preprocess.Per_module.t
-    ; promote : Rule.Promote.t option
+    ; promote : Rule_mode.Promote.t option
     ; compile_flags : Ordered_set_lang.Unexpanded.t
     ; allow_overlapping_dependencies : bool
     ; enabled_if : Blang.t

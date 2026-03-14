@@ -18,11 +18,11 @@ module MenhirBasics = struct
     | PLUS
     | MINUS
     | LPAREN
-    | INT of (
+    | INT of 
 # 3 "demos/calc-unparsing/parser.mly"
        (int)
 # 25 "demos/calc-unparsing/parser.ml"
-  )
+  
     | EOL
     | DIV
   
@@ -38,72 +38,7 @@ module Tables = struct
   
   include MenhirBasics
   
-  let token2terminal : token -> int =
-    fun _tok ->
-      match _tok with
-      | DIV ->
-          8
-      | EOL ->
-          7
-      | INT _ ->
-          6
-      | LPAREN ->
-          5
-      | MINUS ->
-          4
-      | PLUS ->
-          3
-      | RPAREN ->
-          2
-      | TIMES ->
-          1
-  
-  and error_terminal =
-    0
-  
-  and token2value : token -> Obj.t =
-    fun _tok ->
-      match _tok with
-      | DIV ->
-          Obj.repr ()
-      | EOL ->
-          Obj.repr ()
-      | INT _v ->
-          Obj.repr (_v : (
-# 3 "demos/calc-unparsing/parser.mly"
-       (int)
-# 76 "demos/calc-unparsing/parser.ml"
-          ))
-      | LPAREN ->
-          Obj.repr ()
-      | MINUS ->
-          Obj.repr ()
-      | PLUS ->
-          Obj.repr ()
-      | RPAREN ->
-          Obj.repr ()
-      | TIMES ->
-          Obj.repr ()
-  
-  and default_reduction =
-    (4, "\000\002\000s\000\b\000A\t")
-  
-  and error =
-    (9, "\014\007\003\128\007\136p\000\000\014<\195\128\000\227\204\000\000Y\128\000")
-  
-  and start =
-    1
-  
-  and action =
-    ((8, "(((\000\003(\000\000(\030(\000(\014\000\000\003\000"), (8, "\022\030\"2\000\000G*\022\021\021\021\000\000\021*\022\017\017\017\000\000\017*\006\n\014"))
-  
-  and lhs =
-    (2, "*\170@")
-  
-  and goto =
-    ((4, "0\128\006\000\160@ \000\000"), (8, "\016\017\015\014\012\007\005\n"))
-  
-  and semantic_action =
+  let semantic_action =
     [|
       (fun _menhir_env ->
         let _menhir_stack = _menhir_env.MenhirLib.EngineTypes.stack in
@@ -114,18 +49,18 @@ module Tables = struct
           MenhirLib.EngineTypes.endp = _endpos_i_;
           MenhirLib.EngineTypes.next = _menhir_stack;
         } = _menhir_stack in
-        let i : (
+        let i : 
 # 3 "demos/calc-unparsing/parser.mly"
        (int)
-# 121 "demos/calc-unparsing/parser.ml"
-        ) = Obj.magic i in
+# 56 "demos/calc-unparsing/parser.ml"
+         = Obj.magic i in
         let _endpos__0_ = _menhir_stack.MenhirLib.EngineTypes.endp in
         let _startpos = _startpos_i_ in
         let _endpos = _endpos_i_ in
         let _v : (AST.main) = 
 # 46 "demos/calc-unparsing/parser.mly"
     ( EConst i )
-# 129 "demos/calc-unparsing/parser.ml"
+# 64 "demos/calc-unparsing/parser.ml"
          in
         {
           MenhirLib.EngineTypes.state = _menhir_s;
@@ -164,7 +99,7 @@ module Tables = struct
         let _v : (AST.main) = 
 # 52 "demos/calc-unparsing/parser.mly"
     ( e )
-# 168 "demos/calc-unparsing/parser.ml"
+# 103 "demos/calc-unparsing/parser.ml"
          in
         {
           MenhirLib.EngineTypes.state = _menhir_s;
@@ -197,12 +132,12 @@ module Tables = struct
           let op = 
 # 66 "demos/calc-unparsing/parser.mly"
         ( UNeg )
-# 201 "demos/calc-unparsing/parser.ml"
+# 136 "demos/calc-unparsing/parser.ml"
            in
           (
 # 58 "demos/calc-unparsing/parser.mly"
     ( EUnOp (op, e) )
-# 206 "demos/calc-unparsing/parser.ml"
+# 141 "demos/calc-unparsing/parser.ml"
            : (AST.main))
         in
         {
@@ -243,12 +178,12 @@ module Tables = struct
           let op = 
 # 69 "demos/calc-unparsing/parser.mly"
         ( BAdd )
-# 247 "demos/calc-unparsing/parser.ml"
+# 182 "demos/calc-unparsing/parser.ml"
            in
           (
 # 63 "demos/calc-unparsing/parser.mly"
     ( EBinOp (e1, op, e2) )
-# 252 "demos/calc-unparsing/parser.ml"
+# 187 "demos/calc-unparsing/parser.ml"
            : (AST.main))
         in
         {
@@ -289,12 +224,12 @@ module Tables = struct
           let op = 
 # 70 "demos/calc-unparsing/parser.mly"
         ( BSub )
-# 293 "demos/calc-unparsing/parser.ml"
+# 228 "demos/calc-unparsing/parser.ml"
            in
           (
 # 63 "demos/calc-unparsing/parser.mly"
     ( EBinOp (e1, op, e2) )
-# 298 "demos/calc-unparsing/parser.ml"
+# 233 "demos/calc-unparsing/parser.ml"
            : (AST.main))
         in
         {
@@ -335,12 +270,12 @@ module Tables = struct
           let op = 
 # 71 "demos/calc-unparsing/parser.mly"
         ( BMul )
-# 339 "demos/calc-unparsing/parser.ml"
+# 274 "demos/calc-unparsing/parser.ml"
            in
           (
 # 63 "demos/calc-unparsing/parser.mly"
     ( EBinOp (e1, op, e2) )
-# 344 "demos/calc-unparsing/parser.ml"
+# 279 "demos/calc-unparsing/parser.ml"
            : (AST.main))
         in
         {
@@ -381,12 +316,12 @@ module Tables = struct
           let op = 
 # 72 "demos/calc-unparsing/parser.mly"
         ( BDiv )
-# 385 "demos/calc-unparsing/parser.ml"
+# 320 "demos/calc-unparsing/parser.ml"
            in
           (
 # 63 "demos/calc-unparsing/parser.mly"
     ( EBinOp (e1, op, e2) )
-# 390 "demos/calc-unparsing/parser.ml"
+# 325 "demos/calc-unparsing/parser.ml"
            : (AST.main))
         in
         {
@@ -419,7 +354,7 @@ module Tables = struct
         let _v : (AST.main) = 
 # 41 "demos/calc-unparsing/parser.mly"
     ( e )
-# 423 "demos/calc-unparsing/parser.ml"
+# 358 "demos/calc-unparsing/parser.ml"
          in
         {
           MenhirLib.EngineTypes.state = _menhir_s;
@@ -430,7 +365,123 @@ module Tables = struct
         });
     |]
   
-  and trace =
+  let terminal_count =
+    9
+  
+  let token2terminal : token -> int =
+    fun _tok ->
+      match _tok with
+      | TIMES ->
+          1
+      | RPAREN ->
+          2
+      | PLUS ->
+          3
+      | MINUS ->
+          4
+      | LPAREN ->
+          5
+      | INT _ ->
+          6
+      | EOL ->
+          7
+      | DIV ->
+          8
+  
+  let error_terminal =
+    0
+  
+  let token2value : token -> Obj.t =
+    fun _tok ->
+      match _tok with
+      | TIMES ->
+          Obj.repr ()
+      | RPAREN ->
+          Obj.repr ()
+      | PLUS ->
+          Obj.repr ()
+      | MINUS ->
+          Obj.repr ()
+      | LPAREN ->
+          Obj.repr ()
+      | INT _v ->
+          Obj.repr (_v : 
+# 3 "demos/calc-unparsing/parser.mly"
+       (int)
+# 412 "demos/calc-unparsing/parser.ml"
+          )
+      | EOL ->
+          Obj.repr ()
+      | DIV ->
+          Obj.repr ()
+  
+  let default_reduction =
+    "\000\002\000s\000\b\000A\t"
+  
+  let[@inline] default_reduction =
+    fun i ->
+      MenhirLib.PackedIntArray.get4 default_reduction i
+  
+  let error =
+    "\014\007\003\128\007\136p\000\000\014<\195\128\000\227\204\000\000Y\128\000"
+  
+  let[@inline] error =
+    fun i ->
+      MenhirLib.PackedIntArray.get1 error i
+  
+  let[@inline] error =
+    fun i j ->
+      error (9 * i + j)
+  
+  let start =
+    1
+  
+  let action_displacement =
+    "(((\000\003(\000\000(\030(\000(\014\000\000\003\000"
+  
+  let[@inline] action_displacement =
+    fun i ->
+      MenhirLib.PackedIntArray.get8 action_displacement i
+  
+  let action_data =
+    "\022\030\"2\000\000G*\022\021\021\021\000\000\021*\022\017\017\017\000\000\017*\006\n\014"
+  
+  let[@inline] action_data =
+    fun i ->
+      MenhirLib.PackedIntArray.get8 action_data i
+  
+  let[@inline] action =
+    fun i j ->
+      let k = MenhirLib.RowDisplacementDecode.decode (action_displacement i) in
+      action_data (k + j)
+  
+  let lhs =
+    "*\170@"
+  
+  let[@inline] lhs =
+    fun i ->
+      MenhirLib.PackedIntArray.get2 lhs i
+  
+  let goto_displacement =
+    "0\128\006\000\160@ \000\000"
+  
+  let[@inline] goto_displacement =
+    fun i ->
+      MenhirLib.PackedIntArray.get4 goto_displacement i
+  
+  let goto_data =
+    "\016\017\015\014\012\007\005\n"
+  
+  let[@inline] goto_data =
+    fun i ->
+      MenhirLib.PackedIntArray.get8 goto_data i
+  
+  let[@inline] goto =
+    fun i j ->
+      let k = MenhirLib.RowDisplacementDecode.decode (goto_displacement i) in
+      goto_data (k + j)
+  
+  let trace =
     None
   
 end
@@ -446,13 +497,13 @@ module MenhirInterpreter = struct
 end
 
 let main =
-  fun lexer lexbuf : (AST.main) ->
+  fun lexer lexbuf : ((AST.main)) ->
     Obj.magic (MenhirInterpreter.entry `Legacy 0 lexer lexbuf)
 
 module Incremental = struct
   
   let main =
-    fun initial_position : (AST.main) MenhirInterpreter.checkpoint ->
+    fun initial_position : ((AST.main) MenhirInterpreter.checkpoint) ->
       Obj.magic (MenhirInterpreter.start 0 initial_position)
   
 end
@@ -573,24 +624,24 @@ module CST = struct
     
     method visit_LPAREN = self#text "("
     
-    method virtual visit_INT : (
+    method virtual visit_INT : 
 # 3 "demos/calc-unparsing/parser.mly"
        (int)
-# 580 "demos/calc-unparsing/parser.ml"
-    ) -> 'r
+# 631 "demos/calc-unparsing/parser.ml"
+     -> 'r
     
     method virtual visit_EOL : 'r
     
     method visit_DIV = self#text "/"
     
-    method visit_main = fun t : 'r ->
+    method visit_main = fun t : ('r) ->
       match t with
       | MenhirSettle.CST.NonTerminal (8, csts) ->
           self#case_eol csts.(0)
       | _ ->
           assert false
     
-    method visit_expr = fun t : 'r ->
+    method visit_expr = fun t : ('r) ->
       match t with
       | MenhirSettle.CST.NonTerminal (1, csts) ->
           self#case_int (match csts.(0) with
@@ -613,28 +664,28 @@ module CST = struct
       | _ ->
           assert false
     
-    method case_int = fun x0 : 'r ->
+    method case_int = fun x0 : ('r) ->
       self#visit_INT x0
     
-    method case_paren = fun x1 : 'r ->
+    method case_paren = fun x1 : ('r) ->
       self#cat self#visit_LPAREN (self#cat (self#visit_expr x1) self#visit_RPAREN)
     
-    method case_neg = fun x1 : 'r ->
+    method case_neg = fun x1 : ('r) ->
       self#cat self#visit_MINUS (self#visit_expr x1)
     
-    method case_add = fun x0 x2 : 'r ->
+    method case_add = fun x0 x2 : ('r) ->
       self#cat (self#visit_expr x0) (self#cat self#visit_PLUS (self#visit_expr x2))
     
-    method case_sub = fun x0 x2 : 'r ->
+    method case_sub = fun x0 x2 : ('r) ->
       self#cat (self#visit_expr x0) (self#cat self#visit_MINUS (self#visit_expr x2))
     
-    method case_mul = fun x0 x2 : 'r ->
+    method case_mul = fun x0 x2 : ('r) ->
       self#cat (self#visit_expr x0) (self#cat self#visit_TIMES (self#visit_expr x2))
     
-    method case_div = fun x0 x2 : 'r ->
+    method case_div = fun x0 x2 : ('r) ->
       self#cat (self#visit_expr x0) (self#cat self#visit_DIV (self#visit_expr x2))
     
-    method case_eol = fun x0 : 'r ->
+    method case_eol = fun x0 : ('r) ->
       self#cat (self#visit_expr x0) self#visit_EOL
     
   end

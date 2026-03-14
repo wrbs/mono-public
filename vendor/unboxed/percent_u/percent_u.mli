@@ -99,6 +99,7 @@ module Option : sig
   val is_none : t -> bool [@@zero_alloc]
   val is_some : t -> bool [@@zero_alloc]
   val some : value -> t [@@zero_alloc]
+  val value : t -> default:value -> value [@@zero_alloc]
 
   (* Conversion *)
   val of_mult : UFO.t -> t [@@zero_alloc]

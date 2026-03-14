@@ -18,7 +18,7 @@ val setup_rules
   -> Context_name.t
   -> Build_config.Gen_rules.t Memo.t
 
-val lock_dir_path : Context_name.t -> Path.Source.t option Memo.t
+val lock_dir_path : Context_name.t -> Path.t option Memo.t
 val lock_dir_active : Context_name.t -> bool Memo.t
 val ocaml_toolchain : Context_name.t -> Ocaml_toolchain.t Action_builder.t option Memo.t
 val which : Context_name.t -> (Filename.t -> Path.t option Memo.t) Staged.t
@@ -33,3 +33,14 @@ val setup_pkg_install_alias
   :  dir:Path.Build.t
   -> Context_name.t
   -> Build_config.Gen_rules.t
+
+module Pkg_digest : sig
+  type t
+
+  val to_string : t -> string
+end
+
+val pkg_digest_of_project_dependency
+  :  Context_name.t
+  -> Package.Name.t
+  -> Pkg_digest.t option Memo.t

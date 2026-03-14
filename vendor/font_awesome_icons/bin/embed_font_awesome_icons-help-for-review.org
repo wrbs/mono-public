@@ -1,11 +1,11 @@
 * embed_font_awesome_icons.exe
 
 : Embed FontAwesome SVG icons
-: 
+:
 :   embed_font_awesome_icons.exe [SVG [SVG ...]]
-: 
+:
 : === flags ===
-: 
+:
 :   -output NAME               . name of the generated module
 :   [-im-super-duper-sure-i-want-to-embed-hundreds-of-icons]
 :                              . Embed all available FontAwesome icons. WARNING:

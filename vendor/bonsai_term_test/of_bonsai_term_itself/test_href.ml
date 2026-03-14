@@ -42,7 +42,7 @@ let%expect_test "Ansi" =
   in
   Handle.show handle;
   [%expect
-    {| (off)Visit ]8;;https://example.com\(off fg:rgb256-0-100-255 +uline)example.com]8;;\(off) for more info(off)(EraseLine:ToEnd)(off) |}]
+    {| (off)Visit (HREF:https://example.com)(off fg:rgb256-0-100-255 +uline)example.com(/HREF)(off) for more info(off)(EraseLine:ToEnd)(off) |}]
 ;;
 
 (* Tests for edge cases with zcat and cropping *)
@@ -64,7 +64,7 @@ let%expect_test "zcat of two href spans that exactly overlap" =
        [ View.text ~attrs:[ Attr.href "https://first.com" ] "overlap"
        ; View.text ~attrs:[ Attr.href "https://second.com" ] "overlap"
        ]);
-  [%expect {| ]8;;https://first.com\(off)overlap]8;;\(off)(EraseLine:ToEnd)(off) |}]
+  [%expect {| (HREF:https://first.com)(off)overlap(/HREF)(off)(EraseLine:ToEnd)(off) |}]
 ;;
 
 let%expect_test "zcat of two href spans where one span is inside the other" =
@@ -74,7 +74,7 @@ let%expect_test "zcat of two href spans where one span is inside the other" =
        ; View.text ~attrs:[ Attr.href "https://outer.com" ] "outer text here"
        ]);
   [%expect
-    {| ]8;;https://outer.com\(off)out]8;;\]8;;https://inner.com\(off)inner]8;;\]8;;https://outer.com\(off)xt here]8;;\(off)(EraseLine:ToEnd)(off) |}]
+    {| (HREF:https://outer.com)(off)out(/HREF)(HREF:https://inner.com)(off)inner(/HREF)(HREF:https://outer.com)(off)xt here(/HREF)(off)(EraseLine:ToEnd)(off) |}]
 ;;
 
 let%expect_test "zcat of two href spans that share the same start position" =
@@ -84,7 +84,7 @@ let%expect_test "zcat of two href spans that share the same start position" =
        ; View.text ~attrs:[ Attr.href "https://second.com" ] "second link"
        ]);
   [%expect
-    {| ]8;;https://first.com\(off)first]8;;\]8;;https://second.com\(off)d link]8;;\(off)(EraseLine:ToEnd)(off) |}]
+    {| (HREF:https://first.com)(off)first(/HREF)(HREF:https://second.com)(off)d link(/HREF)(off)(EraseLine:ToEnd)(off) |}]
 ;;
 
 let%expect_test "zcat of two href spans that share the same end position" =
@@ -97,7 +97,7 @@ let%expect_test "zcat of two href spans that share the same end position" =
            ]
        ]);
   [%expect
-    {| ]8;;https://first.com\(off)first link]8;;\(off)(EraseLine:ToEnd)(off) |}]
+    {| (HREF:https://first.com)(off)first link(/HREF)(off)(EraseLine:ToEnd)(off) |}]
 ;;
 
 let%expect_test "zcat of two href spans that partially overlap but are offset" =
@@ -110,7 +110,7 @@ let%expect_test "zcat of two href spans that partially overlap but are offset" =
            ]
        ]);
   [%expect
-    {| ]8;;https://first.com\(off)first link]8;;\]8;;https://second.com\(off) ext]8;;\(off)(EraseLine:ToEnd)(off) |}]
+    {| (HREF:https://first.com)(off)first link(/HREF)(HREF:https://second.com)(off) ext(/HREF)(off)(EraseLine:ToEnd)(off) |}]
 ;;
 
 let%expect_test "cropping of nodes with the href attribute - crop from left" =
@@ -119,7 +119,7 @@ let%expect_test "cropping of nodes with the href attribute - crop from left" =
        ~l:5
        (View.text ~attrs:[ Attr.href "https://example.com" ] "example.com link"));
   [%expect
-    {| ]8;;https://example.com\(off)le.com link]8;;\(off)(EraseLine:ToEnd)(off) |}]
+    {| (HREF:https://example.com)(off)le.com link(/HREF)(off)(EraseLine:ToEnd)(off) |}]
 ;;
 
 let%expect_test "cropping of nodes with the href attribute - crop from right" =
@@ -128,7 +128,7 @@ let%expect_test "cropping of nodes with the href attribute - crop from right" =
        ~r:5
        (View.text ~attrs:[ Attr.href "https://example.com" ] "example.com link"));
   [%expect
-    {| ]8;;https://example.com\(off)example.com]8;;\(off)(EraseLine:ToEnd)(off) |}]
+    {| (HREF:https://example.com)(off)example.com(/HREF)(off)(EraseLine:ToEnd)(off) |}]
 ;;
 
 let%expect_test "cropping of nodes with the href attribute - crop from both sides" =
@@ -138,7 +138,7 @@ let%expect_test "cropping of nodes with the href attribute - crop from both side
        ~r:5
        (View.text ~attrs:[ Attr.href "https://example.com" ] "example.com link"));
   [%expect
-    {| ]8;;https://example.com\(off)mple.com]8;;\(off)(EraseLine:ToEnd)(off) |}]
+    {| (HREF:https://example.com)(off)mple.com(/HREF)(off)(EraseLine:ToEnd)(off) |}]
 ;;
 
 let%expect_test "cropping of nodes with the href attribute - crop to nothing" =

@@ -26,6 +26,13 @@ module Make
      : TWO_PHASE_NUMBERING with type t = M.key
 
 (**{!ForOrderedType} is a special case of {!Make} where it suffices for
+   keys to be numbered. (Yes, it can be useful to renumber some elements
+   of a type whose elements are already numbered.) *)
+module ForNumberedType
+  (T : NUMBERING)
+     : TWO_PHASE_NUMBERING with type t = T.t
+
+(**{!ForOrderedType} is a special case of {!Make} where it suffices for
    keys to be ordered. *)
 module ForOrderedType
   (T : OrderedType)
@@ -42,3 +49,16 @@ module ForHashedType
 module ForType
   (T : TYPE)
      : TWO_PHASE_NUMBERING with type t = T.t
+
+module type OPERATIONS =
+  NUMBERING_OPERATIONS
+
+(**{!Operations} extends a numbered type
+   with a number of common operations. *)
+module Operations (T : NUMBERING)
+     : OPERATIONS with type t := T.t
+
+(**{!OperationsForIntSegment} creates a view of the type [int],
+   restricted to the segment [\[0, n)], as a numbered type. *)
+module OperationsForIntSegment (T : sig val n: int end)
+     : NUMBERED with type t := int

@@ -69,19 +69,52 @@ let message (t : t) = Sexp_or_string.Stable.V1.to_string (raw_message t)
 let tags (t : t) = t.tags
 let add_tags (t : t) tags = { t with tags = List.rev_append tags t.tags }
 
-let to_write_only_text (t : t) zone =
-  let prefix =
-    match t.level with
-    | None -> ""
-    | Some l -> Level.to_string l ^ " "
-  in
-  let formatted_tags =
-    match t.tags with
-    | [] -> []
-    | _ :: _ ->
-      " --" :: List.concat_map t.tags ~f:(fun (t, v) -> [ " ["; t; ": "; v; "]" ])
-  in
-  String.concat
-    ~sep:""
-    (Time_float.to_string_abs ~zone t.time :: " " :: prefix :: message t :: formatted_tags)
+let level_string (t : t) =
+  match t.level with
+  | None -> ""
+  | Some l -> Level.to_string l ^ " "
 ;;
+
+let format_tags (t : t) =
+  match t.tags with
+  | [] -> []
+  | _ :: _ -> " --" :: List.concat_map t.tags ~f:(fun (t, v) -> [ " ["; t; ": "; v; "]" ])
+;;
+
+let to_write_only_text (t : t) zone =
+  let prefix = level_string t in
+  let formatted_tags = format_tags t in
+  let time_string = Time_float.to_string_abs ~zone t.time in
+  String.concat ~sep:"" (time_string :: " " :: prefix :: message t :: formatted_tags)
+;;
+
+module For_testing = struct
+  let to_string
+    (t : t)
+    (zone : Core_private.Time_zone.t)
+    ~(time : [ `Keep | `Omit ])
+    ~(tags : [ `Keep | `Omit ])
+    ~(level : [ `Keep | `Omit ])
+    =
+    let prefix =
+      match level with
+      | `Keep -> level_string t
+      | `Omit -> ""
+    in
+    let formatted_tags =
+      match tags with
+      | `Keep -> format_tags t
+      | `Omit -> []
+    in
+    let time_string =
+      match time with
+      | `Keep -> Time_float.to_string_abs ~zone t.time ^ " "
+      | `Omit -> ""
+    in
+    let list_to_print = time_string :: prefix :: message t :: formatted_tags in
+    let filtered_list =
+      List.filter list_to_print ~f:(fun str -> not (String.is_empty str))
+    in
+    String.concat ~sep:"" filtered_list
+  ;;
+end

@@ -1,6 +1,6 @@
 (*---------------------------------------------------------------------------
-   Copyright (c) 2025 The uucp programmers. All rights reserved.
-   SPDX-License-Identifier: ISC
+   Copyright (c) 2020 The uucp programmers. All rights reserved.
+   Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
 (* WARNING do not edit. This file was automatically generated. *)
@@ -98,9 +98,8 @@ let upper_map_map : Uchar.t list t =
            [Uchar.unsafe_of_int 0x018B;]; []; []; []|];
          [|[]; []; [Uchar.unsafe_of_int 0x0191;]; []; [];
            [Uchar.unsafe_of_int 0x01F6;]; []; []; [];
-           [Uchar.unsafe_of_int 0x0198;]; [Uchar.unsafe_of_int 0x023D;];
-           [Uchar.unsafe_of_int 0xA7DC;]; []; [];
-           [Uchar.unsafe_of_int 0x0220;]; []|];
+           [Uchar.unsafe_of_int 0x0198;]; [Uchar.unsafe_of_int 0x023D;]; 
+           []; []; []; [Uchar.unsafe_of_int 0x0220;]; []|];
          [|[]; [Uchar.unsafe_of_int 0x01A0;]; [];
            [Uchar.unsafe_of_int 0x01A2;]; []; [Uchar.unsafe_of_int 0x01A4;];
            []; []; [Uchar.unsafe_of_int 0x01A7;]; []; []; []; [];
@@ -165,7 +164,7 @@ let upper_map_map : Uchar.t list t =
            []; [Uchar.unsafe_of_int 0x0190;]; [Uchar.unsafe_of_int 0xA7AB;];
            []; []; []|];
          [|[Uchar.unsafe_of_int 0x0193;]; [Uchar.unsafe_of_int 0xA7AC;]; 
-           []; [Uchar.unsafe_of_int 0x0194;]; [Uchar.unsafe_of_int 0xA7CB;];
+           []; [Uchar.unsafe_of_int 0x0194;]; [];
            [Uchar.unsafe_of_int 0xA78D;]; [Uchar.unsafe_of_int 0xA7AA;]; 
            []; [Uchar.unsafe_of_int 0x0197;]; [Uchar.unsafe_of_int 0x0196;];
            [Uchar.unsafe_of_int 0xA7AE;]; [Uchar.unsafe_of_int 0x2C62;];
@@ -417,8 +416,7 @@ let upper_map_map : Uchar.t list t =
            [Uchar.unsafe_of_int 0x041E;]; [Uchar.unsafe_of_int 0x0421;];
            [Uchar.unsafe_of_int 0x0422;]; [Uchar.unsafe_of_int 0x0422;];
            [Uchar.unsafe_of_int 0x042A;]; [Uchar.unsafe_of_int 0x0462;];
-           [Uchar.unsafe_of_int 0xA64A;]; []; [Uchar.unsafe_of_int 0x1C89;];
-           []; []; []; []; []|];
+           [Uchar.unsafe_of_int 0xA64A;]; []; []; []; []; []; []; []|];
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
          nil;
          [|[]; []; []; []; []; []; []; []; []; [Uchar.unsafe_of_int 0xA77D;];
@@ -900,13 +898,10 @@ let upper_map_map : Uchar.t list t =
          [|[]; [Uchar.unsafe_of_int 0xA7C0;]; [];
            [Uchar.unsafe_of_int 0xA7C2;]; []; []; []; [];
            [Uchar.unsafe_of_int 0xA7C7;]; []; [Uchar.unsafe_of_int 0xA7C9;];
-           []; []; [Uchar.unsafe_of_int 0xA7CC;]; [];
-           [Uchar.unsafe_of_int 0xA7CE;]|];
-         [|[]; [Uchar.unsafe_of_int 0xA7D0;]; [];
-           [Uchar.unsafe_of_int 0xA7D2;]; []; [Uchar.unsafe_of_int 0xA7D4;];
-           []; [Uchar.unsafe_of_int 0xA7D6;]; [];
-           [Uchar.unsafe_of_int 0xA7D8;]; []; [Uchar.unsafe_of_int 0xA7DA;];
-           []; []; []; []|];
+           []; []; []; []; []|];
+         [|[]; [Uchar.unsafe_of_int 0xA7D0;]; []; []; []; []; [];
+           [Uchar.unsafe_of_int 0xA7D6;]; []; [Uchar.unsafe_of_int 0xA7D8;];
+           []; []; []; []; []; []|];
          nil;
          [|[]; []; []; []; []; []; [Uchar.unsafe_of_int 0xA7F5;]; []; 
            []; []; []; []; []; []; []; []|];
@@ -1122,22 +1117,10 @@ let upper_map_map : Uchar.t list t =
          [|[Uchar.unsafe_of_int 0x10CB0;]; [Uchar.unsafe_of_int 0x10CB1;];
            [Uchar.unsafe_of_int 0x10CB2;]; []; []; []; []; []; []; []; 
            []; []; []; []; []; []|];
-         nil; nil; nil; nil; nil; nil; nil;
-         [|[Uchar.unsafe_of_int 0x10D50;]; [Uchar.unsafe_of_int 0x10D51;];
-           [Uchar.unsafe_of_int 0x10D52;]; [Uchar.unsafe_of_int 0x10D53;];
-           [Uchar.unsafe_of_int 0x10D54;]; [Uchar.unsafe_of_int 0x10D55;];
-           [Uchar.unsafe_of_int 0x10D56;]; [Uchar.unsafe_of_int 0x10D57;];
-           [Uchar.unsafe_of_int 0x10D58;]; [Uchar.unsafe_of_int 0x10D59;];
-           [Uchar.unsafe_of_int 0x10D5A;]; [Uchar.unsafe_of_int 0x10D5B;];
-           [Uchar.unsafe_of_int 0x10D5C;]; [Uchar.unsafe_of_int 0x10D5D;];
-           [Uchar.unsafe_of_int 0x10D5E;]; [Uchar.unsafe_of_int 0x10D5F;]|];
-         [|[Uchar.unsafe_of_int 0x10D60;]; [Uchar.unsafe_of_int 0x10D61;];
-           [Uchar.unsafe_of_int 0x10D62;]; [Uchar.unsafe_of_int 0x10D63;];
-           [Uchar.unsafe_of_int 0x10D64;]; [Uchar.unsafe_of_int 0x10D65;];
-           []; []; []; []; []; []; []; []; []; []|];
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
-         nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil|];
+         nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
+         nil; nil; nil; nil; nil; nil; nil; nil; nil|];
        [|nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
@@ -1209,24 +1192,8 @@ let upper_map_map : Uchar.t list t =
            [Uchar.unsafe_of_int 0x16E5A;]; [Uchar.unsafe_of_int 0x16E5B;];
            [Uchar.unsafe_of_int 0x16E5C;]; [Uchar.unsafe_of_int 0x16E5D;];
            [Uchar.unsafe_of_int 0x16E5E;]; [Uchar.unsafe_of_int 0x16E5F;]|];
-         nil; nil; nil;
-         [|[]; []; []; []; []; []; []; []; []; []; [];
-           [Uchar.unsafe_of_int 0x16EA0;]; [Uchar.unsafe_of_int 0x16EA1;];
-           [Uchar.unsafe_of_int 0x16EA2;]; [Uchar.unsafe_of_int 0x16EA3;];
-           [Uchar.unsafe_of_int 0x16EA4;]|];
-         [|[Uchar.unsafe_of_int 0x16EA5;]; [Uchar.unsafe_of_int 0x16EA6;];
-           [Uchar.unsafe_of_int 0x16EA7;]; [Uchar.unsafe_of_int 0x16EA8;];
-           [Uchar.unsafe_of_int 0x16EA9;]; [Uchar.unsafe_of_int 0x16EAA;];
-           [Uchar.unsafe_of_int 0x16EAB;]; [Uchar.unsafe_of_int 0x16EAC;];
-           [Uchar.unsafe_of_int 0x16EAD;]; [Uchar.unsafe_of_int 0x16EAE;];
-           [Uchar.unsafe_of_int 0x16EAF;]; [Uchar.unsafe_of_int 0x16EB0;];
-           [Uchar.unsafe_of_int 0x16EB1;]; [Uchar.unsafe_of_int 0x16EB2;];
-           [Uchar.unsafe_of_int 0x16EB3;]; [Uchar.unsafe_of_int 0x16EB4;]|];
-         [|[Uchar.unsafe_of_int 0x16EB5;]; [Uchar.unsafe_of_int 0x16EB6;];
-           [Uchar.unsafe_of_int 0x16EB7;]; [Uchar.unsafe_of_int 0x16EB8;];
-           []; []; []; []; []; []; []; []; []; []; []; []|];
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
-         nil; nil; nil; nil; nil|];
+         nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil|];
        nil; nil; nil; nil; nil; nil; nil;
        [|nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
@@ -1699,9 +1666,7 @@ let lower_map_map : Uchar.t list t =
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
-         nil; nil; nil; nil; nil; nil;
-         [|[]; []; []; []; []; []; []; []; []; [Uchar.unsafe_of_int 0x1C8A;];
-           []; []; []; []; []; []|];
+         nil; nil; nil; nil; nil; nil; nil;
          [|[Uchar.unsafe_of_int 0x10D0;]; [Uchar.unsafe_of_int 0x10D1;];
            [Uchar.unsafe_of_int 0x10D2;]; [Uchar.unsafe_of_int 0x10D3;];
            [Uchar.unsafe_of_int 0x10D4;]; [Uchar.unsafe_of_int 0x10D5;];
@@ -2108,14 +2073,10 @@ let lower_map_map : Uchar.t list t =
          [|[Uchar.unsafe_of_int 0xA7C1;]; []; [Uchar.unsafe_of_int 0xA7C3;];
            []; [Uchar.unsafe_of_int 0xA794;]; [Uchar.unsafe_of_int 0x0282;];
            [Uchar.unsafe_of_int 0x1D8E;]; [Uchar.unsafe_of_int 0xA7C8;]; 
-           []; [Uchar.unsafe_of_int 0xA7CA;]; [];
-           [Uchar.unsafe_of_int 0x0264;]; [Uchar.unsafe_of_int 0xA7CD;]; 
-           []; [Uchar.unsafe_of_int 0xA7CF;]; []|];
-         [|[Uchar.unsafe_of_int 0xA7D1;]; []; [Uchar.unsafe_of_int 0xA7D3;];
-           []; [Uchar.unsafe_of_int 0xA7D5;]; [];
+           []; [Uchar.unsafe_of_int 0xA7CA;]; []; []; []; []; []; []|];
+         [|[Uchar.unsafe_of_int 0xA7D1;]; []; []; []; []; [];
            [Uchar.unsafe_of_int 0xA7D7;]; []; [Uchar.unsafe_of_int 0xA7D9;];
-           []; [Uchar.unsafe_of_int 0xA7DB;]; [];
-           [Uchar.unsafe_of_int 0x019B;]; []; []; []|];
+           []; []; []; []; []; []; []|];
          nil;
          [|[]; []; []; []; []; [Uchar.unsafe_of_int 0xA7F6;]; []; []; 
            []; []; []; []; []; []; []; []|];
@@ -2267,23 +2228,10 @@ let lower_map_map : Uchar.t list t =
          [|[Uchar.unsafe_of_int 0x10CF0;]; [Uchar.unsafe_of_int 0x10CF1;];
            [Uchar.unsafe_of_int 0x10CF2;]; []; []; []; []; []; []; []; 
            []; []; []; []; []; []|];
-         nil; nil; nil; nil; nil; nil; nil; nil; nil;
-         [|[Uchar.unsafe_of_int 0x10D70;]; [Uchar.unsafe_of_int 0x10D71;];
-           [Uchar.unsafe_of_int 0x10D72;]; [Uchar.unsafe_of_int 0x10D73;];
-           [Uchar.unsafe_of_int 0x10D74;]; [Uchar.unsafe_of_int 0x10D75;];
-           [Uchar.unsafe_of_int 0x10D76;]; [Uchar.unsafe_of_int 0x10D77;];
-           [Uchar.unsafe_of_int 0x10D78;]; [Uchar.unsafe_of_int 0x10D79;];
-           [Uchar.unsafe_of_int 0x10D7A;]; [Uchar.unsafe_of_int 0x10D7B;];
-           [Uchar.unsafe_of_int 0x10D7C;]; [Uchar.unsafe_of_int 0x10D7D;];
-           [Uchar.unsafe_of_int 0x10D7E;]; [Uchar.unsafe_of_int 0x10D7F;]|];
-         [|[Uchar.unsafe_of_int 0x10D80;]; [Uchar.unsafe_of_int 0x10D81;];
-           [Uchar.unsafe_of_int 0x10D82;]; [Uchar.unsafe_of_int 0x10D83;];
-           [Uchar.unsafe_of_int 0x10D84;]; [Uchar.unsafe_of_int 0x10D85;];
-           []; []; []; []; []; []; []; []; []; []|];
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
-         nil; nil|];
+         nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil|];
        [|nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
@@ -2355,22 +2303,8 @@ let lower_map_map : Uchar.t list t =
            [Uchar.unsafe_of_int 0x16E7A;]; [Uchar.unsafe_of_int 0x16E7B;];
            [Uchar.unsafe_of_int 0x16E7C;]; [Uchar.unsafe_of_int 0x16E7D;];
            [Uchar.unsafe_of_int 0x16E7E;]; [Uchar.unsafe_of_int 0x16E7F;]|];
-         nil; nil; nil; nil;
-         [|[Uchar.unsafe_of_int 0x16EBB;]; [Uchar.unsafe_of_int 0x16EBC;];
-           [Uchar.unsafe_of_int 0x16EBD;]; [Uchar.unsafe_of_int 0x16EBE;];
-           [Uchar.unsafe_of_int 0x16EBF;]; [Uchar.unsafe_of_int 0x16EC0;];
-           [Uchar.unsafe_of_int 0x16EC1;]; [Uchar.unsafe_of_int 0x16EC2;];
-           [Uchar.unsafe_of_int 0x16EC3;]; [Uchar.unsafe_of_int 0x16EC4;];
-           [Uchar.unsafe_of_int 0x16EC5;]; [Uchar.unsafe_of_int 0x16EC6;];
-           [Uchar.unsafe_of_int 0x16EC7;]; [Uchar.unsafe_of_int 0x16EC8;];
-           [Uchar.unsafe_of_int 0x16EC9;]; [Uchar.unsafe_of_int 0x16ECA;]|];
-         [|[Uchar.unsafe_of_int 0x16ECB;]; [Uchar.unsafe_of_int 0x16ECC;];
-           [Uchar.unsafe_of_int 0x16ECD;]; [Uchar.unsafe_of_int 0x16ECE;];
-           [Uchar.unsafe_of_int 0x16ECF;]; [Uchar.unsafe_of_int 0x16ED0;];
-           [Uchar.unsafe_of_int 0x16ED1;]; [Uchar.unsafe_of_int 0x16ED2;];
-           [Uchar.unsafe_of_int 0x16ED3;]; []; []; []; []; []; []; []|];
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
-         nil; nil; nil; nil; nil; nil; nil|];
+         nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil|];
        nil; nil; nil; nil; nil; nil; nil;
        [|nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
@@ -2523,9 +2457,8 @@ let title_map_map : Uchar.t list t =
            [Uchar.unsafe_of_int 0x018B;]; []; []; []|];
          [|[]; []; [Uchar.unsafe_of_int 0x0191;]; []; [];
            [Uchar.unsafe_of_int 0x01F6;]; []; []; [];
-           [Uchar.unsafe_of_int 0x0198;]; [Uchar.unsafe_of_int 0x023D;];
-           [Uchar.unsafe_of_int 0xA7DC;]; []; [];
-           [Uchar.unsafe_of_int 0x0220;]; []|];
+           [Uchar.unsafe_of_int 0x0198;]; [Uchar.unsafe_of_int 0x023D;]; 
+           []; []; []; [Uchar.unsafe_of_int 0x0220;]; []|];
          [|[]; [Uchar.unsafe_of_int 0x01A0;]; [];
            [Uchar.unsafe_of_int 0x01A2;]; []; [Uchar.unsafe_of_int 0x01A4;];
            []; []; [Uchar.unsafe_of_int 0x01A7;]; []; []; []; [];
@@ -2590,7 +2523,7 @@ let title_map_map : Uchar.t list t =
            []; [Uchar.unsafe_of_int 0x0190;]; [Uchar.unsafe_of_int 0xA7AB;];
            []; []; []|];
          [|[Uchar.unsafe_of_int 0x0193;]; [Uchar.unsafe_of_int 0xA7AC;]; 
-           []; [Uchar.unsafe_of_int 0x0194;]; [Uchar.unsafe_of_int 0xA7CB;];
+           []; [Uchar.unsafe_of_int 0x0194;]; [];
            [Uchar.unsafe_of_int 0xA78D;]; [Uchar.unsafe_of_int 0xA7AA;]; 
            []; [Uchar.unsafe_of_int 0x0197;]; [Uchar.unsafe_of_int 0x0196;];
            [Uchar.unsafe_of_int 0xA7AE;]; [Uchar.unsafe_of_int 0x2C62;];
@@ -2818,8 +2751,7 @@ let title_map_map : Uchar.t list t =
            [Uchar.unsafe_of_int 0x041E;]; [Uchar.unsafe_of_int 0x0421;];
            [Uchar.unsafe_of_int 0x0422;]; [Uchar.unsafe_of_int 0x0422;];
            [Uchar.unsafe_of_int 0x042A;]; [Uchar.unsafe_of_int 0x0462;];
-           [Uchar.unsafe_of_int 0xA64A;]; []; [Uchar.unsafe_of_int 0x1C89;];
-           []; []; []; []; []|];
+           [Uchar.unsafe_of_int 0xA64A;]; []; []; []; []; []; []; []|];
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
          nil;
          [|[]; []; []; []; []; []; []; []; []; [Uchar.unsafe_of_int 0xA77D;];
@@ -3262,13 +3194,10 @@ let title_map_map : Uchar.t list t =
          [|[]; [Uchar.unsafe_of_int 0xA7C0;]; [];
            [Uchar.unsafe_of_int 0xA7C2;]; []; []; []; [];
            [Uchar.unsafe_of_int 0xA7C7;]; []; [Uchar.unsafe_of_int 0xA7C9;];
-           []; []; [Uchar.unsafe_of_int 0xA7CC;]; [];
-           [Uchar.unsafe_of_int 0xA7CE;]|];
-         [|[]; [Uchar.unsafe_of_int 0xA7D0;]; [];
-           [Uchar.unsafe_of_int 0xA7D2;]; []; [Uchar.unsafe_of_int 0xA7D4;];
-           []; [Uchar.unsafe_of_int 0xA7D6;]; [];
-           [Uchar.unsafe_of_int 0xA7D8;]; []; [Uchar.unsafe_of_int 0xA7DA;];
-           []; []; []; []|];
+           []; []; []; []; []|];
+         [|[]; [Uchar.unsafe_of_int 0xA7D0;]; []; []; []; []; [];
+           [Uchar.unsafe_of_int 0xA7D6;]; []; [Uchar.unsafe_of_int 0xA7D8;];
+           []; []; []; []; []; []|];
          nil;
          [|[]; []; []; []; []; []; [Uchar.unsafe_of_int 0xA7F5;]; []; 
            []; []; []; []; []; []; []; []|];
@@ -3484,22 +3413,10 @@ let title_map_map : Uchar.t list t =
          [|[Uchar.unsafe_of_int 0x10CB0;]; [Uchar.unsafe_of_int 0x10CB1;];
            [Uchar.unsafe_of_int 0x10CB2;]; []; []; []; []; []; []; []; 
            []; []; []; []; []; []|];
-         nil; nil; nil; nil; nil; nil; nil;
-         [|[Uchar.unsafe_of_int 0x10D50;]; [Uchar.unsafe_of_int 0x10D51;];
-           [Uchar.unsafe_of_int 0x10D52;]; [Uchar.unsafe_of_int 0x10D53;];
-           [Uchar.unsafe_of_int 0x10D54;]; [Uchar.unsafe_of_int 0x10D55;];
-           [Uchar.unsafe_of_int 0x10D56;]; [Uchar.unsafe_of_int 0x10D57;];
-           [Uchar.unsafe_of_int 0x10D58;]; [Uchar.unsafe_of_int 0x10D59;];
-           [Uchar.unsafe_of_int 0x10D5A;]; [Uchar.unsafe_of_int 0x10D5B;];
-           [Uchar.unsafe_of_int 0x10D5C;]; [Uchar.unsafe_of_int 0x10D5D;];
-           [Uchar.unsafe_of_int 0x10D5E;]; [Uchar.unsafe_of_int 0x10D5F;]|];
-         [|[Uchar.unsafe_of_int 0x10D60;]; [Uchar.unsafe_of_int 0x10D61;];
-           [Uchar.unsafe_of_int 0x10D62;]; [Uchar.unsafe_of_int 0x10D63;];
-           [Uchar.unsafe_of_int 0x10D64;]; [Uchar.unsafe_of_int 0x10D65;];
-           []; []; []; []; []; []; []; []; []; []|];
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
-         nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil|];
+         nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
+         nil; nil; nil; nil; nil; nil; nil; nil; nil|];
        [|nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
@@ -3571,24 +3488,8 @@ let title_map_map : Uchar.t list t =
            [Uchar.unsafe_of_int 0x16E5A;]; [Uchar.unsafe_of_int 0x16E5B;];
            [Uchar.unsafe_of_int 0x16E5C;]; [Uchar.unsafe_of_int 0x16E5D;];
            [Uchar.unsafe_of_int 0x16E5E;]; [Uchar.unsafe_of_int 0x16E5F;]|];
-         nil; nil; nil;
-         [|[]; []; []; []; []; []; []; []; []; []; [];
-           [Uchar.unsafe_of_int 0x16EA0;]; [Uchar.unsafe_of_int 0x16EA1;];
-           [Uchar.unsafe_of_int 0x16EA2;]; [Uchar.unsafe_of_int 0x16EA3;];
-           [Uchar.unsafe_of_int 0x16EA4;]|];
-         [|[Uchar.unsafe_of_int 0x16EA5;]; [Uchar.unsafe_of_int 0x16EA6;];
-           [Uchar.unsafe_of_int 0x16EA7;]; [Uchar.unsafe_of_int 0x16EA8;];
-           [Uchar.unsafe_of_int 0x16EA9;]; [Uchar.unsafe_of_int 0x16EAA;];
-           [Uchar.unsafe_of_int 0x16EAB;]; [Uchar.unsafe_of_int 0x16EAC;];
-           [Uchar.unsafe_of_int 0x16EAD;]; [Uchar.unsafe_of_int 0x16EAE;];
-           [Uchar.unsafe_of_int 0x16EAF;]; [Uchar.unsafe_of_int 0x16EB0;];
-           [Uchar.unsafe_of_int 0x16EB1;]; [Uchar.unsafe_of_int 0x16EB2;];
-           [Uchar.unsafe_of_int 0x16EB3;]; [Uchar.unsafe_of_int 0x16EB4;]|];
-         [|[Uchar.unsafe_of_int 0x16EB5;]; [Uchar.unsafe_of_int 0x16EB6;];
-           [Uchar.unsafe_of_int 0x16EB7;]; [Uchar.unsafe_of_int 0x16EB8;];
-           []; []; []; []; []; []; []; []; []; []; []; []|];
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
-         nil; nil; nil; nil; nil|];
+         nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil|];
        nil; nil; nil; nil; nil; nil; nil;
        [|nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
          nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil; nil;
@@ -3650,3 +3551,19 @@ let title_map_map : Uchar.t list t =
        nil; nil; nil|] }
 
 
+
+(*---------------------------------------------------------------------------
+   Copyright (c) 2020 The uucp programmers
+
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
+
+   THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+   WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+   MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+   ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+   WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+   ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+  ---------------------------------------------------------------------------*)

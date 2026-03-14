@@ -19,6 +19,7 @@ module Kind : sig
     | Impl_vmodule
     | Wrapped_compat
     | Root
+    | Parameter
 
   include Dune_lang.Conv.S with type t := t
 
@@ -30,7 +31,7 @@ module Source : sig
   type t
 
   val name : t -> Module_name.t
-  val make : ?impl:File.t -> ?intf:File.t -> Module_name.Path.t -> t
+  val make : impl:File.t option -> intf:File.t option -> Module_name.Path.t -> t
   val has : t -> ml_kind:Ml_kind.t -> bool
   val files : t -> File.t list
   val path : t -> Module_name.Path.t
@@ -87,6 +88,7 @@ end
 
 val sources : t -> Path.t list
 val sources_without_pp : t -> Path.t list
+val source_without_pp : ml_kind:Ml_kind.t -> t -> Path.t option
 val visibility : t -> Visibility.t
 val encode : t -> src_dir:Path.t -> Dune_lang.t list
 val decode : src_dir:Path.t -> t Dune_lang.Decoder.t

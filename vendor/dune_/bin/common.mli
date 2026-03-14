@@ -3,6 +3,8 @@ open Stdune
 
 type t
 
+(* [x t] returns the [Context_name.t] of of the cross-compilation context, if
+  there is any *)
 val x : t -> Dune_engine.Context_name.t option
 val capture_outputs : t -> bool
 val root : t -> Workspace_root.t
@@ -15,7 +17,7 @@ val rpc
      ]
 
 val watch_exclusions : t -> string list
-val stats : t -> Dune_stats.t option
+val stats : t -> Dune_trace.t option
 val print_metrics : t -> bool
 val dump_memo_graph_file : t -> Path.External.t option
 val dump_memo_graph_format : t -> Dune_graph.Graph.File_format.t
@@ -34,7 +36,7 @@ module Builder : sig
   val forbid_builds : t -> t
   val default_root_is_cwd : t -> bool
   val set_default_root_is_cwd : t -> bool -> t
-  val set_log_file : t -> Dune_util.Log.File.t -> t
+  val set_log_file : t -> Log.File.t -> t
   val disable_log_file : t -> t
   val set_promote : t -> Dune_engine.Clflags.Promote.t -> t
   val default_target : t -> Arg.Dep.t
@@ -42,12 +44,19 @@ module Builder : sig
   val default : t
 end
 
-(** [init] creates a [Common.t] by executing a sequence of side-effecting actions to
-    initialize Dune's working environment based on the options determined in the\
-    [Builder.t].
+(** [init_with_root] creates a [Common.t] by executing a sequence of
+    side-effecting actions to initialize Dune's working environment based on the
+    options determined in the\ [Builder.t].
 
     Return the [Common.t] and the final configuration, which is the same as the one
     returned in the [config] field of [Dune_rules.Workspace.workspace ()]) *)
+val init_with_root
+  :  root:Workspace_root.t
+  -> Builder.t
+  -> t * Dune_config_file.Dune_config.t
+
+(** [init] is like [init_with_root], where [root] is the Workspace root
+    corresponding to the current working directory. *)
 val init : Builder.t -> t * Dune_config_file.Dune_config.t
 
 (** [examples [("description", "dune cmd foo"); ...]] is an [EXAMPLES] manpage
@@ -66,7 +75,7 @@ val envs : Cmdliner.Cmd.Env.info list
 val debug_backtraces : bool Cmdliner.Term.t
 val config_from_config_file : Dune_config.Partial.t Cmdliner.Term.t
 val display_term : Dune_config.Display.t option Cmdliner.Term.t
-val context_arg : doc:string -> Dune_engine.Context_name.t Cmdliner.Term.t
+val context_arg : doc:string option -> Dune_engine.Context_name.t Cmdliner.Term.t
 
 (** A [--build-info] command line argument that print build information
     (included in [term]) *)

@@ -1,0 +1,4 @@
+(library
+  (public_name cmarkit)
+  (flags :standard -w -9-27-30-35-32)
+  (wrapped false))

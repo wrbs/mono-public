@@ -71,11 +71,12 @@ type t =
       -> src:Path.Build.t
       -> dst:Path.Source.t
       -> unit Fiber.t
-  ; stats : Dune_stats.t option
+  ; stats : Dune_trace.t option
   ; cache_config : Dune_cache.Config.t
   ; cache_debug_flags : Cache_debug_flags.t
   ; implicit_default_alias : Path.Build.t -> unit Action_builder.t option Memo.t
-  ; execution_parameters : dir:Path.Build.t -> Execution_parameters.t Memo.t
+  ; execution_parameters :
+      Context_name.t -> dir:Path.Build.t -> Execution_parameters.t Memo.t
   ; source_tree : (module Source_tree)
   ; shared_cache : (module Dune_cache.Shared.S)
   ; write_error_summary : Build_system_error.Set.t -> unit Fiber.t

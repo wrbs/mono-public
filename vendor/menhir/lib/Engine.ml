@@ -123,31 +123,13 @@ module Make (T : TABLE) = struct
 
   (* ------------------------------------------------------------------------ *)
 
-  (* In the code-based back-end, the [run] function is sometimes responsible
-     for pushing a new cell on the stack. This is motivated by code sharing
-     concerns. In this interpreter, there is no such concern; [run]'s caller
-     is always responsible for updating the stack. *)
+  (* In this interpreter, the caller of [run] is responsible for updating the
+     stack. *)
 
-  (* In the code-based back-end, there is a [run] function for each state
-     [s]. This function can behave in two slightly different ways, depending
-     on when it is invoked, or (equivalently) depending on [s].
-
-     If [run] is invoked after shifting a terminal symbol (or, equivalently,
-     if [s] has a terminal incoming symbol), then [run] discards a token,
-     unless [s] has a default reduction on [#]. (Indeed, in that case,
-     requesting the next token might drive the lexer off the end of the input
-     stream.)
-
-     If, on the other hand, [run] is invoked after performing a goto
-     transition, or invoked directly by an entry point, then there is nothing
-     to discard.
-
-     These two cases are reflected in [CodeBackend.gettoken].
-
-     Here, the code is structured in a slightly different way. It is up to the
-     caller of [run] to indicate whether to discard a token, via the parameter
-     [please_discard]. This flag is set when [s] is being entered by shifting
-     a terminal symbol and [s] does not have a default reduction on [#]. *)
+  (* It is also up to the caller of [run] to indicate whether to discard a
+     token, via the parameter [please_discard]. This flag is set when [s] is
+     being entered by shifting a terminal symbol and [s] does not have a
+     default reduction on [#]. *)
 
   (* The following recursive group of functions are tail recursive, produce a
      checkpoint of type [semantic_value checkpoint], and cannot raise an
@@ -185,9 +167,7 @@ module Make (T : TABLE) = struct
 
   and check_for_default_reduction env =
 
-    (* Examine what situation we are in. This case analysis is analogous to
-       that performed in [CodeBackend.gettoken], in the sub-case where we do
-       not have a terminal incoming symbol. *)
+    (* Examine what situation we are in. *)
 
     T.default_reduction
       env.current
@@ -743,51 +723,10 @@ module Make (T : TABLE) = struct
      value associated with (the incoming symbol of) this state. Note that the
      type [element] is an existential type. *)
 
-  (* As of 2017/03/31, the type [stack] and the function [stack] are DEPRECATED.
-     If desired, they could now be implemented outside Menhir, by relying on
-     the functions [top] and [pop]. *)
+  (* Access to the stack is offered by the functions [top] and [pop]. *)
 
   type element =
     | Element: 'a lr1state * 'a * position * position -> element
-
-  open General
-
-  type stack =
-    element stream
-
-  (* If [current] is the current state and [cell] is the top stack cell,
-     then [stack cell current] is a view of the parser's state as a stream
-     of elements. *)
-
-  let rec stack cell current : element stream =
-    lazy (
-      (* The stack is empty iff the top stack cell is its own successor. In
-         that case, the current state [current] should be an initial state
-         (which has no incoming symbol).
-         We do not allow the user to inspect this state. *)
-      let next = cell.next in
-      if next == cell then
-        Nil
-      else
-        (* Construct an element containing the current state [current] as well
-           as the semantic value contained in the top stack cell. This semantic
-           value is associated with the incoming symbol of this state, so it
-           makes sense to pair them together. The state has type ['a state] and
-           the semantic value has type ['a], for some type ['a]. Here, the OCaml
-           type-checker thinks ['a] is [semantic_value] and considers this code
-           well-typed. Outside, we will use magic to provide the user with a way
-           of inspecting states and recovering the value of ['a]. *)
-        let element = Element (
-          current,
-          cell.semv,
-          cell.startp,
-          cell.endp
-        ) in
-        Cons (element, stack next cell.state)
-    )
-
-  let stack env : element stream =
-    stack env.stack env.current
 
   (* As explained above, the function [top] allows access to the top stack
      element only if the stack is nonempty, i.e., only if the current state
@@ -797,8 +736,21 @@ module Make (T : TABLE) = struct
     let cell = env.stack in
     let next = cell.next in
     if next == cell then
+      (* The stack is empty iff the top stack cell is its own successor. In
+         that case, the current state [current] should be an initial state
+         (which has no incoming symbol). We do not allow the user to inspect
+         this state. *)
       None
     else
+      (* Construct an element containing the current state [env.current], the
+         semantic value contained in the top stack cell, and a pair of
+         positions. The semantic value is associated with the incoming symbol
+         of this state, so it makes sense to pair them together. The state has
+         type ['a state] and the semantic value has type ['a], for some type
+         ['a]. Here, the OCaml type-checker thinks ['a] is [semantic_value]
+         and considers this code well-typed. Outside, we will use magic to
+         provide the user with a way of inspecting states and recovering the
+         value of ['a]. *)
       Some (Element (env.current, cell.semv, cell.startp, cell.endp))
 
   (* [equal] compares the stacks for physical equality, and compares the

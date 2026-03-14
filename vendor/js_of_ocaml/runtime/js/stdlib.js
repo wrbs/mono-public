@@ -287,7 +287,7 @@ function caml_register_global(n, v, name_opt) {
 
 //Provides: caml_get_global_data mutable
 //Requires: caml_global_data
-function caml_get_global_data() {
+function caml_get_global_data(_unit) {
   return caml_global_data;
 }
 
@@ -297,6 +297,14 @@ function caml_is_printable(c) {
 }
 
 //Provides: caml_maybe_print_stats
-function caml_maybe_print_stats(unit) {
+function caml_maybe_print_stats(_unit) {
   return 0;
+}
+
+//Provides: caml_with_async_exns
+//Requires: caml_callback
+//Version: >= 5.2, < 5.3
+//OxCaml
+function caml_with_async_exns(body_callback) {
+  return caml_callback(body_callback, [0]);
 }

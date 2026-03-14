@@ -151,7 +151,7 @@ type constant =
   | Int64 of Int64.t
   | NativeInt of Int32.t  (** Only produced when compiling to WebAssembly. *)
   | Tuple of int * constant array * array_or_not
-  | Null
+  | Null_
 
 module Constant : sig
   type t = constant
@@ -240,10 +240,9 @@ module Print : sig
 
   val instr : Format.formatter -> instr -> unit
 
-  val block :
-    Format.formatter -> (Addr.Map.key -> xinstr -> string) -> int -> block -> unit
+  val block : Format.formatter -> (Addr.t -> xinstr -> string) -> int -> block -> unit
 
-  val program : Format.formatter -> (Addr.Map.key -> xinstr -> string) -> program -> unit
+  val program : Format.formatter -> (Addr.t -> xinstr -> string) -> program -> unit
 
   val last : Format.formatter -> last -> unit
 
@@ -292,6 +291,8 @@ val fold_children : 'c fold_blocs
 val fold_children_skip_try_body : 'c fold_blocs
 
 val poptraps : block Addr.Map.t -> Addr.t -> Addr.Set.t
+
+val return_values : program -> Var.Set.t Var.Map.t
 
 val traverse :
   fold_blocs_poly -> (Addr.t -> 'c -> 'c) -> Addr.t -> block Addr.Map.t -> 'c -> 'c

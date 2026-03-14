@@ -637,6 +637,9 @@ module Tmachine : sig
 
   val refresh  : t -> unit
   val cursor   : t -> (int * int * cursor) option -> unit
+  val set_title: t -> string -> unit
+  val save_title : t -> unit
+  val restore_title : t -> unit
   val image    : t -> image -> unit
 
   val set_size : t -> int * int -> unit

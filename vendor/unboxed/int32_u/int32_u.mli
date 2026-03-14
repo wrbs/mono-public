@@ -440,7 +440,8 @@ module Stable : sig
     val sexp_of_t : t -> Sexp.t
     val t_of_sexp : Sexp.t -> t
 
-    include Bin_prot.Binable.S with type t := t
+    include%template Bin_prot.Binable.S [@mode local] with type t := t
+
     include Ppx_hash_lib.Hashable.S_any with type t := t
 
     val typerep_of_t : t Typerep_lib.Std.Typerep.t

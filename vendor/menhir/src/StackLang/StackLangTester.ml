@@ -12,6 +12,9 @@ open Printf
 open Grammar
 open StackLang
 
+module R =
+  ReferenceInterpreter.Make(Lr1)(Settings)
+
 let debug = false
 
 (* -------------------------------------------------------------------------- *)
@@ -39,27 +42,21 @@ let print_outcome = function
 
 (* -------------------------------------------------------------------------- *)
 
-(* [run_reference sentence] uses the reference interpreter to parse the
+(* [run_reference nt sentence] uses the reference interpreter to parse the
    sentence [sentence]. It returns a pair of an outcome and the length
    of the trace (regardless of whether the trace is actually visible). *)
 
 let run_reference nt sentence : outcome * int =
-  let lexer, lexbuf = Interpret.stream sentence in
+  let module T = TerminalStream.Make(Grammar) in
+  let lexer, lexbuf = T.stream sentence in
   let count = ref 0 in
-  let module Log =
-    Logging.Make(struct
-      let show = Settings.trace
-      let count = count
-    end)
-  in
-  let log = (module Log : Logging.LOG) in
   let outcome =
-    match ReferenceInterpreter.interpret nt log lexer lexbuf with
+    match R.interpret count nt lexer lexbuf with
     | Some _cst ->
         Accepted
     | None ->
         Rejected
-    | exception Interpret.EndOfStream ->
+    | exception T.EndOfStream ->
         Overshoot
     | exception e ->
         Crash e
@@ -73,7 +70,8 @@ let run_reference nt sentence : outcome * int =
 exception BoundExceeded
 
 let run_candidate candidate bound sentence : outcome * int =
-  let lexer, lexbuf = Interpret.stream sentence in
+  let module T = TerminalStream.Make(Grammar) in
+  let lexer, lexbuf = T.stream sentence in
   let count = ref 0 in
   let log s =
     if Settings.trace then prerr_string s;
@@ -91,7 +89,7 @@ let run_candidate candidate bound sentence : outcome * int =
         Rejected
     | exception BoundExceeded ->
         TraceTooLong bound
-    | exception Interpret.EndOfStream ->
+    | exception T.EndOfStream ->
         Overshoot
     | exception e ->
         Crash e
@@ -147,8 +145,8 @@ let test m program nt sentence =
 
 (* -------------------------------------------------------------------------- *)
 
-(* [test program nt sentence] tests the program [program] with the start
-   symbol [nt] and with a number of sentences. *)
+(* [test program nt] tests the program [program] with the start symbol [nt]
+   and with a number of sentences. *)
 
 (* We sample sentences of increasing sizes, picking at most [k] sentences of
    each size, until a certain size threshold is reached. The current settings
@@ -161,7 +159,7 @@ let test program nt =
     eprintf
       "StackLangTester: about to test start symbol %s...\n%!"
       (Nonterminal.print false nt);
-  (* Sample sentences of increasing sizes, picking at most [m] sentences
+  (* Sample sentences of increasing sizes, picking at most [k] sentences
      of each size, until a total of [n] sentences is reached or the size
      threshold is reached. *)
   let m = StackLangMeasure.zero() in
@@ -170,7 +168,8 @@ let test program nt =
   let total = ref 0 in
   while !size < threshold do
     for _ = 1 to k do
-      let sentence = RandomSentenceGenerator.nonterminal nt !size in
+      let module R = RandomSentenceGenerator.Make(Grammar) in
+      let sentence = R.nonterminal nt !size in
       test m program nt sentence;
       total := !total + List.length sentence;
     done;
@@ -195,12 +194,11 @@ let test program nt =
 
 (* -------------------------------------------------------------------------- *)
 
-(* [test program nt sentence] tests the program [program]. *)
+(* [test program] tests the program [program]. *)
 
 let test program =
+  Time.time "Testing the StackLang program" @@ fun () ->
   (* For each start symbol [nt], test this entry point. *)
-  Lr1.entry |> ProductionMap.iter begin fun _prod s ->
-    let nt = Lr1.nt_of_entry s in
-    test program nt
-  end;
-  Time.tick "Testing the StackLang program"
+  Lr1.entry |> ProductionMap.iter @@ fun _prod s ->
+  let nt = Lr1.get_start s in
+  test program nt

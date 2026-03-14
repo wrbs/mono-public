@@ -1,6 +1,6 @@
 (library
  (name portable_ws_deque_test)
- (libraries await await.blocking base concurrent concurrent.in_thread
+ (libraries await await.blocking base concurrent concurrent.in_thread core
    expect_test_helpers_core.expect_test_helpers_base
    core_kernel.nonempty_list portable portable.test_helpers portable_ws_deque
    threads)

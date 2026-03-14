@@ -18,6 +18,7 @@
 ///////////// Array
 
 //Provides: caml_array_sub mutable
+//Alias: caml_array_sub_local
 function caml_array_sub(a, i, len) {
   var a2 = new Array(len + 1);
   a2[0] = 0;
@@ -41,13 +42,8 @@ function caml_uniform_array_sub(a, i, len) {
   return caml_array_sub(a, i, len);
 }
 
-//Provides: caml_array_sub_local mutable
-//Requires: caml_array_sub
-function caml_array_sub_local(a, i, len) {
-  return caml_array_sub(a, i, len);
-}
-
 //Provides: caml_array_append mutable
+//Alias: caml_array_append_local
 function caml_array_append(a1, a2) {
   var l1 = a1.length,
     l2 = a2.length;
@@ -59,12 +55,6 @@ function caml_array_append(a1, a2) {
   for (; i < l1; i++) a[i] = a1[i];
   for (; i < l; i++, j++) a[i] = a2[j];
   return a;
-}
-
-//Provides: caml_array_append_local mutable
-//Requires: caml_array_append
-function caml_array_append_local(a1, a2) {
-  return caml_array_append(a1, a2);
 }
 
 //Provides: caml_floatarray_append mutable
@@ -82,7 +72,32 @@ function caml_uniform_array_append(a1, a2) {
 }
 
 //Provides: caml_array_concat mutable
+//Alias: caml_array_concat_local
 function caml_array_concat(l) {
+  var a = [0];
+  while (l !== 0) {
+    var b = l[1];
+    for (var i = 1; i < b.length; i++) a.push(b[i]);
+    l = l[2];
+  }
+  return a;
+}
+
+//Provides: caml_floatarray_concat mutable
+//Version: >= 5.4
+function caml_floatarray_concat(l) {
+  var a = [0];
+  while (l !== 0) {
+    var b = l[1];
+    for (var i = 1; i < b.length; i++) a.push(b[i]);
+    l = l[2];
+  }
+  return a;
+}
+
+//Provides: caml_uniform_array_concat mutable
+//Version: >= 5.4
+function caml_uniform_array_concat(l) {
   var a = [0];
   while (l !== 0) {
     var b = l[1];
@@ -186,22 +201,6 @@ function caml_array_make(len, init) {
   return b;
 }
 
-//Provides: caml_floatarray_create_local const (const)
-//Requires: caml_floatarray_create
-function caml_floatarray_create_local(x) {
-  return caml_floatarray_create(x);
-}
-
-// Provides: caml_iarray_of_array const
-function caml_iarray_of_array(a) {
-  return a;
-}
-
-// Provides: caml_array_of_iarray const
-function caml_array_of_iarray(a) {
-  return a;
-}
-
 //Provides: caml_make_vect const (const, mutable)
 //Requires: caml_array_make
 function caml_make_vect(len, init) {
@@ -232,6 +231,7 @@ function caml_array_create_float(len) {
 }
 //Provides: caml_floatarray_create const (const)
 //Requires: caml_array_bound_error
+//Alias: caml_floatarray_create_local
 function caml_floatarray_create(len) {
   if (len >>> 0 >= ((0x7fffffff / 8) | 0)) caml_array_bound_error();
   var len = (len + 1) | 0;

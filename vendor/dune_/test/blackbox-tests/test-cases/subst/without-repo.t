@@ -21,7 +21,7 @@ there is no vcs
   > (version 0.1)
   > EOF
 
-  $ echo "3.20.2" > README.md
+  $ echo "3.21.0" > README.md
 
   $ dune subst
 

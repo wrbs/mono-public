@@ -1,6 +1,6 @@
 (*---------------------------------------------------------------------------
    Copyright (c) 2014 The uucp programmers. All rights reserved.
-   SPDX-License-Identifier: ISC
+   Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
 let log fmt = Format.eprintf (fmt ^^ "%!")
@@ -27,16 +27,6 @@ let uchar_iter_ints f =
     if Uchar.equal u Uchar.max then () else loop (Uchar.succ u) f
   in
   loop Uchar.min f
-
-(* Generate the Unicode version *)
-
-let pp_version ppf ucd =
-  let version = match String.split_on_char ' ' ucd.Uucd.description with
-  | [tok] -> tok
-  | [_; tok] -> tok
-  | _ -> ucd.Uucd.description
-  in
-  pp ppf "@[<2>let unicode_version = \"%s\"@]@\n@\n" version
 
 (* Property lookup *)
 
@@ -255,17 +245,48 @@ let pp_tmap5byte ppf pname m =
     (Uucp_tmap5bytes.dump_pp pp_v) m;
   ()
 
-(* Generate a module *)
 
-let year = (Unix.gmtime (Unix.gettimeofday ())).Unix.tm_year + 1900
+(* Generate a module *)
 
 let pp_mod pp_mod ppf m =
   pp ppf
 "\
 (*---------------------------------------------------------------------------
-   Copyright (c) %d The uucp programmers. All rights reserved.
-   SPDX-License-Identifier: ISC
+   Copyright (c) 2020 The uucp programmers. All rights reserved.
+   Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
 (* WARNING do not edit. This file was automatically generated. *)
-@\n@[%a@]@\n" year pp_mod m
+@\n@[%a@]@\n
+(*---------------------------------------------------------------------------
+   Copyright (c) 2020 The uucp programmers
+
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
+
+   THE SOFTWARE IS PROVIDED \"AS IS\" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+   WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+   MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+   ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+   WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+   ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+  ---------------------------------------------------------------------------*)
+" pp_mod m
+
+(*---------------------------------------------------------------------------
+   Copyright (c) 2014 The uucp programmers
+
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
+
+   THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+   WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+   MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+   ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+   WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+   ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+  ---------------------------------------------------------------------------*)

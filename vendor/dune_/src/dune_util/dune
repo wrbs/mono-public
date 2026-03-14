@@ -2,15 +2,14 @@
  (name dune_util)
  (libraries
   stdune
-  dune_stats
-  chrome_trace
+  dune_console
+  dune_trace
   xdg
   dyn
   ordering
   pp
-  dune_console
   build_path_prefix_map
   dune_sexp
   dune_config
   memo
-  (re_export unix)))
+  unix))

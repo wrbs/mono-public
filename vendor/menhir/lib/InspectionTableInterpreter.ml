@@ -55,17 +55,6 @@ module Make
 
   include IT
 
-  (* This auxiliary function decodes a packed linearized array, as created by
-     [TableBackend.linearize_and_marshal1]. Here, we read a row all at once. *)
-
-  let read_packed_linearized
-    (data, entry : PackedIntArray.t * PackedIntArray.t) (i : int) : int list
-  =
-    LinearizedArray.read_row_via
-      (PackedIntArray.get data)
-      (PackedIntArray.get entry)
-      i
-
   (* This auxiliary function decodes a symbol. The encoding was done by
      [encode_symbol] or [encode_symbol_option] in the table back-end. *)
 
@@ -89,13 +78,13 @@ module Make
      nonterminal symbols, we add [start] to account for the presence of the
      start symbols. *)
 
-  let n2i (nt : 'a IT.nonterminal) : int =
+  let[@inline] n2i (nt : 'a IT.nonterminal) : int =
     let answer = TT.start + Obj.magic nt in
     (* For safety, check that the above cast produced a correct result. *)
     assert (IT.nonterminal answer = X (N nt));
     answer
 
-  let t2i (t : 'a IT.terminal) : int =
+  let[@inline] t2i (t : 'a IT.terminal) : int =
     let answer = Obj.magic t in
     (* For safety, check that the above cast produced a correct result. *)
     assert (IT.terminal answer = X (T t));
@@ -103,11 +92,11 @@ module Make
 
   (* Ordering functions. *)
 
-  let compare_terminals t1 t2 =
+  let[@inline] compare_terminals t1 t2 =
     (* Subtraction is safe because overflow is impossible. *)
     t2i t1 - t2i t2
 
-  let compare_nonterminals nt1 nt2 =
+  let[@inline] compare_nonterminals nt1 nt2 =
     (* Subtraction is safe because overflow is impossible. *)
     n2i nt1 - n2i nt2
 
@@ -122,7 +111,7 @@ module Make
     | X (N nt1), X (N nt2) ->
         compare_nonterminals nt1 nt2
 
-  let compare_productions prod1 prod2 =
+  let[@inline] compare_productions prod1 prod2 =
     (* Subtraction is safe because overflow is impossible. *)
     prod1 - prod2
 
@@ -139,8 +128,8 @@ module Make
      appropriate choice of ['a]. *)
 
   let incoming_symbol (s : 'a IT.lr1state) : 'a IT.symbol =
-    let core = PackedIntArray.get IT.lr0_core s in
-    let symbol = decode_symbol (PackedIntArray.get IT.lr0_incoming core) in
+    let core = IT.lr0_core s in
+    let symbol = decode_symbol (IT.lr0_incoming core) in
     match symbol with
     | IT.X symbol ->
         Obj.magic symbol
@@ -149,13 +138,13 @@ module Make
      to decode the symbol. *)
 
   let lhs prod =
-    IT.nonterminal (PackedIntArray.get TT.lhs prod)
+    IT.nonterminal (TT.lhs prod)
 
   (* The function [rhs] reads the table [IT.rhs] and uses [decode_symbol]
      to decode the symbol. *)
 
   let rhs prod =
-    List.map decode_symbol (read_packed_linearized IT.rhs prod)
+    List.map decode_symbol (IT.rhs prod)
 
   (* The function [items] maps the LR(1) state [s] to its LR(0) core,
      then uses [core] as an index into the table [IT.lr0_items]. The
@@ -163,7 +152,7 @@ module Make
      essentially a copy of [Item.export]. *)
 
   type item =
-      int * int
+    int * int
 
   let low_bits =
     10
@@ -171,31 +160,31 @@ module Make
   let low_limit =
     1 lsl low_bits
 
-  let export t : item =
+  let[@inline] export t : item =
     (t lsr low_bits, t mod low_limit)
 
   let items s =
     (* Map [s] to its LR(0) core. *)
-    let core = PackedIntArray.get IT.lr0_core s in
+    let core = IT.lr0_core s in
     (* Now use [core] to look up the table [IT.lr0_items]. *)
-    List.map export (read_packed_linearized IT.lr0_items core)
+    List.map export (IT.lr0_items core)
 
   (* The function [nullable] maps the nonterminal symbol [nt] to its
      integer code, which it uses to look up the array [IT.nullable].
      This yields 0 or 1, which we map back to a Boolean result. *)
 
-  let decode_bool i =
+  let[@inline] decode_bool i =
     assert (i = 0 || i = 1);
     i = 1
 
   let nullable nt =
-    decode_bool (PackedIntArray.get1 IT.nullable (n2i nt))
+    decode_bool (IT.nullable (n2i nt))
 
   (* The function [first] maps the symbols [nt] and [t] to their integer
      codes, which it uses to look up the matrix [IT.first]. *)
 
   let first nt t =
-    decode_bool (PackedIntArray.unflatten1 IT.first (n2i nt) (t2i t))
+    decode_bool (IT.first (n2i nt) (t2i t))
 
   let xfirst symbol t =
     match symbol with
@@ -204,10 +193,6 @@ module Make
     | X (N nt) ->
         first nt t
 
-  (* The function [foreach_terminal] exploits the fact that the
-     first component of [TT.error] is [Terminal.n - 1], i.e., the
-     number of terminal symbols, including [error] but not [#]. *)
-
   let rec foldij i j f accu =
     if i = j then
       accu
@@ -215,13 +200,13 @@ module Make
       foldij (i + 1) j f (f i accu)
 
   let foreach_terminal f accu =
-    let n, _ = TT.error in
+    let n = TT.terminal_count in
     foldij 0 n (fun i accu ->
       f (IT.terminal i) accu
     ) accu
 
   let foreach_terminal_but_error f accu =
-    let n, _ = TT.error in
+    let n = TT.terminal_count in
     foldij 0 n (fun i accu ->
       if i = TT.error_terminal then
         accu

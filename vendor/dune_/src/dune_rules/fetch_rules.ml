@@ -139,6 +139,7 @@ module Spec = struct
            ~loc:loc_url
            [ Pp.text "No checksum provided. It should be:"; Checksum.pp actual_checksum ]
        | Some (loc, _) ->
+         let loc = Dune_pkg.Lock_dir.loc_in_source_tree loc in
          User_error.raise
            ~loc
            [ Pp.text "Invalid checksum, got"; Dune_pkg.Checksum.pp actual_checksum ])
@@ -188,14 +189,29 @@ let find_checksum, find_url =
           Dune_pkg.Dev_tool.all
           ~init:(Checksum.Map.empty, Digest.Map.empty)
           ~f:(fun acc dev_tool ->
-            Fs_memo.dir_exists
-              (In_source_dir (Dune_pkg.Lock_dir.dev_tool_lock_dir_path dev_tool))
-            >>= function
+            let dir = Lock_dir.dev_tool_external_lock_dir dev_tool in
+            let exists =
+              (* Note we use [Path.Untracked] here rather than [Fs_memo] because a tool's
+                 lockdir may be generated part way through a build. *)
+              Path.Untracked.exists (Path.external_ dir)
+            in
+            match exists with
             | false -> Memo.return acc
             | true -> Lock_dir.of_dev_tool dev_tool >>| add_checksums_and_urls acc)
       in
       Per_context.list ()
-      >>= Memo.parallel_map ~f:Lock_dir.get
+      >>= Memo.parallel_map ~f:(fun ctx_name ->
+        let* active = Lock_dir.lock_dir_active ctx_name in
+        match active with
+        | true -> Lock_dir.get ctx_name
+        | false ->
+          Memo.return
+          @@ Error
+               (User_message.make
+                  [ Pp.textf
+                      "Context %S has no lock dir"
+                      (Context_name.to_string ctx_name)
+                  ]))
       >>| List.filter_map ~f:Result.to_option
       >>| List.fold_left ~init ~f:add_checksums_and_urls)
   in
@@ -216,6 +232,7 @@ let find_checksum, find_url =
 ;;
 
 let gen_rules_for_checksum_or_url (loc_url, (url : OpamUrl.t)) checksum =
+  let loc_url = Dune_pkg.Lock_dir.loc_in_source_tree loc_url in
   let checksum_or_url =
     match checksum with
     | Some (_, checksum) -> `Checksum checksum
@@ -228,7 +245,6 @@ let gen_rules_for_checksum_or_url (loc_url, (url : OpamUrl.t)) checksum =
   let rules =
     Rules.collect_unit
     @@ fun () ->
-    let* url = resolve_url url in
     (* CR-someday rgrinberg: it's possible to share the downloading step between the
        directory and file actions. Though it's unlikely to be of any use in real
        world situations. *)
@@ -238,11 +254,18 @@ let gen_rules_for_checksum_or_url (loc_url, (url : OpamUrl.t)) checksum =
         Rules.Produce.rule (Rule.make ~info ~targets build)
     in
     let make_target = make_target checksum_or_url in
-    let action ~target ~kind =
-      action ~url:(loc_url, url) ~checksum ~target ~kind
-      |> Action.Full.make ~can_go_in_shared_cache:true
-      |> Action_builder.return
-      |> Action_builder.with_no_targets
+    let action =
+      let url =
+        let open Action_builder.O in
+        let* () = Action_builder.return () in
+        Action_builder.of_memo (resolve_url url)
+      in
+      fun ~target ~kind ->
+        Action_builder.with_no_targets
+          (let open Action_builder.O in
+           let+ url = url in
+           action ~url:(loc_url, url) ~checksum ~target ~kind
+           |> Action.Full.make ~can_go_in_shared_cache:true)
     in
     let dir_rule =
       let target = make_target ~kind:`Directory in

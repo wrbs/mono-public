@@ -16,7 +16,7 @@ module type Key = sig
   include Comparable.S_plain with type t := t
 
   val to_string_hum : t -> string
-  val catpuccin_color : t -> Bonsai_tui_catpuccin.t option
+  val catppuccin_color : t -> Bonsai_tui_catppuccin.t option
 end
 
 module type Size = sig
@@ -37,13 +37,13 @@ module Make (Key : Key) (Size : Size) = struct
       }
   end
 
-  let bg = Bonsai_tui_catpuccin.Crust
+  let bg = Bonsai_tui_catppuccin.Crust
 
   let render_instruction key action (local_ graph) =
-    let%arr flavor = Bonsai_tui_catpuccin.flavor graph in
-    let text = Bonsai_tui_catpuccin.color ~flavor Text in
-    let subtext = Bonsai_tui_catpuccin.color ~flavor Subtext0 in
-    let crust = Bonsai_tui_catpuccin.color ~flavor bg in
+    let%arr flavor = Bonsai_tui_catppuccin.flavor graph in
+    let text = Bonsai_tui_catppuccin.color ~flavor Text in
+    let subtext = Bonsai_tui_catppuccin.color ~flavor Subtext0 in
+    let crust = Bonsai_tui_catppuccin.color ~flavor bg in
     View.hcat
       [ View.text ~attrs:[ Attr.bold; Attr.fg text; Attr.bg crust ] key
       ; View.text ~attrs:[ Attr.bg crust ] " "
@@ -72,8 +72,8 @@ module Make (Key : Key) (Size : Size) = struct
     let instructions = instructions ~navigation graph in
     let%arr instructions
     and text = Text.component graph
-    and flavor = Bonsai_tui_catpuccin.flavor graph in
-    let mauve = Bonsai_tui_catpuccin.color ~flavor Mauve in
+    and flavor = Bonsai_tui_catppuccin.flavor graph in
+    let mauve = Bonsai_tui_catppuccin.color ~flavor Mauve in
     View.hcat
       [ text ~attrs:[ Attr.fg mauve; Attr.bold ] app_title; text "   "; instructions ]
   ;;
@@ -87,7 +87,7 @@ module Make (Key : Key) (Size : Size) = struct
     let%arr navigation
     and current_size
     and text = Text.component graph
-    and flavor = Bonsai_tui_catpuccin.flavor graph in
+    and flavor = Bonsai_tui_catppuccin.flavor graph in
     let maybe_navigation =
       match navigation with
       | [] -> View.none
@@ -100,22 +100,22 @@ module Make (Key : Key) (Size : Size) = struct
           @@ List.map navigation ~f:(fun navigation ->
             let current = Key.to_string_hum navigation in
             text
-              ~attrs:[ Attr.fg (Bonsai_tui_catpuccin.color ~flavor Lavender); Attr.bold ]
+              ~attrs:[ Attr.fg (Bonsai_tui_catppuccin.color ~flavor Lavender); Attr.bold ]
               [%string "%{current}"])
         in
         View.hcat
           [ arrow
           ; banner
           ; text
-              ~attrs:[ Attr.fg (Bonsai_tui_catpuccin.color ~flavor Yellow) ]
+              ~attrs:[ Attr.fg (Bonsai_tui_catppuccin.color ~flavor Yellow) ]
               [%string " (%{Size.to_string current_size})"]
           ]
     in
     View.hcat
-      [ text ~attrs:[ Attr.fg (Bonsai_tui_catpuccin.color ~flavor Peach) ] tree_name
+      [ text ~attrs:[ Attr.fg (Bonsai_tui_catppuccin.color ~flavor Peach) ] tree_name
       ; text " "
       ; text
-          ~attrs:[ Attr.fg (Bonsai_tui_catpuccin.color ~flavor Yellow) ]
+          ~attrs:[ Attr.fg (Bonsai_tui_catppuccin.color ~flavor Yellow) ]
           [%string "(%{Size.to_string total_size} total)"]
       ; text " "
       ; maybe_navigation
@@ -123,10 +123,10 @@ module Make (Key : Key) (Size : Size) = struct
   ;;
 
   let backdrop (dimensions : Dimensions.t Bonsai.t) (local_ graph) =
-    let flavor = Bonsai_tui_catpuccin.flavor graph in
+    let flavor = Bonsai_tui_catppuccin.flavor graph in
     let%arr { height; width } = dimensions
     and flavor in
-    let bg_color = Bonsai_tui_catpuccin.color ~flavor bg in
+    let bg_color = Bonsai_tui_catppuccin.color ~flavor bg in
     List.init height ~f:(fun _ ->
       View.text ~attrs:[ Attr.bg bg_color ] (String.make width ' '))
     |> View.vcat
@@ -247,7 +247,7 @@ module Make (Key : Key) (Size : Size) = struct
       node.weight.dominated
     in
     let%arr text = Text.component graph
-    and flavor = Bonsai_tui_catpuccin.flavor graph
+    and flavor = Bonsai_tui_catppuccin.flavor graph
     and nodes
     and focus
     and max_weight in
@@ -265,16 +265,16 @@ module Make (Key : Key) (Size : Size) = struct
          let maybe_focused =
            if is_focused
            then
-             Attr.many [ Attr.fg (Bonsai_tui_catpuccin.color ~flavor Green); Attr.bold ]
+             Attr.many [ Attr.fg (Bonsai_tui_catppuccin.color ~flavor Green); Attr.bold ]
            else Attr.empty
          in
          let name =
            text
              ~attrs:
                [ Option.value_map
-                   (Key.catpuccin_color node.name)
+                   (Key.catppuccin_color node.name)
                    ~default:Attr.empty
-                   ~f:(fun color -> Attr.fg (Bonsai_tui_catpuccin.color ~flavor color))
+                   ~f:(fun color -> Attr.fg (Bonsai_tui_catppuccin.color ~flavor color))
                ; maybe_focused
                ]
              (Key.to_string_hum node.name)
@@ -286,7 +286,7 @@ module Make (Key : Key) (Size : Size) = struct
          in
          let prefix =
            text
-             ~attrs:[ Attr.fg (Bonsai_tui_catpuccin.color ~flavor Mauve) ]
+             ~attrs:[ Attr.fg (Bonsai_tui_catppuccin.color ~flavor Mauve) ]
              (if is_focused then "> " else "  ")
          in
          let bar =
@@ -306,8 +306,8 @@ module Make (Key : Key) (Size : Size) = struct
                [ (if is_focused
                   then
                     Attr.many
-                      [ Attr.bg (Bonsai_tui_catpuccin.color ~flavor Mauve)
-                      ; Attr.fg (Bonsai_tui_catpuccin.color ~flavor Crust)
+                      [ Attr.bg (Bonsai_tui_catppuccin.color ~flavor Mauve)
+                      ; Attr.fg (Bonsai_tui_catppuccin.color ~flavor Crust)
                       ]
                   else Attr.empty)
                ]

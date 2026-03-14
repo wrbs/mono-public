@@ -288,11 +288,24 @@ module For_testing : sig
 
       This function is best used with existing Log.ts, e.g. to replace Log.Global's
       outputs in expect tests. If you just want a full Log.t, see [create] below. *)
-  val create_output : map_output:(string -> string) -> Output.t
+  val create_output
+    :  ?map_output:(string -> string)
+    -> ?time:[ `Keep | `Omit ]
+    -> ?tags:[ `Keep | `Omit ]
+    -> ?level:[ `Keep | `Omit ]
+    -> unit
+    -> Output.t
 
   (** [create_log ~map_output level] creates a [Log.t] with its level set to [level] using
       the output returned by [create_output], and an [on_error] value of `Raise. *)
-  val create : map_output:(string -> string) -> Level.t -> t
+
+  val create
+    :  ?map_output:(string -> string)
+    -> ?time:[ `Keep | `Omit ]
+    -> ?tags:[ `Keep | `Omit ]
+    -> ?level:[ `Keep | `Omit ]
+    -> Level.t
+    -> t
 
   val transform : t -> Message_event.t -> Message_event.t option
 end

@@ -39,8 +39,8 @@ let trim_trailing_dir_sep s =
 
 let normalize_include_dirs dirs = List.map dirs ~f:trim_trailing_dir_sep
 
-let normalize_effects (effects : [ `Cps | `Double_translation ] option) common :
-    Config.effects_backend =
+let normalize_effects (effects : [ `Disabled | `Cps | `Double_translation ] option) common
+    : Config.effects_backend =
   match effects with
   | None ->
       (* For backward compatibility, consider that [--enable effects] alone means
@@ -48,7 +48,7 @@ let normalize_effects (effects : [ `Cps | `Double_translation ] option) common :
       if List.mem ~eq:String.equal "effects" common.Jsoo_cmdline.Arg.optim.enable
       then `Cps
       else `Disabled
-  | Some ((`Cps | `Double_translation) as e) -> (e :> Config.effects_backend)
+  | Some ((`Disabled | `Cps | `Double_translation) as e) -> e
 
 type t =
   { common : Jsoo_cmdline.Arg.t
@@ -64,6 +64,7 @@ type t =
   ; static_env : (string * string) list
   ; wrap_with_fun : [ `Iife | `Named of string | `Anonymous ]
   ; target_env : Target_env.t
+  ; shape_files : string list
   ; (* toplevel *)
     dynlink : bool
   ; linkall : bool
@@ -78,6 +79,26 @@ type t =
   ; keep_unit_names : bool
   ; effects : Config.effects_backend
   }
+
+let set_param =
+  let doc = "Set compiler options." in
+  let all = List.map (Config.Param.all ()) ~f:(fun (x, _, _) -> x, x) in
+  let pair = Arg.(pair ~sep:'=' (enum all) string) in
+  let parser s =
+    match Arg.conv_parser pair s with
+    | Ok (k, v) -> (
+        match
+          List.find ~f:(fun (k', _, _) -> String.equal k k') (Config.Param.all ())
+        with
+        | _, _, valid -> (
+            match valid v with
+            | Ok () -> Ok (k, v)
+            | Error msg -> Error (`Msg ("Unexpected VALUE after [=], " ^ msg))))
+    | Error _ as e -> e
+  in
+  let printer = Arg.conv_printer pair in
+  let c = Arg.conv (parser, printer) in
+  Arg.(value & opt_all (list c) [] & info [ "set" ] ~docv:"PARAM=VALUE" ~doc)
 
 let wrap_with_fun_conv =
   let conv s =
@@ -113,6 +134,10 @@ let options =
   let output_file =
     let doc = "Set output file name to [$(docv)]." in
     Arg.(value & opt (some string) None & info [ "o" ] ~docv:"FILE" ~doc)
+  in
+  let shape_files =
+    let doc = "load shape file [$(docv)]." in
+    Arg.(value & opt_all string [] & info [ "load-shape" ] ~docv:"FILE" ~doc)
   in
   let input_file =
     let doc =
@@ -174,14 +199,6 @@ let options =
        with the global object."
     in
     Arg.(value & opt wrap_with_fun_conv `Iife & info [ "wrap-with-fun" ] ~doc)
-  in
-  let set_param =
-    let doc = "Set compiler options." in
-    let all = List.map (Config.Param.all ()) ~f:(fun (x, _) -> x, x) in
-    Arg.(
-      value
-      & opt_all (list (pair ~sep:'=' (enum all) string)) []
-      & info [ "set" ] ~docv:"PARAM=VALUE" ~doc)
   in
   let set_env =
     let doc = "Set environment variable statically." in
@@ -273,12 +290,20 @@ let options =
   in
   let effects =
     let doc =
-      "Select an implementation of effect handlers. [$(docv)] should be one of $(b,cps) \
-       or $(b,double-translation). Effects won't be supported if unspecified."
+      "Select an implementation of effect handlers. [$(docv)] should be one of $(b,cps), \
+       $(b,double-translation) or $(b,disabled) (the default). Effects won't be \
+       supported if unspecified."
     in
     Arg.(
       value
-      & opt (some (enum [ "cps", `Cps; "double-translation", `Double_translation ])) None
+      & opt
+          (some
+             (enum
+                [ "cps", `Cps
+                ; "double-translation", `Double_translation
+                ; "disabled", `Disabled
+                ]))
+          None
       & info [ "effects" ] ~docv:"KIND" ~doc)
   in
   let build_t
@@ -309,7 +334,8 @@ let options =
       input_file
       js_files
       keep_unit_names
-      effects =
+      effects
+      shape_files =
     let inline_source_content = not sourcemap_don't_inline_content in
     let chop_extension s = try Filename.chop_extension s with Invalid_argument _ -> s in
     let runtime_files = js_files in
@@ -380,6 +406,7 @@ let options =
       ; source_map
       ; keep_unit_names
       ; effects
+      ; shape_files
       }
   in
   let t =
@@ -412,7 +439,8 @@ let options =
       $ input_file
       $ js_files
       $ keep_unit_names
-      $ effects)
+      $ effects
+      $ shape_files)
   in
   Term.ret t
 
@@ -486,14 +514,6 @@ let options_runtime_only =
     in
     Arg.(value & opt wrap_with_fun_conv `Iife & info [ "wrap-with-fun" ] ~doc)
   in
-  let set_param =
-    let doc = "Set compiler options." in
-    let all = List.map (Config.Param.all ()) ~f:(fun (x, _) -> x, x) in
-    Arg.(
-      value
-      & opt_all (list (pair ~sep:'=' (enum all) string)) []
-      & info [ "set" ] ~docv:"PARAM=VALUE" ~doc)
-  in
   let set_env =
     let doc = "Set environment variable statically." in
     Arg.(
@@ -543,12 +563,20 @@ let options_runtime_only =
   in
   let effects =
     let doc =
-      "Select an implementation of effect handlers. [$(docv)] should be one of $(b,cps) \
-       or $(b,double-translation). Effects won't be supported if unspecified."
+      "Select an implementation of effect handlers. [$(docv)] should be one of $(b,cps), \
+       $(b,double-translation), or $(b,disabled) (the default). Effects won't be \
+       supported if unspecified."
     in
     Arg.(
       value
-      & opt (some (enum [ "cps", `Cps; "double-translation", `Double_translation ])) None
+      & opt
+          (some
+             (enum
+                [ "cps", `Cps
+                ; "double-translation", `Double_translation
+                ; "disabled", `Disabled
+                ]))
+          None
       & info [ "effects" ] ~docv:"KIND" ~doc)
   in
   let build_t
@@ -633,6 +661,7 @@ let options_runtime_only =
       ; source_map
       ; keep_unit_names = false
       ; effects
+      ; shape_files = []
       }
   in
   let t =

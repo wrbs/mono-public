@@ -371,11 +371,13 @@ let quickcheck_shrinker_element =
 ;;
 
 let () =
-  Sexplib.Conv.Exn_converter.add [%extension_constructor Xmlm.Error] (function
-    | Xmlm.Error ((line, col), error) ->
-      let error = Xmlm.error_message error in
-      [%message "Error parsing xml" (line : int) (col : int) (error : string)]
-    | _ -> assert false)
+  Sexplib.Conv.Exn_converter.add
+    [%extension_constructor Xmlm.Error]
+    (Obj.magic_portable (function
+      | Xmlm.Error ((line, col), error) ->
+        let error = Xmlm.error_message error in
+        [%message "Error parsing xml" (line : int) (col : int) (error : string)]
+      | _ -> assert false))
 ;;
 
 let parse_input input =

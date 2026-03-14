@@ -111,9 +111,21 @@ module Private = struct
 end
 
 module For_testing = struct
-  let create ~map_output =
-    create_unbuffered ~flush:return (fun msg ->
-      map_output (Message_event.message msg) |> print_endline)
+  let create
+    ?(map_output = Fn.id)
+    ?(time : [ `Keep | `Omit ] = `Omit)
+    ?(tags : [ `Keep | `Omit ] = `Omit)
+    ?(level : [ `Keep | `Omit ] = `Omit)
+    ()
+    =
+    create_unbuffered ~flush:return (fun message_event ->
+      let message = Message_event.to_serialized_message_lossy message_event in
+      let zone = Timezone.find_exn "nyc" in
+      let string_message =
+        Message.For_testing.to_string message zone ~time ~tags ~level
+      in
+      let mapped_output = map_output string_message in
+      print_endline mapped_output)
   ;;
 
   let is_async_stderr_output_set () = Set_once.is_some stderr_async

@@ -3,38 +3,36 @@
 (*                                    Menhir                                  *)
 (*                                                                            *)
 (*   Copyright Inria. All rights reserved. This file is distributed under     *)
-(*   the terms of the GNU General Public License version 2, as described in   *)
-(*   the file LICENSE.                                                        *)
+(*   the terms of the GNU Library General Public License version 2, with a    *)
+(*   special exception on linking, as described in the file LICENSE.          *)
 (*                                                                            *)
 (******************************************************************************)
 
-(* This module provides some type and function definitions
+(**This module provides some type and function definitions
    that help deal with the keywords that we recognize within
    semantic actions. *)
 
-(* The user can request position information either at several types:
+(**The user can request position information either at several types:
    - a simple offset of type [int], e.g., via $startofs;
    - a position of type [Lexing.position], e.g., via $startpos;
    - a location, e.g., via $loc.
    A location is currently represented as a pair of positions, but
    this might change in the future; we may allow the user to choose
    a custom type of locations. *)
-
 type flavor =
   | FlavorOffset
   | FlavorPosition
   | FlavorLocation
 
-(* The user can request position information about the $start or $end
+(**The user can request position information about the $start or $end
    of a symbol. Also, $symbolstart requests the computation of the
    start position of the first nonempty element in a production. *)
-
 type where =
   | WhereSymbolStart
   | WhereStart
   | WhereEnd
 
-(* The user can request position information about a production's
+(**The user can request position information about a production's
    left-hand side or about one of the symbols in its right-hand
    side, which he must refer to by name. (Referring to its symbol
    by its position, using [$i], is permitted in the concrete
@@ -49,25 +47,35 @@ type where =
    corresponds to $sloc in concrete syntax. In the latter case, [subject] must
    be [Left] or [RightNamed _]; this corresponds to $loc and $loc(x) in
    concrete syntax. *)
-
 type subject =
   | Before
   | Left
   | RightNamed of string
 
-(* Keywords inside semantic actions. They allow access to semantic
+(**Keywords inside semantic actions. They allow access to semantic
    values or to position information. *)
-
 type keyword =
   | Position of subject * where * flavor
 
-(* This maps a [Position] keyword to the name of the variable that the
-   keyword is replaced with. *)
+(**[startpos] is the keyword [$startpos]. *)
+val startpos: keyword
 
+(**[endpos] is the keyword [$endpos]. *)
+val endpos: keyword
+
+(**[posvar] maps a keyword to the name of the variable that this keyword
+   is replaced with. *)
 val posvar: subject -> where -> flavor -> string
 
-(* Sets of keywords. *)
+(**[kposvar] maps a keyword to the name of the variable that this keyword
+   is replaced with. *)
+val kposvar: keyword -> string
 
+(**[print] prints a keyword. This function is currently untested and not
+   guaranteed to be correct. It should be used with caution. *)
+val print: keyword -> string
+
+(**Sets of keywords. *)
 module KeywordSet : sig
   include Set.S with type elt = keyword
   val map: (keyword -> keyword) -> t -> t

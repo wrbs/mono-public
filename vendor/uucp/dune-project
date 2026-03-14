@@ -1,4 +1,4 @@
 (lang dune 1.1)
 (name uucp)
-(version v17.0.0+dune)
+(version v15.0.0+dune)
 (package (name uucp))

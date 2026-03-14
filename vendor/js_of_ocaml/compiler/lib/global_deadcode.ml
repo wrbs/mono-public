@@ -42,6 +42,8 @@ module Domain : sig
 
   val top : t
 
+  val live_block : t
+
   val live_field : int -> t -> t
 
   val join : t -> t -> t
@@ -73,6 +75,8 @@ end = struct
         if depth = 0 then Top else Live (IntMap.map (fun l' -> truncate (depth - 1) l') f)
 
   let depth_treshold = 4
+
+  let live_block = Live IntMap.empty
 
   let live_field i l =
     (* We need to limit the depth of the liveness information,
@@ -385,11 +389,13 @@ let propagate defs scoped_live_vars ~state ~dep:y ~target:x ~action:usage_kind =
                 vars;
               !live
           | Expr (Field (_, i, _)) -> Domain.live_field i l
+          | Expr (Prim (IsInt, _)) -> Domain.live_block
           | _ -> Domain.top)
       (* If y is top and y is a field access, x depends only on that field *)
       | Top -> (
           match Var.Tbl.get defs y with
           | Expr (Field (_, i, _)) -> Domain.live_field i Domain.top
+          | Expr (Prim (IsInt, _)) -> Domain.live_block
           | _ -> Domain.top))
   (* If x is used as an argument for parameter y, then contribution is liveness of y *)
   | Propagate { scope; src } ->
@@ -558,7 +564,7 @@ let add_sentinal p sentinal =
   Code.prepend p [ instr ]
 
 (** Run the liveness analysis and replace dead variables with the given sentinal. *)
-let f p ~deadcode_sentinal global_info =
+let f pure_funs p ~deadcode_sentinal global_info =
   Code.invariant p;
   let t = Timer.make () in
   (* Add sentinal variable *)
@@ -570,7 +576,6 @@ let f p ~deadcode_sentinal global_info =
   (* Compute definitions *)
   let defs = definitions p in
   (* Compute initial liveness *)
-  let pure_funs = Pure_fun.f p in
   let live_table, scoped_live_vars = liveness p pure_funs global_info in
   (* Compute usages *)
   let uses = usages p global_info scoped_live_vars in

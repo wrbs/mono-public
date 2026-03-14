@@ -53,19 +53,18 @@ module Make (D : Desc) = struct
 
   let to_string (v : D.t) = Printf.sprintf "%s%s" magic (Marshal.to_string v [])
 
-  let with_record stats ~name ~file ~f =
+  let with_record stats what ~file ~f =
     let start = Unix.gettimeofday () in
     let res = Result.try_with f in
     let event =
-      let stop = Unix.gettimeofday () in
-      let module Event = Chrome_trace.Event in
-      let module Timestamp = Event.Timestamp in
-      let dur = Timestamp.of_float_seconds (stop -. start) in
-      let common = Event.common_fields ~name ~ts:(Timestamp.of_float_seconds start) () in
-      let args = [ "path", `String (Path.to_string file); "module", `String D.name ] in
-      Event.complete common ~args ~dur
+      Dune_trace.Event.persistent
+        ~file
+        ~module_:D.name
+        what
+        ~start
+        ~stop:(Unix.gettimeofday ())
     in
-    Dune_stats.emit stats event;
+    Dune_trace.emit stats event;
     Result.ok_exn res
   ;;
 
@@ -73,16 +72,17 @@ module Make (D : Desc) = struct
     let dump file v =
       Io.with_file_out file ~f:(fun oc ->
         output_string oc magic;
-        Marshal.to_channel oc v [])
+        match Marshal.to_channel oc v [] with
+        | s -> s
+        | exception Invalid_argument s ->
+          raise (Invalid_argument (sprintf "%s (%s)" s D.name)))
     in
     let dump =
       lazy
-        (match Dune_stats.global () with
+        (match Dune_trace.global () with
          | None -> dump
          | Some stats ->
-           fun file v ->
-             with_record stats ~name:"Writing Persistent Dune State" ~file ~f:(fun () ->
-               dump file v))
+           fun file v -> with_record stats `Save ~file ~f:(fun () -> dump file v))
     in
     fun file (v : D.t) -> (Lazy.force dump) file v
   ;;
@@ -112,12 +112,10 @@ module Make (D : Desc) = struct
     in
     let read_file =
       lazy
-        (match Dune_stats.global () with
+        (match Dune_trace.global () with
          | None -> read_file
          | Some stats ->
-           fun file ->
-             with_record stats ~name:"Loading Persistent Dune State" ~file ~f:(fun () ->
-               read_file file))
+           fun file -> with_record stats `Load ~file ~f:(fun () -> read_file file))
     in
     fun file -> if Path.exists file then (Lazy.force read_file) file else None
   ;;

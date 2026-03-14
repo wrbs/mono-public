@@ -1,7 +1,7 @@
 (*---------------------------------------------------------------------------
    Copyright (c) 2014 Daniel C. Bünzli. All rights reserved.
    Distributed under the ISC license, see terms at the end of the file.
-   dune 3.20.2
+   dune 3.21.0
   ---------------------------------------------------------------------------*)
 
 type ret = [ `Await | `Boundary | `End | `Uchar of Uchar.t ]

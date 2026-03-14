@@ -365,7 +365,9 @@ module type DATA_FLOW_GRAPH = sig
   (**{!foreach_successor} describes the edges of the data flow graph as well
      as the manner in which a property at the source of an edge is
      transformed into a property at the target. The property at the target
-     must of course be a monotonic function of the property at the source. *)
+     must of course be a monotonic function of the property at the source.
+     Furthermore, if the property at the source is [bottom] then the
+     property that is transmitted to each target should be [bottom] as well. *)
   val foreach_successor:
     variable -> property ->
     (variable -> property -> unit) -> unit
@@ -415,6 +417,45 @@ module type NUMBERING = sig
      value of type {!t}. *)
   val decode: int -> t
 
+end
+
+(**A number of operations that are easily supported by numbered types. *)
+module type NUMBERING_OPERATIONS = sig
+
+  (**A (numbered) type of elements. *)
+  type t
+
+  (**[equal] tests whether two elements are equal. *)
+  val equal: t -> t -> bool
+
+  (**[compare] is a total order on elements. *)
+  val compare: t -> t -> int
+
+  (**[init f] initializes a fresh array, indexed by elements. *)
+  val init: (t -> 'a) -> 'a array
+
+  (**[tabulate] tabulates a function [f] on elements,
+     producing a new function whose time complexity is O(1). *)
+  val tabulate: (t -> 'a) -> (t -> 'a)
+
+  (**In every iteration function, the order in which elements are yielded
+     corresponds to the integer indices produced by [encode]. *)
+
+  (**[iter] enumerates all elements. *)
+  val iter: (t -> unit) -> unit
+
+  (**[fold] enumerates all elements. *)
+  val fold: (t -> 'a -> 'a) -> 'a -> 'a
+
+  (**[map] enumerates all elements. *)
+  val map: (t -> 'a) -> 'a list
+
+end
+
+(**The combination of [NUMBERING] and [NUMBERING_OPERATIONS]. *)
+module type NUMBERED = sig
+  include NUMBERING
+  include NUMBERING_OPERATIONS with type t := t
 end
 
 (**The signature {!TWO_PHASE_NUMBERING} combines the signatures

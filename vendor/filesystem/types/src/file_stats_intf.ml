@@ -1,6 +1,6 @@
 open! Core
 
-module type S = sig
+module type S = sig @@ portable
   module File_kind : T
   module File_permissions : T
 
@@ -19,7 +19,7 @@ module type S = sig
     ; modify_time : Time_ns.t
     ; status_time : Time_ns.t
     }
-  [@@deriving equal ~localize, quickcheck, sexp_of]
+  [@@deriving equal ~portable ~localize, quickcheck ~portable, sexp_of ~portable]
 
   (** Conversions *)
 

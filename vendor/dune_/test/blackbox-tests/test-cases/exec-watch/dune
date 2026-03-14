@@ -1,4 +1,10 @@
 (cram
+ (deps wait-for-file.sh))
+
+(cram
+ (timeout 5))
+
+(cram
  (enabled_if
   ;; On macos it looks like dune has a chance to miss filesystem events if they
   ;; occur too close together in time. Tests of `dune exec -w` run a program with a
@@ -12,13 +18,11 @@
 ; These tests are explicitly disabled due to flakiness
 
 (cram
- (applies_to exec-watch-server exec-watch-ignore-sigterm exec-signal)
+ (applies_to
+  exec-stdin
+  exec-watch-server
+  exec-watch-ignore-sigterm
+  exec-signal
+  exec-watch-fail
+  exec-watch-basic)
  (enabled_if false))
-
-; CR Alizter: renable all tests again, work out what causes the CI to hang
-
-(cram
- (enabled_if false))
-
-(cram
- (deps wait-for-file.sh))

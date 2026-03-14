@@ -1,4 +1,23 @@
-;; Note: the library MenhirLib is not built here; it is built in lib/pack.
+;; The library MenhirLib is built here.
+
+(library
+  (name menhirLib)
+  (public_name menhirLib)
+)
+
+;; Explicitly enable warnings during development
+;; and disable assertions in releases.
+
+(env
+  (dev (flags
+    :standard
+    -g
+    -w @1..74-4-44-67-70
+  ))
+  (release (flags
+    :standard -noassert
+  ))
+)
 
 ;; These rules generate the module [StaticVersion]. This module defines a
 ;; value of type [unit] whose name is [require_XXXXXXXX], where [XXXXXXXX]

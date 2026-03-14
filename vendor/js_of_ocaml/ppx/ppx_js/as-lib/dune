@@ -2,7 +2,7 @@
  (name ppx_js)
  (public_name js_of_ocaml-ppx.as-lib)
  (synopsis "Js_of_ocaml ppx")
- (libraries compiler-libs.common ppxlib ppxlib_jane)
+ (libraries compiler-libs.common ppxlib)
  (preprocess
   (pps ppx_optcomp_light ppxlib.metaquot)))
 

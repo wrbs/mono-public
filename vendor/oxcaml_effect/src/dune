@@ -1,5 +1,0 @@
-(library
- (name effect)
- (public_name oxcaml_effect)
- (libraries base basement)
- (preprocess no_preprocessing))

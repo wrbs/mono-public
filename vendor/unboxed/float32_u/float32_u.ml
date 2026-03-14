@@ -105,11 +105,20 @@ let[@inline] of_int32_preserve_order i : t =
   of_float32 ((F.of_int32_preserve_order [@inlined hint]) i)
 ;;
 
+external box_int64 : int64# -> (int64[@local_opt]) @@ portable = "%box_int64"
+external unbox_int64 : (int64[@local_opt]) -> int64# @@ portable = "%unbox_int64"
+
 let[@inline] one_ulp ud t : t = of_float32 ((F.one_ulp [@inlined hint]) ud (to_float32 t))
 let[@inline] of_int i : t = of_float32 (F.of_int i)
 let[@inline] to_int t : int = (F.to_int [@inlined hint]) (to_float32 t)
 let[@inline] of_int64 i : t = of_float32 ((F.of_int64 [@inlined hint]) i)
 let[@inline] to_int64 t : int64 = (F.to_int64 [@inlined hint]) (to_float32 t)
+let[@inline] of_int64_u x : t = of_float32 ((F.of_int64 [@inlined hint]) (box_int64 x))
+
+let[@inline] to_int64_u x : int64# =
+  unbox_int64 ((F.to_int64 [@inlined hint]) (to_float32 x))
+;;
+
 let[@inline] of_float i : t = of_float32 (F.of_float i)
 let[@inline] to_float t : float = F.to_float (to_float32 t)
 

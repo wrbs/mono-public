@@ -340,12 +340,13 @@ end = struct
       fields;
     !func_idx, func_names, !global_idx, global_names, !tag_idx, tag_names
 
-  let output_functions ch (func_idx, func_names, func_types, fields) =
+  let output_functions ch (type_names, func_idx, func_names, func_types, fields) =
     let l =
       List.fold_left
         ~f:(fun acc field ->
           match field with
-          | Function { signature; _ } -> signature :: acc
+          | Function { typ = Some typ; _ } -> Code.Var.Hashtbl.find type_names typ :: acc
+          | Function { signature; _ } -> Hashtbl.find func_types signature :: acc
           | Type _ | Import _ | Data _ | Global _ | Tag _ -> acc)
         ~init:[]
         fields
@@ -361,10 +362,7 @@ end = struct
         ~init:func_idx
         fields
     in
-    output_vec
-      (fun ch typ -> output_uint ch (Hashtbl.find func_types typ))
-      ch
-      (List.rev l)
+    output_vec (fun ch typ -> output_uint ch typ) ch (List.rev l)
 
   let int_un_op (arith, comp, trunc, reinterpret) ch op =
     match op with
@@ -372,12 +370,15 @@ end = struct
     | Ctz -> output_byte ch (arith + 1)
     | Popcnt -> output_byte ch (arith + 2)
     | Eqz -> output_byte ch comp
-    | TruncSatF64 signage ->
+    | TruncSat (size, signage) ->
         Feature.require nontrapping_fptoint;
         output_byte ch 0xFC;
         output_byte
           ch
           (trunc
+          + (match size with
+            | `F32 -> 0
+            | `F64 -> 2)
           +
           match signage with
           | S -> 0
@@ -506,8 +507,8 @@ end = struct
     | UnOp (op, e') -> (
         output_expression st ch e';
         match op with
-        | I32 op -> int_un_op (0x67, 0x45, 2, 0xBC) ch op
-        | I64 op -> int_un_op (0x79, 0x50, 6, 0xBD) ch op
+        | I32 op -> int_un_op (0x67, 0x45, 0, 0xBC) ch op
+        | I64 op -> int_un_op (0x79, 0x50, 4, 0xBD) ch op
         | F32 op -> output_byte ch (float_un_op (0x8B, 0xB2, 0xBE) op)
         | F64 op -> output_byte ch (float_un_op (0x99, 0xB7, 0xBF) op))
     | BinOp (op, e', e'') -> (
@@ -552,7 +553,9 @@ end = struct
         List.iter ~f:(fun e' -> output_expression st ch e') l;
         output_byte ch 0x10;
         output_uint ch (Code.Var.Hashtbl.find st.func_names f)
-    | Seq _ -> assert false
+    | Seq (l, e') ->
+        List.iter ~f:(fun i' -> output_instruction st ch i') l;
+        output_expression st ch e'
     | Pop _ -> ()
     | RefFunc f ->
         Feature.require reference_types;
@@ -702,6 +705,11 @@ end = struct
         output_expression st ch e';
         output_byte ch 0xFB;
         output_byte ch 0x1B
+    | AnyConvertExtern e' ->
+        Feature.require gc;
+        output_expression st ch e';
+        output_byte ch 0xFB;
+        output_byte ch 0x1A
 
   and output_instruction st ch i =
     match i with
@@ -918,8 +926,9 @@ end = struct
     | RefTest (_, e')
     | Br_on_cast (_, _, _, e')
     | Br_on_cast_fail (_, _, _, e')
-    | Br_on_null (_, e') -> expr_function_references e' set
-    | ExternConvertAny e' -> expr_function_references e' set
+    | Br_on_null (_, e')
+    | ExternConvertAny e'
+    | AnyConvertExtern e' -> expr_function_references e' set
     | BinOp (_, e', e'')
     | ArrayNew (_, e', e'')
     | ArrayNewData (_, _, e', e'')
@@ -935,7 +944,9 @@ end = struct
         List.fold_left ~f:(fun set i -> instr_function_references i set) ~init:set l
     | Call (_, l) | ArrayNewFixed (_, l) | StructNew (_, l) ->
         List.fold_left ~f:(fun set i -> expr_function_references i set) ~init:set l
-    | Seq _ -> assert false
+    | Seq (l, e) ->
+        List.fold_left ~f:(fun set i -> instr_function_references i set) ~init:set l
+        |> expr_function_references e
     | RefFunc f -> Code.Var.Set.add f set
     | Call_ref (_, e', l) ->
         List.fold_left
@@ -1171,7 +1182,11 @@ end = struct
     let func_idx, func_names, global_idx, global_names, _, tag_names =
       output_section 2 output_imports ch (func_types, type_names, fields)
     in
-    output_section 3 output_functions ch (func_idx, func_names, func_types, fields);
+    output_section
+      3
+      output_functions
+      ch
+      (type_names, func_idx, func_names, func_types, fields);
     let st =
       { type_names
       ; func_names

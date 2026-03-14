@@ -31,44 +31,12 @@
 
 open Grammar
 
-module type REACHABILITY_RESULT = sig
-  module Word : sig
-    type t
-    val singleton : Terminal.t -> t
-    val elements : t -> Terminal.t list
-    val compare : t -> t -> int
-    val length : t -> int
-  end
-
-  module Graph : sig
-    (* Graph nodes. *)
-    type node
-    include Hashtbl.HashedType with type t := node
-
-    val state : node -> Lr1.node
-    val lookaheads : node -> TerminalSet.t
-
-    (* Edge labels. *)
-    type label
-    val append_word : label -> Word.t -> Word.t
-
-    (* The source node(s). *)
-
-    val sources: (node -> unit) -> unit
-
-    (* [successors n f] presents each of [n]'s successors, in
-       an arbitrary order, to [f], together with the cost of
-       the edge that was followed. *)
-    val successors: node -> (label -> int -> node -> unit) -> unit
-  end
-
-  module Statistics : sig
-    val header : string
-    val print : out_channel -> time:float -> heap:int -> unit
-  end
+module Settings = struct
+  include Settings
+  let trace = false
 end
-
-module type REACHABILITY_ALGORITHM = functor () -> REACHABILITY_RESULT
+module R =
+  ReferenceInterpreter.Make(Lr1)(Settings)
 
 (* ------------------------------------------------------------------------ *)
 
@@ -84,11 +52,26 @@ module Run
           a file to which one line of statistics is appended. *)
        val statistics: string option
      end)
-    (Alg : REACHABILITY_ALGORITHM)
     () =
 struct
 
-open Default
+(* ------------------------------------------------------------------------ *)
+
+(* [find_erroneous s zs] finds whether there is a terminal [z] in [zs] such
+   that state [s] will initiate an error on the lookahead symbol [z]. All
+   terminals in [zs] must be real. *)
+
+let find_erroneous s zs : Terminal.t option =
+  match Lr1.test_default_reduction s with
+  | Some _ ->
+      None
+  | None ->
+      let transitions = Lr1.transitions s
+      and reductions = Lr1.reductions s in
+      zs |> TerminalSet.pick @@ fun z ->
+      assert (Terminal.real z);
+      not (TerminalMap.mem z reductions) &&
+      not (SymbolMap.mem (Symbol.T z) transitions)
 
 (* ------------------------------------------------------------------------ *)
 
@@ -110,7 +93,7 @@ let start =
    what conditions each nonterminal transition in the automaton can be
    taken. *)
 
-module Core = Alg()
+module Core = LRijkstraFast.Run()
 module Word = Core.Word
 
 (* ------------------------------------------------------------------------ *)
@@ -128,25 +111,24 @@ let fail msg =
 let fail format =
   Printf.ksprintf fail format
 
-let validate nt s' elements : ReferenceInterpreter.target =
-  let open ReferenceInterpreter in
+let validate nt s' elements (* : target *) =
+  let count = ref 0 (* unused *) in
   match
-    check_error_path Logging.never nt elements
+    R.check_error_path count nt elements
   with
-  | OInputReadPastEnd ->
+  | R.OInputReadPastEnd ->
       fail "input was read past its end"
-  | OInputNotFullyConsumed ->
+  | R.OInputNotFullyConsumed ->
       fail "input was not fully consumed"
-  | OUnexpectedAccept ->
+  | R.OUnexpectedAccept ->
       fail "input was unexpectedly accepted"
-  | OK ((state, _) as target) ->
-      if Lr1.Node.compare state s' <> 0 then
+  | R.OK ((state, _) as target) ->
+      if not (Lr1.equal state s') then
         fail "error occurred in state %d instead of %d"
-          (Lr1.number state)
-          (Lr1.number s')
+          (Lr1.encode state)
+          (Lr1.encode s')
       else
         target
-
 
 (* ------------------------------------------------------------------------ *)
 
@@ -161,15 +143,13 @@ let validate nt s' elements : ReferenceInterpreter.target =
    unmodified. Experiments show that the running time of this phase is
    typically 10x shorter than the running time of the main loop above. *)
 
-module A = Astar.Make(struct
-    include Core.Graph
-
-    (* Algorithm A*, used with a zero estimate, is Dijkstra's algorithm.
-       We have experimented with a non-zero estimate, but the performance
-       increase was minimal. *)
-    let estimate _ =
-      0
-  end)
+module G = struct
+  include Core.Graph
+  (* Algorithm A*, used with a zero estimate, is Dijkstra's algorithm.
+     We have experimented with a non-zero estimate, but the performance
+     increase was minimal. *)
+  let estimate _ = 0
+end
 
 (* ------------------------------------------------------------------------ *)
 
@@ -197,55 +177,64 @@ let explored =
 let domain =
   ref Lr1.NodeSet.empty
 
-let data : (Nonterminal.t * Word.t * ReferenceInterpreter.target) list ref =
+let data : (Nonterminal.t * Word.t * _ (* target *)) list ref =
   ref []
 
-(* The set [reachable] stores every reachable state (regardless of whether an
-   error can be triggered in that state). *)
+(* The set [reachable] counts all reachable LR(1) states (not just those where
+   an error can be triggered). It is used only to print an information message
+   and could be removed if desired. *)
 
 let reachable =
   ref Lr1.NodeSet.empty
 
 (* Perform the forward search. *)
 
-let _, _ =
-  A.search (fun (node', path) ->
-      incr explored;
-      let s' = Core.Graph.state node' in
-      let zs = Core.Graph.lookaheads node' in
-      reachable := Lr1.NodeSet.add s' !reachable;
-      (* If [z] causes an error in state [s'] and this is the first time
-         we are able to trigger an error in this state, ... *)
-      if not (Lr1.NodeSet.mem s' !domain) then
-        begin match find_erroneous s' zs with
-          | None -> ()
-          | Some z ->
-            (* Reconstruct the initial state [s] and the word [w] that lead
-               to this error. *)
-            let node, ws = A.reverse path in
-            let w = List.fold_right Core.Graph.append_word ws (Word.singleton z) in
-            (* Check that the reference interpreter confirms our finding.
-               At the same time, compute a list of spurious reductions. *)
-            let nt = Lr1.nt_of_entry (Core.Graph.state node) in
-            let target = validate nt s' (Word.elements w) in
-            (* Store this new data. *)
-            domain := Lr1.NodeSet.add s' !domain;
-            data := (nt, w, target) :: !data
-        end
-    )
+let start_time =
+  Time.start()
+
+module A =
+  AStar.Make(G)
+
+let visit node' path =
+  incr explored;
+  let s' = Core.Graph.state node' in
+  let zs = Core.Graph.lookaheads node' in
+  reachable := Lr1.NodeSet.add s' !reachable;
+  (* If [z] causes an error in state [s'] and this is the first time
+     we are able to trigger an error in this state, ... *)
+  if not (Lr1.NodeSet.mem s' !domain) then
+    match find_erroneous s' zs with
+    | None -> ()
+    | Some z ->
+        (* Reconstruct the initial state [s] and the word [w] that lead
+           to this error. *)
+        let node, ws = A.reverse path in
+        let w = List.fold_right Core.Graph.append_word ws (Word.singleton z) in
+        (* Check that the reference interpreter confirms our finding.
+           At the same time, compute a list of spurious reductions. *)
+        let nt = Lr1.get_start (Core.Graph.state node) in
+        let target = validate nt s' (Word.elements w) in
+        (* Store this new data. *)
+        domain := Lr1.NodeSet.add s' !domain;
+        data := (nt, w, target) :: !data
+
+let () =
+  A.search @@ fun node' path ->
+    visit node' path;
+    true (* continue *)
 
 (* Sort and output the data. *)
 
 let () =
   !data
   |> List.fast_sort (fun (nt1, w1, (s1, _)) (nt2, w2, (s2, _)) ->
-      let c = Int.compare (Lr1.number s1) (Lr1.number s2) in
+      let c = Int.compare (Lr1.encode s1) (Lr1.encode s2) in
       if c <> 0 then c else
         let c = Nonterminal.compare nt1 nt2 in
         if c <> 0 then c else Word.compare w2 w1
     )
-  |> List.map (fun (nt, w, target) -> (nt, Word.elements w, target))
-  |> List.iter Interpret.print_messages_item
+  |> List.map (fun (nt, w, target) -> ((Some nt, Word.elements w), target))
+  |> List.iter R.print_messages_item
 
 (* ------------------------------------------------------------------------ *)
 
@@ -259,7 +248,9 @@ let max_heap_size =
     0 (* dummy *)
 
 let () =
-  Time.tick "Forward search";
+  Time.stop start_time "Forward search"
+
+let () =
   if X.verbose then begin
     Printf.eprintf
       "%d graph nodes explored by forward search.\n\

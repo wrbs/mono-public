@@ -34,7 +34,7 @@ will be installed as a sub-directory.
 
 .. code:: dune
 
-   (lang dune 3.20)
+   (lang dune 3.21)
    (using dune_site 0.1)
    (name mygui)
 
@@ -96,8 +96,7 @@ site using the :doc:`generate_sites_module stanza
     (sites mygui))
 
 The generated module ``mysites`` depends on the library ``dune-site`` provided
-by Dune. As such, the the dependency on ``dune-site`` must be specified
-explicitly.
+by Dune. As such, the dependency on ``dune-site`` must be specified explicitly.
 
 .. note::
 
@@ -245,7 +244,7 @@ Main Executable (C)
 
 .. code:: dune
 
-  (lang dune 3.20)
+  (lang dune 3.21)
   (using dune_site 0.1)
   (name app)
 
@@ -305,7 +304,7 @@ The Plugin "plugin1"
 
 .. code:: dune
 
-  (lang dune 3.20)
+  (lang dune {{latest}})
   (using dune_site 0.1)
 
   (generate_opam_files true)

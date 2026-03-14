@@ -40,14 +40,61 @@ let quote_for_sh fn =
     Buffer.contents buf
 ;;
 
-let cram_stanzas lexbuf =
-  let rec loop acc =
-    match Cram_lexer.block lexbuf with
-    | None -> List.rev acc
-    | Some s -> loop (s :: acc)
-  in
-  loop []
+let map_loc_to_source_path loc =
+  Loc.map_pos loc ~f:(fun (pos : Lexing.position) ->
+    { pos with
+      pos_fname =
+        Path.of_string pos.pos_fname
+        |> Path.drop_optional_build_context_maybe_sandboxed
+        |> Path.to_string
+    })
 ;;
+
+let cram_stanzas =
+  let is_conflict_marker line =
+    [ "======="; "%%%%%%%"; "+++++++"; "-------"; "|||||||" ]
+    |> List.exists ~f:(fun prefix -> String.is_prefix line ~prefix)
+  in
+  let find_conflict ~loc state line =
+    match state with
+    | `No_conflict when String.is_prefix ~prefix:"<<<<<<<" line -> `Started loc
+    | `Started loc when is_conflict_marker line -> `Has_markers loc
+    | `Has_markers loc when is_conflict_marker line -> `Has_markers loc
+    | `Has_markers start_loc when String.is_prefix ~prefix:">>>>>>>" line ->
+      User_error.raise
+        ~loc:(Loc.span start_loc loc)
+        [ Pp.text
+            "Conflict marker found. Please remove it or set (conflict_markers allow)"
+        ]
+    | _ -> state
+  in
+  fun ~(conflict_markers : Cram_stanza.Conflict_markers.t) lexbuf ->
+    let rec loop acc conflict_state =
+      match Cram_lexer.block lexbuf with
+      | None -> List.rev acc
+      | Some (loc, block) ->
+        let loc = map_loc_to_source_path loc in
+        let conflict_state =
+          match block with
+          | Command _ -> conflict_state
+          | Comment lines ->
+            (match conflict_markers with
+             | Ignore -> conflict_state
+             | Error -> List.fold_left lines ~init:conflict_state ~f:(find_conflict ~loc))
+        in
+        loop ((loc, block) :: acc) conflict_state
+    in
+    loop [] `No_conflict
+;;
+
+module For_tests = struct
+  let cram_stanzas lexbuf = cram_stanzas lexbuf ~conflict_markers:Ignore
+
+  let dyn_of_block = function
+    | Cram_lexer.Comment lines -> Dyn.variant "Comment" [ Dyn.list Dyn.string lines ]
+    | Command lines -> Dyn.variant "Command" [ Dyn.list Dyn.string lines ]
+  ;;
+end
 
 let run_expect_test file ~f =
   let open Fiber.O in
@@ -288,7 +335,7 @@ let cram_commmands commands =
   Buffer.contents buf
 ;;
 
-let create_sh_script cram_stanzas ~temp_dir : sh_script Fiber.t =
+let create_sh_script cram_stanzas ~temp_dir ~setup_scripts : sh_script Fiber.t =
   let script = Path.relative temp_dir "main.sh" in
   let oc = Io.open_out ~binary:true script in
   Fiber.finalize ~finally:(fun () -> Fiber.return @@ close_out oc)
@@ -337,6 +384,15 @@ let create_sh_script cram_stanzas ~temp_dir : sh_script Fiber.t =
         }
   in
   fprln oc "trap 'exit 0' EXIT";
+  let* () =
+    Fiber.sequential_iter setup_scripts ~f:(fun (script_path : Path.t) ->
+      let+ script_sh_path = sh_path script_path in
+      fprln oc ". %s" script_sh_path;
+      match script_path with
+      | In_source_tree _ -> assert false
+      | External _ -> ()
+      | In_build_dir _ -> fprln oc "rm -f %s" script_sh_path)
+  in
   let+ cram_to_output = Fiber.sequential_map ~f:loop cram_stanzas in
   let command_count = !i in
   let metadata_file = Option.some_if (command_count > 0) metadata_file in
@@ -376,9 +432,9 @@ let make_temp_dir ~script =
   temp_dir
 ;;
 
-let run_cram_test env ~src ~script ~cram_stanzas ~temp_dir ~cwd ~timeout =
+let run_cram_test env ~src ~script ~cram_stanzas ~temp_dir ~cwd ~timeout ~setup_scripts =
   let open Fiber.O in
-  let* sh_script = create_sh_script cram_stanzas ~temp_dir in
+  let* sh_script = create_sh_script cram_stanzas ~temp_dir ~setup_scripts in
   let env = make_run_env env ~temp_dir ~cwd in
   let open Fiber.O in
   let sh =
@@ -409,25 +465,58 @@ let run_cram_test env ~src ~script ~cram_stanzas ~temp_dir ~cwd ~timeout =
   | Ok () -> read_and_attach_exit_codes sh_script |> sanitize ~parent_script:script
   | Error `Timed_out ->
     let timeout_loc, timeout = Option.value_exn timeout in
+    let timeout_set_message =
+      [ Pp.textf "A time limit of %.2fs has been set in " timeout
+      ; Pp.tag User_message.Style.Loc @@ Loc.pp_file_colon_line timeout_loc
+      ]
+      |> Pp.concat
+      |> Pp.hovbox
+    in
+    let timeout_msg =
+      match
+        let completed_count =
+          read_exit_codes_and_prefix_maps sh_script.metadata_file |> List.length
+        in
+        let command_blocks_only =
+          List.filter_map sh_script.cram_to_output ~f:(function
+            | Cram_lexer.Comment _ -> None
+            | Cram_lexer.Command block_result -> Some block_result)
+        in
+        let total_commands = List.length command_blocks_only in
+        if completed_count < total_commands
+        then (
+          (* Find the command that got stuck - it's the one at index completed_count *)
+          match List.nth command_blocks_only completed_count with
+          | Some { command; _ } -> Some (String.concat ~sep:" " command)
+          | None -> None)
+        else None
+      with
+      | None -> [ Pp.text "Cram test timed out" ]
+      | Some cmd ->
+        [ Pp.textf "Cram test timed out while running command:"
+        ; Pp.verbatimf "  $ %s" cmd
+        ]
+    in
     User_error.raise
       ~loc:(Loc.in_file (Path.drop_optional_build_context_maybe_sandboxed src))
-      [ Pp.concat
-          [ Pp.paragraphf
-              "Cram test timed out. A time limit of %.2fs has been set in "
-              timeout
-          ; Pp.tag User_message.Style.Loc @@ Loc.pp_file_colon_line timeout_loc
-          ; Pp.verbatim "."
-          ]
-      ]
+      (timeout_msg @ [ timeout_set_message ])
 ;;
 
-let run_produce_correction ~src ~env ~script ~timeout lexbuf =
+let run_produce_correction
+      ~conflict_markers
+      ~src
+      ~env
+      ~script
+      ~timeout
+      ~setup_scripts
+      lexbuf
+  =
   let temp_dir = make_temp_dir ~script in
-  let cram_stanzas = cram_stanzas lexbuf in
+  let cram_stanzas = cram_stanzas lexbuf ~conflict_markers |> List.map ~f:snd in
   let cwd = Path.parent_exn script in
   let env = make_run_env env ~temp_dir ~cwd in
   let open Fiber.O in
-  run_cram_test env ~src ~script ~cram_stanzas ~temp_dir ~cwd ~timeout
+  run_cram_test env ~src ~script ~cram_stanzas ~temp_dir ~cwd ~timeout ~setup_scripts
   >>| compose_cram_output
 ;;
 
@@ -440,17 +529,26 @@ module Script = Persistent.Make (struct
     let test_example () = []
   end)
 
-let run_and_produce_output ~src ~env ~dir:cwd ~script ~dst ~timeout =
+let run_and_produce_output
+      ~conflict_markers
+      ~src
+      ~env
+      ~dir:cwd
+      ~script
+      ~dst
+      ~timeout
+      ~setup_scripts
+  =
   let script_contents = Io.read_file ~binary:false script in
   let lexbuf = Lexbuf.from_string script_contents ~fname:(Path.to_string script) in
   let temp_dir = make_temp_dir ~script in
-  let cram_stanzas = cram_stanzas lexbuf in
+  let cram_stanzas = cram_stanzas lexbuf ~conflict_markers |> List.map ~f:snd in
   (* We don't want the ".cram.run.t" dir around when executing the script. *)
   Path.rm_rf (Path.parent_exn script);
   let env = make_run_env env ~temp_dir ~cwd in
   let open Fiber.O in
   let+ commands =
-    run_cram_test env ~src ~script ~cram_stanzas ~temp_dir ~cwd ~timeout
+    run_cram_test env ~src ~script ~cram_stanzas ~temp_dir ~cwd ~timeout ~setup_scripts
     >>| List.filter_map ~f:(function
       | Cram_lexer.Command c -> Some c
       | Comment _ -> None)
@@ -468,54 +566,91 @@ module Run = struct
       ; script : 'path
       ; output : 'target
       ; timeout : (Loc.t * float) option
+      ; setup_scripts : 'path list
       }
 
     let name = "cram-run"
-    let version = 2
+    let version = 3
 
-    let bimap ({ src = _; dir; script; output; timeout } as t) f g =
-      { t with dir = f dir; script = f script; output = g output; timeout }
+    let bimap ({ src = _; dir; script; output; timeout; setup_scripts } as t) f g =
+      { t with
+        dir = f dir
+      ; script = f script
+      ; output = g output
+      ; timeout
+      ; setup_scripts = List.map ~f setup_scripts
+      }
     ;;
 
     let is_useful_to ~memoize:_ = true
 
-    let encode { src = _; dir; script; output; timeout } path target : Sexp.t =
+    let encode { src = _; dir; script; output; timeout; setup_scripts } path target
+      : Sexp.t
+      =
       List
         [ path dir
         ; path script
         ; target output
         ; Dune_sexp.Encoder.(option float (Option.map ~f:snd timeout))
           |> Dune_sexp.to_sexp
+        ; List (List.map ~f:path setup_scripts)
         ]
     ;;
 
-    let action { src; dir; script; output; timeout } ~ectx:_ ~(eenv : Action.env) =
-      run_and_produce_output ~src ~env:eenv.env ~dir ~script ~dst:output ~timeout
+    let action
+          { src; dir; script; output; timeout; setup_scripts }
+          ~ectx:_
+          ~(eenv : Action.env)
+      =
+      run_and_produce_output
+        ~conflict_markers:Ignore
+        ~src
+        ~env:eenv.env
+        ~dir
+        ~script
+        ~dst:output
+        ~timeout
+        ~setup_scripts
     ;;
   end
 
   include Action_ext.Make (Spec)
 end
 
-let run ~src ~dir ~script ~output ~timeout =
-  Run.action { src; dir; script; output; timeout }
+let run ~src ~dir ~script ~output ~timeout ~setup_scripts =
+  Run.action { src; dir; script; output; timeout; setup_scripts }
 ;;
 
 module Make_script = struct
   module Spec = struct
-    type ('path, 'target) t = 'path * 'target
+    type ('path, 'target) t =
+      { script : 'path
+      ; target : 'target
+      ; conflict_markers : Cram_stanza.Conflict_markers.t
+      }
 
     let name = "cram-generate"
-    let version = 1
-    let bimap (src, dst) f g = f src, g dst
+    let version = 2
+    let bimap t f g = { t with script = f t.script; target = g t.target }
     let is_useful_to ~memoize:_ = true
-    let encode (src, dst) path target : Sexp.t = List [ path src; target dst ]
 
-    let action (src, dst) ~ectx:_ ~eenv:_ =
+    let encode { script = src; target = dst; conflict_markers } path target : Sexp.t =
+      List
+        [ path src
+        ; target dst
+        ; Atom
+            (match conflict_markers with
+             | Error -> "error"
+             | Ignore -> "ignore")
+        ]
+    ;;
+
+    let action { script = src; target = dst; conflict_markers } ~ectx:_ ~eenv:_ =
       let commands =
         Io.read_file ~binary:false src
         |> Lexbuf.from_string ~fname:(Path.to_string src)
-        |> cram_stanzas
+        |> cram_stanzas ~conflict_markers
+        |> List.map ~f:snd
         |> List.filter_map ~f:(function
           | Cram_lexer.Comment _ -> None
           | Command s -> Some s)
@@ -529,7 +664,9 @@ module Make_script = struct
   include Action_ext.Make (Spec)
 end
 
-let make_script ~src ~script = Make_script.action (src, script)
+let make_script ~src ~script ~conflict_markers =
+  Make_script.action { script = src; target = script; conflict_markers }
+;;
 
 module Diff = struct
   module Spec = struct
@@ -555,7 +692,9 @@ module Diff = struct
               [ Pp.textf "%s does not exist or is corrupted" (Path.to_string out) ]
         in
         let current_stanzas =
-          Lexbuf.from_string ~fname:(Path.to_string script) current |> cram_stanzas
+          Lexbuf.from_string ~fname:(Path.to_string script) current
+          |> cram_stanzas ~conflict_markers:Ignore
+          |> List.map ~f:snd
         in
         let rec loop acc current expected =
           match current with
@@ -596,7 +735,14 @@ module Action = struct
     let action script ~ectx:_ ~(eenv : Action.env) =
       run_expect_test
         script
-        ~f:(run_produce_correction ~src:script ~env:eenv.env ~script ~timeout:None)
+        ~f:
+          (run_produce_correction
+             ~conflict_markers:Ignore
+             ~src:script
+             ~env:eenv.env
+             ~script
+             ~timeout:None
+             ~setup_scripts:[])
     ;;
   end
 

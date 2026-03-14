@@ -2,11 +2,8 @@ type t = int * int * int
 
 let make x = x
 let of_ocaml_config ocfg = Ocaml_config.version ocfg
-let supports_no_keep_locs version = version >= (4, 03, 0)
 let supports_opaque_for_mli version = version >= (4, 03, 0)
 let always_reads_alias_cmi version = version < (4, 03, 0)
-let supports_color_in_ocamlparam version = version >= (4, 03, 0)
-let supports_ocaml_color version = version >= (4, 05, 0)
 let supports_response_file version = version >= (4, 05, 0)
 let ocamlmklib_supports_response_file version = version >= (4, 08, 0)
 let stdlib_includes_bigarray version = version >= (4, 07, 0)
@@ -38,10 +35,4 @@ let supports_oxcaml version =
   let ox = "+ox" in
   Stdune.String.is_suffix ~suffix:jst version
   || Stdune.String.is_suffix ~suffix:ox version
-;;
-
-let supports_parametrized_library version =
-  (* We create the alias to make sure it is easy to distinguish the
-     functionality from the compiler variant. *)
-  supports_oxcaml version
 ;;

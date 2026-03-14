@@ -80,9 +80,9 @@ let create ~level ~default_outputs ~named_outputs ~on_error ~time_source ~transf
   let id = Id.create () in
   let control_events =
     Bus.create_exn
-      Arity1_local
       ~on_subscription_after_first_write:Allow
       ~on_callback_raise:(ignore : Error.t -> unit)
+      ()
   in
   let transforms = Doubly_linked.of_list transforms in
   let t =

@@ -31,7 +31,7 @@ let connector ~buf prefix child =
   if half then Buffer.add_string buf "╴" else Buffer.add_string buf "─"
 ;;
 
-let is_all_whitespace = String.for_all ~f:Char.is_whitespace
+let is_all_whitespace x = String.for_all ~f:Char.is_whitespace x
 
 let count_leading_empty_lines s =
   s |> String.split ~on:'\n' |> List.take_while ~f:is_all_whitespace |> List.length

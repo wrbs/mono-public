@@ -20,6 +20,12 @@ include%template
   with type t := t
    and type value := float
 
+[%%template:
+[@@@mode.default m = (global, local)]
+
+val of_or_null : float or_null @ m -> t @ m
+val to_or_null : t @ m -> float or_null @ m]
+
 include Comparable.Map_and_set_binable with type t := t
 
 module Array : sig

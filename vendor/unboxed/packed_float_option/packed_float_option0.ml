@@ -33,13 +33,20 @@ module Stable = struct
     let[@zero_alloc] of_option = function
       | None -> none
       | Some v -> (some [@mode m]) v [@exclave_if_local m]
+    ;;
+
+    let to_or_null (t @ m) = if is_none t then Null else This t [@exclave_if_local m]
+
+    let[@zero_alloc] of_or_null = function
+      | Null -> none
+      | This v -> (some [@mode m]) v [@exclave_if_local m]
     ;;]
 
     let sexp_of_t t = to_option t |> [%sexp_of: float option]
     let t_of_sexp s = [%of_sexp: float option] s |> of_option
     let t_sexp_grammar = [%sexp_grammar: float option] |> Sexplib.Sexp_grammar.coerce
     let equal = [%compare.equal: float]
-    let%template equal = [%compare_local.equal: float] [@@mode m = local]
+    let%template equal = ([%compare.equal: float] [@mode local]) [@@mode m = local]
   end
 end
 
@@ -139,7 +146,7 @@ module Local = struct
   let to_float_none_as_nan = (to_float_none_as_nan [@mode local])
 
   (* Evaluatues [none = none] to true *)
-  let equal = [%compare_local.equal: float]
+  let equal = ([%compare.equal: float] [@mode local])
 
   module Infix = struct
     let ( + ) = Stdlib.( +. )
@@ -286,9 +293,9 @@ module Unboxed = struct
     [%compare.equal: Float_u.t] t1 t2
   ;;
 
-  let[@zero_alloc] none () = Float_u.nan ()
-  let[@zero_alloc] is_none (t : t) : bool = Float_u.is_nan (t :> float#)
-  let unsafe_value (t : t) : float# = (t :> float#)
+  let[@inline] [@zero_alloc] none () = Float_u.nan ()
+  let[@inline] [@zero_alloc] is_none (t : t) : bool = Float_u.is_nan (t :> float#)
+  let[@inline] unsafe_value (t : t) : float# = (t :> float#)
 
   [%%template
   [@@@mode.default m = (global, local)]
@@ -299,11 +306,11 @@ module Unboxed = struct
 
   let[@inline] [@zero_alloc] unbox (t @ local) = Float_u.of_float t]
 
-  let[@zero_alloc] is_some t = not (is_none t)
+  let[@inline] [@zero_alloc] is_some t = not (is_none t)
   let[@inline] [@zero_alloc] const t = Float_u.of_float t
   let[@inline] [@zero_alloc] abs t = Float_u.abs t
   let[@inline] [@zero_alloc] select cond t1 t2 = Float_u.select cond t1 t2
-  let[@zero_alloc] min t1 t2 = Float_u.min t1 t2
+  let[@inline] [@zero_alloc] min t1 t2 = Float_u.min t1 t2
   let[@inline] [@zero_alloc] unchecked_some v = v
   let[@inline] [@zero_alloc] some_if b v = select b v (none ())
 
@@ -471,6 +478,10 @@ module Unboxed = struct
     let[@zero_alloc] create_local contents = exclave_ { contents }
     let[@inline] create_none () = create (none ())
     let[@inline] [@zero_alloc] set_none t = set t (none ())
+
+    let[@inline] [@zero_alloc] set_float_nan_as_none t flt =
+      set t (of_float_nan_as_none flt)
+    ;;
   end
 
   module Stable = struct

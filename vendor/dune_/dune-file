@@ -44,9 +44,15 @@
 (rule
  (copy dune-private-libs.opam.template chrome-trace.opam.template))
 
+(rule
+ (copy dune-private-libs.opam.template fs-io.opam.template))
+
+(rule
+ (copy dune-private-libs.opam.template top-closure.opam.template))
+
 (env
  (_
-  (flags :standard -alert -unstable)
+  (flags :standard %{dune-warnings} -alert -unstable)
   (env-vars
    ; Workaround for #6607
    (CLICOLOR_FORCE 0))))

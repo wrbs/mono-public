@@ -1,12 +1,12 @@
-open! Stdune
-open! Fiber.O
+open Stdune
+open Fiber.O
 module Dune_rpc = Dune_rpc_private
 open Dune_rpc
 open Dune_rpc_server
 module Scheduler = Test_scheduler
 
 let () = Printexc.record_backtrace false
-let () = Dune_util.Log.init_disabled ()
+let () = Log.init_disabled ()
 let print pp = Format.printf "%a@." Pp.to_fmt pp
 let print_dyn dyn = print (Dyn.pp dyn)
 
@@ -765,7 +765,7 @@ let%test_module "finalization" =
         | Response.E
         |   { payload = Some [ [ "id"; [ "initialize" ] ] ]
         |   ; message =
-        |       "connection terminated. this request will never receive a response"
+        |       "Connection terminated. This request will never receive a response."
         |   ; kind = Connection_dead
         |   }
         \-----------------------------------------------------------------------
@@ -781,7 +781,7 @@ let%test_module "finalization" =
         | Response.E
         |   { payload = Some [ [ "id"; [ "initialize" ] ] ]
         |   ; message =
-        |       "connection terminated. this request will never receive a response"
+        |       "Connection terminated. This request will never receive a response."
         |   ; kind = Connection_dead
         |   }
         \-----------------------------------------------------------------------
@@ -807,7 +807,8 @@ let%test_module "finalization" =
         \-----------------------------------------------------------------------
 
 
-        --------------- |}]
+        ---------------
+        |}]
     ;;
   end)
 ;;

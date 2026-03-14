@@ -1,5 +1,12 @@
 # Changes
 
+## 2026/01/12
+
+* Use `app_nil_r` instead of `app_nil_end`
+  to avoid a warning with Coq 8.18.
+
+* Coq 8.13 or newer is now required.
+
 ## 2024/07/15
 
 * Avoid the `future-coercion-class-field` warning.

@@ -3,8 +3,8 @@
   (env-vars
    (DUNE_CONFIG__BACKGROUND_SANDBOXES disabled)
    (DUNE_CONFIG__BACKGROUND_DIGESTS disabled)
-   ; We set ocaml to always be colored since it changes the output of
-   ; ocamlc error messages. See https://github.com/ocaml/ocaml/issues/14144
+   ;; We set ocaml to always be colored since it changes the output of
+   ;; ocamlc error messages. See https://github.com/ocaml/ocaml/issues/14144
    (OCAML_COLOR always))
   (binaries
    ../utils/dune_cmd.exe
@@ -25,7 +25,9 @@
   (env_var OCAML_COLOR)
   %{bin:dune_cmd}
   (package dune))
- ; Tests shouldn't take longer than 60s
+ ;; We don't allow conflict markers in tests
+ (conflict_markers error)
+ ;; Tests shouldn't take longer than 60s
  (timeout 60))
 
 (cram
@@ -65,12 +67,6 @@
 ;; The following test is flaky due to platform sensitivity
 ;; see https://github.com/ocaml/dune/issues/3744
 
-(subdir
- cram
- (cram
-  (applies_to error)
-  (enabled_if false)))
-
 ;; CONDITIONALLY DISABLED TESTS
 
 (cram
@@ -91,25 +87,6 @@
   (and
    (<> %{ocaml-config:system} macosx)
    (<> %{ocaml-config:system} win))))
-
-(subdir
- cram
- ;; mac has a different sh error message
- (cram
-  (applies_to error)
-  (enabled_if
-   (<> "macosx" %{ocaml-config:system}))))
-
-(subdir
- cram
- (cram
-  (applies_to hg-access)
-  (enabled_if %{bin-available:hg})))
-
-(cram
- (applies_to link-time-transitive-deps dune-build-info-subdir)
- (deps
-  (package dune-build-info)))
 
 (cram
  (applies_to version-corruption)
@@ -149,3 +126,7 @@
  (applies_to hidden-deps-unsupported)
  (enabled_if
   (< %{ocaml_version} 5.2.0)))
+
+(cram
+ (applies_to trace-file)
+ (deps %{bin:perl}))

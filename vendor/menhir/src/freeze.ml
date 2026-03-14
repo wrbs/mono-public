@@ -8,52 +8,96 @@
 (*                                                                            *)
 (******************************************************************************)
 
-(* The automaton is now frozen and will no longer be modified. It is
-   time to dump a new description of it, if requested by the user. *)
-
-let () =
-  if Settings.dump_resolved then
-    let module D = Dump.Make(Default) in
-    D.dump (Settings.base ^ ".automaton.resolved")
-
 let () =
   if Settings.automaton_graph then
-    AutomatonGraph.print_automaton_graph()
+    let module A = AutomatonGraph.Make(Lr1) in
+    A.print (Settings.base ^ ".dot")
 
-(* Let [Interpret] handle the command line options [--interpret],
-   [--interpret-error], [--compile-errors], [--compare-errors]. *)
+(* Handle the command line options [--interpret], [--interpret-error],
+   [--compile-errors], [--compare-errors], etc. *)
 
 let () =
-  Interpret.run()
+  match Settings.backend with
+  | `Interpret show ->
+      let module I = Interpret.Make(Lr1)(Settings) in
+      I.interpret show
+  | `InterpretError ->
+      let module I = Interpret.Make(Lr1)(Settings) in
+      I.interpret_error()
+  | `InterpretGLR show ->
+      let module I = InterpretGLR.Make(Lr1) in
+      I.interpret show
+  | _ ->
+      ()
+
+module Messages =
+  Messages.Make(Lr1)(Settings)
+
+let () =
+  Settings.compile_errors |> Option.iter @@ fun filename ->
+  Messages.compile_errors filename;
+  exit 0
+
+let () =
+  Settings.compare_errors |> Option.iter @@ fun (filename1, filename2) ->
+  Messages.compare_errors filename1 filename2;
+  exit 0
+
+let () =
+  Settings.merge_errors |> Option.iter @@ fun (filename1, filename2) ->
+  Messages.merge_errors filename1 filename2;
+  exit 0
+
+let () =
+  Settings.update_errors |> Option.iter @@ fun filename ->
+  Messages.update_errors filename;
+  exit 0
+
+let () =
+  Settings.echo_errors |> Option.iter @@ fun filename ->
+  Messages.echo_errors false filename;
+  exit 0
+
+let () =
+  Settings.echo_errors_concrete |> Option.iter @@ fun filename ->
+  Messages.echo_errors true filename;
+  exit 0
 
 (* If [--list-errors] is set, produce a list of erroneous input sentences,
    then stop. *)
 
 let () =
-  if Settings.list_errors then begin
+  if Settings.list_errors then
     let module X = struct
       (* Undocumented: if [--log-automaton 2] is set, be verbose. *)
-      let verbose = Settings.logA >= 2
+      let verbose = !Channels.logA >= 2
       (* For my own purposes, LRijkstra can print one line of statistics to a .csv file. *)
       let statistics = if false then Some "lr.csv" else None
-      (* Fast algorithm can validate its results against classic one if
-         [validate] is true. *)
-      let validate = Settings.list_errors_algorithm = `Validate
     end in
-    let (module Alg) = match Settings.list_errors_algorithm with
-      | `Fast | `Validate ->
-        (module LRijkstraFast.Run(X) : LRijkstra.REACHABILITY_ALGORITHM)
-      | `Classic ->
-        (module LRijkstraClassic.Run(X) : LRijkstra.REACHABILITY_ALGORITHM)
-    in
     let module L = struct
-      include LRijkstra.Run(X)(Alg)()
+      include LRijkstra.Run(X)()
     end in
     exit 0
-  end
 
 (* If requested, generate a .cmly file. *)
 
 let () =
   if Settings.cmly then
     Cmly_write.write (Settings.base ^ ".cmly")
+
+(* If no code generation was requested (i.e., no back-end was selected)
+   then exit at this point. *)
+
+let () =
+  if Settings.backend = `NoBackend then
+    exit 0
+
+(* If a test of the GLR interpreter has been requested, run it now (and stop). *)
+
+(* Note: [TestGLR.benchmark] is currently unused. *)
+
+let () =
+  if Settings.test_GLR then (TestGLR.test(); exit 0)
+
+let force () =
+  ()

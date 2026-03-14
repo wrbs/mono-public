@@ -90,13 +90,21 @@ let poll_handling_rpc_build_requests ~(common : Common.t) ~config =
     | `Allow server -> server
     | `Forbid_builds -> Code_error.raise "rpc server must be allowed in passive mode" []
   in
-  Scheduler.Run.poll_passive
+  Dune_engine.Scheduler.Run.poll_passive
     ~get_build_request:
-      (let+ (Build (targets, ivar)) = Dune_rpc_impl.Server.pending_build_action rpc in
+      (let+ { kind; outcome } = Dune_rpc_impl.Server.pending_action rpc in
        let request setup =
-         Target.interpret_targets (Common.root common) config setup targets
+         let root = Common.root common in
+         match kind with
+         | Build targets ->
+           Target.interpret_targets (Common.root common) config setup targets
+         | Runtest test_paths ->
+           Runtest_common.make_request
+             ~contexts:setup.contexts
+             ~to_cwd:root.to_cwd
+             ~test_paths
        in
-       run_build_system ~common ~request, ivar)
+       run_build_system ~common ~request, outcome)
 ;;
 
 let run_build_command_poll_eager ~(common : Common.t) ~config ~request : unit =
@@ -105,7 +113,7 @@ let run_build_command_poll_eager ~(common : Common.t) ~config ~request : unit =
     (* Run two fibers concurrently. One is responible for rebuilding targets
        named on the command line in reaction to file system changes. The other
        is responsible for building targets named in RPC build requests. *)
-    let+ () = Scheduler.Run.poll (run_build_system ~common ~request)
+    let+ () = Dune_engine.Scheduler.Run.poll (run_build_system ~common ~request)
     and+ () = poll_handling_rpc_build_requests ~common ~config in
     ())
 ;;
@@ -138,14 +146,6 @@ let run_build_command ~(common : Common.t) ~config ~request =
     ~request
 ;;
 
-let build_via_rpc_server ~print_on_success ~targets =
-  Rpc_common.wrap_build_outcome_exn
-    ~print_on_success
-    (Rpc.Build.build ~wait:true)
-    targets
-    ()
-;;
-
 let build =
   let doc = "Build the given targets, or the default ones if none are given." in
   let man =
@@ -162,12 +162,37 @@ let build =
         ]
     ]
   in
-  let name_ = Arg.info [] ~docv:"TARGET" in
+  (* CR-someday Alizter: document this option *)
+  let name_ = Arg.info [] ~docv:"TARGET" ~doc:None in
   let term =
     let+ builder = Common.Builder.term
     and+ targets = Arg.(value & pos_all dep [] name_)
-    and+ aliases_rec = Arg.(value & opt_all Dep.alias_rec_arg [] & info [ "alias-rec" ])
-    and+ aliases = Arg.(value & opt_all Dep.alias_arg [] & info [ "alias" ]) in
+    and+ aliases_rec =
+      Arg.(
+        value
+        & opt_all Dep.alias_rec_arg []
+        & info
+            [ "alias-rec" ]
+            ~docv:"ALIAS"
+            ~doc:
+              (Some
+                 "Build the alias $(docv) in its parent directory and all \
+                  subdirectories. Equivalent to the build target $(b,@)$(docv). Example: \
+                  $(b,--alias-rec dir/foo) builds the $(b,foo) alias in $(b,dir/) and \
+                  all its subdirectories. Repeatable."))
+    and+ aliases =
+      Arg.(
+        value
+        & opt_all Dep.alias_arg []
+        & info
+            [ "alias" ]
+            ~docv:"ALIAS"
+            ~doc:
+              (Some
+                 "Build $(docv) in its parent directory only. Equivalent to the build \
+                  target $(b,@@)$(docv). Example: $(b,--alias dir/foo) builds the \
+                  $(b,foo) alias in $(b,dir/) only. Repeatable."))
+    in
     let targets = List.concat [ targets; aliases; aliases_rec ] in
     let targets =
       match targets with
@@ -198,13 +223,17 @@ let build =
          an RPC server in the background to schedule the fiber which will
          perform the RPC call.
       *)
-      Rpc_common.run_via_rpc
-        ~builder
-        ~common
-        ~config
-        lock_held_by
-        (Rpc.Build.build ~wait:true)
-        targets
+      let targets = Rpc.Rpc_common.prepare_targets targets in
+      Scheduler.go_without_rpc_server ~common ~config (fun () ->
+        let open Fiber.O in
+        Rpc.Rpc_common.fire_request
+          ~name:"build"
+          ~wait:true
+          ~lock_held_by
+          builder
+          Dune_rpc_impl.Decl.build
+          targets
+        >>| Rpc.Rpc_common.wrap_build_outcome_exn ~print_on_success:true)
     | Ok () ->
       let request setup =
         Target.interpret_targets (Common.root common) config setup targets

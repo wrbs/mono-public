@@ -10,7 +10,8 @@ let man =
   ]
 ;;
 
-let info = Cmd.info "utop" ~doc ~man
+let man_xrefs = [ `Cmd "top" ]
+let info = Cmd.info "utop" ~man_xrefs ~doc ~man
 
 let lock_utop_if_dev_tool_enabled () =
   match Lazy.force Lock_dev_tool.is_enabled with
@@ -20,9 +21,12 @@ let lock_utop_if_dev_tool_enabled () =
 
 let term =
   let+ builder = Common.Builder.term
-  and+ dir = Arg.(value & pos 0 string "" & Arg.info [] ~docv:"DIR")
-  and+ ctx_name = Common.context_arg ~doc:{|Select context where to build/run utop.|}
-  and+ args = Arg.(value & pos_right 0 string [] (Arg.info [] ~docv:"ARGS")) in
+  (* CR-someday Alizter: document this option *)
+  and+ dir = Arg.(value & pos 0 string "" & Arg.info [] ~docv:"DIR" ~doc:None)
+  and+ ctx_name =
+    Common.context_arg ~doc:(Some {|Select context where to build/run utop.|})
+  (* CR-someday Alizter: document this option *)
+  and+ args = Arg.(value & pos_right 0 string [] (Arg.info [] ~docv:"ARGS" ~doc:None)) in
   let common, config = Common.init builder in
   let dir = Common.prefix_target common dir in
   if not (Path.is_directory (Path.of_string dir))
@@ -82,7 +86,7 @@ let term =
             Dune_rules.Lib_flags.L.toplevel_ld_paths requires lib_config
             |> Path.Set.fold
                  ~f:(fun dir env ->
-                   Env_path.cons ~var:Ocaml.Env.caml_ld_library_path env ~dir)
+                   Env_path.cons ~var:Root.Ocaml.Env.caml_ld_library_path env ~dir)
                  ~init:env
           in
           let env =

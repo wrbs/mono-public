@@ -1,6 +1,6 @@
 (*---------------------------------------------------------------------------
    Copyright (c) 2014 The uucp programmers. All rights reserved.
-   SPDX-License-Identifier: ISC
+   Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
 (* Reapeatedly looks up properties for the whole character set. *)
@@ -38,7 +38,6 @@ let lookup_break count =
   prop "grapheme_cluster" Uucp.Break.grapheme_cluster;
   prop "word" Uucp.Break.word;
   prop "sentence" Uucp.Break.sentence;
-  prop "indic_conjunct_break" Uucp.Break.indic_conjunct_break;
   prop "east_asian_width" Uucp.Break.east_asian_width;
   ()
 
@@ -58,9 +57,8 @@ let lookup_case count =
 let lookup_cjk count =
   let prop fname p = prop count "Uucd.Cjk" fname p in
   prop "ideographic" Uucp.Cjk.is_ideographic;
-  prop "ids_unary_operator" Uucp.Cjk.is_ids_unary_operator;
-  prop "ids_binary_operator" Uucp.Cjk.is_ids_binary_operator;
-  prop "ids_trinary_operator" Uucp.Cjk.is_ids_trinary_operator;
+  prop "ids_bin_op" Uucp.Cjk.is_ids_bin_op;
+  prop "ids_tri_op" Uucp.Cjk.is_ids_tri_op;
   prop "radical" Uucp.Cjk.is_radical;
   prop "unified_ideograph" Uucp.Cjk.is_unified_ideograph;
   ()
@@ -198,3 +196,19 @@ let main () =
   lookup !count !mods
 
 let () = main ()
+
+(*---------------------------------------------------------------------------
+   Copyright (c) 2014 The uucp programmers
+
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
+
+   THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+   WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+   MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+   ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+   WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+   ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+  ---------------------------------------------------------------------------*)

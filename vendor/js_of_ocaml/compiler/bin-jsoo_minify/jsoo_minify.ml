@@ -91,14 +91,8 @@ let main =
   let t = Cmdliner.Term.(const f $ Cmd_arg.options) in
   Cmdliner.Cmd.v Cmd_arg.info t
 
-let (_ : int) =
-  try
-    Sys.with_async_exns (fun () ->
-      Cmdliner.Cmd.eval
-        ~catch:false
-        ~argv:(Jsoo_cmdline.normalize_argv ~warn:(warn "%s") Sys.argv)
-        main)
-  with
+let (exit_code : int) =
+  try with_async_exns @@ fun () -> Cmdliner.Cmd.eval ~catch:false ~argv:Sys.argv main with
   | (Match_failure _ | Assert_failure _ | Not_found) as exc ->
       let backtrace = Printexc.get_backtrace () in
       Format.eprintf
@@ -107,10 +101,12 @@ let (_ : int) =
         Sys.argv.(0);
       Format.eprintf "Error: %s@." (Printexc.to_string exc);
       prerr_string backtrace;
-      exit 1
+      1
   | Failure s ->
       Format.eprintf "%s: Error: %s@." Sys.argv.(0) s;
-      exit 1
+      1
   | exc ->
       Format.eprintf "%s: Error: %s@." Sys.argv.(0) (Printexc.to_string exc);
-      exit 1
+      1
+
+let () = exit exit_code

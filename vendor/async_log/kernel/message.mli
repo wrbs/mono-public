@@ -24,6 +24,16 @@ val tags : t -> (string * string) list
 val add_tags : t -> (string * string) list -> t
 val to_write_only_text : t -> Time_float.Zone.t -> string
 
+module For_testing : sig
+  val to_string
+    :  t
+    -> Time_float.Zone.t
+    -> time:[ `Keep | `Omit ]
+    -> tags:[ `Keep | `Omit ]
+    -> level:[ `Keep | `Omit ]
+    -> string
+end
+
 module Stable : sig
   module T1 : sig
     module V2 : sig

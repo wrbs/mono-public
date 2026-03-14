@@ -129,8 +129,8 @@ let analyze program : label -> env option =
       let block = (lookup program label).block in
       exec jump env block
   end in
+  Time.time "StackLang: static analysis of the current token" @@ fun () ->
   let module D = Fix.DataFlow.ForHashedType(Label)(P)(G) in
-  Time.tick "StackLang: static analysis of the current token";
   D.solution
 
 (* -------------------------------------------------------------------------- *)
@@ -232,13 +232,13 @@ and map_casetok env r branches odefault =
   let default_tokens = P.diff env (all_tokens branches) in
   let dead_default = P.is_empty default_tokens in
   (* Transform every live branch, and drop every dead branch. *)
-  let branches = Misc.filter_map (map_tokbranch env) branches in
+  let branches = MList.filter_map (map_tokbranch env) branches in
   (* If the default branch is dead and if there is only one explicit
      branch (whose pattern does not assign any register) then this
      [case] construct is redundant and can be removed. *)
   begin try
     if not (dead_default && List.length branches = 1) then raise Break;
-    let branch = Misc.single branches in
+    let branch = MList.single branches in
     let tokpat, block = branch in
     if not (no_assigns tokpat) then raise Break;
     (* Keep only the live branch. *)
@@ -270,6 +270,7 @@ let map_tblock env tblock =
 (* The main transformation function. *)
 
 let transform program : program =
+  Time.time "StackLang: simplifying case analyses on the current token" @@ fun () ->
   let analysis : label -> env option = analyze program in
   let cfg = Label.Map.mapi (fun label tblock ->
     match analysis label with
@@ -279,5 +280,4 @@ let transform program : program =
         (* This block is apparently dead. No need to transform it. *)
         tblock
   ) program.cfg in
-  Time.tick "StackLang: simplifying case analyses on the current token";
   { program with cfg }

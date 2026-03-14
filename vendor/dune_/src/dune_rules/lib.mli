@@ -12,6 +12,30 @@ val to_dyn : t -> Dyn.t
 val name : t -> Lib_name.t
 
 val implements : t -> t Resolve.Memo.t option
+val parameters : t -> t list Resolve.Memo.t
+
+module Parameterised : sig
+  type status =
+    | Not_parameterised
+    | Partial
+    | Complete
+
+  val status : t -> status
+  val arguments : t -> t list
+  val applied_modules : t -> Module_name.t Parameterised_name.t list Resolve.t
+  val applied_name : t -> Module_name.t Parameterised_name.t Resolve.t
+  val requires : t -> t list Resolve.t
+  val for_instance : build_dir:Path.Build.t -> ext_lib:string -> t -> t
+  val dir : build_dir:Path.Build.t -> t -> Path.Build.t
+
+  val instantiate
+    :  loc:Loc.t
+    -> from:[ `depends | `inline_tests ]
+    -> t
+    -> (Loc.t * t Resolve.t) list
+    -> parent_parameters:(Loc.t * t) list
+    -> t Resolve.t
+end
 
 (** [is_local t] returns [true] whenever [t] is defined in the local workspace *)
 val is_local : t -> bool
@@ -41,6 +65,8 @@ module L : sig
     -> key:('a -> t)
     -> deps:('a -> 'a list Resolve.Memo.t)
     -> ('a list, 'a list) Result.t Resolve.Memo.t
+
+  val project_root : t list -> Path.Source.t option
 end
 
 (** {1 Compilation contexts} *)
@@ -60,6 +86,8 @@ module Compile : sig
   (** Return the list of dependencies needed for linking this library/exe *)
   val requires_link : t -> lib list Resolve.t Memo.Lazy.t
 
+  val user_written_requires : t -> (Loc.t * lib) list Resolve.Memo.t
+
   (** Dependencies listed by the user + runtime dependencies from ppx *)
   val direct_requires : t -> lib list Resolve.Memo.t
 
@@ -75,6 +103,9 @@ module Compile : sig
 
   (** Transitive closure of all used ppx rewriters *)
   val pps : t -> lib list Resolve.Memo.t
+
+  (** Libraries allowed to be unused *)
+  val allow_unused_libraries : t -> lib list Resolve.Memo.t
 
   (** Sub-systems used in this compilation context *)
   val sub_systems : t -> sub_system list Memo.t
@@ -154,6 +185,7 @@ module DB : sig
     -> allow_overlaps:bool
     -> forbidden_libraries:(Loc.t * Lib_name.t) list
     -> Lib_dep.t list
+    -> allow_unused_libraries:(Loc.t * Lib_name.t) list
     -> pps:(Loc.t * Lib_name.t) list
     -> dune_version:Dune_lang.Syntax.Version.t
     -> Compile.t

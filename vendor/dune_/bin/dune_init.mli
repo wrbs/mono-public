@@ -7,7 +7,7 @@ module Init_context : sig
   open Dune_config_file
 
   type t =
-    { dir : Path.t
+    { dir : Path.Source.t
     ; project : Dune_project.t
     ; defaults : Dune_config.Project_defaults.t
     }
@@ -90,7 +90,7 @@ module Component : sig
       }
   end
 
-  (** All the the supported types of components *)
+  (** All the supported types of components *)
   type 'options t =
     | Executable : Options.Executable.t Options.t -> Options.Executable.t t
     | Library : Options.Library.t Options.t -> Options.Library.t t

@@ -86,7 +86,7 @@ let print_pped_file =
     Path.set_extension
       pp_file
       ~ext:
-        (match (ml_kind : Ocaml.Ml_kind.t) with
+        (match (ml_kind : Root.Ocaml.Ml_kind.t) with
          | Intf -> ".cmi.dump"
          | Impl -> ".cmo.dump")
     |> Path.as_in_build_dir_exn
@@ -157,9 +157,12 @@ let get_pped_file super_context file =
 
 let term =
   let+ builder = Common.Builder.term
-  and+ context_name = Common.context_arg ~doc:"Build context to use."
+  and+ context_name = Common.context_arg ~doc:(Some "Build context to use.")
   and+ _ = Describe_lang_compat.arg
-  and+ file = Arg.(required & pos 0 (some string) None (Arg.info [] ~docv:"FILE")) in
+  and+ file =
+    (* CR-someday Alizter: document this option *)
+    Arg.(required & pos 0 (some string) None (Arg.info [] ~docv:"FILE" ~doc:None))
+  in
   let common, config = Common.init builder in
   Scheduler.go_with_rpc_server ~common ~config
   @@ fun () ->

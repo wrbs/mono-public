@@ -254,11 +254,6 @@ let odoc_base_flags quiet build_dir =
   | Nonfatal -> S []
 ;;
 
-let odoc_dev_tool_lock_dir_exists () =
-  let path = Dune_pkg.Lock_dir.dev_tool_lock_dir_path Odoc in
-  Fs_memo.dir_exists (Path.Outside_build_dir.In_source_dir path)
-;;
-
 let odoc_dev_tool_exe_path_building_if_necessary () =
   let open Action_builder.O in
   let path = Path.build (Pkg_dev_tool.exe_path Odoc) in
@@ -267,9 +262,10 @@ let odoc_dev_tool_exe_path_building_if_necessary () =
 ;;
 
 let odoc_program sctx dir =
-  let open Action_builder.O in
-  let* odoc_dev_tool_lock_dir_exists =
-    Action_builder.of_memo (odoc_dev_tool_lock_dir_exists ())
+  let odoc_dev_tool_lock_dir_exists =
+    match Config.get Compile_time.lock_dev_tools with
+    | `Enabled -> true
+    | `Disabled -> false
   in
   match odoc_dev_tool_lock_dir_exists with
   | true -> odoc_dev_tool_exe_path_building_if_necessary ()
@@ -583,7 +579,7 @@ module Toplevel_index = struct
   (** This format is public API. *)
   let to_json items = `Assoc [ "packages", list_to_json items ~f:item_to_json ]
 
-  let json t = Dune_stats.Json.to_string (to_json t)
+  let json t = Json.to_string (to_json t)
 
   let content (output : Output_format.t) t =
     match output with
@@ -988,7 +984,7 @@ let setup_package_odoc_rules sctx ~pkg =
         ~doc_dir:(Paths.odocs ctx (Pkg pkg))
         ~includes:(Action_builder.return []))
   in
-  Dep.setup_deps ctx (Pkg pkg) (Path.set_of_build_paths_list odocs)
+  Path.Set.of_list_map ~f:Path.build odocs |> Dep.setup_deps ctx (Pkg pkg)
 ;;
 
 let gen_project_rules sctx project =

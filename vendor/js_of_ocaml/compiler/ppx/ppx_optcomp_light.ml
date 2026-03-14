@@ -24,7 +24,8 @@
     ]}
     on module (Pstr_module),
     toplevel bindings (Pstr_value, Pstr_primitive)
-    and pattern in case (pc_lhs)
+    pattern in case (pc_lhs)
+    and module in signature (Psig_module)
 *)
 
 open StdLabels
@@ -38,6 +39,12 @@ module Version : sig
   val compare : t -> t -> int
 
   val current : t
+
+  type extra_prefix =
+    | Plus
+    | Tilde
+
+  val extra : (extra_prefix * string) option
 end = struct
   type t = int list
 
@@ -86,6 +93,26 @@ end = struct
         match compint x y with
         | 0 -> compare xs ys
         | n -> n)
+
+  type extra_prefix =
+    | Plus
+    | Tilde
+
+  type release_info = { extra : (extra_prefix * string) option }
+
+  let extra =
+    (* Sys.ocaml_release is only available since OCaml 4.14. For older
+       version of OCaml, [ocaml_release.extra] will evaluate to
+       [None]. *)
+    let ocaml_release = { extra = None } in
+    ignore ocaml_release.extra;
+    match
+      let open! Sys in
+      ocaml_release.extra
+    with
+    | None -> None
+    | Some (Plus, tag) -> Some (Plus, tag)
+    | Some (Tilde, tag) -> Some (Tilde, tag)
 end
 
 exception Invalid of Location.t
@@ -155,61 +182,77 @@ let keep loc (attrs : attributes) =
             | PStr [ { pstr_desc = Pstr_eval (e, []); _ } ] -> e
             | _ -> raise (Invalid attr_loc)
           in
-          let loc = e.pexp_loc in
-          let rec eval = function
-            | { pexp_desc = Pexp_ident { txt = Lident "ocaml_version"; _ }; _ } ->
-                Version Version.current
-            | { pexp_desc = Pexp_ident { txt = Lident "ast_version"; _ }; _ } ->
-                Int Ppxlib.Selected_ast.version
-            | { pexp_desc = Pexp_construct ({ txt = Lident "true"; _ }, None); _ } ->
-                Bool true
-            | { pexp_desc = Pexp_construct ({ txt = Lident "false"; _ }, None); _ } ->
-                Bool false
-            | { pexp_desc = Pexp_constant (Pconst_integer (d, None)); _ } ->
-                Int (int_of_string d)
-            | { pexp_desc = Pexp_tuple l; _ } -> Tuple (List.map l ~f:(fun (_label, l) -> eval l))
-            | { pexp_desc = Pexp_apply (op, [ (Nolabel, a); (Nolabel, b) ]); pexp_loc; _ }
-              -> (
-                let op = get_bin_op op in
-                let a = eval a in
-                let b = eval b in
-                match op with
-                | LE | GE | LT | GT | NEQ | EQ ->
-                    let comp =
-                      match a, b with
-                      | Version _, _ | _, Version _ ->
-                          Version.compare (version a) (version b)
-                      | Int a, Int b -> compare a b
-                      | _ -> raise (Invalid pexp_loc)
-                    in
-                    let op =
-                      match op with
-                      | LE -> ( <= )
-                      | GE -> ( >= )
-                      | LT -> ( < )
-                      | GT -> ( > )
-                      | EQ -> ( = )
-                      | NEQ -> ( <> )
-                      | _ -> assert false
-                    in
-                    Bool (op comp 0)
-                | AND -> (
-                    match a, b with
-                    | Bool a, Bool b -> Bool (a && b)
-                    | _ -> raise (Invalid loc))
-                | OR -> (
-                    match a, b with
-                    | Bool a, Bool b -> Bool (a || b)
-                    | _ -> raise (Invalid loc))
-                | NOT -> raise (Invalid loc))
-            | { pexp_desc = Pexp_apply (op, [ (Nolabel, a) ]); _ } -> (
-                let op = get_un_op op in
-                let a = eval a in
-                match op, a with
-                | NOT, Bool b -> Bool (not b)
-                | NOT, _ -> raise (Invalid loc)
-                | _ -> raise (Invalid loc))
-            | _ -> raise (Invalid loc)
+          let rec eval e =
+            let open Ppxlib.Ast_pattern in
+            let loc = e.pexp_loc in
+            match
+              (parse_res
+                 (pexp_ident (lident (string "ocaml_version"))
+                 >>| (fun () -> Version Version.current)
+                 ||| (pexp_ident (lident (string "ast_version"))
+                     >>| fun () -> Int Ppxlib.Selected_ast.version)
+                 ||| (pexp_ident (lident (string "oxcaml"))
+                     >>| fun () ->
+                     Bool
+                       (match Version.extra with
+                       | Some (Plus, "ox") -> true
+                       | _ -> false))
+                 ||| (pexp_construct (lident (string "true")) drop >>| fun () -> Bool true)
+                 ||| (pexp_construct (lident (string "false")) drop
+                     >>| fun () -> Bool false)
+                 ||| (pexp_constant (pconst_integer __ none)
+                     >>| fun () d -> Int (int_of_string d))
+                 ||| (pexp_tuple __ >>| fun () l -> Tuple (List.map l ~f:eval))
+                 ||| (pexp_apply __ __
+                     >>| fun () op l ->
+                     match l with
+                     | [ (Nolabel, a); (Nolabel, b) ] -> (
+                         let op = get_bin_op op in
+                         let a = eval a in
+                         let b = eval b in
+                         match op with
+                         | LE | GE | LT | GT | NEQ | EQ ->
+                             let comp =
+                               match a, b with
+                               | Version _, _ | _, Version _ ->
+                                   Version.compare (version a) (version b)
+                               | Int a, Int b -> compare a b
+                               | _ -> raise (Invalid loc)
+                             in
+                             let op =
+                               match op with
+                               | LE -> ( <= )
+                               | GE -> ( >= )
+                               | LT -> ( < )
+                               | GT -> ( > )
+                               | EQ -> ( = )
+                               | NEQ -> ( <> )
+                               | _ -> assert false
+                             in
+                             Bool (op comp 0)
+                         | AND -> (
+                             match a, b with
+                             | Bool a, Bool b -> Bool (a && b)
+                             | _ -> raise (Invalid loc))
+                         | OR -> (
+                             match a, b with
+                             | Bool a, Bool b -> Bool (a || b)
+                             | _ -> raise (Invalid loc))
+                         | NOT -> raise (Invalid loc))
+                     | [ (Nolabel, a) ] -> (
+                         let op = get_un_op op in
+                         let a = eval a in
+                         match op, a with
+                         | NOT, Bool b -> Bool (not b)
+                         | NOT, _ -> raise (Invalid loc)
+                         | _ -> raise (Invalid loc))
+                     | _ -> raise (Invalid loc))))
+                loc
+                e
+                ()
+            with
+            | Ok res -> res
+            | Error _ -> raise (Invalid loc)
           in
           match eval e with
           | Bool b -> b
@@ -254,29 +297,40 @@ let rec filter_pattern = function
   | { ppat_attributes; ppat_loc; _ } as p ->
       if keep ppat_loc ppat_attributes then Some p else None
 
+let drop_attr =
+  let attr =
+    { attr_name = Location.mknoloc "ppx_optcomp_light.dropped"
+    ; attr_loc = Location.none
+    ; attr_payload = PStr []
+    }
+  in
+  Ppxlib.Attribute.mark_as_handled_manually attr;
+  attr
+
+let drop_str loc = { pstr_desc = Pstr_attribute drop_attr; pstr_loc = loc }
+
+let drop_sig loc = { psig_desc = Psig_attribute drop_attr; psig_loc = loc }
+
 let traverse =
   object
     inherit Ppxlib.Ast_traverse.map as super
 
-    method! structure items =
-      let items =
-        filter_map items ~f:(fun item ->
-            match item.pstr_desc with
-            | Pstr_module { pmb_attributes; pmb_loc; _ } ->
-                if keep pmb_loc pmb_attributes then Some item else None
-            | Pstr_primitive { pval_attributes; pval_loc; _ } ->
-                if keep pval_loc pval_attributes then Some item else None
-            | Pstr_value (r, l) -> (
-                let l =
-                  filter_map l ~f:(fun b ->
-                      if keep b.pvb_loc b.pvb_attributes then Some b else None)
-                in
-                match l with
-                | [] -> None
-                | _ -> Some { item with pstr_desc = Pstr_value (r, l) })
-            | _ -> Some item)
-      in
-      super#structure items
+    method! structure_item item =
+      let item = super#structure_item item in
+      match item.pstr_desc with
+      | Pstr_module { pmb_attributes; pmb_loc; _ } ->
+          if keep pmb_loc pmb_attributes then item else drop_str pmb_loc
+      | Pstr_primitive { pval_attributes; pval_loc; _ } ->
+          if keep pval_loc pval_attributes then item else drop_str pval_loc
+      | Pstr_value (r, l) -> (
+          let l =
+            filter_map l ~f:(fun b ->
+                if keep b.pvb_loc b.pvb_attributes then Some b else None)
+          in
+          match l with
+          | [] -> drop_str Location.none
+          | _ -> { item with pstr_desc = Pstr_value (r, l) })
+      | _ -> item
 
     method! cases cases =
       let cases =
@@ -286,7 +340,17 @@ let traverse =
             | Some pattern -> Some { case with pc_lhs = pattern })
       in
       super#cases cases
+
+    method! signature_item item =
+      let item = super#signature_item item in
+      match item.psig_desc with
+      | Psig_module { pmd_attributes; pmd_loc; _ } ->
+          if keep pmd_loc pmd_attributes then item else drop_sig pmd_loc
+      | _ -> item
   end
 
 let () =
-  Ppxlib.Driver.register_transformation ~impl:traverse#structure "ppx_optcomp_light"
+  Ppxlib.Driver.register_transformation
+    ~impl:traverse#structure
+    ~intf:traverse#signature
+    "ppx_optcomp_light"

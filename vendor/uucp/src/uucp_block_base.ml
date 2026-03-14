@@ -1,6 +1,6 @@
 (*---------------------------------------------------------------------------
    Copyright (c) 2014 The uucp programmers. All rights reserved.
-   SPDX-License-Identifier: ISC
+   Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
 type t = [
@@ -31,7 +31,6 @@ type t = [
   | `Bassa_Vah
   | `Batak
   | `Bengali
-  | `Beria_Erfe
   | `Bhaiksuki
   | `Block_Elements
   | `Bopomofo
@@ -55,8 +54,6 @@ type t = [
   | `CJK_Ext_F
   | `CJK_Ext_G
   | `CJK_Ext_H
-  | `CJK_Ext_I
-  | `CJK_Ext_J
   | `CJK_Radicals_Sup
   | `CJK_Strokes
   | `CJK_Symbols
@@ -100,7 +97,6 @@ type t = [
   | `Early_Dynastic_Cuneiform
   | `Egyptian_Hieroglyph_Format_Controls
   | `Egyptian_Hieroglyphs
-  | `Egyptian_Hieroglyphs_Ext_A
   | `Elbasan
   | `Elymaic
   | `Emoticons
@@ -113,7 +109,6 @@ type t = [
   | `Ethiopic_Ext_A
   | `Ethiopic_Ext_B
   | `Ethiopic_Sup
-  | `Garay
   | `Geometric_Shapes
   | `Geometric_Shapes_Ext
   | `Georgian
@@ -128,7 +123,6 @@ type t = [
   | `Gujarati
   | `Gunjala_Gondi
   | `Gurmukhi
-  | `Gurung_Khema
   | `Half_And_Full_Forms
   | `Half_Marks
   | `Hangul
@@ -167,7 +161,6 @@ type t = [
   | `Khmer_Symbols
   | `Khojki
   | `Khudawadi
-  | `Kirat_Rai
   | `Lao
   | `Latin_1_Sup
   | `Latin_Ext_A
@@ -211,7 +204,6 @@ type t = [
   | `Misc_Math_Symbols_B
   | `Misc_Pictographs
   | `Misc_Symbols
-  | `Misc_Symbols_Sup
   | `Misc_Technical
   | `Modi
   | `Modifier_Letters
@@ -224,7 +216,6 @@ type t = [
   | `Myanmar
   | `Myanmar_Ext_A
   | `Myanmar_Ext_B
-  | `Myanmar_Ext_C
   | `NB (** Non_block *)
   | `NKo
   | `Nabataean
@@ -238,7 +229,6 @@ type t = [
   | `OCR
   | `Ogham
   | `Ol_Chiki
-  | `Ol_Onal
   | `Old_Hungarian
   | `Old_Italic
   | `Old_North_Arabian
@@ -271,11 +261,9 @@ type t = [
   | `Samaritan
   | `Saurashtra
   | `Sharada
-  | `Sharada_Sup
   | `Shavian
   | `Shorthand_Format_Controls
   | `Siddham
-  | `Sidetic
   | `Sinhala
   | `Sinhala_Archaic_Numbers
   | `Small_Forms
@@ -286,7 +274,6 @@ type t = [
   | `Specials
   | `Sundanese
   | `Sundanese_Sup
-  | `Sunuwar
   | `Sup_Arrows_A
   | `Sup_Arrows_B
   | `Sup_Arrows_C
@@ -300,7 +287,6 @@ type t = [
   | `Syloti_Nagri
   | `Symbols_And_Pictographs_Ext_A
   | `Symbols_For_Legacy_Computing
-  | `Symbols_For_Legacy_Computing_Sup
   | `Syriac
   | `Syriac_Sup
   | `Tagalog
@@ -310,14 +296,12 @@ type t = [
   | `Tai_Tham
   | `Tai_Viet
   | `Tai_Xuan_Jing
-  | `Tai_Yo
   | `Takri
   | `Tamil
   | `Tamil_Sup
   | `Tangsa
   | `Tangut
   | `Tangut_Components
-  | `Tangut_Components_Sup
   | `Tangut_Sup
   | `Telugu
   | `Thaana
@@ -325,11 +309,8 @@ type t = [
   | `Tibetan
   | `Tifinagh
   | `Tirhuta
-  | `Todhri
-  | `Tolong_Siki
   | `Toto
   | `Transport_And_Map
-  | `Tulu_Tigalari
   | `UCAS
   | `UCAS_Ext
   | `UCAS_Ext_A
@@ -378,7 +359,6 @@ let pp ppf b = Format.fprintf ppf "%s" begin match b with
   | `Bassa_Vah -> "Bassa_Vah"
   | `Batak -> "Batak"
   | `Bengali -> "Bengali"
-  | `Beria_Erfe -> "Beria_Erfe"
   | `Bhaiksuki -> "Bhaiksuki"
   | `Block_Elements -> "Block_Elements"
   | `Bopomofo -> "Bopomofo"
@@ -402,8 +382,6 @@ let pp ppf b = Format.fprintf ppf "%s" begin match b with
   | `CJK_Ext_F -> "CJK_Ext_F"
   | `CJK_Ext_G -> "CJK_Ext_G"
   | `CJK_Ext_H -> "CJK_Ext_H"
-  | `CJK_Ext_I -> "CJK_Ext_I"
-  | `CJK_Ext_J -> "CJK_Ext_J"
   | `CJK_Radicals_Sup -> "CJK_Radicals_Sup"
   | `CJK_Strokes -> "CJK_Strokes"
   | `CJK_Symbols -> "CJK_Symbols"
@@ -447,7 +425,6 @@ let pp ppf b = Format.fprintf ppf "%s" begin match b with
   | `Early_Dynastic_Cuneiform -> "Early_Dynastic_Cuneiform"
   | `Egyptian_Hieroglyph_Format_Controls -> "Egyptian_Hieroglyph_Format_Controls"
   | `Egyptian_Hieroglyphs -> "Egyptian_Hieroglyphs"
-  | `Egyptian_Hieroglyphs_Ext_A -> "Egyptian_Hieroglyphs_Ext_A"
   | `Elbasan -> "Elbasan"
   | `Elymaic -> "Elymaic"
   | `Emoticons -> "Emoticons"
@@ -460,7 +437,6 @@ let pp ppf b = Format.fprintf ppf "%s" begin match b with
   | `Ethiopic_Ext_A -> "Ethiopic_Ext_A"
   | `Ethiopic_Ext_B -> "Ethiopic_Ext_B"
   | `Ethiopic_Sup -> "Ethiopic_Sup"
-  | `Garay -> "Garay"
   | `Geometric_Shapes -> "Geometric_Shapes"
   | `Geometric_Shapes_Ext -> "Geometric_Shapes_Ext"
   | `Georgian -> "Georgian"
@@ -475,7 +451,6 @@ let pp ppf b = Format.fprintf ppf "%s" begin match b with
   | `Gujarati -> "Gujarati"
   | `Gunjala_Gondi -> "Gunjala_Gondi"
   | `Gurmukhi -> "Gurmukhi"
-  | `Gurung_Khema -> "Gurung_Khema"
   | `Half_And_Full_Forms -> "Half_And_Full_Forms"
   | `Half_Marks -> "Half_Marks"
   | `Hangul -> "Hangul"
@@ -516,7 +491,6 @@ let pp ppf b = Format.fprintf ppf "%s" begin match b with
   | `Khmer_Symbols -> "Khmer_Symbols"
   | `Khojki -> "Khojki"
   | `Khudawadi -> "Khudawadi"
-  | `Kirat_Rai -> "Kirat_Rai"
   | `Lao -> "Lao"
   | `Latin_1_Sup -> "Latin_1_Sup"
   | `Latin_Ext_A -> "Latin_Ext_A"
@@ -561,7 +535,6 @@ let pp ppf b = Format.fprintf ppf "%s" begin match b with
   | `Misc_Math_Symbols_B -> "Misc_Math_Symbols_B"
   | `Misc_Pictographs -> "Misc_Pictographs"
   | `Misc_Symbols -> "Misc_Symbols"
-  | `Misc_Symbols_Sup -> "Misc_Symbols_Sup"
   | `Misc_Technical -> "Misc_Technical"
   | `Modi -> "Modi"
   | `Modifier_Letters -> "Modifier_Letters"
@@ -574,7 +547,6 @@ let pp ppf b = Format.fprintf ppf "%s" begin match b with
   | `Myanmar -> "Myanmar"
   | `Myanmar_Ext_A -> "Myanmar_Ext_A"
   | `Myanmar_Ext_B -> "Myanmar_Ext_B"
-  | `Myanmar_Ext_C -> "Myanmar_Ext_C"
   | `NB -> "NB"
   | `NKo -> "NKo"
   | `Nabataean -> "Nabataean"
@@ -588,7 +560,6 @@ let pp ppf b = Format.fprintf ppf "%s" begin match b with
   | `OCR -> "OCR"
   | `Ogham -> "Ogham"
   | `Ol_Chiki -> "Ol_Chiki"
-  | `Ol_Onal -> "Ol_Onal"
   | `Old_Hungarian -> "Old_Hungarian"
   | `Old_Italic -> "Old_Italic"
   | `Old_North_Arabian -> "Old_North_Arabian"
@@ -621,11 +592,9 @@ let pp ppf b = Format.fprintf ppf "%s" begin match b with
   | `Samaritan -> "Samaritan"
   | `Saurashtra -> "Saurashtra"
   | `Sharada -> "Sharada"
-  | `Sharada_Sup -> "Sharada_Sup"
   | `Shavian -> "Shavian"
   | `Shorthand_Format_Controls -> "Shorthand_Format_Controls"
   | `Siddham -> "Siddham"
-  | `Sidetic -> "Sidetic"
   | `Sinhala -> "Sinhala"
   | `Sinhala_Archaic_Numbers -> "Sinhala_Archaic_Numbers"
   | `Small_Forms -> "Small_Forms"
@@ -636,7 +605,6 @@ let pp ppf b = Format.fprintf ppf "%s" begin match b with
   | `Specials -> "Specials"
   | `Sundanese -> "Sundanese"
   | `Sundanese_Sup -> "Sundanese_Sup"
-  | `Sunuwar -> "Sunuwar"
   | `Sup_Arrows_A -> "Sup_Arrows_A"
   | `Sup_Arrows_B -> "Sup_Arrows_B"
   | `Sup_Arrows_C -> "Sup_Arrows_C"
@@ -646,7 +614,6 @@ let pp ppf b = Format.fprintf ppf "%s" begin match b with
   | `Sup_Punctuation -> "Sup_Punctuation"
   | `Sup_Symbols_And_Pictographs -> "Sup_Symbols_And_Pictographs"
   | `Symbols_For_Legacy_Computing -> "Symbols_For_Legacy_Computing"
-  | `Symbols_For_Legacy_Computing_Sup -> "Symbols_For_Legacy_Computing_Sup"
   | `Super_And_Sub -> "Super_And_Sub"
   | `Sutton_SignWriting -> "Sutton_SignWriting"
   | `Syloti_Nagri -> "Syloti_Nagri"
@@ -660,14 +627,12 @@ let pp ppf b = Format.fprintf ppf "%s" begin match b with
   | `Tai_Tham -> "Tai_Tham"
   | `Tai_Viet -> "Tai_Viet"
   | `Tai_Xuan_Jing -> "Tai_Xuan_Jing"
-  | `Tai_Yo -> "Tai_Yo"
   | `Takri -> "Takri"
   | `Tamil -> "Tamil"
   | `Tamil_Sup -> "Tamil_Sup"
   | `Tangsa -> "Tangsa"
   | `Tangut -> "Tangut"
   | `Tangut_Components -> "Tangut_Components"
-  | `Tangut_Components_Sup -> "Tangut_Components_Sup"
   | `Tangut_Sup -> "Tangut_Sup"
   | `Telugu -> "Telugu"
   | `Thaana -> "Thaana"
@@ -675,11 +640,8 @@ let pp ppf b = Format.fprintf ppf "%s" begin match b with
   | `Tibetan -> "Tibetan"
   | `Tifinagh -> "Tifinagh"
   | `Tirhuta -> "Tirhuta"
-  | `Todhri -> "Todhri"
-  | `Tolong_Siki -> "Tolong_Siki"
   | `Toto -> "Toto"
   | `Transport_And_Map -> "Transport_And_Map"
-  | `Tulu_Tigalari -> "Tulu_Tigalari"
   | `UCAS -> "UCAS"
   | `UCAS_Ext -> "UCAS_Ext"
   | `UCAS_Ext_A -> "UCAS_Ext_A"
@@ -699,3 +661,19 @@ let pp ppf b = Format.fprintf ppf "%s" begin match b with
   | `Zanabazar_Square -> "Zanabazar_Square"
   | `Znamenny_Music -> "Znamenny_Music"
   end
+
+(*---------------------------------------------------------------------------
+   Copyright (c) 2014 The uucp programmers
+
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
+
+   THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+   WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+   MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+   ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+   WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+   ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+  ---------------------------------------------------------------------------*)

@@ -108,7 +108,7 @@ type cell =
    of a production, and in the module Invariant): the right end of this array
    represents the top of the stack. *)
 type stack =
-  Invariant.word
+  Invariant.shape
 
 (**The result type of a block (once this block is translated to an OCaml
    function). If this block is reachable from only one start symbol [nt],
@@ -465,11 +465,8 @@ let match_tokbranch toks (tokpat, _) : bool =
    [None] if the default branch is definitely taken. The situation where the
    outcome is not definitely known is forbidden. *)
 
-let find_tokbranch branches toks : tokbranch option =
-  match List.find (match_tokbranch toks) branches with
-  | branch -> Some branch
-  | exception Not_found -> None
-  (* [List.find_opt] requires OCaml 4.05, so cannot be used *)
+let[@inline] find_tokbranch branches toks : tokbranch option =
+  List.find_opt (match_tokbranch toks) branches
 
 (* -------------------------------------------------------------------------- *)
 

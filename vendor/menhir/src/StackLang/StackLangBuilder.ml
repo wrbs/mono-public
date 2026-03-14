@@ -244,6 +244,9 @@ module Build (A : sig
 end) = struct
   open A
 
+  let start_time =
+    Time.start()
+
   (* The type [address] is not [label]. For convenience, we let the user pick
      her own (structured) type of addresses. *)
 
@@ -278,7 +281,7 @@ end) = struct
 
   let cfg =
     (* The control flow graph under construction. *)
-    let cfg = ref Label.Map.empty in
+    MRef.with_state Label.Map.empty @@ fun cfg ->
     (* A waiting queue of addresses for which we must generate code. *)
     let waiting = Queue.create() in
     (* Insert the entry points into the queue. *)
@@ -286,30 +289,27 @@ end) = struct
       Queue.add addr waiting
     end;
     (* Process the waiting queue. *)
-    waiting |> Misc.qiter begin fun (addr : address) ->
-      let label = print addr in
-      if not (Label.Map.mem label !cfg) then begin
-        (* Generate code for this address. *)
-        let tblock = code addr in
-        (* Add it to the control flow graph. *)
-        cfg := Label.Map.add label tblock !cfg;
-        (* Examine the successors of this block and insert them into the
-           queue, if they have not been processed already. (I am lazy, so
-           I allow a label to be inserted several times into the queue.) *)
-        tblock.block |> Block.successors begin fun (target : label) ->
-          if not (Label.Map.mem target !cfg) then
-            Queue.add (unprint target) waiting
-        end
-      end
-    end;
-    !cfg
+    MQueue.repeat waiting @@ fun (addr : address) ->
+    let label = print addr in
+    if not (Label.Map.mem label !cfg) then begin
+      (* Generate code for this address. *)
+      let tblock = code addr in
+      (* Add it to the control flow graph. *)
+      cfg := Label.Map.add label tblock !cfg;
+      (* Examine the successors of this block and insert them into the
+         queue, if they have not been processed already. (I am lazy, so
+         I allow a label to be inserted several times into the queue.) *)
+      tblock.block |> Block.successors @@ fun (target : label) ->
+      if not (Label.Map.mem target !cfg) then
+        Queue.add (unprint target) waiting
+    end
 
   (* Construct the entry points. *)
   let entry =
     StringMap.map print entry
 
   let () =
-    Time.tick "StackLang: producing code"
+    Time.stop start_time "StackLang: producing code"
 
   (* Construct a complete program, and annotate every block with the set
      of the registers that it uses. *)

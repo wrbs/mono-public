@@ -1,46 +1,43 @@
 (*---------------------------------------------------------------------------
    Copyright (c) 2014 The uucp programmers. All rights reserved.
-   SPDX-License-Identifier: ISC
+   Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
 (* Line break *)
 
 type line =
-  [ `AI | `AK | `AL | `AP | `AS | `B2 | `BA | `BB | `BK | `CB | `CJ | `CL
-  | `CM | `CP | `CR | `EX | `EB | `EM | `GL | `H2 | `H3 | `HH | `HL | `HY | `ID
-  | `IN | `IS | `JL | `JT | `JV | `LF | `NL | `NS | `NU | `OP | `PO | `PR
-  | `QU | `RI | `SA | `SG | `SP | `SY | `VF | `VI | `WJ | `XX | `ZW | `ZWJ ]
+  [ `AI | `AL | `B2 | `BA | `BB | `BK | `CB | `CJ | `CL | `CM | `CP
+  | `CR | `EX | `EB | `EM | `GL | `H2 | `H3 | `HL | `HY | `ID | `IN
+  | `IS | `JL | `JT | `JV | `LF | `NL | `NS | `NU | `OP | `PO | `PR
+  | `QU | `RI | `SA | `SG | `SP | `SY | `WJ | `XX | `ZW | `ZWJ ]
 
 let line_of_byte : line array =
-  [| `AI; `AK; `AL; `AP; `AS; `B2; `BA; `BB; `BK; `CB; `CJ; `CL;
-     `CM; `CP; `CR; `EX; `EB; `EM; `GL; `H2; `H3; `HH; `HL; `HY; `ID;
-     `IN; `IS; `JL; `JT; `JV; `LF; `NL; `NS; `NU; `OP; `PO; `PR;
-     `QU; `RI; `SA; `SG; `SP; `SY; `VF; `VI; `WJ; `XX; `ZW; `ZWJ |]
+  [| `AI; `AL; `B2; `BA; `BB; `BK; `CB; `CJ; `CL; `CM; `CP; `CR; `EX;
+     `EB; `EM; `GL; `H2; `H3; `HL; `HY; `ID; `IN; `IS; `JL; `JT; `JV;
+     `LF; `NL; `NS; `NU; `OP; `PO; `PR; `QU; `RI; `SA; `SG; `SP; `SY;
+     `WJ; `XX; `ZW; `ZWJ |]
 
 let line_max = Array.length line_of_byte - 1
 
 let line_to_byte = function
-| `AI -> 0 | `AK -> 1 | `AL -> 2 | `AP -> 3 | `AS -> 4 | `B2 -> 5
-| `BA -> 6 | `BB -> 7 | `BK -> 8 | `CB -> 9 | `CJ -> 10 | `CL -> 11
-| `CM -> 12 | `CP -> 13 | `CR -> 14 | `EX -> 15 | `EB -> 16 | `EM -> 17
-| `GL -> 18 | `H2 -> 19 | `H3 -> 20 | `HH -> 21 | `HL -> 22 | `HY -> 23
-| `ID -> 24 | `IN -> 25 | `IS -> 26 | `JL -> 27 | `JT -> 28 | `JV -> 29
-| `LF -> 30 | `NL -> 31 | `NS -> 32 | `NU -> 33 | `OP -> 34 | `PO -> 35
-| `PR -> 36 | `QU -> 37 | `RI -> 38 | `SA -> 39 | `SG -> 40 | `SP -> 41
-| `SY -> 42 | `VF -> 43 | `VI -> 44 | `WJ -> 45 | `XX -> 46 | `ZW -> 47
-| `ZWJ -> 48
+| `AI -> 0 | `AL -> 1 | `B2 -> 2 | `BA -> 3 | `BB -> 4 | `BK -> 5 | `CB -> 6
+| `CJ -> 7 | `CL -> 8 | `CM -> 9 | `CP -> 10 | `CR -> 11 | `EX -> 12
+| `EB -> 13 | `EM -> 14 | `GL -> 15 | `H2 -> 16 | `H3 -> 17 | `HL -> 18
+| `HY -> 19 | `ID -> 20 | `IN -> 21 | `IS -> 22 | `JL -> 23 | `JT -> 24
+| `JV -> 25 | `LF -> 26 | `NL -> 27 | `NS -> 28 | `NU -> 29 | `OP -> 30
+| `PO -> 31 | `PR -> 32 | `QU -> 33 | `RI -> 34 | `SA -> 35 | `SG -> 36
+| `SP -> 37 | `SY -> 38 | `WJ -> 39 | `XX -> 40 | `ZW -> 41 | `ZWJ -> 42
 
 let pp_line ppf v = Format.fprintf ppf "%s" begin match v with
-  | `AI -> "AI" | `AK -> "AK" | `AL -> "AL" | `AP -> "AP" | `AS -> "AS"
-  | `B2 -> "B2" | `BA -> "BA" | `BB -> "BB" | `BK -> "BK" | `CB -> "CB"
-  | `CJ -> "CJ" | `CL -> "CL" | `CM -> "CM" | `CP -> "CP" | `CR -> "CR"
-  | `EX -> "EX" | `EB -> "EB" | `EM -> "EM" | `GL -> "GL" | `H2 -> "H2"
-  | `H3 -> "H3" | `HH -> "HH" | `HL -> "HL" | `HY -> "HY" | `ID -> "ID"
-  | `IN -> "IN" | `IS -> "IS" | `JL -> "JL" | `JT -> "JT" | `JV -> "JV"
-  | `LF -> "LF" | `NL -> "NL" | `NS -> "NS" | `NU -> "NU" | `OP -> "OP"
-  | `PO -> "PO" | `PR -> "PR" | `QU -> "QU" | `RI -> "RI" | `SA -> "SA"
-  | `SG -> "SG" | `SP -> "SP" | `SY -> "SY" | `VF -> "VF" | `VI -> "VI"
-  | `WJ -> "WJ" | `XX -> "XX" | `ZW -> "ZW" | `ZWJ -> "ZWJ"
+  | `AI -> "AI" | `AL -> "AL" | `B2 -> "B2" | `BA -> "BA" | `BB -> "BB"
+  | `BK -> "BK" | `CB -> "CB" | `CJ -> "CJ" | `CL -> "CL" | `CM -> "CM"
+  | `CP -> "CP" | `CR -> "CR" | `EX -> "EX" | `EB -> "EB" | `EM -> "EM"
+  | `GL -> "GL" | `H2 -> "H2" | `H3 -> "H3" | `HL -> "HL" | `HY -> "HY"
+  | `ID -> "ID" | `IN -> "IN" | `IS -> "IS" | `JL -> "JL" | `JT -> "JT"
+  | `JV -> "JV" | `LF -> "LF" | `NL -> "NL" | `NS -> "NS" | `NU -> "NU"
+  | `OP -> "OP" | `PO -> "PO" | `PR -> "PR" | `QU -> "QU" | `RI -> "RI"
+  | `SA -> "SA" | `SG -> "SG" | `SP -> "SP" | `SY -> "SY" | `WJ -> "WJ"
+  | `XX -> "XX" | `ZW -> "ZW" | `ZWJ -> "ZWJ"
   end
 
 (* Grapheme cluster break *)
@@ -116,27 +113,25 @@ let pp_sentence ppf v = Format.fprintf ppf "%s" begin match v with
   | `SE -> "SE" | `SP -> "SP" | `ST -> "ST" | `UP -> "UP" | `XX -> "XX"
   end
 
-(* Indic conjunct break *)
-
-type indic_conjunct_break =
-  [ `Consonant | `Extend | `Linker | `None ]
-
-let indic_conjunct_break_of_byte : indic_conjunct_break array =
-  [| `Consonant; `Extend; `Linker; `None |]
-
-let indic_conjunct_break_max = Array.length indic_conjunct_break_of_byte - 1
-
-let indic_conjunct_break_to_byte = function
-| `Consonant -> 0 | `Extend -> 1 | `Linker -> 2 | `None -> 3
-
-let pp_indic_conjunct_break ppf v = Format.fprintf ppf "%s" begin match v with
-  | `Consonant -> "Consonant" | `Extend -> "Extend" | `Linker -> "Linker"
-  | `None -> "None"
-  end
-
 (* East Asian width *)
 
 type east_asian_width = [ `A | `F | `H | `N | `Na | `W ]
 let pp_east_asian_width ppf v = Format.pp_print_string ppf begin match v with
 | `A -> "A" | `F -> "F" | `H -> "H" | `N -> "N" | `Na -> "Na" | `W -> "W"
 end
+
+(*---------------------------------------------------------------------------
+   Copyright (c) 2014 The uucp programmers
+
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
+
+   THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+   WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+   MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+   ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+   WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+   ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+  ---------------------------------------------------------------------------*)

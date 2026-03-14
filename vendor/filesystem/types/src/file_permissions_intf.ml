@@ -1,7 +1,7 @@
 open! Core
 
 (** Infix aliases for functions in [S]. *)
-module type Operators = sig
+module type Operators = sig @@ portable
   type t
 
   (** Alias for [intersection]. *)
@@ -14,10 +14,15 @@ module type Operators = sig
   val ( lxor ) : t -> t -> t
 end
 
-module type S = sig
+module type S = sig @@ portable
   (** Represents unix file permissions. *)
   type t : immediate
-  [@@deriving compare ~localize, equal ~localize, hash, quickcheck, sexp_of]
+  [@@deriving
+    compare ~portable ~localize
+    , equal ~portable ~localize
+    , hash ~portable
+    , quickcheck ~portable
+    , sexp_of ~portable]
 
   (** {2 Constants} *)
 

@@ -71,7 +71,6 @@ let rec encode : Action.For_shell.t -> Dune_lang.t =
       ; Predicate_lang.encode Dune_sexp.Encoder.int pred
       ; encode t
       ]
-  | Dynamic_run (a, xs) -> List (atom "run_dynamic" :: program a :: List.map xs ~f:string)
   | Chdir (a, r) -> List [ atom "chdir"; path a; encode r ]
   | Setenv (k, v, r) -> List [ atom "setenv"; string k; string v; encode r ]
   | Redirect_out (outputs, fn, perm, r) ->
@@ -186,7 +185,7 @@ module Syntax = struct
 
   let term =
     let doc = "Output the rules in Makefile syntax." in
-    let+ makefile = Arg.(value & flag & info [ "m"; "makefile" ] ~doc) in
+    let+ makefile = Arg.(value & flag & info [ "m"; "makefile" ] ~doc:(Some doc)) in
     if makefile then Makefile else Sexp
   ;;
 
@@ -264,7 +263,7 @@ let term =
     Arg.(
       value
       & opt (some string) None
-      & info [ "o" ] ~docv:"FILE" ~doc:"Output to a file instead of stdout.")
+      & info [ "o" ] ~docv:"FILE" ~doc:(Some "Output to a file instead of stdout."))
   and+ recursive =
     Arg.(
       value
@@ -272,10 +271,12 @@ let term =
       & info
           [ "r"; "recursive" ]
           ~doc:
-            "Print all rules needed to build the transitive dependencies of the given \
-             targets.")
+            (Some
+               "Print all rules needed to build the transitive dependencies of the given \
+                targets."))
   and+ syntax = Syntax.term
-  and+ targets = Arg.(value & pos_all dep [] & Arg.info [] ~docv:"TARGET") in
+  (* CR-someday Alizter: document this option *)
+  and+ targets = Arg.(value & pos_all dep [] & Arg.info [] ~docv:"TARGET" ~doc:None) in
   let common, config = Common.init builder in
   let out = Option.map ~f:Path.of_string out in
   Scheduler.go_with_rpc_server ~common ~config (fun () ->

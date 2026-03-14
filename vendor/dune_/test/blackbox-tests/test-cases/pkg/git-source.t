@@ -15,7 +15,7 @@ Test fetching from git
 
   $ mkdir foo && cd foo
   $ make_lockdir
-  $ cat >dune.lock/test.pkg <<EOF
+  $ make_lockpkg test <<EOF
   > (version 0.0.1)
   > (source (fetch (url "git+file://$MYGITREPO")))
   > (build (run cat foo))

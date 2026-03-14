@@ -14,11 +14,11 @@ let empty =
   { data = None; label_text = None; title = None; title_border = None; border = None }
 ;;
 
-let catpuccin ~flavor ~data_color =
-  { data = Some (Bonsai_tui_catpuccin.color ~flavor data_color)
-  ; label_text = Some (Bonsai_tui_catpuccin.color ~flavor Subtext0)
-  ; title = Some (Bonsai_tui_catpuccin.color ~flavor Text)
-  ; title_border = Some (Bonsai_tui_catpuccin.color ~flavor Text)
-  ; border = Some (Bonsai_tui_catpuccin.color ~flavor Overlay1)
+let catppuccin ~flavor ~data_color =
+  { data = Some (Bonsai_tui_catppuccin.color ~flavor data_color)
+  ; label_text = Some (Bonsai_tui_catppuccin.color ~flavor Subtext0)
+  ; title = Some (Bonsai_tui_catppuccin.color ~flavor Text)
+  ; title_border = Some (Bonsai_tui_catppuccin.color ~flavor Text)
+  ; border = Some (Bonsai_tui_catppuccin.color ~flavor Overlay1)
   }
 ;;

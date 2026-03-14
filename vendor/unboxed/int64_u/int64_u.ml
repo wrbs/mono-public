@@ -48,7 +48,6 @@ module Shared_derived = struct
   let[@inline] hash t = (I.hash [@inlined hint]) (to_int64 t)
   let typerep_of_t = Typerep_lib.Std.Typerep.Int64_u
   let[@inline] of_string x = of_int64 ((I.of_string [@inlined hint]) x)
-  let[@inline] to_string t = (I.to_string [@inlined hint]) (to_int64 t)
 
   let%template[@mode m = (global, local)] [@inline] [@zero_alloc] equal t1 t2 : bool =
     (I.equal [@mode m]) (to_int64 t1) (to_int64 t2)
@@ -241,7 +240,7 @@ let[@inline] bswap64 t = of_int64 (I.bswap64 (to_int64 t))
 let[@cold] to_int_exn_failure x =
   Base.Printf.failwithf
     "conversion from int64 to int failed: %s is out of range"
-    (to_string x)
+    (I.to_string (to_int64 x))
     ()
 ;;
 
@@ -376,12 +375,15 @@ module Array = struct
   let copy t = init (length t) ~f:(fun i -> unsafe_get t i) [@nontail]
 end
 
+let to_string n = Base.Exported_for_specific_uses.Integer_to_string.int64_u_to_string n
+
 module Stable = struct
   module V1 = struct
     type nonrec t = t [@@deriving globalize]
 
     include Shared_derived
 
+    let to_string = to_string
     let stable_witness = Ppx_stable_witness_runtime.Stable_witness.assert_stable
   end
 end

@@ -15,7 +15,7 @@ module Other : sig
       For an example, see the "Quickcheck" section of the README for this library. *)
   val quickcheck_generator
     :  other_constructor_names:string list
-    -> t Quickcheck.Generator.t
+    -> t Quickcheck.Generator.t @ portable
 
   val quickcheck_observer : t Quickcheck.Observer.t
   val quickcheck_shrinker : t Quickcheck.Shrinker.t
@@ -43,7 +43,7 @@ module Stable : sig
       (** See unstable documentation. *)
       val quickcheck_generator
         :  other_constructor_names:string list
-        -> t Quickcheck.Generator.t
+        -> t Quickcheck.Generator.t @ portable
 
       val quickcheck_observer : t Quickcheck.Observer.t
       val quickcheck_shrinker : t Quickcheck.Shrinker.t

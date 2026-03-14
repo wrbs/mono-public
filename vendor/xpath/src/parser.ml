@@ -60,10 +60,10 @@ end
 module Name_parser = struct
   module Utf8 = struct
     (* Name start character *)
-    (* [A-Z] | "_" | [a-z] | [#xC0-#xD6] | [#xD8-#xF6] | [#xF8-#x2FF] | [#x370-#x37D] | [#x37F-#x1FFF] | [#x200C-#x200D] | [#x2070-#x218F] | [#x2C00-#x2FEF] | [#x3001-#xD7FF] | [#xF900-#xFDCF] | [#xFDF0-#xFFFD] | [#x10000-#xEFFFF] *)
+    (*=[A-Z] | "_" | [a-z] | [#xC0-#xD6] | [#xD8-#xF6] | [#xF8-#x2FF] | [#x370-#x37D] | [#x37F-#x1FFF] | [#x200C-#x200D] | [#x2070-#x218F] | [#x2C00-#x2FEF] | [#x3001-#xD7FF] | [#xF900-#xFDCF] | [#xFDF0-#xFFFD] | [#x10000-#xEFFFF] *)
 
     (* Name chars additional character *)
-    (* | "-" | "." | [0-9] | #xB7 | [#x0300-#x036F] | [#x203F-#x2040] *)
+    (*=| "-" | "." | [0-9] | #xB7 | [#x0300-#x036F] | [#x203F-#x2040] *)
 
     (* We split ascii and non-ascii ranges for speed *)
     let start_ranges_ascii =

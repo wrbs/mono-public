@@ -184,6 +184,9 @@ let executables_rules
   let* cctx =
     let requires_compile = Lib.Compile.direct_requires compile_info in
     let requires_link = Lib.Compile.requires_link compile_info in
+    let instances =
+      Parameterised_rules.instances ~sctx ~db:(Scope.libs scope) exes.buildable.libraries
+    in
     let js_of_ocaml =
       Js_of_ocaml.Mode.Pair.mapi js_of_ocaml ~f:(fun mode x ->
         Option.some_if
@@ -205,9 +208,24 @@ let executables_rules
       ~opaque:Inherit_from_settings
       ~melange_package_name:None
       ~package:exes.package
+      ~instances
   in
   let lib_config = ocaml.lib_config in
   let* requires_compile = Compilation_context.requires_compile cctx in
+  let* () =
+    let toolchain = Compilation_context.ocaml cctx in
+    let user_written_requires = Lib.Compile.user_written_requires compile_info in
+    let allow_unused_libraries = Lib.Compile.allow_unused_libraries compile_info in
+    Unused_libs_rules.gen_rules
+      sctx
+      toolchain
+      exes.buildable.loc
+      ~obj_dir
+      ~modules
+      ~dir
+      ~user_written_requires
+      ~allow_unused_libraries
+  in
   let* () =
     let* dep_graphs =
       (* Building an archive for foreign stubs, we link the corresponding object
@@ -309,6 +327,7 @@ let executables_rules
       ~dialects:(Dune_project.dialects (Scope.project scope))
       ~ident:(Merlin_ident.for_exes ~names:(Nonempty_list.map ~f:snd exes.names))
       ~modes:`Exe
+      ~parameters:(Resolve.return [])
   in
   cctx, merlin
 ;;
@@ -327,6 +346,7 @@ let compile_info ~scope (exes : Executables.t) =
     (Scope.libs scope)
     (`Exe exes.names)
     exes.buildable.libraries
+    ~allow_unused_libraries:exes.buildable.allow_unused_libraries
     ~pps
     ~dune_version
     ~allow_overlaps:exes.buildable.allow_overlapping_dependencies
@@ -348,10 +368,7 @@ let rules ~sctx ~dir_contents ~scope ~expander (exes : Executables.t) =
       ~embed_in_plugin_libraries:exes.embed_in_plugin_libraries
   in
   let* () = Buildable_rules.gen_select_rules sctx compile_info ~dir
-  and* () =
-    let requires_link = Lib.Compile.requires_link compile_info in
-    Bootstrap_info.gen_rules sctx exes ~dir ~requires_link
-  in
+  and* () = Bootstrap_info.gen_rules sctx exes ~dir compile_info dir_contents in
   let merlin_ident = Merlin_ident.for_exes ~names:(Nonempty_list.map ~f:snd exes.names) in
   Buildable_rules.with_lib_deps (Super_context.context sctx) merlin_ident ~dir ~f
 ;;

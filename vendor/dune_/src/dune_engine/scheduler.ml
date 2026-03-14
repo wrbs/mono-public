@@ -6,7 +6,7 @@ open Dune_async_io
 module Config = struct
   type t =
     { concurrency : int
-    ; stats : Dune_stats.t option
+    ; stats : Dune_trace.t option
     ; print_ctrl_c_warning : bool
     ; watch_exclusions : string list
     }
@@ -122,7 +122,7 @@ module Event : sig
     type event := t
     type t
 
-    val create : Dune_stats.t option -> t
+    val create : Dune_trace.t option -> t
 
     (** Return the next event. File changes event are always flattened and
         returned first. *)
@@ -187,7 +187,7 @@ end = struct
       ; mutable pending_worker_tasks : int
       ; worker_tasks_completed : Fiber.fill Queue.t
       ; timers : Fiber.fill Queue.t
-      ; stats : Dune_stats.t option
+      ; stats : Dune_trace.t option
       ; mutable got_event : bool
       ; mutable yield : unit Fiber.Ivar.t option
       }
@@ -343,7 +343,7 @@ end = struct
     end
 
     let next q =
-      Option.iter q.stats ~f:Dune_stats.record_gc_and_fd;
+      Option.iter q.stats ~f:Dune_trace.record_gc_and_fd;
       Mutex.lock q.mutex;
       let rec loop () =
         match
@@ -829,8 +829,8 @@ type t =
   ; thread_pool : Thread_pool.t
   }
 
-let t : t Fiber.Var.t = Fiber.Var.create ()
-let set x f = Fiber.Var.set t x f
+let t : t option Fiber.Var.t = Fiber.Var.create None
+let set x f = Fiber.Var.set t (Some x) f
 let t_opt () = Fiber.Var.get t
 let t () = Fiber.Var.get_exn t
 
@@ -1182,17 +1182,9 @@ module Run = struct
        But we don't care because the user enabled this manually with
        [--trace-file] *)
     Option.iter stats ~f:(fun stats ->
-      let event =
-        let fields =
-          let ts = Chrome_trace.Event.Timestamp.of_float_seconds (Unix.gettimeofday ()) in
-          Chrome_trace.Event.common_fields ~name:"watch mode iteration" ~ts ()
-        in
-        (* the instant event allows us to separate build commands from
-           different iterations of the watch mode in the event viewer *)
-        Chrome_trace.Event.instant ~scope:Global fields
-      in
-      Dune_stats.emit stats event;
-      Dune_stats.flush stats)
+      let event = Dune_trace.Event.scheduler_idle () in
+      Dune_trace.emit stats event;
+      Dune_trace.flush stats)
   ;;
 
   let poll step =

@@ -40,45 +40,29 @@ let builtin_for_dune : Dune_package.t =
 ;;
 
 module DB = struct
+  module Id = Id.Make ()
+
   type t =
-    { stdlib_dir : Path.t
+    { id : Id.t
+    ; stdlib_dir : Path.t
     ; paths : Path.t list
     ; builtins : Meta.Simplified.t Package.Name.Map.t
     ; ext_lib : Filename.Extension.t
     }
 
-  let to_dyn { stdlib_dir; paths; builtins; ext_lib } =
+  let to_dyn { id; stdlib_dir; paths; builtins; ext_lib } =
     let open Dyn in
     record
-      [ "stdlib_dir", Path.to_dyn stdlib_dir
+      [ "id", Id.to_dyn id
+      ; "stdlib_dir", Path.to_dyn stdlib_dir
       ; "paths", list Path.to_dyn paths
       ; "builtins", Package.Name.Map.to_dyn Meta.Simplified.to_dyn builtins
       ; "ext_lib", string ext_lib
       ]
   ;;
 
-  let equal t { stdlib_dir; paths; builtins; ext_lib } =
-    Path.equal t.stdlib_dir stdlib_dir
-    && List.equal Path.equal t.paths paths
-    && Package.Name.Map.equal ~equal:Meta.Simplified.equal t.builtins builtins
-    && String.equal t.ext_lib ext_lib
-  ;;
-
-  let equal a b =
-    (* Since the DB is cached per context, physical equality will
-       shortcut almost all equality tests. *)
-    phys_equal a b || equal a b
-  ;;
-
-  let hash { stdlib_dir; paths; builtins; ext_lib } =
-    Poly.hash
-      ( Path.hash stdlib_dir
-      , List.hash Path.hash paths
-      , Package.Name.Map.to_list builtins
-        |> List.hash (fun (k, v) ->
-          Tuple.T2.hash Package.Name.hash Meta.Simplified.hash (k, v))
-      , String.hash ext_lib )
-  ;;
+  let equal x y = Id.equal x.id y.id
+  let hash t = Id.hash t.id
 
   let create ~paths ~(lib_config : Lib_config.t) =
     let stdlib_dir = lib_config.stdlib_dir in
@@ -87,7 +71,7 @@ module DB = struct
       let version = lib_config.ocaml_version in
       Meta.builtins ~stdlib_dir ~version
     in
-    { stdlib_dir; paths; builtins; ext_lib }
+    { id = Id.gen (); stdlib_dir; paths; builtins; ext_lib }
   ;;
 end
 
@@ -141,7 +125,9 @@ let to_dune_library (t : Findlib.Package.t) ~dir_contents ~ext_lib ~external_loc
     let dune_version = None in
     let virtual_deps = [] in
     let implements = None in
+    let parameters = [] in
     let orig_src_dir = None in
+    let local_main_module_name = None in
     let main_module_name : Lib_info.Main_module_name.t = This None in
     let enabled = Memo.return Lib_info.Enabled_status.Normal in
     let requires =
@@ -168,7 +154,6 @@ let to_dune_library (t : Findlib.Package.t) ~dir_contents ~ext_lib ~external_loc
     let wasmoo_runtime = Findlib.Package.wasmoo_runtime t in
     let melange_runtime_deps = Lib_info.File_deps.External [] in
     let preprocess = Preprocess.Per_module.no_preprocessing () in
-    let virtual_ = false in
     let default_implementation = None in
     let wrapped = None in
     let foreign_archives, native_archives =
@@ -252,13 +237,16 @@ let to_dune_library (t : Findlib.Package.t) ~dir_contents ~ext_lib ~external_loc
       ~version
       ~synopsis
       ~main_module_name
+      ~local_main_module_name
       ~sub_systems
       ~requires
+      ~parameters
       ~foreign_objects
       ~public_headers
       ~plugins
       ~archives
       ~ppx_runtime_deps
+      ~allow_unused_libraries:[]
       ~foreign_archives
       ~native_archives:(Files native_archives)
       ~foreign_dll_files:[]
@@ -268,7 +256,6 @@ let to_dune_library (t : Findlib.Package.t) ~dir_contents ~ext_lib ~external_loc
       ~enabled
       ~virtual_deps
       ~dune_version
-      ~virtual_
       ~entry_modules
       ~implements
       ~default_implementation
@@ -279,6 +266,7 @@ let to_dune_library (t : Findlib.Package.t) ~dir_contents ~ext_lib ~external_loc
       ~exit_module:None
       ~instrumentation_backend:None
       ~melange_runtime_deps
+      ~root_module:None
   in
   Dune_package.Lib.of_findlib info external_location
 ;;

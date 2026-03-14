@@ -1,4 +1,4 @@
-FROM ocaml/opam:debian-ocaml-5.2
+FROM ocaml/opam:debian-ocaml-5.3
 WORKDIR /bench-dir
 
 RUN sudo apt-get update \
@@ -29,7 +29,7 @@ RUN mkdir janestreet \
  && cd janestreet \
  && git clone --depth 20 https://github.com/janestreet/opam-repository \
  && cd opam-repository \
- && git checkout 41c89c7824533f6b63cc5b6d75e6ddb1441d1520 \
+ && git checkout 2819773f29b6f6c14b918eae3cb40c8ff6b22d0e \
  && opam remote add js .
 
 # Install dependencies
@@ -37,6 +37,7 @@ WORKDIR /bench-dir/js_of_ocaml
 COPY --chown=opam:opam js_of_ocaml-compiler.opam .
 RUN opam install -y --deps-only ./js_of_ocaml-compiler.opam \
  && opam install opam-format stringext uucp cstruct \
+ && opam pin add ppxlib -n 0.35.0 \
  && opam clean
 
 # Prepare partial render table benchmark
@@ -46,6 +47,10 @@ RUN opam exec -- dune exec tools/ci_setup.exe ../janestreet . \
  && opam exec -- dune build --root ../janestreet --profile release lib/bonsai_web_components/partial_render_table/bench/bin/main.bc-for-jsoo \
  && opam remove js_of_ocaml-compiler ojs \
  && opam clean
+
+# Bin_prot packages
+RUN opam pin add -n https://github.com/janestreet/bin_prot.git#125e336faacd2e2e8c7a1fed2231bde1cebfebdd \
+ && opam install ppx_bin_prot
 
 # Copy sources
 COPY --chown=opam:opam . ./

@@ -74,7 +74,7 @@ module Version_preference = struct
     Arg.(
       value
       & opt (some (enum all_by_string)) None
-      & info [ "version-preference" ] ~doc ~docv)
+      & info [ "version-preference" ] ~doc:(Some doc) ~docv)
   ;;
 
   let choose ~from_arg ~from_context =
@@ -119,31 +119,6 @@ let unset_solver_vars_of_workspace workspace ~lock_dir_path =
   lock_dir.unset_solver_vars
 ;;
 
-let get_repos repos ~repositories =
-  let module Repository = Dune_pkg.Pkg_workspace.Repository in
-  repositories
-  |> Fiber.parallel_map ~f:(fun (loc, name) ->
-    match Repository.Name.Map.find repos name with
-    | None ->
-      User_error.raise
-        ~loc
-        [ Pp.textf "Repository '%s' is not a known repository"
-          @@ Repository.Name.to_string name
-        ]
-    | Some repo ->
-      let loc, opam_url = Repository.opam_url repo in
-      let module Opam_repo = Dune_pkg.Opam_repo in
-      (match Dune_pkg.OpamUrl.classify opam_url loc with
-       | `Git -> Opam_repo.of_git_repo loc opam_url
-       | `Path path -> Fiber.return @@ Opam_repo.of_opam_repo_dir_path loc path
-       | `Archive ->
-         User_error.raise
-           ~loc
-           [ Pp.textf "Repositories stored in archives (%s) are currently unsupported"
-             @@ OpamUrl.to_string opam_url
-           ]))
-;;
-
 let find_local_packages =
   let open Memo.O in
   Dune_rules.Dune_load.packages ()
@@ -181,7 +156,9 @@ module Lock_dirs_arg = struct
                []
                ~docv:"LOCKDIRS"
                ~doc:
-                 "Lock directories to check for outdated packages. Defaults to dune.lock.")
+                 (Some
+                    "Lock directories to check for outdated packages. Defaults to \
+                     dune.lock."))
        in
        Selected (List.map arg ~f:Path.Source.of_string))
       (let+ _all =
@@ -190,31 +167,34 @@ module Lock_dirs_arg = struct
            & flag
            & info
                [ "all" ]
-               ~doc:"Check all lock directories in the workspace for outdated packages.")
+               ~doc:
+                 (Some
+                    "Check all lock directories in the workspace for outdated packages."))
        in
        All)
   ;;
 
   let lock_dirs_of_workspace t (workspace : Workspace.t) =
+    let module Set = Path.Source.Set in
+    let default_path = Dune_rules.Lock_dir.default_source_path in
     let workspace_lock_dirs =
-      Lock_dir.default_path
+      default_path
       :: List.map workspace.lock_dirs ~f:(fun (lock_dir : Workspace.Lock_dir.t) ->
         lock_dir.path)
-      |> Path.Source.Set.of_list
-      |> Path.Source.Set.to_list
+      |> Set.of_list
+      |> Set.to_list
     in
     match t with
     | All -> workspace_lock_dirs
-    | Selected [] -> [ Lock_dir.default_path ]
+    | Selected [] -> [ default_path ]
     | Selected chosen_lock_dirs ->
-      let workspace_lock_dirs_set = Path.Source.Set.of_list workspace_lock_dirs in
-      let chosen_lock_dirs_set = Path.Source.Set.of_list chosen_lock_dirs in
-      if Path.Source.Set.is_subset chosen_lock_dirs_set ~of_:workspace_lock_dirs_set
+      let workspace_lock_dirs_set = Set.of_list workspace_lock_dirs in
+      let chosen_lock_dirs_set = Set.of_list chosen_lock_dirs in
+      if Set.is_subset chosen_lock_dirs_set ~of_:workspace_lock_dirs_set
       then chosen_lock_dirs
       else (
         let unknown_lock_dirs =
-          Path.Source.Set.diff chosen_lock_dirs_set workspace_lock_dirs_set
-          |> Path.Source.Set.to_list
+          Set.diff chosen_lock_dirs_set workspace_lock_dirs_set |> Set.to_list
         in
         let f x = Path.pp (Path.source x) in
         User_error.raise
@@ -226,3 +206,21 @@ module Lock_dirs_arg = struct
           ])
   ;;
 end
+
+let check_pkg_management_enabled () =
+  Memo.run
+  @@
+  let open Memo.O in
+  let+ workspace = Workspace.workspace () in
+  match workspace.config.pkg_enabled with
+  | Set (_, `Enabled) | Unset -> ()
+  | Set (loc, `Disabled) ->
+    User_error.raise
+      ~loc
+      [ Pp.text "Package management is disabled in workspace configuration." ]
+      ~hints:
+        [ Pp.text
+            "To enable package management, remove the explicit (pkg disabled) setting \
+             from your dune-workspace file."
+        ]
+;;

@@ -44,7 +44,7 @@ var caml_marshal_constants = {
   CODE_CUSTOM: 0x12,
   CODE_CUSTOM_LEN: 0x18,
   CODE_CUSTOM_FIXED: 0x19,
-  CODE_NULL: 0x1f
+  CODE_NULL: 0x1f,
 };
 
 //Provides: UInt8ArrayReader
@@ -292,6 +292,7 @@ function caml_input_value_from_reader(reader) {
     }
     return n;
   }
+  var old_pos = reader.i;
   var magic = reader.read32u();
   switch (magic) {
     case 0x8495a6be /* Intext_magic_number_small */:
@@ -326,6 +327,9 @@ function caml_input_value_from_reader(reader) {
     default:
       caml_failwith("caml_input_value_from_reader: bad object");
       break;
+  }
+  if (header_len !== reader.i - old_pos) {
+    caml_failwith("caml_input_value_from_reader: invalid header");
   }
   var stack = [];
   var objects = [];
@@ -482,7 +486,6 @@ function caml_input_value_from_reader(reader) {
                 reader.read32s();
                 break;
             }
-            var old_pos = reader.i;
             var size = [0];
             var v = ops.deserialize(reader, size);
             if (expected_size !== undefined) {
@@ -714,9 +717,8 @@ var caml_output_val = (function () {
           for (var i = 0; i < name.length; i++)
             writer.write(8, name.charCodeAt(i));
           writer.write(8, 0);
-          var old_pos = writer.pos();
           ops.serialize(writer, v, sz_32_64);
-          if (ops.fixed_length !== writer.pos() - old_pos)
+          if (ops.fixed_length !== sz_32_64[0])
             caml_failwith(
               "output_value: incorrect fixed sizes specified by " + name,
             );

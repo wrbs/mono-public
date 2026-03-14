@@ -51,20 +51,8 @@ end = struct
          List.sort libs ~compare)
         |> List.map ~f:Lib.name
       in
-      let project =
-        List.fold_left libs ~init:None ~f:(fun acc lib ->
-          let scope_for_key =
-            let info = Lib.info lib in
-            let status = Lib_info.status info in
-            match status with
-            | Private (scope_name, _) -> Some scope_name
-            | Installed_private | Public _ | Installed -> None
-          in
-          Option.merge acc scope_for_key ~f:(fun a b ->
-            assert (Dune_project.equal a b);
-            a))
-      in
-      { pps; project_root = Option.map project ~f:Dune_project.root }
+      let project_root = Lib.L.project_root libs in
+      { pps; project_root }
     ;;
   end
 
@@ -281,8 +269,7 @@ let build_ppx_driver sctx ~scope ~target ~pps ~pp_names =
     Driver.select pps ~loc:(Dot_ppx (target, pp_names))
     >>| Resolve.map ~f:(fun driver -> driver, pps)
     >>|
-    (* Extend the dependency stack as we don't have locations at this
-           point *)
+    (* Extend the dependency stack as we don't have locations at this point *)
     Resolve.push_stack_frame ~human_readable_description:(fun () ->
       Dyn.pp (List [ String "pps"; Dyn.(list Lib_name.to_dyn) pp_names ]))
   in
@@ -369,9 +356,9 @@ let get_cookies ~loc ~expander ~lib_name libs =
     Memo.List.concat_map libs ~f:(fun t ->
       let info = Lib.info t in
       let kind = Lib_info.kind info in
-      match kind with
-      | Normal -> Memo.return []
-      | Ppx_rewriter { cookies } | Ppx_deriver { cookies } ->
+      match (kind : Lib_kind.t) with
+      | Virtual | Parameter | Dune_file Normal -> Memo.return []
+      | Dune_file (Ppx_rewriter { cookies } | Ppx_deriver { cookies }) ->
         Memo.List.map cookies ~f:(fun { Lib_kind.Ppx_args.Cookie.name; value } ->
           let+ value = Expander.No_deps.expand_str expander value in
           name, (value, Lib.name t)))

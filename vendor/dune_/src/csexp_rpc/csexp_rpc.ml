@@ -1,7 +1,6 @@
 open Stdune
 open Fiber.O
 open Dune_async_io
-module Log = Dune_util.Log
 module Session_id = Id.Make ()
 
 module Socket = struct
@@ -236,10 +235,10 @@ module Session = struct
 
   external send : Unix.file_descr -> Bytes.t -> int -> int -> int = "dune_send"
 
-  let write t b =
+  let write fd bytes pos len =
     match Platform.OS.value with
-    | Linux -> send t b
-    | _ -> Unix.single_write t b
+    | Linux -> send fd bytes pos len
+    | _ -> Unix.single_write fd bytes pos len
   ;;
 
   let rec csexp_write_loop fd out_buf token =

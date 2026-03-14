@@ -1,4 +1,16 @@
 open! Core
+open Bonsai_term
+
+(** [text_wrap ~max_width string] will "word wrap"
+    https://en.wikipedia.org/wiki/Typesetting the text. It will break up your text
+    attempting to do "word wrapping" so that each line fits in max_width so that the
+    output lines fit within max_width.
+
+    [max_width] is treated as [Int.max 5 max_width] so that the weird unicode characters
+    don't get weirder. e.g. some unicode characters can take up 2 chars though this
+    behavior is not stable across terminal emulators, as some terminal emulators will make
+    some emojis look as wide as 4 chars. *)
+val text_wrap : ?attrs:Attr.t list -> max_width:int -> string -> View.t
 
 module Text : sig
   type 'attr t =

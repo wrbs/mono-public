@@ -68,7 +68,7 @@ let%expect_test _ =
   let output = [%expect.output] in
   let expected =
     Format.sprintf
-      "Warning: integer overflow: int32 0x%lx (%ld) truncated to 0x%lx (%ld); the \
+      "Warning [integer-overflow]: int32 0x%lx (%ld) truncated to 0x%lx (%ld); the \
        generated code might be incorrect.@."
       i
       i
@@ -86,7 +86,7 @@ let%expect_test _ =
   let output = [%expect.output] in
   let expected =
     Format.sprintf
-      "Warning: integer overflow: integer 0x%x (%d) truncated to 0x%lx (%ld); the \
+      "Warning [integer-overflow]: integer 0x%x (%d) truncated to 0x%lx (%ld); the \
        generated code might be incorrect.@."
       i
       i
@@ -104,7 +104,7 @@ let%expect_test _ =
   let output = [%expect.output] in
   let expected =
     Format.sprintf
-      "Warning: integer overflow: native integer 0x%nx (%nd) truncated to 0x%lx (%ld); \
+      "Warning [integer-overflow]: native integer 0x%nx (%nd) truncated to 0x%lx (%ld); \
        the generated code might be incorrect.@."
       i
       i
@@ -506,9 +506,9 @@ end
 let%expect_test _ =
   Test.check_exn
   @@ Test.make ~count:1000 ~name:"Int31.neg" t_corner ~print:print_t (fun i ->
-         let r_int31 = Int31.(neg i |> to_int32) in
-         let r_int32 = Int32.neg (Int31.to_int32 i) in
-         in_range r_int31 && canon_equal r_int31 r_int32);
+      let r_int31 = Int31.(neg i |> to_int32) in
+      let r_int32 = Int32.neg (Int31.to_int32 i) in
+      in_range r_int31 && canon_equal r_int31 r_int32);
   [%expect ""]
 
 let binop_prop op_i31 op_i32 i j =

@@ -11,28 +11,36 @@ module Stable = struct
       open! Import
 
       let quickcheck_generator ~other_field_names =
+        let open Base_quickcheck.Generator.Portable.Let_syntax in
+        let empty = (Map.empty (module String) : t) in
         if List.is_empty other_field_names
-        then Quickcheck.Generator.return String.Map.empty
+        then return empty
         else (
           let other_field_names = String.Set.of_list other_field_names in
-          Quickcheck.Generator.weighted_union
-            [ 4., Quickcheck.Generator.return String.Map.empty
+          (Base_quickcheck.Generator.weighted_union [@mode portable])
+            [ 4., return empty
             ; ( 1.
-              , String.Map.quickcheck_generator
-                  (Quickcheck.Generator.of_list (Set.to_list other_field_names))
+              , (Base_quickcheck.Generator.map_t_m [@mode portable])
+                  (module String)
+                  ((Base_quickcheck.Generator.of_list [@mode portable])
+                     (Set.to_list other_field_names))
                   Sexp.quickcheck_generator )
             ])
       ;;
 
       let quickcheck_shrinker =
-        String.Map.quickcheck_shrinker String.quickcheck_shrinker Sexp.quickcheck_shrinker
+        (Base_quickcheck.Shrinker.map_t [@mode portable])
+          String.quickcheck_shrinker
+          Sexp.quickcheck_shrinker
       ;;
 
       let quickcheck_observer =
-        String.Map.quickcheck_observer String.quickcheck_observer Sexp.quickcheck_observer
+        (Base_quickcheck.Observer.map_t [@mode portable])
+          String.quickcheck_observer
+          Sexp.quickcheck_observer
       ;;
 
-      let%template equal = [%compare_local.equal: Sexp.t String.Map.t]
+      let%template equal = ([%compare.equal: Sexp.t String.Map.t] [@mode local])
       [@@mode __ = (local, global)]
       ;;
 

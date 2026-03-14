@@ -16,7 +16,7 @@ type t =
 
 val empty : t
 
-val catpuccin
-  :  flavor:Bonsai_tui_catpuccin.Flavor.t
-  -> data_color:Bonsai_tui_catpuccin.t
+val catppuccin
+  :  flavor:Bonsai_tui_catppuccin.Flavor.t
+  -> data_color:Bonsai_tui_catppuccin.t
   -> t

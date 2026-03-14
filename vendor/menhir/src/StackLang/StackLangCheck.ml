@@ -211,8 +211,8 @@ let wf_tblock program label { block; needed } =
   wf_block env block
 
 let wf program =
-  Label.Map.iter (wf_tblock program) program.cfg;
-  Time.tick "StackLang: checking well-formedness"
+  Time.time "StackLang: checking well-formedness" @@ fun () ->
+  Label.Map.iter (wf_tblock program) program.cfg
 
 let wf program =
   handle wf program;
@@ -390,12 +390,12 @@ let wt_subtype env context target =
   let fail message =
     wt_fail env
       "Failed stack subtype check (%s) : %s\n\
-       Actual shape: %s\n\
-       Expected shape: %s\n"
+       Actual shape:%s\n\
+       Expected shape:%s\n"
       context
       message
-      (print actual)
-      (print expected)
+      (show_shape actual)
+      (show_shape expected)
   in
   let n1, n2 = length actual, length expected in
   if n1 < n2 then
@@ -512,14 +512,12 @@ let wt_pop env ps cell =
 
 let wt_peek env ps cell =
   assert (not (Pattern.occurs state ps));
-  let env0 = env in
   let d = Pop in
   let env, ps = wt_maybe_uncons d "state" (holds_state cell) none env ps in
   let env, ps = wt_maybe_uncons d "semantic value" (holds_semv cell) none env ps in
   let env, ps = wt_maybe_uncons d "start position" (holds_startp cell) none env ps in
   let env, ps = wt_maybe_uncons d "end position" (holds_endp cell) none env ps in
   let env = wt_unnil d env ps in
-  assert (env0 = env);
   env
 
 (* [wt_similar env expected actual] checks that the cell shapes [expected]
@@ -725,8 +723,8 @@ and wt_casetag_branch env k (tagpat, block) : tagbranch =
 (* [wt] checks a program. *)
 
 let wt program =
+  Time.time "StackLang: checking well-typedness" @@ fun () ->
   let cfg = Label.Map.mapi (wt_tblock program) program.cfg in
-  Time.tick "StackLang: checking well-typedness";
   { program with cfg }
 
 let wt program =

@@ -67,30 +67,56 @@ module Timing_histograms : sig
     module Input : sig
       type t =
         | Telemetry_idle_callback
+        (** Measures the amount of time that the app can be "idle". This will be measured
+            when the browser is able to call into [requestIdleCallback]. *)
         | Bonsai_whole_frame_loop
+        (** Total time that it takes for bonsai to render a frame from executing actions,
+            stabilizing, vdom diffing, etc... This may be the most useful "global" frame
+            time. *)
         | Bonsai_stabilization_update_visibility
+        (** Time taken to stabilize bonsai graph nodes linked to layout changes *)
         | Bonsai_stabilization_clock
+        (** Time taken to stabilize bonsai graph nodes linked to clock changes *)
         | Bonsai_stabilization_action
+        (** Time taken to stabilize bonsai graph nodes linked to executing an action *)
         | Bonsai_stabilization_after_apply_actions
+        (** Time taken to stabilize bonsai graph nodes after actions and stabilizations
+            have changed graph inputs *)
         | Bonsai_update_visibility
+        (** Time taken to recompute which parts of the DOM have had their layout changed *)
         | Bonsai_apply_action
+        (** Time taken by bonsai to evaluate state machines (apply action) *)
         | Bonsai_diff_vdom
+        (** Time taken by the virtual dom implementation to diff the changed nodes *)
         | Bonsai_patch_vdom
-        | Bonsai_display_handlers
+        (** Time taken by the virtual dom implementation to actually mutate the dom *)
+        | Bonsai_display_handlers (** Time taken to trigger on_display edges *)
         | Browser_long_task
+        (** Measures the time spent in a "long task" as defined by the browser (50ms or
+            more). This is meassured using the [PerformanceLongTaskTiming] API. *)
         | Bonsai_start_of_frame_to_start_of_next_frame
+        (** Time that occurs between the start of each frame. It will not be less than
+            16ms on a 60hz refresh rate. This measure is also very representative that
+            performance felt by users. *)
         | Bonsai_end_of_frame_to_start_of_next_frame
+        (** Time between the end of a frame and a new frame. Contrarily to other measures,
+            the larger this is, the better this will be. It will top at 16ms maximum at
+            60hz refresh rate. *)
         | Metrics_count_dom_nodes
+        (** At page close only: Counts the number of dom nodes at page close. *)
         | Bonsai_graph_application
-        | Bonsai_preprocess
-        | Bonsai_gather
+        (** At startup only: Total time to construct the initial graph *)
+        | Bonsai_preprocess (** At startup only: Total time to optimize the graph *)
+        | Bonsai_gather (** At startup only: Total time to make the graph runnable *)
       [@@deriving string, sexp_of, equal, compare, enumerate]
     end
 
     module Aggregated : sig
       (** A [Kind.Aggregated.t] represents the union of some [Kind.Input.t]s, that we want
           to explcitly collect because aggregating the collected data is impractical. *)
-      type t = Bonsai_stabilization_all
+      type t =
+        | Bonsai_stabilization_all
+        (** Aggregates all phases of the bonsai stabilization *)
       [@@deriving string, sexp_of, equal, compare, enumerate]
     end
 

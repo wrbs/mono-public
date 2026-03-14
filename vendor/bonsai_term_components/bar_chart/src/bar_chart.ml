@@ -8,7 +8,7 @@ let truncate_text s max_length =
       let width = View.uchar_tty_width uchar in
       acc + width)
   in
-  if total_width <= max_length
+  if total_width = 0 || total_width <= max_length
   then s
   else (
     (* Reserve space for the ellipsis character *)
@@ -24,104 +24,177 @@ let truncate_text s max_length =
 ;;
 
 let get_fg_attr color = Option.map color ~f:Attr.fg |> Option.to_list
-let get_bg_attr color = Option.map color ~f:Attr.bg |> Option.to_list
 
 module Bar = struct
-  type 'data t =
-    { value : 'data
+  type t =
+    { value : float
     ; label : string option
     ; color : Attr.Color.t option
     }
   [@@deriving fields ~getters]
 
-  let block_eighths = [| " "; "▁"; "▂"; "▃"; "▄"; "▅"; "▆"; "▇"; "█" |]
+  let solid_block = Uchar.Utf8.of_string "█"
+  let down_arrow = Uchar.Utf8.of_string "↓"
+  let up_arrow = Uchar.Utf8.of_string "↑"
 
-  let view
-    (type a)
-    (module M : Floatable.S with type t = a)
-    ~max_bar_height
-    ~(min_value : a)
-    ~(max_value : a)
-    ~bar_width
-    ({ value; color; label = _ } : a t)
-    =
-    (* Shift everything down by [min_value] and then pretend [min_value] = 0 *)
-    let min_value = M.to_float min_value in
-    let max_value = M.to_float max_value -. min_value in
-    let value = M.to_float value -. min_value in
-    let units_per_cell = max_value /. Float.of_int max_bar_height in
-    let height = value /. units_per_cell in
-    let whole_blocks = Float.iround_exn ~dir:`Down height in
-    let extra_eighths =
-      (height -. Float.of_int whole_blocks) *. 8.0 |> Float.iround_exn ~dir:`Nearest
+  let block_eighths =
+    Array.map [| " "; "▁"; "▂"; "▃"; "▄"; "▅"; "▆"; "▇"; "█" |] ~f:Uchar.Utf8.of_string
+  ;;
+
+  let view { value; color; label = _ } ~max_bar_height ~bar_height ~bar_width =
+    let ~whole_blocks, ~extra_eighths = Bar_height.precise_height bar_height value in
+    let num_eighths = (whole_blocks * 8) + extra_eighths in
+    let max_num_eighths = max_bar_height * 8 in
+    let make_row c =
+      View.text
+        ~attrs:(get_fg_attr color)
+        (String.concat (List.create ~len:bar_width (Uchar.Utf8.to_string c)))
     in
-    let top_block =
-      if whole_blocks >= max_bar_height
-      then View.none
-      else
-        List.init bar_width ~f:(fun _ -> block_eighths.(extra_eighths))
-        |> String.concat
-        |> View.text ~attrs:(get_fg_attr color)
-    in
-    let bar =
+    let make_block height =
       (* Fill the rectangle with a character so it shows up in tests. *)
-      View.vcat
-        [ top_block
-        ; View.vcat
-          @@ List.init whole_blocks ~f:(fun _ ->
-            View.text
-              ~attrs:(get_fg_attr color @ get_bg_attr color)
-              (String.concat (List.create ~len:bar_width "█")))
-        ]
+      View.vcat @@ List.init height ~f:(fun _ -> make_row solid_block)
     in
     let bar =
-      if View.height bar > 0
-      then bar
-      else View.transparent_rectangle ~width:bar_width ~height:1
+      if num_eighths < 0
+      then make_row down_arrow
+      else if num_eighths = 0
+      then View.transparent_rectangle ~width:bar_width ~height:1
+      else if num_eighths > max_num_eighths
+      then View.vcat [ make_row up_arrow; make_block (max_bar_height - 1) ]
+      else View.vcat [ make_row block_eighths.(extra_eighths); make_block whole_blocks ]
     in
     View.pad bar ~t:(max_bar_height - View.height bar)
   ;;
 end
 
 module Y_range = struct
-  type 'a t =
-    | Constant of 'a
+  type t =
+    | Constant of float
     | Use_most_extreme_value
 
   let get_y_value
-    (type a)
-    (module M : Floatable.S with type t = a)
-    (t : a t)
-    ~(bars : a Bar.t list)
+    t
+    ~bars
     ~(get_value : float list -> compare:local_ (float -> float -> int) -> float option)
-    ~(default : a)
+    ~default
     =
     match t with
-    | Constant n -> n
+    | Constant x -> x
     | Use_most_extreme_value ->
       List.map bars ~f:Bar.value
-      |> List.map ~f:M.to_float
       |> get_value ~compare:Float.compare
-      |> Option.map ~f:M.of_float
       |> Option.value ~default
   ;;
 
-  let y_min
-    (type a)
-    (module M : Floatable.S with type t = a)
-    (t : a t)
-    (bars : a Bar.t list)
-    =
-    get_y_value (module M) t ~bars ~get_value:List.min_elt ~default:(M.of_float 0.0)
+  let y_min t bars = get_y_value t ~bars ~get_value:List.min_elt ~default:0.
+  let y_max t bars = get_y_value t ~bars ~get_value:List.max_elt ~default:1.
+end
+
+module Bar_width_config = struct
+  type t =
+    | Custom of
+        { width : int
+        ; padding : int
+        }
+    | Choose_for_me_from_max_total_width of int
+
+  let calculate_bar_width ~width_for_bars ~num_bars =
+    (* In order of importance, our priorities are that:
+       1. [bar_width] >= 1.
+       2. Total width of bars and padding does not exceed [width_for_bars].
+       3. [padding] >= 1.
+       4. [padding] is as large as possible, but the total width taken up by bars is at
+          least 3x the total width taken up by padding.
+
+       This logic is slightly complicated by the fact that there are N bars but N + 1
+       segments of padding. *)
+    if num_bars <= 0
+    then ~width:1, ~padding:0
+    else if width_for_bars <= 2 * num_bars
+    then ~width:(Int.max 1 (width_for_bars / num_bars)), ~padding:0
+    else (
+      let padding = Int.max 1 (width_for_bars / (4 * (num_bars + 1))) in
+      let width = (width_for_bars - ((num_bars + 1) * padding)) / num_bars in
+      (* Because we're rounding down when calculating the width, we sometimes we violate
+         the condition that bars to take up 3x the space that the padding does so we need
+         to reduce the padding by 1. *)
+      if padding = 1 || num_bars * width >= 3 * (num_bars + 1) * padding
+      then ~width, ~padding
+      else (
+        let padding = padding - 1 in
+        ~width:((width_for_bars - ((num_bars + 1) * padding)) / num_bars), ~padding))
   ;;
 
-  let y_max
-    (type a)
-    (module M : Floatable.S with type t = a)
-    (t : a t)
-    (bars : a Bar.t list)
-    =
-    get_y_value (module M) t ~bars ~get_value:List.max_elt ~default:(M.of_float 1.0)
+  let get_bar_width t ~length_of_labels_and_border ~num_bars =
+    match t with
+    | Custom { width; padding } -> ~width, ~padding
+    | Choose_for_me_from_max_total_width total_width ->
+      let width_for_bars = total_width - length_of_labels_and_border in
+      calculate_bar_width ~width_for_bars ~num_bars
+  ;;
+end
+
+module Bar_height_config = struct
+  type t =
+    | Default
+    | Linear of
+        { min_value : Y_range.t
+        ; max_value : Y_range.t
+        }
+    | Logarithmic of
+        { min_value : Y_range.t
+        ; max_value : Y_range.t
+        ; base : int
+        (* The base does not affect bar height calculations. It only determines the scale
+           used when auto-generating y-axis labels. We include it here so that a
+           reasonable [Y_label_config] can be derived from this config without requiring
+           the user to specify the base separately. *)
+        }
+
+  let extrema t ~data =
+    match t with
+    | Linear { min_value; max_value } | Logarithmic { min_value; max_value; base = _ } ->
+      ~min_value:(Y_range.y_min min_value data), ~max_value:(Y_range.y_max max_value data)
+    | Default ->
+      let min_value = Y_range.y_min Use_most_extreme_value data |> Float.min 0. in
+      let max_value = Y_range.y_max Use_most_extreme_value data |> Float.max 0. in
+      if Float.( = ) min_value 0. && Float.( = ) max_value 0.
+      then ~min_value:0., ~max_value:1.
+      else ~min_value, ~max_value
+  ;;
+
+  let get_bar_height t ~data ~max_bar_height =
+    let ~min_value, ~max_value = extrema t ~data in
+    match t with
+    | Linear _ | Default ->
+      Bar_height.create_linear_exn ~min_value ~max_value ~max_bar_height
+    | Logarithmic _ ->
+      Bar_height.create_logarithmic_exn ~min_value ~max_value ~max_bar_height
+  ;;
+end
+
+module Y_labels_config = struct
+  type t =
+    | Hidden
+    | Shown_use_reasonable_default
+    | Shown_custom of Y_labels.t
+
+  let get_y_labels t ~max_bar_height ~min_value ~max_value ~bar_height_config =
+    match t with
+    | Hidden -> None
+    | Shown_use_reasonable_default ->
+      let make_label_string =
+        match bar_height_config with
+        | Bar_height_config.Linear _ | Default ->
+          Y_labels.Make_label_string.make_reasonable_linear
+            ~max_bar_height
+            ~min_value
+            ~max_value
+        | Logarithmic { base; min_value = _; max_value = _ } ->
+          Y_labels.Make_label_string.make_reasonable_logarithmic ~base
+      in
+      Some { Y_labels.layout = Every_n_rows 5; make_label_string }
+    | Shown_custom y_labels -> Some y_labels
   ;;
 end
 
@@ -147,76 +220,73 @@ let title_view title ~max_width ~text_color ~border_color =
     |> Bonsai_tui_border_box.view ~attrs:(get_fg_attr text_color)
 ;;
 
-let xlabels ~label_color ~chars_per_label ~labels =
+let x_labels ~label_color ~bar_width ~bar_padding ~labels =
   let pad_string s =
+    (* This is necessary to make sure that the label is shifted to the left is there's no
+       way to perfectly center the label. For example, if there's two characters available
+       for the x label and a one character label, we want the label to be in the first
+       position rather than the second. *)
+    let s =
+      if bar_padding % 2 = 1 && bar_width % 2 <> String.length s % 2 then s ^ " " else s
+    in
     View.text ~attrs:(get_fg_attr label_color) s
-    |> View.center ~within:{ Dimensions.height = 1; width = chars_per_label }
+    |> View.center ~within:{ Dimensions.height = 1; width = bar_width + bar_padding }
   in
-  List.map labels ~f:(fun s -> truncate_text s (chars_per_label - 2) |> pad_string)
-  |> View.hcat
-;;
-
-let ylabels
-  (type a)
-  (module M : Floatable.S with type t = a)
-  ~label_color
-  ~max_bar_height
-  ~(max_value : a)
-  ~(min_value : a)
-  =
-  let y_label_gap = 4 in
-  let min_value, max_value = M.to_float min_value, M.to_float max_value in
-  let units_per_cell = (max_value -. min_value) /. Float.of_int max_bar_height in
-  let labels =
-    List.range ~stride:(y_label_gap + 1) 0 (Int.max 1 (max_bar_height + 1))
-    |> List.map ~f:(fun i -> min_value +. (units_per_cell *. Float.of_int i))
-    |> List.map ~f:(Float.to_string_hum ~decimals:2)
-    |> List.mapi ~f:(fun i s ->
-      View.text ~attrs:(get_fg_attr label_color) s
-      |> View.pad ~b:(if i = 0 then 0 else y_label_gap))
+  let text_width =
+    if bar_padding = 0
+    then bar_width - 2
+    else bar_width + bar_padding - 2 + (bar_padding % 2)
   in
-  (* right justifying *)
-  let longest_label_length =
-    List.map labels ~f:View.width
-    |> List.max_elt ~compare:Int.compare
-    |> Option.value ~default:0
-  in
-  List.map labels ~f:(fun label ->
-    View.pad ~l:(longest_label_length - View.width label) label)
-  |> List.rev
-  |> View.vcat
+  List.map labels ~f:(fun s -> truncate_text s text_width |> pad_string) |> View.hcat
 ;;
 
 let view
-  (type a)
-  (module M : Floatable.S with type t = a)
-  ?(theme = Theme.catpuccin ~flavor:Mocha ~data_color:Blue)
-  ?(bar_padding = 2)
-  ?(bar_width = 8)
-  ?(show_ylabels = true)
-  ?(show_xlabels = true)
+  ?(theme = Theme.catppuccin ~flavor:Mocha ~data_color:Blue)
+  ?(y_labels_config = Y_labels_config.Shown_use_reasonable_default)
+  ?(show_x_labels = true)
   ?(title = None)
   ?(show_border = true)
-  ?(y_min = Y_range.Constant (M.of_float 0.0))
-  ?(y_max = Y_range.Use_most_extreme_value)
+  ?(bar_height_config = Bar_height_config.Default)
+  data
   ~max_bar_height
-  (data : a Bar.t list)
+  ~bar_width_config
   =
-  let min_value, max_value =
-    Y_range.y_min (module M) y_min data, Y_range.y_max (module M) y_max data
+  let bar_height =
+    Bar_height_config.get_bar_height bar_height_config ~data ~max_bar_height
   in
   let data =
     List.map data ~f:(fun bar ->
       { bar with color = (if Option.is_some bar.color then bar.color else theme.data) })
   in
+  let y_labels_view =
+    let ~min_value, ~max_value = Bar_height_config.extrema bar_height_config ~data in
+    Y_labels_config.get_y_labels
+      y_labels_config
+      ~max_bar_height
+      ~min_value
+      ~max_value
+      ~bar_height_config
+    |> Option.map
+         ~f:(Y_labels.view ~max_bar_height ~bar_height ~label_color:theme.label_text)
+  in
+  let ~width:bar_width, ~padding:bar_padding =
+    let length_of_labels_and_border =
+      Bool.to_int show_border
+      + (Option.map y_labels_view ~f:View.width |> Option.value ~default:0)
+    in
+    Bar_width_config.get_bar_width
+      bar_width_config
+      ~length_of_labels_and_border
+      ~num_bars:(List.length data)
+  in
   let bars =
     match List.is_empty data with
     | true -> View.transparent_rectangle ~width:1 ~height:max_bar_height
     | false ->
-      List.map
-        data
-        ~f:(Bar.view (module M) ~min_value ~max_value ~max_bar_height ~bar_width)
-      |> List.map ~f:(View.pad ~l:bar_padding ~r:bar_padding)
+      List.map data ~f:(Bar.view ~bar_height ~max_bar_height ~bar_width)
+      |> List.mapi ~f:(fun i bar ->
+        let l = if i = 0 then bar_padding else 0 in
+        View.pad bar ~l ~r:bar_padding)
       |> View.hcat
   in
   let maybe_with_border =
@@ -230,25 +300,22 @@ let view
         ~hide_top:true
         bars
   in
-  let xlabels =
-    if not show_xlabels
+  let x_labels =
+    if not show_x_labels
     then View.none
     else (
-      let left_pad = Bool.to_int show_border in
+      let left_pad = ((bar_padding + 1) / 2) + Bool.to_int show_border in
       let labels = List.map data ~f:Bar.label |> List.map ~f:(Option.value ~default:"") in
-      xlabels
-        ~label_color:theme.label_text
-        ~chars_per_label:(bar_width + (2 * bar_padding))
-        ~labels
+      x_labels ~label_color:theme.label_text ~bar_width ~bar_padding ~labels
       |> View.pad ~l:left_pad)
   in
-  let maybe_with_xlabels = View.vcat [ maybe_with_border; xlabels ] in
+  let maybe_with_x_labels = View.vcat [ maybe_with_border; x_labels ] in
   let maybe_with_title =
     match title with
-    | None -> maybe_with_xlabels
+    | None -> maybe_with_x_labels
     | Some title ->
       let left_pad = Bool.to_int show_border in
-      let max_width = View.width maybe_with_xlabels - left_pad - 2 in
+      let max_width = View.width maybe_with_x_labels - left_pad - 2 in
       let title_view =
         title_view
           title
@@ -257,28 +324,26 @@ let view
           ~border_color:theme.title_border
         |> View.pad ~l:left_pad
       in
-      View.vcat [ title_view; maybe_with_xlabels ]
+      View.vcat [ title_view; maybe_with_x_labels ]
   in
-  let maybe_with_ylabels =
-    if not show_ylabels
-    then maybe_with_title
-    else (
-      (* The [View.width xlabels > 1] is to make labels line up properly for a bar chart
+  let maybe_with_y_labels =
+    match y_labels_view with
+    | None -> maybe_with_title
+    | Some y_labels_view ->
+      (* The [View.width x_labels > 1] is to make labels line up properly for a bar chart
          with no bars. *)
-      let b_pad = Bool.to_int show_border + Bool.to_int (View.width xlabels > 1) in
-      let ylabels =
-        ylabels
-          (module M)
-          ~max_bar_height
-          ~min_value
-          ~max_value
-          ~label_color:theme.label_text
-        |> View.pad ~b:b_pad
-      in
+      let b_pad = Bool.to_int show_border + Bool.to_int (View.width x_labels > 1) in
+      let y_labels_view = View.pad ~b:b_pad y_labels_view in
       View.hcat
-        [ View.pad ~t:(View.height maybe_with_title - View.height ylabels + 1) ylabels
+        [ View.pad
+            ~t:(View.height maybe_with_title - View.height y_labels_view + 1)
+            y_labels_view
         ; maybe_with_title
-        ])
+        ]
   in
-  maybe_with_ylabels
+  maybe_with_y_labels
 ;;
+
+module For_testing = struct
+  let calculate_bar_width = Bar_width_config.calculate_bar_width
+end

@@ -5,7 +5,7 @@ open Bonsai.Let_syntax
 
 let green x =
   View.text
-    ~attrs:[ Attr.fg (Bonsai_tui_catpuccin.color ~flavor:Mocha Green); Attr.bold ]
+    ~attrs:[ Attr.fg (Bonsai_tui_catppuccin.color ~flavor:Mocha Green); Attr.bold ]
     x
 ;;
 
@@ -62,14 +62,14 @@ let render_event : Event.t -> View.t =
     View.hcat
       [ green "Key "
       ; View.text
-          ~attrs:[ Attr.bold; Attr.fg (Bonsai_tui_catpuccin.color ~flavor:Mocha Blue) ]
+          ~attrs:[ Attr.bold; Attr.fg (Bonsai_tui_catppuccin.color ~flavor:Mocha Blue) ]
           (prefix ^ key)
       ]
   | Mouse { kind; position; mods } ->
     View.hcat
       [ green "Mouse "
       ; View.text
-          ~attrs:[ Attr.bold; Attr.fg (Bonsai_tui_catpuccin.color ~flavor:Mocha Blue) ]
+          ~attrs:[ Attr.bold; Attr.fg (Bonsai_tui_catppuccin.color ~flavor:Mocha Blue) ]
           (Sexp.to_string
              [%message
                (kind : Event.mouse_kind)

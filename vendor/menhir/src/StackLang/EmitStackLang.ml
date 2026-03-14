@@ -11,7 +11,10 @@
 open Printf
 open Grammar
 open Invariant
-let prefix = CodeBits.prefix
+module Origin = Origin.Make(Lr1)
+module Conventions =
+  Conventions.Make(Grammar)(Settings)
+let prefix = Conventions.prefix
 open StackLang
 open StackLangBuilder
 
@@ -24,7 +27,7 @@ let is_unit prod =
   Production.length prod = 1
 
 let _may_perform_unit_reduction s =
-  match Default.has_default_reduction s with
+  match Lr1.test_default_reduction s with
   | Some (prod, _) ->
       is_unit prod
   | None ->
@@ -33,7 +36,7 @@ let _may_perform_unit_reduction s =
       ) (Lr1.reductions s) false
 
 let has_default_unit_reduction s =
-  match Default.has_default_reduction s with
+  match Lr1.test_default_reduction s with
   | Some (prod, _) ->
       is_unit prod
   | None ->
@@ -56,7 +59,7 @@ let push (rs : register list) =
 
 (* Auxiliary functions for constructing block types. *)
 
-(* [origin_to_final] converts an origin, as defined by the module Invariant,
+(* [origin_to_final] converts an origin, as defined by the module Origin,
    to a final, as defined by StackLang. In short, if a block is reachable
    from a single start symbol [nt], then its final is [Some nt]; otherwise
    it is [None], which means that this block is polymorphic. *)
@@ -147,8 +150,8 @@ let must_read_positions_upon_entering s =
 
 (* -------------------------------------------------------------------------- *)
 
-(* [must_query_lexer_upon_entering s] determines whether the lexer must be
-   queried for the next token upon entering the state [s]. *)
+(* [must_query_lexer_upon_entering mode s] determines whether the lexer must
+   be queried for the next token upon entering the state [s]. *)
 
 let must_query_lexer_upon_entering mode s =
   (* The lexer is queried only in normal mode. In error-handling mode,
@@ -163,7 +166,7 @@ let must_query_lexer_upon_entering mode s =
   | Some (Symbol.T _) ->
       (* The state [s] either is an initial state or is entered via a shift
          transition. *)
-      match Default.has_default_reduction s with
+      match Lr1.test_default_reduction s with
       | Some (_, toks)
         when TerminalSet.mem Terminal.sharp toks ->
           assert (TerminalSet.cardinal toks = 1);
@@ -240,7 +243,7 @@ let required =
    read from the lexing buffer before the lexer is ever invoked. *)
 
 let token, state, semv, beforeendp, startp, endp =
-  CodePieces.(
+  Conventions.(
     token |> Reg.import,
     state |> Reg.import,
     semv |> Reg.import,
@@ -250,10 +253,10 @@ let token, state, semv, beforeendp, startp, endp =
   )
 
 let startpos ids i =
-  CodePieces.(startpos ids i |> Reg.import)
+  Conventions.(startpos ids i |> Reg.import)
 
 let endpos ids i =
-  CodePieces.(endpos ids i |> Reg.import)
+  Conventions.(endpos ids i |> Reg.import)
 
 let initp =
   "initp" |> prefix |> Reg.import
@@ -283,9 +286,9 @@ module A () = struct
 
 type address =
   | Run of mode * Lr1.node
-  | Reduce of mode * Production.index
+  | Reduce of mode * Production.t
   | Goto of mode * Nonterminal.t
-  | ActGoto of mode * Production.index
+  | ActGoto of mode * Production.t
   | Stop of Lr1.node
 
 let mode_prefix mode name =
@@ -299,11 +302,11 @@ let print addr =
   Label.import (prefix (
     match addr with
     | Run (mode, s) ->
-        let s = Misc.padded_index Lr1.n (Lr1.number s) in
+        let s = MString.padded_index Lr1.n (Lr1.encode s) in
         sprintf "run_%s" s
         |> mode_prefix mode
     | Reduce (mode, prod) ->
-        let prod = Misc.padded_index Production.n (Production.p2i prod) in
+        let prod = MString.padded_index Production.n (Production.encode prod) in
         sprintf "reduce_%s" prod
         |> mode_prefix mode
     | Goto (mode, nt) ->
@@ -311,11 +314,11 @@ let print addr =
         sprintf "goto_%s" nt
         |> mode_prefix mode
     | ActGoto (mode, prod) ->
-        let prod = Misc.padded_index Production.n (Production.p2i prod) in
+        let prod = MString.padded_index Production.n (Production.encode prod) in
         sprintf "act_goto_%s" prod
         |> mode_prefix mode
     | Stop s ->
-        let s = Misc.padded_index Lr1.n (Lr1.number s) in
+        let s = MString.padded_index Lr1.n (Lr1.encode s) in
         sprintf "stop_%s" s
   ))
 
@@ -380,7 +383,7 @@ let rec run mode s =
 
   (* Log that we are entering state [s]. *)
 
-  log "State %d:" (Lr1.number s);
+  log "State %d:" (Lr1.encode s);
 
   (* If necessary, read the positions of the current token from [lexbuf]. *)
 
@@ -395,7 +398,7 @@ let rec run mode s =
   (* If [run] is expected to push a new cell onto the stack, do so now. *)
 
   if must_push then begin
-    let cell = top (Short.stack s) in
+    let cell = top (Short.node_shape s) in
     if present cell then
       push (components cell state semv startp endp) cell
   end;
@@ -417,10 +420,10 @@ let rec run mode s =
      production that needs [$endpos($0)]. [initp] may be read in the future if
      this state can reduce a non-epsilon production that needs [$endpos($0)].
 
-     If [initp] register is never needed anywhere, then it will be considered
-     dead and this initialization instruction will be removed. If it is needed
-     somewhere, then it will be carried all along, so many routines may end up
-     needing [initp]. *)
+     If the register [initp] is never needed anywhere, then it will be
+     considered dead and this initialization instruction will be removed. If
+     it is needed somewhere, then it will be carried all along, so many
+     routines may end up needing [initp]. *)
 
   if Lr1.is_start s then begin
     prim endp (PrimOCamlFieldAccess (VReg lexbuf, "Lexing.lex_curr_p"));
@@ -446,19 +449,12 @@ let rec run mode s =
      perform a similar case analysis, while pretending that the current token
      is the [error] token. *)
 
-  match Default.has_default_reduction s, mode with
+  match Lr1.test_default_reduction s, mode with
   | Some (prod, _), _ ->
       jump (Reduce (mode, prod))
   | None, NormalMode ->
       run_normal_dispatch s
   | None, ErrorHandlingMode ->
-      (* The old code-back end claims that this point in the code can be
-         reached only if the state [s] satisfies [errorpeeker s], that is,
-         only if [s] is the target of a reduction on [error]. Here, this may
-         or may not be true. (One must keep in mind that the old code back-end
-         uses the legacy strategy, whereas we use the simplified strategy,
-         which is somewhat different.) I prefer not to take chances and to
-         generate this code anyway. *)
       log "Resuming error handling";
       run_error_dispatch s
 
@@ -482,13 +478,13 @@ and run_normal_dispatch s =
       match symbol with
       | Symbol.T tok ->
           (* A transition of [s] along [tok] to [s']. *)
-          assert (not (Terminal.pseudo tok));
+          assert (Terminal.real tok);
           (* Use a pattern that recognizes the token [tok] and binds [semv] to
              its semantic value. *)
           branch (TokSingle (tok, semv)) begin fun () ->
             (* Log that we are shifting. *)
             log "Shifting (%s) to state %d"
-              (Terminal.print tok) (Lr1.number s');
+              (Terminal.print tok) (Lr1.encode s');
             (* Invoke [run s']. *)
             jump (Run (mode, s'))
           end
@@ -500,12 +496,11 @@ and run_normal_dispatch s =
 
     Lr1.reductions s
     |> TerminalMap.remove Terminal.error
-    |> Lr0.invert
+    |> Reductions.reverse
     |> ProductionMap.iter begin fun prod toks ->
       (* A reduction of [prod] on every token in the set [toks]. *)
-      branch (TokMultiple toks) begin fun () ->
-        jump (Reduce (mode, prod))
-      end
+      branch (TokMultiple toks) @@ fun () ->
+      jump (Reduce (mode, prod))
     end;
 
     (* A default branch, where we switch to error-handling mode. *)
@@ -541,22 +536,22 @@ and run_error_dispatch s =
          because the [error] token has type unit. Invoke [run s'], still in
           error-handling mode. *)
 
-      log "Handling error in state %d" (Lr1.number s);
-      log "Shifting (error) to state %d" (Lr1.number s');
+      log "Handling error in state %d" (Lr1.encode s);
+      log "Shifting (error) to state %d" (Lr1.encode s');
       def [PReg semv] [VUnit];
       jump (Run (mode, s'))
 
   | exception Not_found ->
 
-  match TerminalMap.lookup tok (Lr1.reductions s) with
+  match TerminalMap.find tok (Lr1.reductions s) with
   | prods ->
-      let prod = Misc.single prods in
+      let prod = MList.single prods in
 
       (* There is a reduce transition on error. Invoke [reduce prod], still in
          error-handling mode. Note that [reduce] can invoke [goto] which can
          invoke another [run] function, still in error-handling mode. *)
 
-      log "Handling error in state %d" (Lr1.number s);
+      log "Handling error in state %d" (Lr1.encode s);
       jump (Reduce (mode, prod))
 
   | exception Not_found ->
@@ -586,7 +581,7 @@ let act prod =
 
   let symbol = Symbol.N nt
   and is_epsilon = (n = 0)
-  and stack = Short.prodstack prod in
+  and stack = Short.production_shape prod in
   assert (length stack = n);
 
   (* Log that we are reducing production [prod]. *)
@@ -646,7 +641,7 @@ let reduce mode prod =
      is stored in the register [state] and thus becomes the new current
      state. *)
 
-  let stack = Short.prodstack prod in
+  let stack = Short.production_shape prod in
   assert (length stack = n);
 
   let pops = ref 0 in
@@ -677,7 +672,7 @@ let reduce mode prod =
   if Production.is_start prod then begin
     assert (n = 1);
     log "Accepting";
-    let nt = Option.force (Production.classify prod) in
+    let nt = Production.get_start prod in
     return nt (VReg (id 0))
   end
   else
@@ -741,14 +736,13 @@ let reduce mode prod =
 let goto mode nt =
 
   let has_case_tag =
-    case_tag state begin fun branch ->
-      Lr1.targets begin fun () sources target ->
-        (* If the current state is a member of [sources], jump to [target]. *)
-        branch
-          (List.map Tag.lazy_make sources)
-          (fun () -> jump (Run (mode, target)))
-      end () (Symbol.N nt)
-    end
+    case_tag state @@ fun branch ->
+    Lr1.targets (Symbol.N nt) |> Lr1.NodeSet.iter @@ fun target ->
+    let sources = Lr1.NodeSet.elements (Lr1.predecessors target) in
+    (* If the current state is a member of [sources], jump to [target]. *)
+    branch
+      (List.map Tag.lazy_make sources)
+      (fun () -> jump (Run (mode, target)))
   in
 
   (* If we have generated a [casetag] instruction, then this function must
@@ -786,20 +780,17 @@ let rec act_goto mode prod =
      so this case analysis is possible. *)
 
   let has_case_tag =
-    case_tag state begin fun branch ->
-      Lr1.targets begin fun () sources target ->
-        sources |> List.iter begin fun source ->
-          (* Generate one branch per edge of [source] to [target]. *)
-          branch [Tag.lazy_make source] begin fun () ->
-            (* Assign [beforeendp]; execute the semantic action; jump to
-               the [run] routine for the state [target]. *)
-            assign_beforeendp source;
-            act prod;
-            jump (Run (mode, target))
-          end
-        end
-      end () symbol
-    end
+    case_tag state @@ fun branch ->
+    Lr1.targets symbol |> Lr1.NodeSet.iter @@ fun target ->
+    let sources = Lr1.predecessors target in
+    sources |> Lr1.NodeSet.iter @@ fun source ->
+    (* Generate one branch per edge of [source] to [target]. *)
+    branch [Tag.lazy_make source] @@ fun () ->
+    (* Assign [beforeendp]; execute the semantic action; jump to
+       the [run] routine for the state [target]. *)
+    assign_beforeendp source;
+    act prod;
+    jump (Run (mode, target))
   in
   set_hint (if has_case_tag then OnlyIfKnownState else Always)
 
@@ -827,7 +818,7 @@ and assign_beforeendp source =
   end
   else begin
     comment "Defining $endpos($0) by peeking at the top stack cell";
-    let stack = Short.stack source in
+    let stack = Short.node_shape source in
     assert (length stack > 0);
     let cell = top stack in
     assert (present cell);
@@ -845,9 +836,6 @@ and assign_beforeendp source =
    we compute here. Because we are inside the functor [L()], this computation
    is performed only if necessary. *)
 
-module Long =
-  Invariant.Long()
-
 let code label =
   (* A potential confusion exists between the [pop] functions provided by the
      modules [Invariant] and [StackLangBuilder]. *)
@@ -856,31 +844,31 @@ let code label =
 
   | Run (mode, s) ->
       (* If [run] does not push a new stack cell, then the shape of the stack
-         at the beginning of [run] is given by [Long.stack]. If [run] pushes a
-         new cell, then we must pop one cell off this shape. *)
-      let stack = Long.stack s in
+         at the beginning of [run] is given by [Long.node_shape]. If [run]
+         pushes a new cell, then we must pop one cell off this shape. *)
+      let stack = Long.node_shape s in
       let stack = if runpushes s then pop stack else stack in
       set_block_type stack (Origin.run s);
       run mode s
 
   | Reduce (mode, prod) ->
-      let stack = Long.prodstack prod in
+      let stack = Long.production_shape prod in
       set_block_type stack (Origin.reduce prod);
       reduce mode prod
 
   | Goto (mode, nt) ->
-      (* The function [Long.gotostack] provides the shape of the stack
+      (* The function [Long.goto_shape] provides the shape of the stack
          *after* the goto transition has been taken. Here, we want the shape
          of the stack when the [goto] function is invoked, that is, *before*
          the goto transition is taken. This is why we pop one cell. *)
-      let stack = pop (Long.gotostack nt) in
+      let stack = pop (Long.goto_shape nt) in
       set_block_type stack (Origin.goto nt);
       goto mode nt
 
   | ActGoto (mode, prod) ->
       (* Same type as in the previous case. *)
       let nt = Production.nt prod in
-      let stack = pop (Long.gotostack nt) in
+      let stack = pop (Long.goto_shape nt) in
       set_block_type stack (Origin.goto nt);
       act_goto mode prod
 
@@ -891,7 +879,7 @@ let code label =
          that is consistent with the [run] function for state [s]. *)
       set_block_type stack (Origin.run s);
       (* The code for this block consists of just a [STOP] instruction. *)
-      stop (Lr1.number s)
+      stop (Lr1.encode s)
 
 (* -------------------------------------------------------------------------- *)
 
@@ -899,10 +887,10 @@ let code label =
 
 let entry =
   let mode = NormalMode in
-  ProductionMap.fold (fun _prod s accu ->
-      let nt = Item.startnt (Lr1.start2item s) in
-      let name = Nonterminal.print true nt in
-      StringMap.add name (Run (mode, s)) accu
+  ProductionMap.fold (fun prod s accu ->
+    let nt = Production.get_start prod in
+    let name = Nonterminal.print true nt in
+    StringMap.add name (Run (mode, s)) accu
   ) Lr1.entry StringMap.empty
 
 (* -------------------------------------------------------------------------- *)
@@ -910,9 +898,9 @@ let entry =
 (* A map of the represented states to their types. *)
 
 let states =
-  Lr1.fold (fun states s ->
+  Lr1.fold (fun s states ->
     if represented s then
-      let bty = make_block_type (Long.stack s) (Origin.run s) in
+      let bty = make_block_type (Long.node_shape s) (Origin.run s) in
       Tag.Map.add (Tag.make s) bty states
     else
       states

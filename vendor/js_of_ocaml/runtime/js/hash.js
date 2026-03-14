@@ -147,13 +147,13 @@ function caml_hash_mix_string(h, v) {
   return caml_hash_mix_jsbytes(h, caml_jsbytes_of_string(v));
 }
 
-//Provides: caml_hash_exn mutable
+//Provides: caml_hash mutable
 //Requires: caml_is_ml_string, caml_is_ml_bytes
 //Requires: caml_hash_mix_int, caml_hash_mix_final
 //Requires: caml_hash_mix_float, caml_hash_mix_string, caml_hash_mix_bytes, caml_custom_ops
 //Requires: caml_hash_mix_jsbytes
 //Requires: caml_is_continuation_tag
-function caml_hash_exn(count, limit, seed, obj) {
+function caml_hash(count, limit, seed, obj) {
   var queue, rd, wr, sz, num, h, v, i, len;
   sz = limit;
   if (sz < 0 || sz > 256) sz = 256;
@@ -220,6 +220,12 @@ function caml_hash_exn(count, limit, seed, obj) {
   h = caml_hash_mix_final(h);
   return h & 0x3fffffff;
 }
+
+//Provides: caml_hash_exn
+//Requires: caml_hash
+//Version: >= 5.2, < 5.3
+//OxCaml
+var caml_hash_exn = caml_hash;
 
 //Provides: caml_string_hash
 //Requires: caml_hash_mix_final, caml_hash_mix_string

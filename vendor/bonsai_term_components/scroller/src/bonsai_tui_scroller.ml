@@ -65,7 +65,7 @@ let apply_action
      | _ ->
        let time_interval = Time_ns.Span.of_sec 0.3 in
        let now = Bonsai.Time_source.now time_source in
-       let max_bounded_offset = content_height - height in
+       let max_bounded_offset = Int.max 0 (content_height - height) in
        let prev_offset = offset in
        let stuck_to_bottom =
          match action with
@@ -188,6 +188,7 @@ let component ?(default_stuck_to_bottom = false) ~dimensions view (local_ graph)
   (* Keep the internal offset up to date so that scrolling _out_ of a sticky state still
      works. *)
   Bonsai.Edge.on_change
+    ~trigger:`After_display
     ~equal:[%equal: int * int]
     (Bonsai.both offset_state offset)
     graph

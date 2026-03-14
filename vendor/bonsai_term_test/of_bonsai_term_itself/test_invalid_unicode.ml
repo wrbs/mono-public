@@ -632,22 +632,22 @@ let%expect_test "an expect test of a bonsai term app that prints out every chara
     |}]
 ;;
 
-let%quick_test ("an expect test of a bonsai term app that prints out every character"
-  [@remember_failures {|"\026"|}])
-  =
-  fun (string : string) ->
-  (* NOTE: we never raise on quickcheck generated strings! *)
-  let view = View.text string in
-  let handle =
-    create_handle
-      ~initial_dimensions:{ width = 80; height = 280 }
-      (fun ~dimensions:_ (local_ _graph) ->
-         let view = Bonsai.return view in
-         let handler = Bonsai.return (fun _ -> Effect.Ignore) in
-         ~view, ~handler)
+let%expect_test "an expect test of a bonsai term app that prints out every character" =
+  let%quick_test prop (string : string) =
+    (* NOTE: we never raise on quickcheck generated strings! *)
+    let view = View.text string in
+    let handle =
+      create_handle
+        ~initial_dimensions:{ width = 80; height = 280 }
+        (fun ~dimensions:_ (local_ _graph) ->
+           let view = Bonsai.return view in
+           let handler = Bonsai.return (fun _ -> Effect.Ignore) in
+           ~view, ~handler)
+    in
+    Bonsai_test.Handle.show handle;
+    let _ : _ = Expect_test_helpers_core.expect_test_output () in
+    ()
+      [@@remember_failures {|"\026"|}]
   in
-  Bonsai_test.Handle.show handle;
-  let _ : _ = Expect_test_helpers_core.expect_test_output () in
-  ();
   [%expect {| |}]
 ;;

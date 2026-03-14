@@ -1,7 +1,7 @@
 open Core
 
-(* We generate this function once per datatype because otherwise the comparisons won’t
-   get inlined, leading to pretty expensive float-array handling in the [float] case. *)
+(* We generate this function once per datatype because otherwise the comparisons won’t get
+   inlined, leading to pretty expensive float-array handling in the [float] case. *)
 (*$
   open Core
 

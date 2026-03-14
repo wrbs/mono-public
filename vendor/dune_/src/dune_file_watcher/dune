@@ -1,7 +1,7 @@
 (library
  (name dune_file_watcher)
  (libraries
-  dune_spawn
+  spawn
   fsevents
   dune_console
   unix
@@ -9,6 +9,6 @@
   threads.posix
   ocaml_inotify
   async_inotify_for_dune
-  dune_re
+  re
   fswatch_win)
  (synopsis "Internal Dune library, do not use!"))

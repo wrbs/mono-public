@@ -1,6 +1,6 @@
 (*---------------------------------------------------------------------------
    Copyright (c) 2017 The uucp programmers. All rights reserved.
-   SPDX-License-Identifier: ISC
+   Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
 let log_err s =
@@ -68,9 +68,9 @@ let esc_non_ascii s =
 let uchars_to_utf_bytes utf uchars =
   let b = Buffer.create 255 in
   let add_utf = match utf with
-  | `UTF_8 -> Buffer.add_utf_8_uchar
-  | `UTF_16BE -> Buffer.add_utf_16be_uchar
-  | `UTF_16LE -> Buffer.add_utf_16le_uchar
+  | `UTF_8 -> Uutf.Buffer.add_utf_8
+  | `UTF_16BE -> Uutf.Buffer.add_utf_16be
+  | `UTF_16LE -> Uutf.Buffer.add_utf_16le
   in
   List.iter (add_utf b) uchars; Buffer.contents b
 
@@ -94,22 +94,20 @@ let str_of_spec_fmt = function
 | `UTF_8 -> "UTF-8"
 | `UTF_16BE -> "UTF-16BE"
 | `UTF_16LE -> "UTF-16LE"
-| `Uchar_esc -> "a Unicode character escape"
+| `Uchar_esc -> "an Unicode character escape"
 | `Bytes_esc -> "a byte sequence escape"
 | `Guess -> "a character specification"
 | `By_name -> "a name substring"
 
 let uchar_of_utf utf s =
-  let get_utf = match utf with
-  | `UTF_8 -> String.get_utf_8_uchar
-  | `UTF_16BE -> String.get_utf_16be_uchar
-  | `UTF_16LE -> String.get_utf_16le_uchar
+  let fold = match utf with
+  | `UTF_8 -> Uutf.String.fold_utf_8
+  | `UTF_16BE -> Uutf.String.fold_utf_16be
+  | `UTF_16LE -> Uutf.String.fold_utf_16le
   in
-  let dec = get_utf s 0 in
-  if Uchar.utf_decode_is_valid dec &&
-     Uchar.utf_decode_length dec = String.length s
-  then Some (Uchar.utf_decode_uchar dec)
-  else None
+  match fold (fun acc _ decode -> decode :: acc) [] s with
+  | [ `Uchar u ] -> Some u
+  | _ -> None
 
 let try_uchar_of_utfs s =
   let rec try_decs s = function
@@ -318,8 +316,6 @@ let all_keys = [
     str Uucp.Break.(pp_grapheme_cluster, grapheme_cluster);
   `P "Word_Break", str Uucp.Break.(pp_word, word);
   `P "Sentence_Break", str Uucp.Break.(pp_sentence, sentence);
-  `P "Indic_Conjunct_Break",
-     str Uucp.Break.(pp_indic_conjunct_break, indic_conjunct_break);
   `P "East_Asian_Width", str Uucp.Break.(pp_east_asian_width, east_asian_width);
   (* Case *)
   `P "Lowercase", str_bool Uucp.Case.is_lower;
@@ -331,12 +327,10 @@ let all_keys = [
   `P "Titlecase_Mapping", str_case_map Uucp.Case.Map.to_title;
   `P "Case_Folding", str_case_map Uucp.Case.Fold.fold;
   `P "NFKC_Casefold", str_case_map Uucp.Case.Nfkc_fold.fold;
-  `P "NFKC_Simple_Casefold", str_case_map Uucp.Case.Nfkc_simple_fold.fold;
   (* CJK *)
   `P "Ideographic", str_bool Uucp.Cjk.is_ideographic;
-  `P "IDS_Unary_Operator", str_bool Uucp.Cjk.is_ids_unary_operator;
-  `P "IDS_Binary_Operator", str_bool Uucp.Cjk.is_ids_binary_operator;
-  `P "IDS_Trinary_Operator", str_bool Uucp.Cjk.is_ids_trinary_operator;
+  `P "IDS_Binary_Operator", str_bool Uucp.Cjk.is_ids_bin_op;
+  `P "IDS_Trinary_Operator", str_bool Uucp.Cjk.is_ids_tri_op;
   `P "Radical", str_bool Uucp.Cjk.is_radical;
   `P "Unified_Ideograph", str_bool Uucp.Cjk.is_unified_ideograph;
   (* Emoji *)
@@ -373,8 +367,6 @@ let all_keys = [
   `P "ID_Continue", str_bool Uucp.Id.is_id_continue;
   `P "XID_Start", str_bool Uucp.Id.is_xid_start;
   `P "XID_Continue", str_bool Uucp.Id.is_xid_continue;
-  `P "ID_Compat_Math_Start", str_bool Uucp.Id.is_id_compat_math_start;
-  `P "ID_Compat_Math_Continue", str_bool Uucp.Id.is_id_compat_math_continue;
   `P "Pattern_Syntax", str_bool Uucp.Id.is_pattern_syntax;
   `P "Pattern_White_Space", str_bool Uucp.Id.is_pattern_white_space;
   (* Name *)
@@ -664,9 +656,25 @@ let man = [
      $(i,http://www.unicode.org/reports/tr44/)"; ]
 
 let ucharinfo =
-  Cmd.v (Cmd.info "ucharinfo" ~version:"v17.0.0+dune" ~doc ~exits ~man)
+  Cmd.v (Cmd.info "ucharinfo" ~version:"v15.0.0" ~doc ~exits ~man)
     Term.(const ucharinfo $ cmd $ keys $ spec_fmt $ out_fmt $ uspecs)
 
 
 let main () = exit (Cmd.eval' ucharinfo)
 let () = if !Sys.interactive then () else main ()
+
+(*---------------------------------------------------------------------------
+   Copyright (c) 2017 The uucp programmers
+
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
+
+   THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+   WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+   MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+   ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+   WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+   ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+  ---------------------------------------------------------------------------*)

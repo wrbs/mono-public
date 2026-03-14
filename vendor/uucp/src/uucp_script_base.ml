@@ -1,6 +1,6 @@
 (*---------------------------------------------------------------------------
    Copyright (c) 2014 The uucp programmers. All rights reserved.
-   SPDX-License-Identifier: ISC
+   Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
 type t = [
@@ -16,7 +16,6 @@ type t = [
   | `Bass
   | `Batk
   | `Beng
-  | `Berf
   | `Bhks
   | `Bopo
   | `Brah
@@ -42,7 +41,6 @@ type t = [
   | `Elba
   | `Elym
   | `Ethi
-  | `Gara
   | `Geor
   | `Glag
   | `Gong
@@ -51,7 +49,6 @@ type t = [
   | `Gran
   | `Grek
   | `Gujr
-  | `Gukh
   | `Guru
   | `Hang
   | `Hani
@@ -73,7 +70,6 @@ type t = [
   | `Khmr
   | `Khoj
   | `Knda
-  | `Krai
   | `Kthi
   | `Kits
   | `Lana
@@ -111,7 +107,6 @@ type t = [
   | `Nshu
   | `Ogam
   | `Olck
-  | `Onao
   | `Orkh
   | `Orya
   | `Osge
@@ -137,7 +132,6 @@ type t = [
   | `Shaw
   | `Shrd
   | `Sidd
-  | `Sidt
   | `Sind
   | `Sinh
   | `Sogd
@@ -145,7 +139,6 @@ type t = [
   | `Sora
   | `Soyo
   | `Sund
-  | `Sunu
   | `Sylo
   | `Syrc
   | `Tagb
@@ -155,7 +148,6 @@ type t = [
   | `Taml
   | `Tang
   | `Tavt
-  | `Tayo
   | `Telu
   | `Tfng
   | `Tglg
@@ -164,10 +156,7 @@ type t = [
   | `Tibt
   | `Tirh
   | `Tnsa
-  | `Todr
-  | `Tols
   | `Toto
-  | `Tutg
   | `Ugar
   | `Vaii
   | `Vith
@@ -196,7 +185,6 @@ let pp ppf s = Format.fprintf ppf "%s" begin match s with
   | `Bass -> "Bass"
   | `Batk -> "Batk"
   | `Beng -> "Beng"
-  | `Berf -> "Berf"
   | `Bhks -> "Bhks"
   | `Bopo -> "Bopo"
   | `Brah -> "Brah"
@@ -222,7 +210,6 @@ let pp ppf s = Format.fprintf ppf "%s" begin match s with
   | `Elba -> "Elba"
   | `Elym -> "Elym"
   | `Ethi -> "Ethi"
-  | `Gara -> "Gara"
   | `Geor -> "Geor"
   | `Glag -> "Glag"
   | `Gong -> "Gong"
@@ -231,7 +218,6 @@ let pp ppf s = Format.fprintf ppf "%s" begin match s with
   | `Gran -> "Gran"
   | `Grek -> "Grek"
   | `Gujr -> "Gujr"
-  | `Gukh -> "Gukh"
   | `Guru -> "Guru"
   | `Hang -> "Hang"
   | `Hani -> "Hani"
@@ -253,7 +239,6 @@ let pp ppf s = Format.fprintf ppf "%s" begin match s with
   | `Khmr -> "Khmr"
   | `Khoj -> "Khoj"
   | `Knda -> "Knda"
-  | `Krai -> "Krai"
   | `Kthi -> "Kthi"
   | `Kits -> "Kits"
   | `Lana -> "Lana"
@@ -291,7 +276,6 @@ let pp ppf s = Format.fprintf ppf "%s" begin match s with
   | `Nshu -> "Nshu"
   | `Ogam -> "Ogam"
   | `Olck -> "Olck"
-  | `Onao -> "Onao"
   | `Orkh -> "Orkh"
   | `Orya -> "Orya"
   | `Osge -> "Osge"
@@ -317,7 +301,6 @@ let pp ppf s = Format.fprintf ppf "%s" begin match s with
   | `Shaw -> "Shaw"
   | `Shrd -> "Shrd"
   | `Sidd -> "Sidd"
-  | `Sidt -> "Sidt"
   | `Sind -> "Sind"
   | `Sinh -> "Sinh"
   | `Sogd -> "Sogd"
@@ -325,7 +308,6 @@ let pp ppf s = Format.fprintf ppf "%s" begin match s with
   | `Sora -> "Sora"
   | `Soyo -> "Soyo"
   | `Sund -> "Sund"
-  | `Sunu -> "Sunu"
   | `Sylo -> "Sylo"
   | `Syrc -> "Syrc"
   | `Tagb -> "Tagb"
@@ -335,7 +317,6 @@ let pp ppf s = Format.fprintf ppf "%s" begin match s with
   | `Taml -> "Taml"
   | `Tang -> "Tang"
   | `Tavt -> "Tavt"
-  | `Tayo -> "Tayo"
   | `Telu -> "Telu"
   | `Tfng -> "Tfng"
   | `Tglg -> "Tglg"
@@ -344,10 +325,7 @@ let pp ppf s = Format.fprintf ppf "%s" begin match s with
   | `Tibt -> "Tibt"
   | `Tirh -> "Tirh"
   | `Tnsa -> "Tnsa"
-  | `Todr -> "Todr"
-  | `Tols -> "Tols"
   | `Toto -> "Toto"
-  | `Tutg -> "Tutg"
   | `Ugar -> "Ugar"
   | `Vaii -> "Vaii"
   | `Vith -> "Vith"
@@ -362,3 +340,19 @@ let pp ppf s = Format.fprintf ppf "%s" begin match s with
   | `Zyyy -> "Zyyy"
   | `Zzzz -> "Zzzz"
   end
+
+(*---------------------------------------------------------------------------
+   Copyright (c) 2014 The uucp programmers
+
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
+
+   THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+   WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+   MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+   ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+   WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+   ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+  ---------------------------------------------------------------------------*)

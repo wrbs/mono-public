@@ -133,8 +133,8 @@ Terminology
      files. The following profiles are standard:
 
      -  ``release`` which is the profile used for opam releases
-     -  ``dev`` which is the default profile when none is set explicitly, it has
-        stricter warnings than the ``release`` one
+     -  ``dev`` which is the default profile when none is set explicitly, and
+        which has warnings-as-errors turned on.
 
    dialect
      An alternative frontend to OCaml (such as ReasonML). It is described
@@ -144,7 +144,7 @@ Terminology
      tree. It can also specify a custom formatter.
 
    placeholder substitution
-     A build step in which placeholders such as ``3.20.2`` in source files
+     A build step in which placeholders such as ``3.21.0`` in source files
      are replaced by concrete values such as ``1.2.3``. It is performed by
      :ref:`dune-subst` for development versions and dune-release_ for
      releases.

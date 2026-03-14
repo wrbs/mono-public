@@ -38,3 +38,11 @@ let () =
     (lazy (Output.stderr ()))
     ~here:[%here]
 ;;
+
+let () =
+  Async_unix.Shutdown.Private.set_shutdown_on_unhandled_exn_logger (fun ~msg exn ->
+    Global.For_async_shutdown.log_error
+      "%s"
+      msg
+      ~tags:[ "exn", Exn.to_string_mach exn ] [@alert "-private_async_log_function"])
+;;

@@ -300,14 +300,15 @@ function caml_sys_rmdir(name) {
 
 //Provides: caml_ba_map_file
 //Requires: caml_failwith
-function caml_ba_map_file(vfd, kind, layout, shared, dims, pos) {
+function caml_ba_map_file(_vfd, _kind, _layout, _shared, _dims, _pos) {
   // var data = caml_sys_fds[vfd];
   caml_failwith("caml_ba_map_file not implemented");
 }
 
 //Provides: caml_ba_map_file_bytecode
 //Requires: caml_ba_map_file
-function caml_ba_map_file_bytecode(argv, argn) {
+function caml_ba_map_file_bytecode(argv, _argn) {
+  // argn === 6
   return caml_ba_map_file(argv[0], argv[1], argv[2], argv[3], argv[4], argv[5]);
 }
 
@@ -324,7 +325,7 @@ function jsoo_create_file_extern(name, content) {
 //Provides: caml_fs_init
 //Requires: jsoo_create_file
 function caml_fs_init() {
-  var tmp = [].concat(globalThis.jsoo_fs_tmp || [], globalThis.caml_fs_tmp || []);
+  var tmp = globalThis.jsoo_fs_tmp;
   if (tmp) {
     for (var i = 0; i < tmp.length; i++) {
       jsoo_create_file(tmp[i].name, tmp[i].content);
@@ -332,7 +333,6 @@ function caml_fs_init() {
   }
   globalThis.jsoo_create_file = jsoo_create_file;
   globalThis.jsoo_fs_tmp = [];
-  globalThis.caml_fs_tmp = [];
   return 0;
 }
 

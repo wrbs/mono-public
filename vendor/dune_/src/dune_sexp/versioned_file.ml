@@ -1,4 +1,4 @@
-open! Stdune
+open Stdune
 module First_line = Versioned_file_first_line
 
 module type S = sig
@@ -57,11 +57,21 @@ struct
 
     let parse first_line : Instance.t =
       let { First_line.lang = name_loc, name; version = ver_loc, ver } = first_line in
+      let ver_atom =
+        match Atom.parse ver with
+        | Some atom -> atom
+        | None ->
+          let has_non_ascii = String.exists ver ~f:(fun c -> Char.code c >= 128) in
+          if has_non_ascii
+          then User_error.raise ~loc:ver_loc [ Pp.text Atom.non_ascii_error_message ]
+          else
+            User_error.raise
+              ~loc:ver_loc
+              [ Pp.text "Invalid version. Version must be two numbers separated by a dot."
+              ]
+      in
       let dune_lang_ver =
-        Decoder.parse
-          Syntax.Version.decode
-          Univ_map.empty
-          (Atom (ver_loc, Atom.of_string ver))
+        Decoder.parse Syntax.Version.decode Univ_map.empty (Atom (ver_loc, ver_atom))
       in
       match Table.find langs name with
       | None ->

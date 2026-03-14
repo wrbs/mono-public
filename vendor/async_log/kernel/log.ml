@@ -161,15 +161,29 @@ let info_s ?time ?tags t the_sexp = sexp ~level:`Info ?time ?tags t the_sexp
 let error_s ?time ?tags t the_sexp = sexp ~level:`Error ?time ?tags t the_sexp
 
 module For_testing = struct
-  let create_output = Output.For_testing.create
+  let create_output
+    ?(map_output = Fn.id)
+    ?(time = `Omit)
+    ?(tags = `Omit)
+    ?(level = `Omit)
+    ()
+    =
+    Output.For_testing.create ~map_output ~time ~tags ~level ()
+  ;;
 
-  let create ~map_output level =
-    let default_outputs = [ create_output ~map_output ] in
+  let create
+    ?(map_output = Fn.id)
+    ?(time : [ `Keep | `Omit ] = `Omit)
+    ?(tags : [ `Keep | `Omit ] = `Omit)
+    ?(level : [ `Keep | `Omit ] = `Omit)
+    (log_level : Level.t)
+    =
+    let default_outputs = [ create_output ~map_output ~time ~tags ~level () ] in
     let named_outputs = Output_name.Map.empty in
     create
       ~default_outputs
       ~named_outputs
-      ~level
+      ~level:log_level
       ~on_error:`Raise
       ~time_source:None
       ~transforms:[]

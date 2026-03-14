@@ -111,3 +111,69 @@ let%expect_test _ =
     }
     //end
     |}]
+
+let%expect_test "global-deadcode-bug" =
+  let prog =
+    {|
+     let log_success () = print_endline "Success!"
+     type t = { a : bool; b : bool }
+     let fun1 () =
+     let g f = if f.b then true else false in
+     let f x = print_endline "here"; g { a = true; b = false} in
+     let _ = (f 5000) in
+     log_success ()
+     let () = fun1 ()
+    |}
+  in
+  Util.compile_and_run ~flags:[ "--disable"; "inline" ] prog;
+  [%expect {|
+    here
+    Success!
+    |}];
+  let program = Util.compile_and_parse ~flags:[ "--disable"; "inline" ] prog in
+  Util.print_fun_decl program (Some "fun1");
+  [%expect
+    {|
+    function fun1(param){
+     function f(x){caml_call1(Stdlib[46], cst_here);}
+     f(5000);
+     return log_success(0);
+    }
+    //end
+    |}]
+
+let%expect_test "_" =
+  let prog =
+    {|
+type t =
+  | Zero
+  | Succ of t
+
+let rules (rules : t -> t) : t -> t =
+  function
+  | Zero -> Succ Zero
+  | Succ n -> Succ (rules n)
+
+let rec step n =
+  rules step n
+
+let rec grow (iters : int) (n : t) : t =
+  if iters < 0 then n else
+    (grow [@tailcall]) (iters - 1) (step n)
+|}
+  in
+  let program = Util.compile_and_parse ~flags:[ "--debug"; "js_assign" ] prog in
+  Util.print_fun_decl program (Some "grow");
+  [%expect
+    {|
+    function grow(iters$1, n$1){
+     var iters = iters$1, n = n$1;
+     for(;;){
+      if(0 > iters) return n;
+      var n$0 = step(n), iters$0 = iters - 1 | 0;
+      iters = iters$0;
+      n = n$0;
+     }
+    }
+    //end
+    |}]

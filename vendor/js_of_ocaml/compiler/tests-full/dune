@@ -2,8 +2,8 @@
  (targets stdlib.cma.js)
  (enabled_if
   (and
-   (>= %{ocaml_version} "5.3")
-   (< %{ocaml_version} "5.4")))
+   (>= %{ocaml_version} "5.4")
+   (< %{ocaml_version} "5.5")))
  (action
   (run
    %{bin:js_of_ocaml}
@@ -12,6 +12,8 @@
    var
    --debuginfo
    %{lib:stdlib:stdlib.cma}
+   --enable
+   use-js-string
    -o
    %{targets})))
 
@@ -19,8 +21,8 @@
  (targets stdlib.cma.output.js)
  (enabled_if
   (and
-   (>= %{ocaml_version} "5.3")
-   (< %{ocaml_version} "5.4")))
+   (>= %{ocaml_version} "5.4")
+   (< %{ocaml_version} "5.5")))
  (action
   (with-stdout-to
    %{targets}
@@ -30,10 +32,53 @@
  (alias runtest)
  (enabled_if
   (and
-   (>= %{ocaml_version} "5.3")
-   (< %{ocaml_version} "5.4")))
+   (>= %{ocaml_version} "5.4")
+   (< %{ocaml_version} "5.5")))
  (action
   (diff stdlib.cma.expected.js stdlib.cma.output.js)))
+
+(library
+ (name shapes)
+ (modules m1 m2 m3))
+
+(rule
+ (targets shapes.cma.js)
+ (enabled_if
+  (and
+   (>= %{ocaml_version} "5.4")
+   (< %{ocaml_version} "5.5")))
+ (action
+  (run
+   %{bin:js_of_ocaml}
+   --load-shape
+   %{dep:stdlib.cma.js}
+   --pretty
+   --debuginfo
+   %{dep:shapes.cma}
+   --enable
+   use-js-string
+   -o
+   %{targets})))
+
+(rule
+ (targets shapes.cma.output.js)
+ (enabled_if
+  (and
+   (>= %{ocaml_version} "5.4")
+   (< %{ocaml_version} "5.5")))
+ (action
+  (with-stdout-to
+   %{targets}
+   (run tail -n +3 %{dep:shapes.cma.js}))))
+
+(rule
+ (alias runtest)
+ (enabled_if
+  (and
+   (>= %{ocaml_version} "5.4")
+   (< %{ocaml_version} "5.5")))
+ (action
+  (diff shapes.cma.expected.js shapes.cma.output.js)))
 
 (rule
  (targets fs.output.js)

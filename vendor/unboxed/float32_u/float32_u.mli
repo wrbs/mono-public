@@ -174,6 +174,15 @@ val of_int64 : local_ int64 -> t
     flambda-backend compiler translates this call to CVTTSS2SI. *)
 val to_int64 : t -> int64
 
+(** Converts the given int64# to the nearest representable float32. The amd64
+    flambda-backend compiler translates this call to CVTSI2SS. *)
+val of_int64_u : int64# -> t
+
+(** Truncate the given float32 number to an int64#. The result is unspecified if the
+    argument is [nan] or falls outside the range of representable int64s. The amd64
+    flambda-backend compiler translates this call to CVTTSS2SI. *)
+val to_int64_u : t -> int64#
+
 (** Converts an int32 to a float32 with the same bit pattern. The amd64 flambda-backend
     compiler translates this call to MOVD. *)
 val of_bits : int32# -> t

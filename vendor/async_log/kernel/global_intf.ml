@@ -75,24 +75,6 @@ module type S = sig
     -> ('a, unit, string, unit) format4
     -> 'a
 
-  val register_async_command_error_output_name : Output_name.t -> unit
-  [@@alert
-    private_async_log_function
-      "This function is meant for the specific use case of logging from [Async_command] \
-       without double-writing to stderr. Please speak to async log devs if you need to \
-       use it for something else."]
-
-  val error_from_async_command
-    :  ?time:Time_float.t
-    -> ?tags:(string * string) list
-    -> ('a, unit, string, unit) format4
-    -> 'a
-  [@@alert
-    private_async_log_function
-      "This function is meant for the specific use case of logging from [Async_command] \
-       without double-writing to stderr. Please speak to async log devs if you need to \
-       use it for something else."]
-
   val debug
     :  ?time:Time_float.t
     -> ?tags:(string * string) list
@@ -171,15 +153,60 @@ module type S = sig
   module For_testing : sig
     (** Change the global log so that it
         1. Writes synchronously.
-        2. Only prints the bodies of messages to stdout, discarding any information about
-           tags, levels, or timestamps.
+        2. By default only prints the bodies of messages to stdout, discarding any
+           information about tags, levels, or timestamps. Use optional time, tags and
+           level arguments to print required metadata information.
 
         [map_output] can be used to transform messages before they make it to stdout; by
         default it is [Fn.id].
 
         (This is equivalent to:
-        [Log.Global.set_output [ Log.For_testing.create_output ~map_output ]]) *)
-    val use_test_output : ?map_output:(string -> string) -> unit -> unit
+        [Log.Global.set_output [ Log.For_testing.create_output ~map_output ~time ~tags ~level () ]]) *)
+    val use_test_output
+      :  ?map_output:(string -> string)
+      -> ?time:[ `Keep | `Omit ]
+      -> ?tags:[ `Keep | `Omit ]
+      -> ?level:[ `Keep | `Omit ]
+      -> unit
+      -> unit
+  end
+
+  (** Used internally by other [Async] libraries.
+
+      There are two locations in [Async], [Async_command] and
+      [Async_unix.Shutdown.shutdown_on_unhandled_exn], that have logic to catch unhandled
+      exceptions and log them before exiting. Normally, they write these shutdown logs to
+      stderr, but sometimes it's desirable to additionally write to select log outputs.
+
+      [log_error] is used by the two locations to log to these outputs at shutdown.
+      [register_error_output_name] allows downstream libraries to opt their outputs into
+      shutdown logging.
+
+      [Async_command] wraps its command's [main] function in a [try_with], and calls
+      [log_error] on error.
+
+      [shutdown_on_unhandled_exn], which is usually used with programs that directly call
+      [Scheduler.go], catches exceptions with [Monitor.detach_and_iter_errors]; caught
+      exceptions are sent to a mutable hook that [Async_log.assign_top_level_logs] sets
+      with [Shutdown.set_shutdown_on_unhandled_exn_logger]. *)
+  module For_async_shutdown : sig
+    val register_error_output_name : Output_name.t -> unit
+    [@@alert
+      private_async_log_function
+        "This function is meant for the specific use case of logging from \
+         [Async_command] and [Async_unix] at shutdown without double-writing to stderr. \
+         Please speak to async log devs if you need to use it for something else."]
+
+    val log_error
+      :  ?time:Time_float.t
+      -> ?tags:(string * string) list
+      -> ('a, unit, string, unit) format4
+      -> 'a
+    [@@alert
+      private_async_log_function
+        "This function is meant for the specific use case of logging from \
+         [Async_command] and [Async_unix] at shutdown without double-writing to stderr. \
+         Please speak to async log devs if you need to use it for something else."]
   end
 end
 

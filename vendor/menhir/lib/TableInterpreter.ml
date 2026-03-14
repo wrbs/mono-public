@@ -39,10 +39,6 @@ module MakeEngineTable (T : TableFormat.TABLES) = struct
   let error_value =
     Obj.repr ()
 
-  (* The function [foreach_terminal] exploits the fact that the
-     first component of [T.error] is [Terminal.n - 1], i.e., the
-     number of terminal symbols, including [error] but not [#]. *)
-
   (* There is similar code in [InspectionTableInterpreter]. The
      code there contains an additional conversion of the type
      [terminal] to the type [xsymbol]. *)
@@ -54,7 +50,7 @@ module MakeEngineTable (T : TableFormat.TABLES) = struct
       foldij (i + 1) j f (f i accu)
 
   let foreach_terminal f accu =
-    let n, _ = T.error in
+    let n = T.terminal_count in
     foldij 0 n (fun i accu ->
       f i accu
     ) accu
@@ -76,7 +72,7 @@ module MakeEngineTable (T : TableFormat.TABLES) = struct
     i
 
   let default_reduction state defred nodefred env =
-    let code = PackedIntArray.get T.default_reduction state in
+    let code = T.default_reduction state in
     if code = 0 then
       (* no default reduction *)
       nodefred env
@@ -88,20 +84,10 @@ module MakeEngineTable (T : TableFormat.TABLES) = struct
   let is_start prod =
     prod < T.start
 
-  (* This auxiliary function helps access a compressed, two-dimensional
-     matrix, like the action and goto tables. *)
-
-  let unmarshal2 table i j =
-    RowDisplacement.getget
-      PackedIntArray.get
-      PackedIntArray.get
-      table
-      i j
-
   let action state terminal value shift reduce fail env =
-    match PackedIntArray.unflatten1 T.error state terminal with
+    match T.error state terminal with
     | 1 ->
-        let action = unmarshal2 T.action state terminal in
+        let action = T.action state terminal in
         let opcode = action land 0b11
         and param = action lsr 2 in
         if opcode >= 0b10 then
@@ -118,9 +104,9 @@ module MakeEngineTable (T : TableFormat.TABLES) = struct
         fail env
 
   let maybe_shift_t state terminal =
-    match PackedIntArray.unflatten1 T.error state terminal with
+    match T.error state terminal with
     | 1 ->
-        let action = unmarshal2 T.action state terminal in
+        let action = T.action state terminal in
         let opcode = action land 0b11 in
         if opcode >= 0b10 then
           (* 0b10 : shift/discard *)
@@ -136,12 +122,12 @@ module MakeEngineTable (T : TableFormat.TABLES) = struct
         None
 
   let may_reduce_prod state terminal prod =
-    let code = PackedIntArray.get T.default_reduction state in
+    let code = T.default_reduction state in
     if code = 0 then
       (* no default reduction *)
-      match PackedIntArray.unflatten1 T.error state terminal with
+      match T.error state terminal with
       | 1 ->
-          let action = unmarshal2 T.action state terminal in
+          let action = T.action state terminal in
           let opcode = action land 0b11 in
           if opcode >= 0b10 then
             (* 0b10 : shift/discard *)
@@ -161,18 +147,18 @@ module MakeEngineTable (T : TableFormat.TABLES) = struct
       prod = prod'
 
   let goto_nt state nt =
-    let code = unmarshal2 T.goto state nt in
+    let code = T.goto state nt in
     (* code = 1 + state *)
     code - 1
 
   let[@inline] lhs prod =
-    PackedIntArray.get T.lhs prod
+    T.lhs prod
 
   let goto_prod state prod =
     goto_nt state (lhs prod)
 
   let maybe_goto_nt state nt =
-    let code = unmarshal2 T.goto state nt in
+    let code = T.goto state nt in
     (* If [code] is 0, there is no outgoing transition.
        If [code] is [1 + state], there is a transition towards [state]. *)
     assert (0 <= code);

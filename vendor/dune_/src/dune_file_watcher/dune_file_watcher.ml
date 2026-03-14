@@ -1,4 +1,3 @@
-open! Stdune
 open Import
 module Inotify_lib = Async_inotify_for_dune.Async_inotify
 module Console = Dune_console
@@ -158,8 +157,6 @@ type t =
     (* Pending fs sync operations indexed by the special sync filename. *)
   }
 
-module Re = Dune_re
-
 let create_should_exclude_predicate ~watch_exclusions =
   (* TODO we should really take the predicate directly and not depend on
      regular expressions in our file watching component *)
@@ -274,7 +271,7 @@ end = struct
     let id = Sync_id.gen () in
     let fn = id |> Sync_id.to_int |> string_of_int in
     let path = Filename.concat (Lazy.force special_dir) fn in
-    Unix.close (Unix.openfile path [ O_WRONLY; O_CREAT; O_TRUNC ] 0o666);
+    Unix.close (Unix.openfile path [ O_WRONLY; O_CREAT; O_TRUNC; O_CLOEXEC ] 0o666);
     Table.set t.sync_table fn id;
     id
   ;;

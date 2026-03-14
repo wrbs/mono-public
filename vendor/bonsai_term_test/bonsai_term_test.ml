@@ -133,7 +133,10 @@ let create_handle_generic
        let dimensions, set_dimensions = Bonsai.state initial_dimensions graph in
        let%sub a =
          Cursor.For_mock_tests.register
-           (fun (local_ graph) -> app ~dimensions graph)
+           (fun (local_ graph) ->
+             Title.For_mock_tests.register
+               (fun (local_ graph) -> app ~dimensions graph)
+               graph)
            graph
        in
        let%arr a and set_dimensions and dimensions in

@@ -40,7 +40,7 @@ attempt to build the package "foo".
   $ cat foo.ml
   let () = print_endline "Hello, world"
   $ DUNE_CONFIG__LOCK_DEV_TOOL=enabled dune fmt
-  Solution for dev-tools.locks/ocamlformat:
+  Solution for _build/.dev-tools.locks/ocamlformat:
   - ocamlformat.0.0.1
   File "foo.ml", line 1, characters 0-0:
   Error: Files _build/default/foo.ml and _build/default/.formatted/foo.ml
@@ -53,11 +53,8 @@ attempt to build the package "foo".
 
 Create a lockdir and define the package "bar". Note its install command is
 `false` so it will fail to install.
-  $ mkdir dune.lock
-  $ cat > dune.lock/lock.dune <<EOF
-  > (lang package 0.1)
-  > EOF
-  $ cat > dune.lock/bar.pkg <<EOF
+  $ make_lockdir
+  $ make_lockpkg bar <<EOF
   > (version 0.0.1)
   > (install (run false))
   > EOF

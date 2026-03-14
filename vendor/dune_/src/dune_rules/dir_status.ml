@@ -204,6 +204,7 @@ let extract_directory_targets ~jsoo_enabled ~dir stanzas =
       (* It's unfortunate that we need to pull in the coq rules here. But
          we don't have a generic mechanism for this yet. *)
       Coq_doc.coqdoc_directory_targets ~dir m
+    | Rocq_stanza.Theory.T m -> Rocq_doc.rocqdoc_directory_targets ~dir m
     | _ -> Memo.return Path.Build.Map.empty)
   >>| Path.Build.Map.union_all ~f:(fun path loc1 loc2 ->
     User_error.raise
@@ -321,7 +322,7 @@ end = struct
       Pkg_rules.lock_dir_path (Context_name.of_string ctx)
       >>| (function
        | None -> false
-       | Some of_ -> Path.Source.is_descendant ~of_ src_dir)
+       | Some of_ -> Path.is_descendant ~of_ (Path.source src_dir))
       >>= (function
        | true -> Memo.return (Lock_dir st_dir)
        | false ->
@@ -364,4 +365,26 @@ let directory_targets t ~jsoo_enabled ~dir =
     components
     >>= Memo.List.fold_left ~init ~f:(fun acc { Group_component.dir; stanzas; _ } ->
       f ~dir stanzas acc)
+;;
+
+let find_directory_target_ancestor =
+  let rec find_directory_target_ancestor ~dir ~jsoo_enabled src =
+    DB.get ~dir
+    >>= function
+    | Lock_dir _ -> Memo.return None
+    | Generated ->
+      let parent = Path.Build.parent_exn dir in
+      find_directory_target_ancestor ~dir:parent ~jsoo_enabled src
+    | ( Group_root _
+      | Is_component_of_a_group_but_not_the_root _
+      | Source_only _
+      | Standalone _ ) as dir_status ->
+      let+ directory_targets = directory_targets dir_status ~jsoo_enabled ~dir in
+      Path.Build.Map.find_key directory_targets ~f:(fun dir_target ->
+        Path.Build.is_descendant ~of_:dir_target src)
+  in
+  fun src ~jsoo_enabled ->
+    match Path.Build.parent src with
+    | None -> Memo.return None
+    | Some dir -> find_directory_target_ancestor ~dir ~jsoo_enabled src
 ;;

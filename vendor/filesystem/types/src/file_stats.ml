@@ -3,7 +3,7 @@ include File_stats_intf
 
 module Or_testing = struct
   (** Hide nondeterministic or host-specific values during expect tests. *)
-  type 'a t = 'a [@@deriving equal ~localize, quickcheck]
+  type 'a t = 'a [@@deriving equal ~portable ~localize, quickcheck ~portable]
 
   let sexp_of_t sexp_of_a a =
     if am_running_test then Sexp.Atom "<hidden>" else sexp_of_a a
@@ -24,7 +24,7 @@ type t =
   ; modify_time : Time_ns_unix.t Or_testing.t
   ; status_time : Time_ns_unix.t Or_testing.t
   }
-[@@deriving equal ~localize, quickcheck, sexp_of]
+[@@deriving equal ~portable ~localize, quickcheck ~portable, sexp_of ~portable]
 
 let to_unix_stats
   { host_device

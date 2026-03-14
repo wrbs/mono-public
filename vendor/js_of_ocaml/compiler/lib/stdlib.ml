@@ -70,19 +70,6 @@ let ( != ) = `use_phys_equal
 
 include Int_replace_polymorphic_compare
 
-let quiet = ref false
-
-let werror = ref false
-
-let warnings = ref 0
-
-let warn fmt =
-  Format.ksprintf
-    (fun s ->
-      incr warnings;
-      if not !quiet then Format.eprintf "%s%!" s)
-    fmt
-
 let fail = ref true
 
 let failwith_ fmt =
@@ -276,9 +263,9 @@ module Int32 = struct
   external ( >= ) : int32 -> int32 -> bool = "%greaterequal"
 
   let warn_overflow name ~to_dec ~to_hex i i32 =
-    warn
-      "Warning: integer overflow: %s 0x%s (%s) truncated to 0x%lx (%ld); the generated \
-       code might be incorrect.@."
+    Warning.warn
+      `Integer_overflow
+      "%s 0x%s (%s) truncated to 0x%lx (%ld); the generated code might be incorrect.@."
       name
       (to_hex i)
       (to_dec i)
@@ -370,15 +357,28 @@ module Float = struct
 end
 
 module Float32 = struct
+  type t
+
+  let of_float _ = assert false
+
+  let to_float _ = assert false
+
+  let of_string _ = assert false
+end
+[@@if not oxcaml]
+
+module Float32 = struct
   type t = float32
 
   external of_float : float -> t = "%float32offloat"
+
   external to_float : t -> float = "%floatoffloat32"
 
   (* In javascript/wasm, we define float32 parsing as rounding the 64-bit result.
      This is not equivalent to native code, which parses to 32 bits directly. *)
   let of_string s = float_of_string s |> of_float
 end
+[@@if oxcaml]
 
 module Bool = struct
   include Bool
@@ -890,12 +890,16 @@ module BitSet : sig
   val next_free : t -> int -> int
 
   val next_mem : t -> int -> int
+
+  val clear : t -> unit
 end = struct
   type t = { mutable arr : int array }
 
   let create () = { arr = Array.make 1 0 }
 
   let create' n = { arr = Array.make ((n / Sys.int_size) + 1) 0 }
+
+  let clear t = Array.fill t.arr 0 (Array.length t.arr) 0
 
   let size t = Array.length t.arr * Sys.int_size
 
@@ -1208,3 +1212,23 @@ module Hashtbl = struct
       =
     Hashtbl.of_seq
 end
+
+module Lexing = struct
+  include Lexing
+
+  let range_to_string (pos1, pos2) =
+    if phys_equal pos1 dummy_pos || phys_equal pos2 dummy_pos
+    then "At an unknown location:\n"
+    else
+      let file = pos1.pos_fname in
+      let line = pos1.pos_lnum in
+      let char1 = pos1.pos_cnum - pos1.pos_bol in
+      let char2 = pos2.pos_cnum - pos1.pos_bol in
+      (* yes, [pos1.pos_bol] *)
+      Printf.sprintf "File \"%s\", line %d, characters %d-%d:\n" file line char1 char2
+  (* use [char1 + 1] and [char2 + 1] if *not* using Caml mode *)
+end
+
+let with_async_exns = Sys.with_async_exns [@@if oxcaml]
+
+let with_async_exns f = f () [@@if not oxcaml]

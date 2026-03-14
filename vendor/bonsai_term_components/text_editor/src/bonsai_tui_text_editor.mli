@@ -30,6 +30,7 @@ module Action : sig
     | Delete_prev_char
     | Delete_next_line
     | Delete_prev_line
+    | Kill_next_char
     | Kill_next_line
     | Kill_prev_line
     | Next_word
@@ -41,6 +42,7 @@ module Action : sig
     | Yank
     | Undo
     | Replace_char of string
+    | Prev_char_in_line
   [@@deriving sexp_of]
 end
 
@@ -75,7 +77,7 @@ end
     relative top-left of the view that you give it. The text editor can be embedded
     anywhere inside of [view] and [get_cursor_position] will give you a location relative
     to the top-left corner of the view. You can use this if you would like to set the
-    cursor positionining. *)
+    cursor positioning. *)
 type t = private
   { text : string Bonsai.t
   ; send_actions : (Action.t Nonempty_list.t -> unit Effect.t) Bonsai.t

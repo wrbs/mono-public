@@ -3,8 +3,8 @@
 (*                                    Menhir                                  *)
 (*                                                                            *)
 (*   Copyright Inria. All rights reserved. This file is distributed under     *)
-(*   the terms of the GNU General Public License version 2, as described in   *)
-(*   the file LICENSE.                                                        *)
+(*   the terms of the GNU Library General Public License version 2, with a    *)
+(*   special exception on linking, as described in the file LICENSE.          *)
 (*                                                                            *)
 (******************************************************************************)
 
@@ -16,12 +16,12 @@ open Cmly_api
 
 (**This module offers facilities for reading and decoding [.cmly] files.
 
-   We encourage users to work with modules of type [GRAMMAR], which offer a
-   high-level description of the grammar and automaton. Values of type
-   [grammar], on the other hand, offer a lower-level description.
-
-   Furthermore, the type [grammar], which serves as a definition of the
-   [.cmly] file format, may evolve in incompatible ways in the future. *)
+   We encourage users to work with modules of type {!Cmly_api.GRAMMAR}, which
+   offer a high-level description of the grammar and automaton. Values of type
+   {!Cmly_format.grammar}, on the other hand, offer a lower-level description.
+   Furthermore, the type {!Cmly_format.grammar}, which serves as a definition
+   of the [.cmly] file format, may evolve in incompatible ways in the
+   future. *)
 
 (**This exception is raised when a [.cmly] file cannot be read or decoded.
    It carries a human-readable error message. *)

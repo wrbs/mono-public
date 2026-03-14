@@ -154,6 +154,12 @@ let peek t =
   | None | Some (Ok ()) -> Ok (Pipe.peek t.reader)
 ;;
 
+let read_now t =
+  match Deferred.peek t.writer_error with
+  | Some (Error _ as error) -> error
+  | None | Some (Ok ()) -> Ok (Pipe.read_now t.reader)
+;;
+
 let read_all t = Expert.lift_consume t ~f:Pipe.read_all
 
 let values_available t =

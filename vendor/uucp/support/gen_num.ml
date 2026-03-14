@@ -1,6 +1,6 @@
 (*---------------------------------------------------------------------------
    Copyright (c) 2014 The uucp programmers. All rights reserved.
-   SPDX-License-Identifier: ISC
+   Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
 let pp_numeric_type ppf ucd =
@@ -11,25 +11,12 @@ let pp_numeric_type ppf ucd =
     ~default:`None size
 
 let pp_numeric_value ppf ucd =
-  let num_size = function
-  | `Frac _ -> 1 + 2 + 2 (* cons *)
-  | `Num _ -> 1 + (64 / Sys.word_size) + 2 (* cons *)
-  in
   let size = function
   | `NaN -> 0
-  | `Nums nums -> List.fold_left (fun acc num -> acc + num_size num) 0 nums
+  | `Frac _ -> 1 + 2
+  | `Num _ -> 1 + (64 / Sys.word_size)
   in
-  let pp_numeric_value ppf = function
-  | `NaN -> Format.fprintf ppf "`NaN"
-  | `Nums nums ->
-      let pp_num ppf = function
-      | `Frac (a, b) -> Format.fprintf ppf "`Frac(%d,%d)" a b
-      | `Num n -> Format.fprintf ppf "`Num(%LdL)" n
-      in
-      let pp_sep ppf () = Format.fprintf ppf ";@," in
-      Format.fprintf ppf "`Nums[%a]" (Format.pp_print_list ~pp_sep pp_num) nums
-  in
-  let pp_nvalue ppf v = Gen.pp ppf "(%a)" pp_numeric_value v in
+  let pp_nvalue ppf v = Gen.pp ppf "(`%a)" Uucp_num_base.pp_numeric_value v in
   Gen.pp_prop_cmap_ucd ppf ucd Uucd.numeric_value
     "numeric_value" "Uucp_num_base.numeric_value" pp_nvalue
     ~default:`NaN size
@@ -43,3 +30,19 @@ let pp_props ppf ucd =
   ()
 
 let pp_mod ppf ucd = Gen.pp_mod pp_props ppf ucd
+
+(*---------------------------------------------------------------------------
+   Copyright (c) 2014 The uucp programmers
+
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
+
+   THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+   WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+   MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+   ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+   WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+   ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+  ---------------------------------------------------------------------------*)
