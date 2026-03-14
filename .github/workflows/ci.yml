@@ -14,16 +14,16 @@ jobs:
     container: archlinux/archlinux
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Install system dependencies and opam
         run: |
           pacman -Syu --noconfirm
           pacman -S --noconfirm \
             base-devel git curl pkgconf \
             openssl zlib gmp libffi pcre zstd \
-            opam
+            opam rsync ripgrep
+
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Init opam
         run: opam init --bare -y --disable-sandboxing
