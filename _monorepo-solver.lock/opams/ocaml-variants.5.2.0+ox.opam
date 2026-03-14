@@ -68,7 +68,11 @@ build: [
     "-exc"
     "PATH=%{build}%/init_deps/bin/:$PATH ./configure --enable-middle-end=flambda2 --enable-runtime5 --enable-stack-checks --enable-poll-insertion --enable-multidomain --disable-warn-error '--prefix=%{prefix}%' '--with-dune=%{build}%/init_deps/bin/dune'"
   ]
-  ["sh" "-exc" "PATH=%{build}%/init_deps/bin/:$PATH make -j%{jobs}%"]
+  [
+    "sh"
+    "-exc"
+    "unset INSIDE_DUNE; PATH=%{build}%/init_deps/bin/:$PATH make -j%{jobs}%"
+  ]
 ]
 install: ["sh" "-exc" "PATH=%{build}%/init_deps/bin/:$PATH make install"]
 extra-source "init-compiler.tar.gz" {
@@ -93,9 +97,9 @@ extra-source "init-menhir.tar.gz" {
 }
 url {
   src:
-    "https://github.com/oxcaml/oxcaml/archive/refs/tags/5.2.0minus-23-opam.tar.gz"
+    "https://github.com/oxcaml/oxcaml/archive/refs/tags/5.2.0minus-25.tar.gz"
   checksum:
-    "sha256=2409416446ca9cc72bb9583e73c1e60cd5105b85b8c73ed75a711df38a77ce41"
+    "sha256=08e9cdc1b4e919cb3266eab8b4cd98f74ffc580a6b21b7d09b156278aa2876fc"
 }
 patches: ["ignore-opam.patch"]
 extra-files: [
@@ -131,6 +135,7 @@ conflicts: [
   "ocamlformat" {!= "0.26.2+ox"}
   "ocamlformat-lib" {!= "0.26.2+ox"}
   "ojs" {!= "1.1.2+ox"}
+  "opam-core" {!= "2.5.0+ox"}
   "ppxlib" {!= "0.33.0+ox"}
   "ppxlib_ast" {!= "0.33.0+ox"}
   "re" {!= "1.14.0+ox"}

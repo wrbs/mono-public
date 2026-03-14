@@ -1,62 +1,62 @@
 (abstract_algebra (
-  (provides ((abstract_algebra v0.18~preview.130.76+222)))
+  (provides ((abstract_algebra v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/abstract_algebra/archive/c7ca860dc25abe73ba75271a5376a2912d12e37b.tar.gz))
+          https://github.com/janestreet/abstract_algebra/archive/3345e6290cc4ce2a8756e7cc284e3ba45ca34e78.tar.gz))
         (hashes (
-          sha256=23fa055e3d908a602d93bc2beb07c830ea3bc53d15776eaa75b86dfdbe6be54e)))))))))
+          sha256=ec3bd7b8dd53b3be87622413f45af067d0c0e2100e1cc62f5f8a6115a2d5585e)))))))))
 
 (accessor (
-  (provides ((accessor v0.18~preview.130.76+222)))
+  (provides ((accessor v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/accessor/archive/76646c16ce8b1de06d6169666294e0fc8c69178d.tar.gz))
+          https://github.com/janestreet/accessor/archive/e2222303e22664e8a9e411016be28658a544530c.tar.gz))
         (hashes (
-          sha256=ae1b5c45dcef98a4081e9a3f23f7e5ddf85ec572c8b6c55be2bed7db71b399d4)))))))))
+          sha256=4630b11e381840737b9fdd8fd48b78d595faec1e4d620149ea26962a8c7062f2)))))))))
 
 (accessor_async (
-  (provides ((accessor_async v0.18~preview.130.76+222)))
+  (provides ((accessor_async v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/accessor_async/archive/99b53a2fae3a09a1d5e6536b95a60a435c77173b.tar.gz))
+          https://github.com/janestreet/accessor_async/archive/5b1484303951b5cc08125c385edc0b31b9cf861a.tar.gz))
         (hashes (
-          sha256=83aa96baf3ab642c4c7ded0230891bc48b0b78dddfa37ccc7b29990ef1f10e59)))))))))
+          sha256=23f216bf93cb81b6c003dabab6e5ef451cc707557c73e5345d85ef0cc009f479)))))))))
 
 (accessor_base (
-  (provides ((accessor_base v0.18~preview.130.76+222)))
+  (provides ((accessor_base v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/accessor_base/archive/a757ed344a4b053ee1fd813b88ced7df1eb6dd82.tar.gz))
+          https://github.com/janestreet/accessor_base/archive/bb1f5af0599a02f87595ca7290d45ad15dfff8f6.tar.gz))
         (hashes (
-          sha256=a8d31c918854a47681698da06e8902100872b1125f4d8063cf43f96742c264b2)))))))))
+          sha256=7a2078b8a6d3f074916bc4a82ce15357c01ffbaa33cdb75f4fdf0c40f9a3c9a5)))))))))
 
 (accessor_core (
-  (provides ((accessor_core v0.18~preview.130.76+222)))
+  (provides ((accessor_core v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/accessor_core/archive/c58d0db666d0bc470f9ccc9c7c3e8c770c07a134.tar.gz))
+          https://github.com/janestreet/accessor_core/archive/f32d29e387f8c4e6d366daa2cc6ddaf04b019e57.tar.gz))
         (hashes (
-          sha256=b4b3d30aee44da8dddd4647d2b84d4fd80b645cc3cf3170e2ec08ee2962d1d20)))))))))
+          sha256=635552baefd38b2b75593f81860498ebb2c68352e6504a332c9e276e60367305)))))))))
 
 (am_running_how_js (
-  (provides ((am_running_how_js v0.18~preview.130.76+222)))
+  (provides ((am_running_how_js v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/am_running_how_js/archive/b445e32e222368014aac2f36f19972847a20a570.tar.gz))
+          https://github.com/janestreet/am_running_how_js/archive/e120ec8cc48e39b85a10c668990baabe241c88ab.tar.gz))
         (hashes (
-          sha256=dcb7c3bc4f4072ab93a858a73cefc895d996abcafa1e4d9db69df3fb2df03baf)))))))))
+          sha256=667a0eaefde2341b056b3ca91ea2be303ddc501dcb6aaa2d0d6da28db9bd3184)))))))))
 
 (angstrom (
   (provides (
@@ -82,284 +82,284 @@
           sha256=11327c202fd0115f3a2bf7710c9c603b979a32ba9b16c1a64ba155857233acc8)))))))))
 
 (async (
-  (provides ((async v0.18~preview.130.76+222)))
+  (provides ((async v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/async/archive/f3a402d596ea5e236b30caaae4e070fc2d0e1d20.tar.gz))
+          https://github.com/janestreet/async/archive/1d16be9d4e91aaebeba320aca2b7fbe71a0fce40.tar.gz))
         (hashes (
-          sha256=6e4e0b6daa2dc97c5bcc8f33bd49fbdfd1aad3ca617e3424b7358773b8f1b55d)))))))))
+          sha256=01d374dff25d427d19e96c9b724ad47e63561fc27f1eedde55fab2d789056724)))))))))
 
 (async_durable (
-  (provides ((async_durable v0.18~preview.130.76+222)))
+  (provides ((async_durable v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/async_durable/archive/53a9e2819b96f20dada2e4a8688af027e4d959b9.tar.gz))
+          https://github.com/janestreet/async_durable/archive/c59fd431e48cf39fc4e0b3e05a6255410d1c3abc.tar.gz))
         (hashes (
-          sha256=6138b3a62156b1437152d9cadcc486337c6e9fd9eea5fbc7e8e416f3b1900631)))))))))
+          sha256=46e001900671de81eda1d69aec24e6a5e7e636c8ec598cbea1b8bb106b8516a6)))))))))
 
 (async_extra (
-  (provides ((async_extra v0.18~preview.130.76+222)))
+  (provides ((async_extra v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/async_extra/archive/76bce581acd619ea05163e96ad0a0e4120a00ad2.tar.gz))
+          https://github.com/janestreet/async_extra/archive/5f59ed0e395d9713b7f4912cb519cd6d9dc1f480.tar.gz))
         (hashes (
-          sha256=3aaa0f68a0b0fcdc2c0d90d4300c3d9efbe1683e87a13d08a3124b44a970e274)))))))))
+          sha256=5446d1aaf5f8abb38eee904a7195412338ece8a4cffcd73f9a3941f65f0a758b)))))))))
 
 (async_find (
-  (provides ((async_find v0.18~preview.130.76+222)))
+  (provides ((async_find v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/async_find/archive/075140ae02d9a85dddaff71e9a7726d1aa77195b.tar.gz))
+          https://github.com/janestreet/async_find/archive/da858174b611ebc58bb1d92d852ce2196550cb7e.tar.gz))
         (hashes (
-          sha256=baedd440402bc0a89544038c1ebb5bb4867e6d3895a0d9eb5654b384e2586246)))))))))
+          sha256=521aec16fea2fd9fc640ef107b76e65df4c20f4287599268c876fda42a7d8258)))))))))
 
 (async_inotify (
-  (provides ((async_inotify v0.18~preview.130.76+222)))
+  (provides ((async_inotify v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/async_inotify/archive/15f1a21996030d754ea8ec50b01244bded19958c.tar.gz))
+          https://github.com/janestreet/async_inotify/archive/d4d1eae8ed16141941c935de2e988093e78e86b7.tar.gz))
         (hashes (
-          sha256=f3edd85f514e6298112c078d31bea7a2d9c37e2ef938274acb07a0f5c52db0e2)))))))))
+          sha256=339b1f8940bb43575aaa233fd236f48e65d37bbef51cd0f9c5bfd04684c1c708)))))))))
 
 (async_interactive (
-  (provides ((async_interactive v0.18~preview.130.76+222)))
+  (provides ((async_interactive v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/async_interactive/archive/8889063c639daf5b81aecd11fef10ab43108cc5c.tar.gz))
+          https://github.com/janestreet/async_interactive/archive/71051bb613f0c484dde4a38229514741994e1947.tar.gz))
         (hashes (
-          sha256=e75bb37b5dacaea6f688b30d6666bdf6615f12ffc92c80f465a2480abe844aa4)))))))))
+          sha256=003ff321e545d8c8c222bce0e3bcd45ac6a66cbc11e4f4d642de85cc88ddd2aa)))))))))
 
 (async_iterator (
-  (provides ((async_iterator v0.18~preview.130.76+222)))
+  (provides ((async_iterator v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/async_iterator/archive/08d37e1b8a69dd3949d84a5d4933be76c48912ab.tar.gz))
+          https://github.com/janestreet/async_iterator/archive/dcfb7439e5791f1928f4e975224bbce1c607839c.tar.gz))
         (hashes (
-          sha256=ccd9035ec1815b66e22e1fd3b48cdd3027b2e798a5849877a0fea99c66f7294e)))))))))
+          sha256=1185e0d2586e43eda8a77297e07e055bd84cc9ddbe50046bf540cf96dcc57cbf)))))))))
 
 (async_js (
-  (provides ((async_js v0.18~preview.130.76+222)))
+  (provides ((async_js v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/async_js/archive/ce67283c20eeaaf9998c0cd81bbe75f1feac3b40.tar.gz))
+          https://github.com/janestreet/async_js/archive/e0239697f364382738e23c2fb5bee1337d672b99.tar.gz))
         (hashes (
-          sha256=28b2ffadcafc75112bb9565bf3ac208228eea45d8757ab5ea1300b73c83e7aef)))))))))
+          sha256=4abe5f4835e84ceb82f466051308ed353541b5e1613b6a11e944beecaebf73ed)))))))))
 
 (async_kernel (
-  (provides ((async_kernel v0.18~preview.130.76+222)))
+  (provides ((async_kernel v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/async_kernel/archive/cfc42ef76ccef008cca3b198e4d2c10c02281e24.tar.gz))
+          https://github.com/janestreet/async_kernel/archive/282543c5c3a802ecf0416fcf901cec40e16040c6.tar.gz))
         (hashes (
-          sha256=deff0d21083f4433f19e32dcc7c3e79c8d57df52b1e57b3a697e6064eb60435e)))))))))
+          sha256=867f676da141c8636d00668bcde954a786bbae879d98c75f092920982df02c32)))))))))
 
 (async_log (
-  (provides ((async_log v0.18~preview.130.76+222)))
+  (provides ((async_log v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/async_log/archive/9eb7b7894ffe8efb4065d73a2d403440fcef878f.tar.gz))
+          https://github.com/janestreet/async_log/archive/6fece69935b3baf8efac5483664161fd947d5029.tar.gz))
         (hashes (
-          sha256=654f5ea6fdacb941924996e2afff2083873097a7b9593c9dfd3dbaba51575c1f)))))))))
+          sha256=81de3ec2acdc93da2135fd85a671e02d3c300b277655fcd795d4670c78bdb8b4)))))))))
 
 (async_rpc_kernel (
-  (provides ((async_rpc_kernel v0.18~preview.130.76+222)))
+  (provides ((async_rpc_kernel v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/async_rpc_kernel/archive/16bf063353a5a8dcc594936425b9cda14200bf28.tar.gz))
+          https://github.com/janestreet/async_rpc_kernel/archive/e9800d165d601ec25c3ac900118e971de077664a.tar.gz))
         (hashes (
-          sha256=e25b4da90e5484cf228eacaffc9fb8e207004f474057b50ba3f7a36808df45eb)))))))))
+          sha256=9048e3c2bab5f25858262a71201172ed5204161cf5268b70e437413a4bfa5ee9)))))))))
 
 (async_rpc_websocket (
-  (provides ((async_rpc_websocket v0.18~preview.130.76+222)))
+  (provides ((async_rpc_websocket v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/async_rpc_websocket/archive/7480ad2eff404dcfb68d69981455e8f7edb42b56.tar.gz))
+          https://github.com/janestreet/async_rpc_websocket/archive/082163771379fa2c35876fcb9835bf2858c5cde5.tar.gz))
         (hashes (
-          sha256=6c7f7253ebf3d3656e641eb0ddfa9c2ef478fb5d02357511e80d881460ddb211)))))))))
+          sha256=c9aa1f1e35cf6311d7c2f947f8d34d755795283d14116bdf721240128edaa5f1)))))))))
 
 (async_sendfile (
-  (provides ((async_sendfile v0.18~preview.130.76+222)))
+  (provides ((async_sendfile v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/async_sendfile/archive/318e619b7107c134f5faa4645622b5dcb9931aa0.tar.gz))
+          https://github.com/janestreet/async_sendfile/archive/2fad0596d1eb507f4034b29546e754ff51d8f682.tar.gz))
         (hashes (
-          sha256=d4c5d30c41b6280f0a31dd4b489282ab9d09e42d11f02ed0eff3d136a5734b09)))))))))
+          sha256=c224b2fdb024c3e329394d541b004a7ffc4a00c2c883c039386ed66d91665f96)))))))))
 
 (async_shell (
-  (provides ((async_shell v0.18~preview.130.76+222)))
+  (provides ((async_shell v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/async_shell/archive/64c39f0a4117ebd422317ce38c263dca75eae39d.tar.gz))
+          https://github.com/janestreet/async_shell/archive/8051d5eb16d744dd4c5d5a9e03d1615f6392c38d.tar.gz))
         (hashes (
-          sha256=85a067e7794d93fdc439e74f857c1dd8d4b2996b3d6fa2db600693caef4a80d4)))))))))
+          sha256=866dc0b8dc04b4b8fde68ed765927d1d83858f60a7b4bd2df33b87189622d830)))))))))
 
 (async_smtp (
-  (provides ((async_smtp v0.18~preview.130.76+222)))
+  (provides ((async_smtp v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/async_smtp/archive/e41e8da3afedbc7b3a0e94c308d650c9a0984a2e.tar.gz))
+          https://github.com/janestreet/async_smtp/archive/01b9419d7df582701876feb8e25c7ec3812ef909.tar.gz))
         (hashes (
-          sha256=b15187f3ec077acb5aec048edb7a11d70c04b90e7bdb9ca5238b811a8f57e4e0)))))))))
+          sha256=844a13db2b8c28decb14fb83cc0d4191dab774529cec7a09a9d6b438e4e4cb53)))))))))
 
 (async_ssl (
-  (provides ((async_ssl v0.18~preview.130.76+222)))
+  (provides ((async_ssl v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/async_ssl/archive/7abae68f7a0c3dcc88dcbc7390e84491707d5907.tar.gz))
+          https://github.com/janestreet/async_ssl/archive/c4f08a3c1b72b67a4ad1b2fc9b43679972040d83.tar.gz))
         (hashes (
-          sha256=6345594b5736f66843b0aea980ded08ffabe568b39b136a2fc05629de60c2154)))))))))
+          sha256=1b158c069eadb993529a0baed6705ce0dc903489647732a9e1b9923ba35595b0)))))))))
 
 (async_udp (
-  (provides ((async_udp v0.18~preview.130.76+222)))
+  (provides ((async_udp v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/async_udp/archive/40c5ad5cc8074ae4cad6bff17bddb30079b124b9.tar.gz))
+          https://github.com/janestreet/async_udp/archive/848757ffa009738a25d6ab0fa9ff0aa245990307.tar.gz))
         (hashes (
-          sha256=0fe25d3dda327a6e05d34b5e297d37ff7837af9301492d99841afe7ca5dc9910)))))))))
+          sha256=3ca43f35cdc64f144de352868d0906521e8df23f8bdf5dca24a1cb44f00dba20)))))))))
 
 (async_unix (
-  (provides ((async_unix v0.18~preview.130.76+222)))
+  (provides ((async_unix v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/async_unix/archive/946357f1578d0e58952473f8b7d6f0dab1f1c388.tar.gz))
+          https://github.com/janestreet/async_unix/archive/fa4a0f5d97e2dac979c0336feda0c6b9314aa77b.tar.gz))
         (hashes (
-          sha256=f677cabcb4fb7cd251d11e863c35f5a07e28a163b7440376352a7e15b02bc30a)))))))))
+          sha256=528fa219fc15dc6031936dfbad99d66722e783e5c96410f504dbed0f95382129)))))))))
 
 (async_websocket (
-  (provides ((async_websocket v0.18~preview.130.76+222)))
+  (provides ((async_websocket v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/async_websocket/archive/c6b0f0fdcb69daab70e47c9bb68d44e0a02dbb1f.tar.gz))
+          https://github.com/janestreet/async_websocket/archive/1270812af09586c67137b2cb01aa9463d882ec93.tar.gz))
         (hashes (
-          sha256=3a5c1c938a24e818790139c6a80f6e018104b145d4fb21ed6790552ec4470d62)))))))))
+          sha256=68438bca69902013893840739539a2d82595fdcaeaa06411d83267d8d75deaf2)))))))))
 
 (await (
-  (provides ((await v0.18~preview.130.76+222)))
+  (provides ((await v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/await/archive/643795c78958ae8ce499124e7661de0bbe7619ae.tar.gz))
+          https://github.com/janestreet/await/archive/19c663468dd0dcda0198bb5281f597b363bd16b6.tar.gz))
         (hashes (
-          sha256=264110832bbe7e35327db7f1c91f951f36139b533517e5101fd7fbfa7696a4f1)))))))))
+          sha256=c3514b7c941a38b6e3f9af65080008e84fb3f06f15950ec3dc212eba5295a91d)))))))))
 
 (babel (
-  (provides ((babel v0.18~preview.130.76+222)))
+  (provides ((babel v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/babel/archive/f73e3846e22b6665192b3552d0186fba3b9a9596.tar.gz))
+          https://github.com/janestreet/babel/archive/b8349b0c4663d44d05702b11e034998e61de6589.tar.gz))
         (hashes (
-          sha256=7692683c6319fad25e9a484501444d0a0a1f537dbc6c3b271f2be3185581a960)))))))))
+          sha256=32027b3998641831d3624dd3eb1cee0f28f9cf0249e885d20e8f12a3cfb8d15a)))))))))
 
 (base (
-  (provides ((base v0.18~preview.130.76+222)))
+  (provides ((base v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/base/archive/52a6c24f130161941b4454c278ecb90e1d293c4e.tar.gz))
+          https://github.com/janestreet/base/archive/8c52a725ed0cdfda1fff7180fc0684bdf67cb6a9.tar.gz))
         (hashes (
-          sha256=ac84a76676bed1f83478ad96ed79485780e4dc789e09999461c6dd4ea13a1478)))))))))
+          sha256=654f8605304bec9e80b16b65724c41d135caeb693e94973e9fddb8e1c5166698)))))))))
 
 (base_bigstring (
-  (provides ((base_bigstring v0.18~preview.130.76+222)))
+  (provides ((base_bigstring v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/base_bigstring/archive/80b25407f646ffc9a46a8477d09abeff63ba4859.tar.gz))
+          https://github.com/janestreet/base_bigstring/archive/1d71bcaeb074ee348895661e04f9e8d5116b2cad.tar.gz))
         (hashes (
-          sha256=5a0afe964f79177424b3ce531a11788ef79c1d5e4c920f7d4f9e963537ad456b)))))))))
+          sha256=33858a9afef91160239536a379b841a8ceeac916a9f8aec75c4ec84fed2fbdc7)))))))))
 
 (base_quickcheck (
-  (provides ((base_quickcheck v0.18~preview.130.76+222)))
+  (provides ((base_quickcheck v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/base_quickcheck/archive/901bb608ea050af3c74cc65a65a08ae96dd24cae.tar.gz))
+          https://github.com/janestreet/base_quickcheck/archive/d9944b7b49349bb4fa5c7b76e2c35e836950129b.tar.gz))
         (hashes (
-          sha256=49aae025e9de9200f69b7bfb1f0e30d555eecf72d95b79ec47a1729ca3e2673d)))))))))
+          sha256=ea7dcdf298990daf9d9502f36d4dd981481c13203ede0c13b9ae2238f0541c45)))))))))
 
 (base_trie (
-  (provides ((base_trie v0.18~preview.130.76+222)))
+  (provides ((base_trie v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/base_trie/archive/9d7a0f98dbcf2947d70128fb2fba8a53a74a530d.tar.gz))
+          https://github.com/janestreet/base_trie/archive/b54f34afa4b72fb935c8d42129851f369ca80e4e.tar.gz))
         (hashes (
-          sha256=6ab894a505487389c79e224976fd54c1c9918f7ddcb6df4faf96cf267d92fa9d)))))))))
+          sha256=24f7d91cee004bb08e9e4cfa0f760cc906f06eb4b3efb4d3c660902f92d12776)))))))))
 
 (basement (
-  (provides ((basement v0.18~preview.130.76+222)))
+  (provides ((basement v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/basement/archive/c657898128a97dcdfbe4b25d79fd0de2e1e5218f.tar.gz))
+          https://github.com/janestreet/basement/archive/78477726453172cf4b9e65751fba3377186a38e2.tar.gz))
         (hashes (
-          sha256=f90975f9c5d918a633fd02c3231b8f84a2cac68b35ad7c0f71d5ded03b58bd19)))))))))
+          sha256=7d0d024d8865bbc4229223120db6bb051dc3effc4ef71050d65201cb9a177df0)))))))))
 
 (bidirectional_map (
-  (provides ((bidirectional_map v0.18~preview.130.76+222)))
+  (provides ((bidirectional_map v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/bidirectional_map/archive/03a8e750f00f573d0d4223e0f7fe29a114ae8c24.tar.gz))
+          https://github.com/janestreet/bidirectional_map/archive/57f45eb007eba7b6b5430af78ce5a03cbfc19caa.tar.gz))
         (hashes (
-          sha256=9bd096146130ab9cf40c7cf0bab14e10e91732c5363bd46a22130cd0b20fcaa2)))))))))
+          sha256=4c042b82eab7bf24323d294c462c856c53a621d8848cad6d21bcec50da4cbd10)))))))))
 
 (big_percent (
-  (provides ((big_percent v0.18~preview.130.76+222)))
+  (provides ((big_percent v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/big_percent/archive/4c9d330a037be6cc9cb9e3a13384c2f3dacbd602.tar.gz))
+          https://github.com/janestreet/big_percent/archive/7ec515f67249bfdb1dbc91c00135cad8a6d7456d.tar.gz))
         (hashes (
-          sha256=6323992146662c5ea65120af8203eaa0915563fbb940f848a07f8da29d22efbf)))))))))
+          sha256=de434e44779921beb1028c39147ed3f6bac876fac1a64eca009ff21a62d36ce1)))))))))
 
 (bigarray-compat (
   (provides ((bigarray-compat 1.1.0)))
@@ -373,24 +373,24 @@
           sha512=7be283fd957ee168ce1e62835d22114da405e4b7da9619b4f2030a832d45ca210a0c8f1d1c57c92e224f3512308a8a0f0923b94f44b6f582acbe0e7728d179d4)))))))))
 
 (bigdecimal (
-  (provides ((bigdecimal v0.18~preview.130.76+222)))
+  (provides ((bigdecimal v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/bigdecimal/archive/4148c3017b84367b3bd58b30e7e4f436310bdf14.tar.gz))
+          https://github.com/janestreet/bigdecimal/archive/2729da9055d028112edb52d780507023d3b41dd1.tar.gz))
         (hashes (
-          sha256=970bdfd2d41ad8e14136e12cf9fead2b052035f48066d8b517c1799268b14a74)))))))))
+          sha256=1ea7b73b26eaf63c76417c2b50bda113f0380b85641d880ee4b09b1432a35bba)))))))))
 
 (bignum (
-  (provides ((bignum v0.18~preview.130.76+222)))
+  (provides ((bignum v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/bignum/archive/8ac6aaed1cc822b4156d1e34aacfb0a24323b0d3.tar.gz))
+          https://github.com/janestreet/bignum/archive/18586616948564e7cd4ca38227f1ade65bcb375c.tar.gz))
         (hashes (
-          sha256=22631d945ad2b1ba353086d8bbcf7edea2dbe75c6def48790d638fd093449417)))))))))
+          sha256=3720651e03622f63876fee6444effde5fdcd5a457f65e06d82080aff78fdfa6c)))))))))
 
 (bigstringaf (
   (provides ((bigstringaf 0.10.0)))
@@ -402,144 +402,144 @@
         (hashes (md5=be0a44416840852777651150757a0a3b)))))))))
 
 (bin_prot (
-  (provides ((bin_prot v0.18~preview.130.76+222)))
+  (provides ((bin_prot v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/bin_prot/archive/0b8bd0d58e2e703feb44acf9e62966dce5095bc5.tar.gz))
+          https://github.com/janestreet/bin_prot/archive/f8ee9c5c0a255b73a29b3a1a89cf1fbf00254db3.tar.gz))
         (hashes (
-          sha256=98df9d5540d7e0a26e8e4e125cf01de86b162aa5c8a43c53349b8a3acc0f8d8a)))))))))
+          sha256=c9206c902bbd168a5b4dfda87483c3d0bcff550e2bdeb3a6898ce1f4d9c2448f)))))))))
 
 (bitset (
-  (provides ((bitset v0.18~preview.130.76+222)))
+  (provides ((bitset v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/bitset/archive/dda5bb68674e3bec10d83aed7c57aedfee6d53f5.tar.gz))
+          https://github.com/janestreet/bitset/archive/acc6ff76e272a0d2d432f09462145197f44121ea.tar.gz))
         (hashes (
-          sha256=2b632ef0c09355e90827540e82c5ad4f9be708c9d6616a0ddb6c009cf6a6478a)))))))))
+          sha256=8f1a0feafd4cb2a6dcfe00d41ee454cd3c8080c579c9d1bc7e07a6254947b2ef)))))))))
 
 (bonsai (
-  (provides ((bonsai v0.18~preview.130.76+222)))
+  (provides ((bonsai v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/bonsai/archive/9a409b5ce807a7b8b863473aff90801a70fc9cf6.tar.gz))
+          https://github.com/janestreet/bonsai/archive/a75776e1d66b841b0f40eb740f4999ad06ba212d.tar.gz))
         (hashes (
-          sha256=6a124e0a5d82f779af4ba865b56730c3d492885efb70269da971d7de7a9c19b4)))))))))
+          sha256=ae75a24dc83c10502824f89082bf8d24467a0859d31896d8343d8ec6fbd0e3db)))))))))
 
 (bonsai_bench (
-  (provides ((bonsai_bench v0.18~preview.130.76+222)))
+  (provides ((bonsai_bench v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/bonsai_bench/archive/f3b057f5046fc8fa3033d6e0b2b0d5352d3b0bd9.tar.gz))
+          https://github.com/janestreet/bonsai_bench/archive/61e2ce22d400ff4b628bb3207072cf5d5f3fb851.tar.gz))
         (hashes (
-          sha256=669b6ba441ba3f07c45d0945e8378114534f0583f71a6884187e14f90a5b85bc)))))))))
+          sha256=6cd7d881eee203c86a1a141250cbb1bbab627de2dc3081030cba075aa2d93d12)))))))))
 
 (bonsai_concrete (
-  (provides ((bonsai_concrete v0.18~preview.130.76+222)))
+  (provides ((bonsai_concrete v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/bonsai_concrete/archive/80f036e072a92bf00a772721cde0e9de26defcf5.tar.gz))
+          https://github.com/janestreet/bonsai_concrete/archive/1180bf8e2cb47050e77f15aa61e0b7d6a0652d03.tar.gz))
         (hashes (
-          sha256=0c28b78326edc8387edeb003925bef7fa755528f32e5552b503533c699ae82a7)))))))))
+          sha256=d84b05589346122236c1373ecb73acec4da436542c687bb7339474d53bbab51b)))))))))
 
 (bonsai_examples (
-  (provides ((bonsai_examples v0.18~preview.130.76+222)))
+  (provides ((bonsai_examples v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/bonsai_examples/archive/2311adcf308cc44488cac91f171df4bdce1447aa.tar.gz))
+          https://github.com/janestreet/bonsai_examples/archive/af1da14d506af63acf63baeee13409120f64c585.tar.gz))
         (hashes (
-          sha256=a2c202f04f57c1977fdc270d0ae466408d5792464b90b724eb25598714de4b08)))))))))
+          sha256=3788679b284e35e3008024c55ca912e91505aab7850c623e3c04f78292e93e0c)))))))))
 
 (bonsai_term (
-  (provides ((bonsai_term v0.18~preview.130.76+222)))
+  (provides ((bonsai_term v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/bonsai_term/archive/210841d1bd2badc73c370c58f0617a40e8fdcdaa.tar.gz))
+          https://github.com/janestreet/bonsai_term/archive/16fe87483ae031399c144ef39bb4683894ce46ae.tar.gz))
         (hashes (
-          sha256=d1f8366e12a4c5d757f56f417be8ccd3e4b73944e8d7a5bceb5c48809e078354)))))))))
+          sha256=e2feebe4e78e08fc3926790c2332046247ce1837d1929f8a2ca8ed05fd061f03)))))))))
 
 (bonsai_term_components (
-  (provides ((bonsai_term_components v0.18~preview.130.76+222)))
+  (provides ((bonsai_term_components v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/bonsai_term_components/archive/4430724413d12aaff72c6b38dd23073f09527b4a.tar.gz))
+          https://github.com/janestreet/bonsai_term_components/archive/2e5c7a65ee32ea7aa8f97b3db82075154e982240.tar.gz))
         (hashes (
-          sha256=207fccccec56e9ca45b3543612ce56d71c9cb1b6bba93e77978cc9477b41b23f)))))))))
+          sha256=6a86369ddbe291a02a15e6007042d2bcf901d153258798bfa1f63320f2467898)))))))))
 
 (bonsai_term_examples (
-  (provides ((bonsai_term_examples v0.18~preview.130.76+222)))
+  (provides ((bonsai_term_examples v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/bonsai_term_examples/archive/63556dd30ecc87513876bc952f0778ce3f815709.tar.gz))
+          https://github.com/janestreet/bonsai_term_examples/archive/eecc004ae45d4908cffa635140bc09344aafa1f8.tar.gz))
         (hashes (
-          sha256=8242bdf4c574309c57023048724862c8c4cdd6d2315acd3944ac10a741f11ae9)))))))))
+          sha256=c8dcb78e6967a80ef59de9aed5d57b41c7f145228f6393420bccbe35941d7fcc)))))))))
 
 (bonsai_term_test (
-  (provides ((bonsai_term_test v0.18~preview.130.76+222)))
+  (provides ((bonsai_term_test v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/bonsai_term_test/archive/547f7d54f198b00bba5a0434dee57cccd1f4d8d4.tar.gz))
+          https://github.com/janestreet/bonsai_term_test/archive/d9138b1d63b831ff9b59a6a7e2758e929c64f645.tar.gz))
         (hashes (
-          sha256=697bdf7592d5d4acd461df763a57dc3ea22dc208bec647c45b505dcc9b0e632e)))))))))
+          sha256=b4778240127faa6e6033e81170b85cd24e68a113d606c69cfc8b79e224e2f91c)))))))))
 
 (bonsai_test (
-  (provides ((bonsai_test v0.18~preview.130.76+222)))
+  (provides ((bonsai_test v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/bonsai_test/archive/ab71321dcdd42b1da4338995dda4a830ec680299.tar.gz))
+          https://github.com/janestreet/bonsai_test/archive/d2ad1471850632a810f51a898efc9a82df41cd54.tar.gz))
         (hashes (
-          sha256=c4a32e629f347accc5bb461a9b3425e12601f2ae714e7cbe9b6431cd098733d3)))))))))
+          sha256=3e306ddee0b8f7ecd5165c0beb8daebbc34bf034f733dfc443462ac0727f9e5f)))))))))
 
 (bonsai_web (
-  (provides ((bonsai_web v0.18~preview.130.76+222)))
+  (provides ((bonsai_web v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/bonsai_web/archive/fef30d82f050f82ebbceb8af869b550cd7cedbbf.tar.gz))
+          https://github.com/janestreet/bonsai_web/archive/c7bb660fa18f64c29b1e0007f8f5892c10ffb9d4.tar.gz))
         (hashes (
-          sha256=34fb05f4ad78d01e6fcce7b82c8929efda33aef4ae7a3b0ecf87028f16bf45df)))))))))
+          sha256=c81fe787337326fabc1f1afc6eac706f4a6710e46c1c314378f5a9328b969aea)))))))))
 
 (bonsai_web_components (
-  (provides ((bonsai_web_components v0.18~preview.130.76+222)))
+  (provides ((bonsai_web_components v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/bonsai_web_components/archive/164394b8000f7688a0506864f77b46f958cde240.tar.gz))
+          https://github.com/janestreet/bonsai_web_components/archive/a235dcdf57e917d8239880c507ece3118221fca3.tar.gz))
         (hashes (
-          sha256=7c29d01bc51112157081236165d3ca988e38dc5b6c1aa8510344d605acae9c8d)))))))))
+          sha256=5ee5070e2f0b1933e6654334ee67575db5b06bb74a0f36681cad0b41d9cfeba0)))))))))
 
 (bonsai_web_test (
-  (provides ((bonsai_web_test v0.18~preview.130.76+222)))
+  (provides ((bonsai_web_test v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/bonsai_web_test/archive/f9f5f3c56074883f7fa09f0b54c2b501cc112489.tar.gz))
+          https://github.com/janestreet/bonsai_web_test/archive/1c471cd7624fa2969d9979a9be399c2882867878.tar.gz))
         (hashes (
-          sha256=afe74511269b39c6bd0449fcd072c31ad450257e0fff122883093465dab950d2)))))))))
+          sha256=de5b9e0eeb5178090ac468725f5f4abbd0875fd2b7b5768fa547a9c3c1f6ef27)))))))))
 
 (camlp-streams (
   (provides ((camlp-streams 5.0.1)))
@@ -552,34 +552,34 @@
           sha512=2efa8dd4a636217c8d49bac1e4e7e5558fc2f45cfea66514140a59fd99dd08d61fb9f1e17804997ff648b71b13820a5d4a1eb70fed9d848aa2abd6e41f853c86)))))))))
 
 (capitalization (
-  (provides ((capitalization v0.18~preview.130.76+222)))
+  (provides ((capitalization v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/capitalization/archive/6feac6c229c9e04a316a23cc012810c0175276a0.tar.gz))
+          https://github.com/janestreet/capitalization/archive/4ef9e45dd71f703fe755eb056dcdcdc9a3f9bc38.tar.gz))
         (hashes (
-          sha256=b909d2f006aff8cc53fb2acde6f75682d6ff9c4f4a5e45f10462919aafc774b1)))))))))
+          sha256=3475da2f9c78ea14fb3372ab804eecf11ac623a967711d3abbcabea576da8a75)))))))))
 
 (capsule (
-  (provides ((capsule v0.18~preview.130.76+222)))
+  (provides ((capsule v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/capsule/archive/3fea739a7ae30fe4189878909ea7e78154eeb78c.tar.gz))
+          https://github.com/janestreet/capsule/archive/a243dd7ec5e75913ccd705e221e8a11654d015b6.tar.gz))
         (hashes (
-          sha256=593fbaee8da5c1bec0e76262afed16f6d3c554cd89c55b10dd72776b90463cc2)))))))))
+          sha256=2c7752be03f5c11c69e8eec1880d79359e51c806724548394c24f07958f0d819)))))))))
 
 (capsule0 (
-  (provides ((capsule0 v0.18~preview.130.76+222)))
+  (provides ((capsule0 v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/capsule0/archive/28a9844cb1ed6f8d719c685ad04d5f20c93b30a1.tar.gz))
+          https://github.com/janestreet/capsule0/archive/29ff62934fe0b3945104896b4291490be6bd45f9.tar.gz))
         (hashes (
-          sha256=b7d4bc1cf1331a828d8488d092e01b19ad168c9f368851285ad2f854a15532d5)))))))))
+          sha256=88d679df7d0ea40d4f1ff4bc78e51fd2d55b7ef8438072b022f733714909cd01)))))))))
 
 (checkseum (
   (provides ((checkseum 0.5.2)))
@@ -592,6 +592,17 @@
           sha256=9e5e4fd4405cb4a8b4df00877543251833e08a6499ef42ccb8dba582df0dafc8
           sha512=b66261effaa561ce5cb8d92a3ec78565a5579bf3d3c4b7f08eba59998ac4d7f49ae9c240986c231b22b965c93a949a8a2e35edec42277ecb5602829945fba6db)))))))))
 
+(cmarkit (
+  (provides ((cmarkit 0.3.0+dune)))
+  (source ((
+    base (
+      Http (
+        (urls (
+          https://github.com/dune-universe/cmarkit/releases/download/v0.3.0%2Bdune/cmarkit-0.3.0.dune.tbz))
+        (hashes (
+          sha256=822dca2b7c97b31a430cf86534011f5ea38874d4fc2dd79e5272b25288f236f7
+          sha512=1d15bf8ea669c502e372f58517b2c418a577e6a6268ca3438165750de58aa35242a3dcdca09caf5b40c63aaedebbbd6b9d081fd231eb531ddcb84a7f8ab516ef)))))))))
+
 (cmdliner (
   (provides ((cmdliner 1.3.0)))
   (source ((
@@ -603,7 +614,7 @@
           sha512=4c46bc334444ff772637deae2f5ba03645d7a1b7db523470a1246acfce79b971c764d964cbb02388639b3161b279700d9ade95da550446fb32aa4849c8a8f283)))))))))
 
 (codicons (
-  (provides ((codicons v0.18~preview.130.76+222)))
+  (provides ((codicons v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
@@ -613,124 +624,124 @@
           sha256=196441e04b013060c04ab5e8b6cccaca5c59811f7f2a45202900e15bc657877b)))))))))
 
 (cohttp_async_websocket (
-  (provides ((cohttp_async_websocket v0.18~preview.130.76+222)))
+  (provides ((cohttp_async_websocket v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/cohttp_async_websocket/archive/9ee12c4ba24611907e99d867c3ea503a849d1418.tar.gz))
+          https://github.com/janestreet/cohttp_async_websocket/archive/5736c0d51fd58cce7ef8de5b4aacf8cdd2665306.tar.gz))
         (hashes (
-          sha256=c38cbc0a39532262e15ff0f5dfa5e06a8b915f423c900c4d5b82b72d4dae4732)))))))))
+          sha256=96fb52c97a15086d661428db1eaffb19e7d62ba6b8de4edcc670ad8fb43b6959)))))))))
 
 (cohttp_static_handler (
-  (provides ((cohttp_static_handler v0.18~preview.130.76+222)))
+  (provides ((cohttp_static_handler v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/cohttp_static_handler/archive/07bf91cd42a144078aa303198171c1c612d9b961.tar.gz))
+          https://github.com/janestreet/cohttp_static_handler/archive/7b67985746122654b54062b74825dded600074d4.tar.gz))
         (hashes (
-          sha256=7040254f86894007b20de0cb8465d9d9da562b2fa4a06d1316b0909af203fe4a)))))))))
+          sha256=6729fdbf9e76d73dc86e953096d14934ceeb75022cf2000d9d1217a1f0977c0a)))))))))
 
 (command_nodejs (
-  (provides ((command_nodejs v0.18~preview.130.76+222)))
+  (provides ((command_nodejs v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/command_nodejs/archive/98d2452fe758095cc801104df64a4ac56ca4c480.tar.gz))
+          https://github.com/janestreet/command_nodejs/archive/7cfdac43876fc419e1052f02ee33d2e041ca7790.tar.gz))
         (hashes (
-          sha256=e2673bc3eb075e904c6091b769f2008e36b9fe4fc6ac55b72d8786f6ffa5b711)))))))))
+          sha256=90173b07b5a78d610abac6689261e512a85726305eccf472710a92cd2cfa03fa)))))))))
 
 (command_rpc (
-  (provides ((command_rpc v0.18~preview.130.76+222)))
+  (provides ((command_rpc v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/command_rpc/archive/b62bf48e6ca2f9ccaaa959e461ad415f5fcda212.tar.gz))
+          https://github.com/janestreet/command_rpc/archive/61b9d5b6a5a8e620108b6eb06d9997b361a605f1.tar.gz))
         (hashes (
-          sha256=0fe4aabe1dfe5ff63cc57fba075efc972449674a4bc15528c77def0858b30b1e)))))))))
+          sha256=1a1f50e0b3b08b9ff216f45f3dc45aef85df77cf0bfc54fb17ceae3487863f00)))))))))
 
 (concurrent (
-  (provides ((concurrent v0.18~preview.130.76+222)))
+  (provides ((concurrent v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/concurrent/archive/cdee2abe5801720dd04037f5581f0aaee2eb241b.tar.gz))
+          https://github.com/janestreet/concurrent/archive/12a47ed4e77e04eafb6e21e29e0731446f3abdc4.tar.gz))
         (hashes (
-          sha256=dd41d757caa62b77483035d97858eb5c43e5fe99e5caebe952fccb563ea861f2)))))))))
+          sha256=ffe5880360f5c312269ccb9776450ebc10e9ab07b4a0c9050b41397585d33ef9)))))))))
 
 (content_security_policy (
-  (provides ((content_security_policy v0.18~preview.130.76+222)))
+  (provides ((content_security_policy v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/content_security_policy/archive/468a6ca4df8049303918b786cf9a6d8a1130c626.tar.gz))
+          https://github.com/janestreet/content_security_policy/archive/0ab7f24774f8eacafefcd327cb34386bbfb86342.tar.gz))
         (hashes (
-          sha256=f4f2e193fdfab290ed10591dca32ca508798e8a08b1a6600e3a5ac1428a4e760)))))))))
+          sha256=745445e31b519f0d9d72e5ab11e5e29b8a48b3a51165e9eec4aeae1221f16ae7)))))))))
 
 (core (
-  (provides ((core v0.18~preview.130.76+222)))
+  (provides ((core v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/core/archive/bc95d305d8e8a4c0e2cdd3cb5180288f180c2e0f.tar.gz))
+          https://github.com/janestreet/core/archive/289df0f3902b0b2d5b43edb1e03b51bf8bacf68f.tar.gz))
         (hashes (
-          sha256=56c82162ad0a41be726d7532a72a2a95749b078bd01460eec65653f9eec11d13)))))))))
+          sha256=b668eefa67ae1e612bca02d6a868420ead5df511c1ac9edbd5378d80ab77f3f8)))))))))
 
 (core_bench (
-  (provides ((core_bench v0.18~preview.130.76+222)))
+  (provides ((core_bench v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/core_bench/archive/f01d81b1bf8d4520f36e0d3930cffcfb2dc5d29e.tar.gz))
+          https://github.com/janestreet/core_bench/archive/44ede7accf4febc10d772f7eed6a55a103c9fce6.tar.gz))
         (hashes (
-          sha256=6847bfff6157f7010cd64408c376dc47cb60f3f8853aeb6a5adc801aed0e9edc)))))))))
+          sha256=e20d6645cf8a35717aa7c34b81b0e8622a099e75cbdcbbb5ef2ffdebc4383af5)))))))))
 
 (core_extended (
-  (provides ((core_extended v0.18~preview.130.76+222)))
+  (provides ((core_extended v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/core_extended/archive/8b803a4a43216cef1b1200b4ea072fd6308e6322.tar.gz))
+          https://github.com/janestreet/core_extended/archive/c6c51294f63a507b731076905751ea22868ceebd.tar.gz))
         (hashes (
-          sha256=6bd8e653e0cc90d442fb43458b01bbcacfbce0e584a439dfe08af94430e9cde4)))))))))
+          sha256=faee04e9c57abf622ebb352d656782aa694b67ab1bcd2bb21d2f7bc1ac9b6931)))))))))
 
 (core_kernel (
-  (provides ((core_kernel v0.18~preview.130.76+222)))
+  (provides ((core_kernel v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/core_kernel/archive/5f7e3a5f03204465c46db2196fc12c6f501c0136.tar.gz))
+          https://github.com/janestreet/core_kernel/archive/fcf988e35ba046633e0219d4f2bad0075cdd35e0.tar.gz))
         (hashes (
-          sha256=1f12bed7c4bd472d1df5d1a8adac034a4228397b28c1655cd748f92f8b17539c)))))))))
+          sha256=39d637a48fef68966051b11edb81aa591dfa9dc21305218e017f306f5a58e80b)))))))))
 
 (core_profiler (
-  (provides ((core_profiler v0.18~preview.130.76+222)))
+  (provides ((core_profiler v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/core_profiler/archive/afe32927a6ed52dc2560d2e12a32a4c2673f886a.tar.gz))
+          https://github.com/janestreet/core_profiler/archive/b9fd487c2351cf87928e40a361b2e535a175a3e4.tar.gz))
         (hashes (
-          sha256=d07e5e09205677f010f2fbe8e55e15ab1ec0e5564a867182d7a1e7245fae6d29)))))))))
+          sha256=78234aad5d2066a16407465b641b5d6003c35989a3352bd8abbd36c9e5bcf48a)))))))))
 
 (core_unix (
-  (provides ((core_unix v0.18~preview.130.76+222)))
+  (provides ((core_unix v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/core_unix/archive/63390a3f75376156e77ed49d6cc07ca48a90dd53.tar.gz))
+          https://github.com/janestreet/core_unix/archive/a1fae2c21efc2b95a6a0010c790d13ff166bd5e9.tar.gz))
         (hashes (
-          sha256=7d3aa4f8debf4cd7d3a6d5f57f42ed173eb36aac16a55a9b7b1496a9c683fc10)))))))))
+          sha256=a440af91ca6fd25f2360d7f6728905d4fb5c461424f9e9d49f8633e399cf7807)))))))))
 
 (cppo (
   (provides ((cppo 1.8.0)))
@@ -765,34 +776,34 @@
           sha512=be281018bcfc20d4db14894ef51c4b836d6338d2fdfe22e63d46f405f8dea7349e16f1c0ecd65f73d4c85a2a80e618cdbb8c9dafcbb9f229f04f1adca5b1973c)))))))))
 
 (csvfields (
-  (provides ((csvfields v0.18~preview.130.76+222)))
+  (provides ((csvfields v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/csvfields/archive/0bb6894faa0999c4072085ba16796d018377bca5.tar.gz))
+          https://github.com/janestreet/csvfields/archive/97e1c19942d124f806bae28dc0e7bc355efd5d41.tar.gz))
         (hashes (
-          sha256=e233502a378f0be257011fdf5bfeb310c10b7ebd5d3ce44e58c519538ea80bba)))))))))
+          sha256=8c02bd0551085f324f0642431036f350e459cea196e691c7e137d12162e3fd7b)))))))))
 
 (curl_async (
-  (provides ((curl_async v0.18~preview.130.76+222)))
+  (provides ((curl_async v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/curl_async/archive/9cae26a11d0a05a7835936439f64b65d305ab71a.tar.gz))
+          https://github.com/janestreet/curl_async/archive/27254841c195e5c3a232c7fb51bf5c9f2632aaa1.tar.gz))
         (hashes (
-          sha256=01951e24669b3655e8e93740e7f2644915449f3e4ff157737eaecce47feae9c8)))))))))
+          sha256=6c334e40e7a5df5bbff5e8bd5dd74f9f03c453ae420ca5333c7f4050869078bf)))))))))
 
 (current_exe (
-  (provides ((current_exe v0.18~preview.130.76+222)))
+  (provides ((current_exe v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/current_exe/archive/531da737d7aa43baddf8651ebff946ce8412526d.tar.gz))
+          https://github.com/janestreet/current_exe/archive/5ac74ca30a836551b741abab3d5491099e57526a.tar.gz))
         (hashes (
-          sha256=eeb4d8e84fc154963778a9ee92cca6b197591ef5f404d9ed054512a33d046776)))))))))
+          sha256=76ce3e62506d36e0d96e96720532714d47aa2f370d0100d883eaaba678e0a23b)))))))))
 
 (decompress (
   (provides ((decompress 1.5.3)))
@@ -806,24 +817,24 @@
           sha512=c3f402404f76075e6f692ea36e701134a5d833824d5d1166365c6c81fb18b309270bf288ce4c118ac44fd0366d9b6eea0a6309255678d8e1bd2bbfa7ba843461)))))))))
 
 (dedent (
-  (provides ((dedent v0.18~preview.130.76+222)))
+  (provides ((dedent v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/dedent/archive/5c4eee78c6bb98e76bd2c9066a1347d117c81b8b.tar.gz))
+          https://github.com/janestreet/dedent/archive/4fdebe7292600a1fb48f31dab218b8ff23f1798a.tar.gz))
         (hashes (
-          sha256=800b481d5353a67a89b8ec8e28edaa52e05f08bc39723f0bc51f06a2d8b0337d)))))))))
+          sha256=17de1fe4e0b4ab56ada6a200a9fc6b0c98d0c1a436e89678fa984c00ad282392)))))))))
 
 (delimited_parsing (
-  (provides ((delimited_parsing v0.18~preview.130.76+222)))
+  (provides ((delimited_parsing v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/delimited_parsing/archive/5271b6f81ff3ce690f037ad3ded5193ce7c297d3.tar.gz))
+          https://github.com/janestreet/delimited_parsing/archive/ba408f900ca9828800d61bcc279b76b6ce73c860.tar.gz))
         (hashes (
-          sha256=a6f00687ff30f386fab054100e2d15bd65ac66ba755cd3ff7fbf921d9b3808f5)))))))))
+          sha256=db11bb771d68361418f6f058c58732746d80d0ae8fb3bbe139de0e5b9acd0c56)))))))))
 
 (domain-name (
   (provides ((domain-name 0.5.0)))
@@ -848,82 +859,114 @@
           sha512=74e50c759ef50ce13d0f1a424f91176f1327349d6c1b97d0a20c848417920c1490ff7d5a8cabc541b1409a6a6e488f807e34c3cf7ac0d9866938bd43eab08de8)))))))))
 
 (dune_ (
-  (provides ((dune 3.20.2+ox)))
+  (provides (
+    (chrome-trace    3.21.0+ox)
+    (dune            3.21.0+ox)
+    (dune-build-info 3.21.0+ox)
+    (dune-rpc        3.21.0+ox)
+    (dyn             3.21.0+ox)
+    (fs-io           3.21.0+ox)
+    (ocamlc-loc      3.21.0+ox)
+    (ordering        3.21.0+ox)
+    (stdune          3.21.0+ox)
+    (top-closure     3.21.0+ox)
+    (xdg             3.21.0+ox)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/ocaml/dune/releases/download/3.20.2/dune-3.20.2.tbz))
+          https://github.com/ocaml/dune/releases/download/3.21.0/dune-3.21.0.tbz))
         (hashes (
-          sha256=b1a86b2d60bdb4a8b9bb6861bdf2f9f28a6e7cb5d833ce81afecceb9ef9ca549
-          sha512=ed14df9163e487d4ae7d0a2427eaab7823ef1f0ef2d93f0b783e6f163bbd5b44ba73f055d60b84e76f476fe11d38e794013628a1da776d9ec13cca9666e7b7ff)))))))
+          sha256=e76d4d89368a0a70025193aeaf4f7c5b54031dba3f59bf9d2af1971dc0eceddd
+          sha512=a7531de073a47f644bd1e06bfb424c50a61d34245e5e0a1f32d8da920437e8fe59246304cb7aec25f797a8dafea876feceeccfe5139502ead4d1ba5c45773ef3)))))))
   (extra ((
     oxcaml-dune.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/dune/dune.3.20.2+ox/files/oxcaml-dune.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/chrome-trace/chrome-trace.3.21.0+ox/files/oxcaml-dune.patch
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/dune/dune.3.21.0+ox/files/oxcaml-dune.patch
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/dune-build-info/dune-build-info.3.21.0+ox/files/oxcaml-dune.patch
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/dune-rpc/dune-rpc.3.21.0+ox/files/oxcaml-dune.patch
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/dyn/dyn.3.21.0+ox/files/oxcaml-dune.patch
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/fs-io/fs-io.3.21.0+ox/files/oxcaml-dune.patch
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ocamlc-loc/ocamlc-loc.3.21.0+ox/files/oxcaml-dune.patch
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ordering/ordering.3.21.0+ox/files/oxcaml-dune.patch
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/stdune/stdune.3.21.0+ox/files/oxcaml-dune.patch
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/top-closure/top-closure.3.21.0+ox/files/oxcaml-dune.patch
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/xdg/xdg.3.21.0+ox/files/oxcaml-dune.patch))
       (hashes (
-        sha256=fe1d266b70e4f7bc884eda337f68c6a539bebc4e9b3e2ed0fdf7293797fc3f33))))))
+        sha256=f213dfb160dabbd377ef15e93ae9d7a0764c21ea30475eba6cecb8bc9b4ee80f))))))
   (patches (oxcaml-dune.patch))))
 
-(email_message (
-  (provides ((email_message v0.18~preview.130.76+222)))
+(either (
+  (provides ((either 1.0.0)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/email_message/archive/c7f053f88c48c99bf287801d597eccceb2643fdf.tar.gz))
+          https://github.com/mirage/either/releases/download/1.0.0/either-1.0.0.tbz))
         (hashes (
-          sha256=a235ef7f406441537225711330a1a6429926cb49c92097a59f8cb1928243dfcd)))))))))
+          sha256=bf674de3312dee7b7215f07df1e8a96eb3d679164b8a918cdd95b8d97e505884
+          sha512=147854c09f897dd028b18a9f19acea8666107aaa7b1aab3c92f568af531364f57298edcaf3897d74246d3857d52e9bfb7ad0fc39220d988d9f14694ca1d5e9ed)))))))))
+
+(email_message (
+  (provides ((email_message v0.18~preview.130.83+317)))
+  (source ((
+    base (
+      Http (
+        (urls (
+          https://github.com/janestreet/email_message/archive/b7ff20af8c0113c283ab2b95ab3f672614635268.tar.gz))
+        (hashes (
+          sha256=941da82ebf4a56bcf0c1b6b9dcd74f6aebcebfb91c46561a425aa60172113751)))))))))
 
 (env_config (
-  (provides ((env_config v0.18~preview.130.76+222)))
+  (provides ((env_config v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/env_config/archive/48d17bd6a0bd5256be69b4efc6ad37a2abe813a5.tar.gz))
+          https://github.com/janestreet/env_config/archive/811b0e8a8100cf90f23852f6b8adb84e51a70049.tar.gz))
         (hashes (
-          sha256=7bb5e27d6c2cc8a162b20c50bf324e2dd029aad6834618a7aade1e9f3e9a63f0)))))))))
+          sha256=a8e9ec1062fcc295df1b13d88ac35d90fe419acfe1b329f44d7fd98f5d673666)))))))))
 
 (expect_test_helpers_async (
-  (provides ((expect_test_helpers_async v0.18~preview.130.76+222)))
+  (provides ((expect_test_helpers_async v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/expect_test_helpers_async/archive/cb945b598237db56143370d71559967a6b423262.tar.gz))
+          https://github.com/janestreet/expect_test_helpers_async/archive/de9e5ae7e8603a7270933693dcee2b9703efaea2.tar.gz))
         (hashes (
-          sha256=d27d829717d03b87cd86429834e95d25fa412dfb223ede97a16407769cf28473)))))))))
+          sha256=5a40d6a7ff929d2d8a7627eebec507519832f4e1be541716518221ab3a51fe5b)))))))))
 
 (expect_test_helpers_core (
-  (provides ((expect_test_helpers_core v0.18~preview.130.76+222)))
+  (provides ((expect_test_helpers_core v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/expect_test_helpers_core/archive/75b3eb5859fe8f9af7269466ea65fb4b81c11d86.tar.gz))
+          https://github.com/janestreet/expect_test_helpers_core/archive/6571d7b391e7426e818890e10d98a52db17ad7dd.tar.gz))
         (hashes (
-          sha256=9f8e27272fa430709471e6594ff92917752ed38685018b02694316f1d3ca7027)))))))))
+          sha256=e1f9b3a4aa3e654543d36269458055e6d08cb1f11dca70d7be1969c8464aa384)))))))))
 
 (expectable (
-  (provides ((expectable v0.18~preview.130.76+222)))
+  (provides ((expectable v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/expectable/archive/a3324954705a7a7d2227205031ba34455b3b4ac6.tar.gz))
+          https://github.com/janestreet/expectable/archive/bac7527fb2ebfef9d2db6705d40574bc3b2f230f.tar.gz))
         (hashes (
-          sha256=3697fdcab57a663e1adf311c3f0d573e9cbc49d24829b622f9cbf95b46fb1510)))))))))
+          sha256=7a322d1a95c479f299ce3d59debc85bb64165ffbf9bf95d109d3881bedb1b6e0)))))))))
 
 (expectree (
-  (provides ((expectree v0.18~preview.130.76+222)))
+  (provides ((expectree v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/expectree/archive/ad6c03794d9988e59fa1f6c04fc1e2f6f7942c4d.tar.gz))
+          https://github.com/janestreet/expectree/archive/790f2ff226f4d950a30818dece9420df49466fea.tar.gz))
         (hashes (
-          sha256=54c8b876ba9a7e011e63bcee57d807b38014734d11b029f3ebcdbe8bc3cf2145)))))))))
+          sha256=369d4359001bf91403566e5910ac67431a56a1d93dece824496db5501776368e)))))))))
 
 (ezjsonm (
   (provides ((ezjsonm 1.3.0)))
@@ -946,55 +989,77 @@
           sha256=720ea90b39fd3ea7de6e8722330a25514e67306e94d4af41ad48d8a7cfa035c6
           md5=307dccc4ea67ff0eeff394701d05bbe7)))))))))
 
-(fieldslib (
-  (provides ((fieldslib v0.18~preview.130.76+222)))
+(fiber (
+  (provides ((fiber 3.7.0)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/fieldslib/archive/4713dc70ff453f632d0ad87e957d955e97e3ad68.tar.gz))
+          https://github.com/ocaml-dune/fiber/releases/download/3.7.0/fiber-lwt-3.7.0.tbz))
         (hashes (
-          sha256=be385e06deec5c539298f4b5c33385a60ffb85b598790996b534be51457d7f7c)))))))))
+          sha256=8648a15ae93fe6942999ce36887429a3913b62829c4714e520cc0e7a1c3b9682
+          sha512=348b28b28ffd87de035e90753f677658e8ad58421caf3ac086e4c0bbab8508fa5fe2f55d137c425afaf790ebcf45291e16d70eac5cb766b6d9786f042b58b19b)))))))))
+
+(fieldslib (
+  (provides ((fieldslib v0.18~preview.130.83+317)))
+  (source ((
+    base (
+      Http (
+        (urls (
+          https://github.com/janestreet/fieldslib/archive/fc60e31c92745f571f3e914d88a234be9172b2e1.tar.gz))
+        (hashes (
+          sha256=39e4e1480a9a4996f3ceb708f20fcb888f69b990a9c9ab5a662922e77cbb8f8d)))))))))
 
 (file_path (
-  (provides ((file_path v0.18~preview.130.76+222)))
+  (provides ((file_path v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/file_path/archive/c976c8df8f9d3ebbd1bfa47fd729ed2a3060a3a0.tar.gz))
+          https://github.com/janestreet/file_path/archive/16bfa3c24eea74a881102d523a0eab50f73c3acb.tar.gz))
         (hashes (
-          sha256=8cfb4f8523600be3fb7ff2cc53fdf071b8e2c2f25258fcee908da2dbaf9dfb57)))))))))
+          sha256=1bb8bd10c47e0caaec15844c38c2b4c4a16a42d55879b745fadf1cd2f01fa4c2)))))))))
 
 (filesystem (
-  (provides ((filesystem v0.18~preview.130.76+222)))
+  (provides ((filesystem v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/filesystem/archive/2ee091ee5e6f59026750925d376525eda5227e9f.tar.gz))
+          https://github.com/janestreet/filesystem/archive/1bf2fa21e795fd1965c290398cdd202cceccc21d.tar.gz))
         (hashes (
-          sha256=a024b02118ff2adcb083ab882907c07fe65cd70fd17faaec26c3e4628b3c6197)))))))))
+          sha256=d9d7f687368c7a77b9d305fb9e30713476f7c039b1e0b6dc60a50a80e7b2cba4)))))))))
+
+(fix (
+  (provides ((fix 20250919)))
+  (source ((
+    base (
+      Http (
+        (urls (
+          https://gitlab.inria.fr/fpottier/fix/-/archive/20250919/archive.tar.gz))
+        (hashes (
+          md5=af7099d1cf24654bd379953b8e3d063f
+          sha512=147bde60a96191f5f0090842df37a12509d78cf6e9dda482fbd000f61215c3d12115854fc331ae39009f26948d6d527187adade160e7ab27a6c4f0d8b324490a)))))))))
 
 (flexible_sexp (
-  (provides ((flexible_sexp v0.18~preview.130.76+222)))
+  (provides ((flexible_sexp v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/flexible_sexp/archive/6902533606a8bf49ae2ba67017771a6db77c8d03.tar.gz))
+          https://github.com/janestreet/flexible_sexp/archive/3bcd1816b598ad8d2a9931f3d5e280eb7d693b3a.tar.gz))
         (hashes (
-          sha256=7b69ae7723179f4857b97b3f40c1b34f1243299ff39486f59d998c95842fa0ef)))))))))
+          sha256=777238fc916f564dde4ca5c813ac8049e7e4903d4f530e248b6e9e2ea6b3905c)))))))))
 
 (float_array (
-  (provides ((float_array v0.18~preview.130.76+222)))
+  (provides ((float_array v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/float_array/archive/2a111c2565d57a4ede9ff2ff9036f6bca0daa6b3.tar.gz))
+          https://github.com/janestreet/float_array/archive/211ca6611f1b8357e2aa65f5083928c34923d2fb.tar.gz))
         (hashes (
-          sha256=29fe8079d7b51bcafe610edd6891ca4e9da4fff51a5199af1a4a963f71e6482d)))))))))
+          sha256=b9f11ba8f975f9f7cd8be22cf81120db3fdaf13c776bebce000d6725a94f353d)))))))))
 
 (fmt (
   (provides ((fmt 0.11.0+dune)))
@@ -1008,14 +1073,14 @@
           sha512=d1a91b65752977f2492abf39f43d121559d50da822e6c1f3b641240e203db45dca6b1e2bc6c4adbf39d59e81ad80d61963ac7ce17ac7ba8317e433967a99d00f)))))))))
 
 (font_awesome_icons (
-  (provides ((font_awesome_icons v0.18~preview.130.76+222)))
+  (provides ((font_awesome_icons v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/font_awesome_icons/archive/16bb8a03f69875cf7be69fa0d7b6a77fd550ce07.tar.gz))
+          https://github.com/janestreet/font_awesome_icons/archive/e04a72b484c2fed9b9a869d3661e2911a8b53105.tar.gz))
         (hashes (
-          sha256=381cfd4d6ce8d911c198eeef405bbae03db77006f2936fb5a97222f80d008096)))))))))
+          sha256=223e03bd10c1626001f2d1d7e13608dbb7f75fb4718990dfd37b2df6ed0aa541)))))))))
 
 (fpath (
   (provides ((fpath 0.7.3+dune)))
@@ -1028,24 +1093,24 @@
           sha256=792ecf88d2a311596106e30775864629558ed0c2d0501590fda55f363dbb6ebc)))))))))
 
 (fuzzy_match (
-  (provides ((fuzzy_match v0.18~preview.130.76+222)))
+  (provides ((fuzzy_match v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/fuzzy_match/archive/0550389d5aedf20ef908de54591b8d794449717f.tar.gz))
+          https://github.com/janestreet/fuzzy_match/archive/10b348e98bb59f391f9aa297445dedec7ce26375.tar.gz))
         (hashes (
-          sha256=e1f5880f332ce5131806ff2de72ff6be53386ed13e3581d6d1099e499399fff9)))))))))
+          sha256=f3fb760c280c5b00003f4b1a9dfadf5699e20516d719a7cf1df07245fba03864)))))))))
 
 (fzf (
-  (provides ((fzf v0.18~preview.130.76+222)))
+  (provides ((fzf v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/fzf/archive/975b086e66cc8d045a8f8a4a7528b46516841d67.tar.gz))
+          https://github.com/janestreet/fzf/archive/ec2ea69e1917bcd02e43d4ccba312e69f6d4b833.tar.gz))
         (hashes (
-          sha256=3028255286aff3b5e7cb5c3188464491db424af1a792f16989b2e95fe558f70e)))))))))
+          sha256=807b9b9e881e58bc494ade689ff51d9f959a74147b4666aa345622e44d00cc89)))))))))
 
 (gen (
   (provides ((gen 1.1)))
@@ -1072,38 +1137,38 @@
   (extra (
     (dune.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/gen_js_api/gen_js_api.1.1.2+ox/files/dune.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ojs/ojs.1.1.2+ox/files/dune.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/gen_js_api/gen_js_api.1.1.2+ox/files/dune.patch
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ojs/ojs.1.1.2+ox/files/dune.patch))
       (hashes (
         sha256=486d4235a5baa84b63b867ceaa9000b8c7fa6c9429999ab247e4ba3401da214e))))
     (gen-js-api+js_of_ocaml-globalThis.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/gen_js_api/gen_js_api.1.1.2+ox/files/gen-js-api+js_of_ocaml-globalThis.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ojs/ojs.1.1.2+ox/files/gen-js-api+js_of_ocaml-globalThis.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/gen_js_api/gen_js_api.1.1.2+ox/files/gen-js-api+js_of_ocaml-globalThis.patch
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ojs/ojs.1.1.2+ox/files/gen-js-api+js_of_ocaml-globalThis.patch))
       (hashes (
         sha256=7828fe1796e89139bbfe38e9fdf6b0d959d15bf4e9762f24bfe3749de409398d))))
     (gen-js-api+ppx-driver+gen_js_api_ppx_driver.ml.patch
      ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/gen_js_api/gen_js_api.1.1.2+ox/files/gen-js-api+ppx-driver+gen_js_api_ppx_driver.ml.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ojs/ojs.1.1.2+ox/files/gen-js-api+ppx-driver+gen_js_api_ppx_driver.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/gen_js_api/gen_js_api.1.1.2+ox/files/gen-js-api+ppx-driver+gen_js_api_ppx_driver.ml.patch
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ojs/ojs.1.1.2+ox/files/gen-js-api+ppx-driver+gen_js_api_ppx_driver.ml.patch))
       (hashes (
         sha256=4bcca59531d1c30227f153728b653a03cfca4048fe0dd6e14c0702fde8739e12))))
     (gen-js-api+ppx-lib+gen_js_api_ppx.ml.patch
      ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/gen_js_api/gen_js_api.1.1.2+ox/files/gen-js-api+ppx-lib+gen_js_api_ppx.ml.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ojs/ojs.1.1.2+ox/files/gen-js-api+ppx-lib+gen_js_api_ppx.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/gen_js_api/gen_js_api.1.1.2+ox/files/gen-js-api+ppx-lib+gen_js_api_ppx.ml.patch
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ojs/ojs.1.1.2+ox/files/gen-js-api+ppx-lib+gen_js_api_ppx.ml.patch))
       (hashes (
         sha256=813d51aee7836858c33494e3bc458516a39aac6f3f515ae70631cf66e026e329))))
     (gen-js-api+unsafe_multidomain_alert.patch
      ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/gen_js_api/gen_js_api.1.1.2+ox/files/gen-js-api+unsafe_multidomain_alert.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ojs/ojs.1.1.2+ox/files/gen-js-api+unsafe_multidomain_alert.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/gen_js_api/gen_js_api.1.1.2+ox/files/gen-js-api+unsafe_multidomain_alert.patch
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ojs/ojs.1.1.2+ox/files/gen-js-api+unsafe_multidomain_alert.patch))
       (hashes (
         sha256=41fd51a6dd20b44bc07451e4635623554c4aa80e5e5f9472faf4161c7a7b0a7a))))
     (gen-js-api-ast.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/gen_js_api/gen_js_api.1.1.2+ox/files/gen-js-api-ast.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ojs/ojs.1.1.2+ox/files/gen-js-api-ast.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/gen_js_api/gen_js_api.1.1.2+ox/files/gen-js-api-ast.patch
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ojs/ojs.1.1.2+ox/files/gen-js-api-ast.patch))
       (hashes (
         sha256=969f7ae0ac3a269f5fecffc659a875d7ba458364aa85da2e9bfa8cd3a214ae2f))))))
   (patches (
@@ -1114,215 +1179,245 @@
     gen-js-api-ast.patch
     dune.patch))))
 
-(hardcaml (
-  (provides ((hardcaml v0.18~preview.130.76+222)))
+(handled_effect (
+  (provides ((handled_effect v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/hardcaml/archive/ae452d20849b743337a47c56a0c7a675335aff8a.tar.gz))
+          https://github.com/janestreet/handled_effect/archive/a44d0d892546484cf0624c1f5687bc6694284488.tar.gz))
         (hashes (
-          sha256=b2068257e2c04f14e70c22d64e68f7f37061b2e07973a0ce223ca3160e420311)))))))))
+          sha256=d16c3c4d04415eca15b544ca8c775ae959ba684a3a3017b2fbe98d7e92867fc2)))))))))
+
+(hardcaml (
+  (provides ((hardcaml v0.18~preview.130.83+317)))
+  (source ((
+    base (
+      Http (
+        (urls (
+          https://github.com/janestreet/hardcaml/archive/17f5d1895ab0cd8f0bf7ab9bdc20430480143f45.tar.gz))
+        (hashes (
+          sha256=073929ddf2f300c390b02b624276f5cb1f7218a9eafdc2f78bfc6a66fcfc0968)))))))))
 
 (hardcaml_axi (
-  (provides ((hardcaml_axi v0.18~preview.130.76+222)))
+  (provides ((hardcaml_axi v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/hardcaml_axi/archive/4d49f54b6d7e964c995e1322fa8708a9d0c1b618.tar.gz))
+          https://github.com/janestreet/hardcaml_axi/archive/9d846a2917e41a6fd8fab0d08c094ee7ba2e6c13.tar.gz))
         (hashes (
-          sha256=11090218cd09d4914045030613360f4f87ae8f9c6c820d954f5b302cab8b87b2)))))))))
+          sha256=810b8d2ed3b07082fb72cbec153ac8ac77f3c6398955a1701fa238ff19bf6e2b)))))))))
 
 (hardcaml_c (
-  (provides ((hardcaml_c v0.18~preview.130.76+222)))
+  (provides ((hardcaml_c v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/hardcaml_c/archive/a45ce091fe7711e4210a336a9f25cbdb1418f285.tar.gz))
+          https://github.com/janestreet/hardcaml_c/archive/22ee680583016da96c04777e9ab94656b6c4e114.tar.gz))
         (hashes (
-          sha256=453953620039631de764fa0bbd21d170c19f284cfc663b595e950af93a8beaa5)))))))))
+          sha256=44b87d8823464f650a6db21b7b43133f5f9e4e94ed1635cd38c948dad5062dff)))))))))
 
 (hardcaml_circuits (
-  (provides ((hardcaml_circuits v0.18~preview.130.76+222)))
+  (provides ((hardcaml_circuits v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/hardcaml_circuits/archive/bac5e3a0786b62b7c51fe0ea81652660e677929f.tar.gz))
+          https://github.com/janestreet/hardcaml_circuits/archive/d8fc9e35b86280187b735e794aef572e943459f8.tar.gz))
         (hashes (
-          sha256=498ef93d089a315d546f644f158e36f7238300b5b71ee43e99a00a2b72821e92)))))))))
+          sha256=a6afbe2ffb5b496380a41dc189a754faf9da4c5cb226099aaa3d7790ec5ba745)))))))))
 
 (hardcaml_event_driven_sim (
-  (provides ((hardcaml_event_driven_sim v0.18~preview.130.76+222)))
+  (provides ((hardcaml_event_driven_sim v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/hardcaml_event_driven_sim/archive/8804ac9dd5bf815be00167e2ee2e009e03980614.tar.gz))
+          https://github.com/janestreet/hardcaml_event_driven_sim/archive/58848a3739ca8a1d20953db7e7288f0cc5229404.tar.gz))
         (hashes (
-          sha256=a2dc698db6b6a35ebf42355d959352dced8ac29228d6610262c941c557777cb2)))))))))
+          sha256=baf634a1b6e1a0de21348e464a63856c083c060ac660e565aeb674f9760e2403)))))))))
 
 (hardcaml_fixed_point (
-  (provides ((hardcaml_fixed_point v0.18~preview.130.76+222)))
+  (provides ((hardcaml_fixed_point v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/hardcaml_fixed_point/archive/f8e77defa6192c937a121628415d0ff24b824740.tar.gz))
+          https://github.com/janestreet/hardcaml_fixed_point/archive/67bf3e6ee2c3a12e7895f7776604223b663b7d91.tar.gz))
         (hashes (
-          sha256=abef6f60aebd4547e7a9b8ed911359b660cb8645548396b37efc7d9d4f5fd38f)))))))))
+          sha256=f6c6b9197133cea17cb77369ec9fc65a45ef0c1402b92236a70f3debb4af425e)))))))))
 
 (hardcaml_handshake (
-  (provides ((hardcaml_handshake v0.18~preview.130.76+222)))
+  (provides ((hardcaml_handshake v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/hardcaml_handshake/archive/015457c7d45acbea49d730fb4119c8aa1ef1a1e5.tar.gz))
+          https://github.com/janestreet/hardcaml_handshake/archive/46e3360035b3ae369a76a5250fe4308d8b4db031.tar.gz))
         (hashes (
-          sha256=c1ed997fab37cd9ed9f9b0f25d73839d1e9018989603d2b519dcec25de0969c7)))))))))
+          sha256=5126e274519eb4624859a8e1e533a36225ec27a9432019bceeb41fb5d6274f17)))))))))
 
-(hardcaml_hobby_boards (
-  (provides ((hardcaml_hobby_boards v0.18~preview.130.76+222)))
+(hardcaml_hobby_boards_demos (
+  (provides ((hardcaml_hobby_boards_demos v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/hardcaml_hobby_boards/archive/8553c3837eeef9e8ba5b9a0519367b7eff228906.tar.gz))
+          https://github.com/janestreet/hardcaml_hobby_boards_demos/archive/d5c97c85767d883061b1e1bb1435834f456f7378.tar.gz))
         (hashes (
-          sha256=2cae1fac698c22fdceee62b34153ff8a82ae5b15821d30737a49c6bb259e45d9)))))))))
+          sha256=e7d1ea7025d804b53bd8b24082982bfbf6d7768ecaf701cda20ae59b11b3f713)))))))))
+
+(hardcaml_hobby_boards_kernel (
+  (provides ((hardcaml_hobby_boards_kernel v0.18~preview.130.83+317)))
+  (source ((
+    base (
+      Http (
+        (urls (
+          https://github.com/janestreet/hardcaml_hobby_boards_kernel/archive/f8e2eef97c3895c650eb85afeef0e81abf25c74c.tar.gz))
+        (hashes (
+          sha256=8240ffc5a0fa2d25011f2b30fe5e343bc410f4659ac25b552e77b03bc3631392)))))))))
 
 (hardcaml_of_verilog (
-  (provides ((hardcaml_of_verilog v0.18~preview.130.76+222)))
+  (provides ((hardcaml_of_verilog v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/hardcaml_of_verilog/archive/f66f19159ed926e34f339c55cbd00e6c7a981567.tar.gz))
+          https://github.com/janestreet/hardcaml_of_verilog/archive/33da0eae9c227f50b10b950709e6285b925083f0.tar.gz))
         (hashes (
-          sha256=14f200cb860b0b2a826d3760e52efec1ba275d1d227c97227497aa625d758136)))))))))
+          sha256=275b334e54a50f29ddbed89d1f875d3c61486749294f08657c50c5b6e1be80c5)))))))))
 
 (hardcaml_step_testbench (
-  (provides ((hardcaml_step_testbench v0.18~preview.130.76+222)))
+  (provides ((hardcaml_step_testbench v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/hardcaml_step_testbench/archive/6935b0669d5469cfb49b95bbefad2c256448275d.tar.gz))
+          https://github.com/janestreet/hardcaml_step_testbench/archive/2fc83c01a466ab9b1ab5a7e5c40ef359b61328b4.tar.gz))
         (hashes (
-          sha256=5f123c399e7206f6f688d351c4acc2485cb44cfe96424e8ff2e682693be5392c)))))))))
+          sha256=c1e3c08b121a33ca19cd7d36fdf489f9bfc36b19649958b00759ed225d4b499d)))))))))
+
+(hardcaml_template_project (
+  (provides ((hardcaml_template_project v0.18~preview.130.83+317)))
+  (source ((
+    base (
+      Http (
+        (urls (
+          https://github.com/janestreet/hardcaml_template_project/archive/f27e421f20ff3c35b36d183199442c5260e5a4c7.tar.gz))
+        (hashes (
+          sha256=15a1014d827169d7c3603f2c78ab4c53ed44c964caad0fba071483326bac2767)))))))))
 
 (hardcaml_test_harness (
-  (provides ((hardcaml_test_harness v0.18~preview.130.76+222)))
+  (provides ((hardcaml_test_harness v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/hardcaml_test_harness/archive/03959a25c81ccb640d49bac2005cb680535011b1.tar.gz))
+          https://github.com/janestreet/hardcaml_test_harness/archive/c8cd6aa253c6c59a0e53570b8885cc32c17ff912.tar.gz))
         (hashes (
-          sha256=186fe9e42716ac0f21eb2fc12a7190cfeaaf3bdff4776a0727203dbf6841f3d7)))))))))
+          sha256=8e00dc84dac48eee29e0cc883893df03b3c079eea568cd343b2592e5e0be716b)))))))))
 
 (hardcaml_verify (
-  (provides ((hardcaml_verify v0.18~preview.130.76+222)))
+  (provides ((hardcaml_verify v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/hardcaml_verify/archive/8302751036fc2c245b03b8e74389bfac06d2e33a.tar.gz))
+          https://github.com/janestreet/hardcaml_verify/archive/0ce09d397aced1ff7cfac6b2011e0503f8b18d99.tar.gz))
         (hashes (
-          sha256=b23f18cb3bad06fb6f4f6396ae386d4a747119314d32215f6988d904eb3e2072)))))))))
+          sha256=c7fdbc42e6a82de38413fecc494618ce1ad1eeb60c6d0e1bc0401272053d3e4c)))))))))
 
 (hardcaml_verilator (
-  (provides ((hardcaml_verilator v0.18~preview.130.76+222)))
+  (provides ((hardcaml_verilator v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/hardcaml_verilator/archive/64ee33f549192a46dfbc78f4cb23f4ec54f34843.tar.gz))
+          https://github.com/janestreet/hardcaml_verilator/archive/c80e823840b3384f5f9a944bf99804ab1b3667cc.tar.gz))
         (hashes (
-          sha256=22ce0ea3fe061968ad88f536623c6fefc1b754c0088b39aa25c3f483561f73a2)))))))))
+          sha256=e47589b9333fd0ae46ef7f3e6fce8a8eac59c7939cc9019cd01473bc71dacf94)))))))))
 
 (hardcaml_waveterm (
-  (provides ((hardcaml_waveterm v0.18~preview.130.76+222)))
+  (provides ((hardcaml_waveterm v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/hardcaml_waveterm/archive/ceab33ac201817f9703df27d78e612b8ea119d41.tar.gz))
+          https://github.com/janestreet/hardcaml_waveterm/archive/dbdfd90218e964d4342662df0654add32d813ca6.tar.gz))
         (hashes (
-          sha256=cd3cc962c096c6c7b57fbb5a08695a333b168fb1da7470f65a673d55c38b177d)))))))))
+          sha256=61dd1ac9ac26d67edd0372a7a4aa5a26db7025f3f81aa7a9cc8c6e6c2d1640fd)))))))))
 
 (hardcaml_xilinx (
-  (provides ((hardcaml_xilinx v0.18~preview.130.76+222)))
+  (provides ((hardcaml_xilinx v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/hardcaml_xilinx/archive/585f1ade2830aff241035ac6faf12e780e04f742.tar.gz))
+          https://github.com/janestreet/hardcaml_xilinx/archive/cc7ae800d6d6e163559c32d88f28c402b7447183.tar.gz))
         (hashes (
-          sha256=b2a528f180033ace7e435b4a6fa17e774c4f2123fd0cc88b0e4508bfa472d0f8)))))))))
+          sha256=cb59668e5faf21276a78621a60519b0cfee3e1fd568ef4950e815962ebe0a3ed)))))))))
 
 (hardcaml_xilinx_components (
-  (provides ((hardcaml_xilinx_components v0.18~preview.130.76+222)))
+  (provides ((hardcaml_xilinx_components v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/hardcaml_xilinx_components/archive/d276b36cc244ab7672456373757d32a73ff52089.tar.gz))
+          https://github.com/janestreet/hardcaml_xilinx_components/archive/31d2206d993514f7bc0305d2c12f6e5b6734678d.tar.gz))
         (hashes (
-          sha256=af2d7fd03f242567781500cc4f9e15c00f8af50789b33c6be517daea86b9c1bd)))))))))
+          sha256=8eadefffa0e7a47d1a716e359a1163fd76098f7ab2fa01a4b4a60bccf2c668ca)))))))))
 
 (hardcaml_xilinx_reports (
-  (provides ((hardcaml_xilinx_reports v0.18~preview.130.76+222)))
+  (provides ((hardcaml_xilinx_reports v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/hardcaml_xilinx_reports/archive/99b7ca4a8bab4ba2324f2001fb01268cd7871659.tar.gz))
+          https://github.com/janestreet/hardcaml_xilinx_reports/archive/9914c85ac34cfb466940434a1c015ec6a456e5ea.tar.gz))
         (hashes (
-          sha256=7f0eed212aba42287e5f265f611e46b2fe433eb73b728f76ec239fb83d496898)))))))))
+          sha256=ff0b5efbc5a214eb491a8242b911a38c71299bef668496a9512e7cd5a93fb3eb)))))))))
 
 (heterogeneous_list (
-  (provides ((heterogeneous_list v0.18~preview.130.76+222)))
+  (provides ((heterogeneous_list v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/heterogeneous_list/archive/4d35796c09e849eefb37d74bf6ee125d4e385482.tar.gz))
+          https://github.com/janestreet/heterogeneous_list/archive/d1cadf6c36bb157ac4d97cb096b61f97e29cb41c.tar.gz))
         (hashes (
-          sha256=8381c840ab6e0b58922c444e53f8a2a1b1702892811faa55288a800f6b4c6f12)))))))))
+          sha256=fca993d6ecf9f03d7b7cc98c2259c9017ddc0e541cc711d349484523b751d448)))))))))
 
 (hex_encode (
-  (provides ((hex_encode v0.18~preview.130.76+222)))
+  (provides ((hex_encode v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/hex_encode/archive/4fd1f06f446bc414c7e7ee6ad7283213e74e75e5.tar.gz))
+          https://github.com/janestreet/hex_encode/archive/eab428b9a381c4979ca83f8c2afeeaa6b5a90d69.tar.gz))
         (hashes (
-          sha256=a04813b04a8da3018ec1ac786b50d02d1441159d67a95e9796b87d39d582d5dc)))))))))
+          sha256=baad09e091abf9ec0c4515772aea7739f85d7e88250517718a9eb17b4adace8f)))))))))
 
 (hg_lib (
-  (provides ((hg_lib v0.18~preview.130.76+222)))
+  (provides ((hg_lib v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/hg_lib/archive/8c1d81c413d107ef5af1e7e7eaf382b11e5a6a52.tar.gz))
+          https://github.com/janestreet/hg_lib/archive/8480fd01ae0baca13415e7fdf46c4d46f3651e68.tar.gz))
         (hashes (
-          sha256=14d49a90d878f3d5eb69a658af7b91093a402f8cc372c66ccc2abea8e7385f84)))))))))
+          sha256=76eca8805f1c701c7ad056e2203ab8665058058bf9339384f9156f566245f45a)))))))))
 
 (higher_kinded (
-  (provides ((higher_kinded v0.18~preview.130.76+222)))
+  (provides ((higher_kinded v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/higher_kinded/archive/f2f916dc284e406afe88f7effbe59dc1b5e619ff.tar.gz))
+          https://github.com/janestreet/higher_kinded/archive/0da2294dc7bd7b5f6e077e1996fa917377dbc564.tar.gz))
         (hashes (
-          sha256=01ae31f23abcaf21a990fd66f538b6232ec40f72004ff9e33eb9bde49ddcda57)))))))))
+          sha256=a5e9471a17ba89904f6c9956a7c54c019d7aa818e266f3204438254a7d9e820f)))))))))
 
 (httpaf (
   (provides ((httpaf 0.7.1)))
@@ -1335,164 +1430,164 @@
           md5=8c8b199d0553f02fb361cf52c57c0412)))))))))
 
 (incr_dom (
-  (provides ((incr_dom v0.18~preview.130.76+222)))
+  (provides ((incr_dom v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/incr_dom/archive/70067e47d47c377622954e82e8f2e61feb956fa8.tar.gz))
+          https://github.com/janestreet/incr_dom/archive/297ca80141b36478beccb172d0126e74dafbd5d5.tar.gz))
         (hashes (
-          sha256=eeb229853b048bfb15e2b78fe4edf381acc72587a0c27a9165a0d6cd85dafb9c)))))))))
+          sha256=9cf8fd1793f9163c84c5fd7b8d240a6a706a4573164867e9cfab052a1fe3a99b)))))))))
 
 (incr_dom_interactive (
-  (provides ((incr_dom_interactive v0.18~preview.130.76+222)))
+  (provides ((incr_dom_interactive v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/incr_dom_interactive/archive/4d839340a85c9f683537c35df0e54a3afd345ac8.tar.gz))
+          https://github.com/janestreet/incr_dom_interactive/archive/88c56c5fd47fa01d26aaa1e96dfdb443158ae522.tar.gz))
         (hashes (
-          sha256=8de2913d9c2e880303cb2b0be683dbf619ce64b14cad359c4eed99c8bdf23f2e)))))))))
+          sha256=d9983f53b359d8736413e2491a764b67336c36ad5ecc0038dced6ede6d266717)))))))))
 
 (incr_dom_partial_render (
-  (provides ((incr_dom_partial_render v0.18~preview.130.76+222)))
+  (provides ((incr_dom_partial_render v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/incr_dom_partial_render/archive/0319b85ed4b92222b08c2b56b9757acb365ef154.tar.gz))
+          https://github.com/janestreet/incr_dom_partial_render/archive/081c1901c6e93655f04be60d0e329bbe09e0ca39.tar.gz))
         (hashes (
-          sha256=3bb11365a1dfb660c4ecf57dd48a21a09cc45e4722ca3bb3f5f8980427926b78)))))))))
+          sha256=ce4737ea692623b5ec8c48da9024da9f4961a07c0516bab47e07c3142ae272b1)))))))))
 
 (incr_dom_sexp_form (
-  (provides ((incr_dom_sexp_form v0.18~preview.130.76+222)))
+  (provides ((incr_dom_sexp_form v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/incr_dom_sexp_form/archive/fe0cef4f0ddfb4a7063bbe9178468889e33c9385.tar.gz))
+          https://github.com/janestreet/incr_dom_sexp_form/archive/964b8fcac1b1d684823242af90bee7e0b7b2ffbb.tar.gz))
         (hashes (
-          sha256=9745df992ee88d23f6085b8acaa0d08465c4ddc941dc70caae5a68aa68a1f283)))))))))
+          sha256=afd79e01fd1251fbf8b4eaaec1007f425215c77cfd0016f1bbb9c700aa70ae50)))))))))
 
 (incr_map (
-  (provides ((incr_map v0.18~preview.130.76+222)))
+  (provides ((incr_map v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/incr_map/archive/92916b6fa87900b8a37779e8f2102e47f74d389c.tar.gz))
+          https://github.com/janestreet/incr_map/archive/be2860f46b97faea54aab43ce5a23d055520df98.tar.gz))
         (hashes (
-          sha256=7d61d6b4f5bd8f81a85ac283ebfc588bb7c58198f3003ed6aec2c597ab8f07be)))))))))
+          sha256=1a71fb2c8093ea48e83035443f8bfc92319d5cffbb86e9681fcf9f349a02b331)))))))))
 
 (incr_select (
-  (provides ((incr_select v0.18~preview.130.76+222)))
+  (provides ((incr_select v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/incr_select/archive/dd2f3e8ad0320a2dd03ce5e1b301de134b74514d.tar.gz))
+          https://github.com/janestreet/incr_select/archive/15e2ca8619604dc185ca55afffbb9fa8807b6150.tar.gz))
         (hashes (
-          sha256=c9ea3f3114245564dcc54818fc3b9fec6a7f3bea05c525539fdc082f35322786)))))))))
+          sha256=f54097fe6faeac4125c51e767a7e877c581241408d58c33490b85a83000af92a)))))))))
 
 (incremental (
-  (provides ((incremental v0.18~preview.130.76+222)))
+  (provides ((incremental v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/incremental/archive/4af0d2662b5d11fe4c28bcc8c3023543557742f6.tar.gz))
+          https://github.com/janestreet/incremental/archive/424a9a0f34060f541c76bbfe648bb17a56c159b4.tar.gz))
         (hashes (
-          sha256=1cabe4eb3916d554740ebe48c2cd4abc6768fd81914f1ff1a6e57b4ec3639130)))))))))
+          sha256=b547d421a09b68f4f39c6979de0af29afb097ba6c6308943113903f50528feb0)))))))))
 
 (indentation_buffer (
-  (provides ((indentation_buffer v0.18~preview.130.76+222)))
+  (provides ((indentation_buffer v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/indentation_buffer/archive/5ba994d505513599301c61618812e01c29697703.tar.gz))
+          https://github.com/janestreet/indentation_buffer/archive/315e2df196add95d96da7e7db3e5f075484bd784.tar.gz))
         (hashes (
-          sha256=7a8b90d1b20059647be1cb70390209c4e151860d39b17913f49b53f5145dafc7)))))))))
+          sha256=734955514a08e1b43d1c905061e54f47bcbbe95f04f1e1373b0dbf7f5db0b7c2)))))))))
 
 (insertion_ordered_map (
-  (provides ((insertion_ordered_map v0.18~preview.130.76+222)))
+  (provides ((insertion_ordered_map v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/insertion_ordered_map/archive/b1c6f057e9c09f86ad96f55a58639b3a6f43ad18.tar.gz))
+          https://github.com/janestreet/insertion_ordered_map/archive/267b8ddff822ffd2d476ee52694d3e646d3ddd5d.tar.gz))
         (hashes (
-          sha256=e2171af8781e9a87eb5562c05c40181005670eb7fce10c506716c15fb7f4959c)))))))))
+          sha256=dada3d8913e47084a32820d5d3093178d066486a5fe277543137c3f56e5e4767)))))))))
 
 (int_repr (
-  (provides ((int_repr v0.18~preview.130.76+222)))
+  (provides ((int_repr v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/int_repr/archive/dfd133ac6f87cb6f705d021e7920834ceda90b69.tar.gz))
+          https://github.com/janestreet/int_repr/archive/719df480253ce5083caf8ba5f18b2966a930cba6.tar.gz))
         (hashes (
-          sha256=4b522689dde52dd6794a148797a4bffd78874e95d122590f8429406673a60a8d)))))))))
+          sha256=4f5d66f5503986df2dfb44dc3cc942dc43e53eaf2e83e29179a9750b78553170)))))))))
 
 (jane-street-headers (
-  (provides ((jane-street-headers v0.18~preview.130.76+222)))
+  (provides ((jane-street-headers v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/jane-street-headers/archive/f1704e9e4a75e87942fa74fe46d86b71953e0bf8.tar.gz))
+          https://github.com/janestreet/jane-street-headers/archive/6ebdb46e6220e39a4873da27f2450ac5e03d1c18.tar.gz))
         (hashes (
-          sha256=e3738c59eae1c3ba74eeb3b2fbb59eb5bcc2e0b5c03eb396012d1ef8201c3fab)))))))))
+          sha256=5c6d6aa2c428145ff890f5b7d3ae961e86aef0cb33b85ff39ba9e86bde58e063)))))))))
 
 (jane_rope (
-  (provides ((jane_rope v0.18~preview.130.76+222)))
+  (provides ((jane_rope v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/jane_rope/archive/170d8e00ef32f5b53fdbfa57c26689f4381db5c9.tar.gz))
+          https://github.com/janestreet/jane_rope/archive/5172281e5b427b68055b52d2b8e85c80549f7599.tar.gz))
         (hashes (
-          sha256=e62fe38c3e6d2d1c8d8b6561017edda02014365f761a2e9c007090d984fbc312)))))))))
+          sha256=0d1153439c0a647e5d3f82d36a2d37b4248d87b2f6bef26603dc2e25c7148ab5)))))))))
 
 (janestreet_cpuid (
-  (provides ((janestreet_cpuid v0.18~preview.130.76+222)))
+  (provides ((janestreet_cpuid v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/janestreet_cpuid/archive/32a32af45784ade2ca848045d92b56179afe12dd.tar.gz))
+          https://github.com/janestreet/janestreet_cpuid/archive/b108becee13455824a7c4f21d70b6531760f66ed.tar.gz))
         (hashes (
-          sha256=99f44764079082590ed316e952b941f1df213afca3bfc699bed77bcfcb053626)))))))))
+          sha256=3caf11523daa511ddb960b61b35ef046dc0112a288d12dcec9a1d98c99fa7f91)))))))))
 
 (janestreet_csv (
-  (provides ((janestreet_csv v0.18~preview.130.76+222)))
+  (provides ((janestreet_csv v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/janestreet_csv/archive/d0f3ea40c1cb6b3d2ffd48aa14f5998f1365ec19.tar.gz))
+          https://github.com/janestreet/janestreet_csv/archive/ee7082188fd913229521ef550a83df0feaa535e9.tar.gz))
         (hashes (
-          sha256=0cbd3d74d00cb2988feec73435e5b59583d374ff9a517f9ec0e8078deb40f3f7)))))))))
+          sha256=ef042f468efa7afe87126dae6c1b1acfd8a3881101985a6251673c7b2f803bc3)))))))))
 
 (janestreet_lru_cache (
-  (provides ((janestreet_lru_cache v0.18~preview.130.76+222)))
+  (provides ((janestreet_lru_cache v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/janestreet_lru_cache/archive/4c73ecd3291d51558d681a1ec7c1116f69a1d576.tar.gz))
+          https://github.com/janestreet/janestreet_lru_cache/archive/be6da36708a04b63f9d5aaf74fb691976936a6f4.tar.gz))
         (hashes (
-          sha256=7b0c974019bbd906d9c4dd2b5a3cba83a6430bb87612e0feae0c6d4bae463de3)))))))))
+          sha256=bb836e161ffbabfaa0b286faf0288089ef1da7fa59066068e0844c9fbb3c252b)))))))))
 
 (janestreet_shims (
-  (provides ((janestreet_shims v0.18~preview.130.76+222)))
+  (provides ((janestreet_shims v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/janestreet_shims/archive/f2aca1157750491b1a43312aab1a48f0ea4ee414.tar.gz))
+          https://github.com/janestreet/janestreet_shims/archive/eee32518a68d8f0e579a5348d7e2bae1a2e19eee.tar.gz))
         (hashes (
-          sha256=8836acb80ace3d78fd4825477545b2ddda3f59c8efff413f14c79ac312795d68)))))))))
+          sha256=b80046d706645450677d5870e0b3b1dd277769e099f01e16f6cafd1307ddecf7)))))))))
 
 (jingoo (
   (provides ((jingoo 1.4.4)))
@@ -1513,399 +1608,29 @@
     base (
       Http (
         (urls (
-          https://github.com/ocsigen/js_of_ocaml/archive/246df644334aa97103d1051aec128337ea1868f9.tar.gz))
+          https://github.com/ocsigen/js_of_ocaml/archive/c3da0bb58eafe2d9ad3387cbbe9b8faf9ec91fb1.tar.gz))
         (hashes (
-          sha256=c43572970512140facf02a30f16d4b34c10d55326bbd3d3c125bc2e549ef4ab8)))))))
-  (extra (
-    (dune.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/dune.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/dune.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/dune.patch))
-      (hashes (
-        sha256=f76da998ab76de56309bd0da3e4db1fb496d6d235d7a0ac2f78e3bafe098714e))))
-    (js_of_ocaml-5.2.0-compiler-changes.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-5.2.0-compiler-changes.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-5.2.0-compiler-changes.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-5.2.0-compiler-changes.patch))
-      (hashes (
-        sha256=e6a88c1c3af53b07f273cf6b37ce980042efdc3aca8a371aba8cfdfc3914d97e))))
-    (js_of_ocaml-5.3-tests-runtime.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-5.3-tests-runtime.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-5.3-tests-runtime.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-5.3-tests-runtime.patch))
-      (hashes (
-        sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855))))
-    (js_of_ocaml-add-unboxed-and-float-block.patch
-     ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-add-unboxed-and-float-block.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-add-unboxed-and-float-block.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-add-unboxed-and-float-block.patch))
-      (hashes (
-        sha256=db409edb2be9be828015b6722fb51d7bccdd1e4a7edf982b5c8d89808713af7b))))
-    (js_of_ocaml-atomic-cmpxchg.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-atomic-cmpxchg.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-atomic-cmpxchg.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-atomic-cmpxchg.patch))
-      (hashes (
-        sha256=89612eb8c1e64898205c0b59c6b73987d2ff993a8c366fb61dac6db90e2806bc))))
-    (js_of_ocaml-atomics.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-atomics.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-atomics.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-atomics.patch))
-      (hashes (
-        sha256=cfe956bb047c252faa2397ff2badca80972d74e1dca0cb633202313dfb8f5da4))))
-    (js_of_ocaml-caml_array_append.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-caml_array_append.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-caml_array_append.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-caml_array_append.patch))
-      (hashes (
-        sha256=430f2a026ce0738ae65b8b67ba614bae89bc57fffdf58293bae249e2fa8cedbd))))
-    (js_of_ocaml-caml_bigstring_strncmp.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-caml_bigstring_strncmp.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-caml_bigstring_strncmp.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-caml_bigstring_strncmp.patch))
-      (hashes (
-        sha256=6fb900f0ff96d99e2a146a24e799f0bfcf234aa06e8447169ede86452e36fe3f))))
-    (js_of_ocaml-caml_hash_exn.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-caml_hash_exn.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-caml_hash_exn.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-caml_hash_exn.patch))
-      (hashes (
-        sha256=eaf87543603ab7f9c5c8e410413f913e572c1815c93a30ac89b245effd435e39))))
-    (js_of_ocaml-caml_provides_sub_local.patch
-     ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-caml_provides_sub_local.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-caml_provides_sub_local.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-caml_provides_sub_local.patch))
-      (hashes (
-        sha256=11b749d7c1b84b1145cbcf63801c2924ab89846ceff3a6fa8a2305bb3bc90f77))))
-    (js_of_ocaml-compilation_unit-name.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-compilation_unit-name.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-compilation_unit-name.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-compilation_unit-name.patch))
-      (hashes (
-        sha256=1e00a73f66cbaa87eefb45702eaaf431978f8eb9ed95684c781b0ebb035d1a7f))))
-    (js_of_ocaml-fix-build_fs.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-fix-build_fs.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-fix-build_fs.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-fix-build_fs.patch))
-      (hashes (
-        sha256=abaa404bf23a77cf1badfe30ab9fcc13c6fb0446a81fa10b0962ed1ba9005d6a))))
-    (js_of_ocaml-flipped-conditions-in-test.patch
-     ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-flipped-conditions-in-test.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-flipped-conditions-in-test.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-flipped-conditions-in-test.patch))
-      (hashes (
-        sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855))))
-    (js_of_ocaml-float32.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-float32.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-float32.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-float32.patch))
-      (hashes (
-        sha256=8d6ebad1481711f57c5ed6dd36187b96ce8fcc51cdf3b0e9d5c277687601c625))))
-    (js_of_ocaml-floatarray_create_local.patch
-     ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-floatarray_create_local.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-floatarray_create_local.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-floatarray_create_local.patch))
-      (hashes (
-        sha256=f17e392acc941dde475cb7be0654037df9b8d550aeae0d96b65394e4c4a1d4ca))))
-    (js_of_ocaml-gh2034.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-gh2034.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-gh2034.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-gh2034.patch))
-      (hashes (
-        sha256=ec01ea15a9d21c22790ad3c93e9d68154e364462de6a2ce1dbbb62e8af25fc2d))))
-    (js_of_ocaml-global_deadcode-fix.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-global_deadcode-fix.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-global_deadcode-fix.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-global_deadcode-fix.patch))
-      (hashes (
-        sha256=5b49d6ee62ae87c77d88ea8022b022830f906367dc9b9ea2e582f037a739292f))))
-    (js_of_ocaml-iarray-primitives.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-iarray-primitives.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-iarray-primitives.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-iarray-primitives.patch))
-      (hashes (
-        sha256=6f7805c3876229168ac8b023783c75226bf57e1a2bc2ded04d0adb9e46def515))))
-    (js_of_ocaml-ident-is_global.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-ident-is_global.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-ident-is_global.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-ident-is_global.patch))
-      (hashes (
-        sha256=9cc507a14142220868af1c6f1e35b06648718f21924b0fb192d6bcf4d28395f6))))
-    (js_of_ocaml-important-config-changes.patch
-     ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-important-config-changes.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-important-config-changes.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-important-config-changes.patch))
-      (hashes (
-        sha256=eeb46aea8e0f0d2232b47f32a8a1d60237626637304431847e60316424daadd3))))
-    (js_of_ocaml-int_u-array-primitives.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-int_u-array-primitives.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-int_u-array-primitives.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-int_u-array-primitives.patch))
-      (hashes (
-        sha256=99eba4301613d03e0305017a687c768bd24a22cef0db25ab62cbc3d304f647ba))))
-    (js_of_ocaml-internal-obj-changes.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-internal-obj-changes.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-internal-obj-changes.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-internal-obj-changes.patch))
-      (hashes (
-        sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855))))
-    (js_of_ocaml-internal-ocaml-5-compatibility.patch
-     ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-internal-ocaml-5-compatibility.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-internal-ocaml-5-compatibility.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-internal-ocaml-5-compatibility.patch))
-      (hashes (
-        sha256=6b7e17df7f0142158eca19a953422eb6eaf97a3f7f3f2443648bfd069fbcb90f))))
-    (js_of_ocaml-jane-street-5.2-compatibility.patch
-     ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-jane-street-5.2-compatibility.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-jane-street-5.2-compatibility.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-jane-street-5.2-compatibility.patch))
-      (hashes (
-        sha256=45391a7a7da6c5bfbe97ec1272cb369d533c2d95cf7a7a56d754db94871eb043))))
-    (js_of_ocaml-jane-street-const_null-support.patch
-     ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-jane-street-const_null-support.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-jane-street-const_null-support.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-jane-street-const_null-support.patch))
-      (hashes (
-        sha256=e708cdc01c0cef3fce1cb9f31b33324977dcca1c166601905fcac1ef10262c3a))))
-    (js_of_ocaml-local-bytes.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-local-bytes.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-local-bytes.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-local-bytes.patch))
-      (hashes (
-        sha256=1c6170fec57089f515ec71bd9873d48bd5ae9c4a85f14b80f33039cce9f232ae))))
-    (js_of_ocaml-magic_number.ml.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-magic_number.ml.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-magic_number.ml.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-magic_number.ml.patch))
-      (hashes (
-        sha256=aa69b6b6414a6a320e3a5102f24f3bd14199c317b9fd7b3e40ace94deee905e2))))
-    (js_of_ocaml-migrate-labeled-tuples-shims.patch
-     ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-migrate-labeled-tuples-shims.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-migrate-labeled-tuples-shims.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-migrate-labeled-tuples-shims.patch))
-      (hashes (
-        sha256=981df4f7397fd84e3e06b54644f5e37f464764045703bc117b9f4b49a630f88a))))
-    (js_of_ocaml-mixed-block-bytecode-op-regression-test.patch
-     ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-mixed-block-bytecode-op-regression-test.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-mixed-block-bytecode-op-regression-test.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-mixed-block-bytecode-op-regression-test.patch))
-      (hashes (
-        sha256=046c0cde7de52fe9b31ba4aeb1185aefbb3c9d3b3abb50b111e699d2b69c89a0))))
-    (js_of_ocaml-mixed-block-bytecode-op.patch
-     ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-mixed-block-bytecode-op.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-mixed-block-bytecode-op.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-mixed-block-bytecode-op.patch))
-      (hashes (
-        sha256=ed6cfee285491515d497e8871c8534236e9a77939c3838dfd5b3fdb20626e347))))
-    (js_of_ocaml-n-ary-functions.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-n-ary-functions.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-n-ary-functions.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-n-ary-functions.patch))
-      (hashes (
-        sha256=b9b078c1f227624cc5fc9dd574c19785354267c19299dcf2f9b9642d0114eddf))))
-    (js_of_ocaml-no-compression-module-5.2.patch
-     ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-no-compression-module-5.2.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-no-compression-module-5.2.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-no-compression-module-5.2.patch))
-      (hashes (
-        sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855))))
-    (js_of_ocaml-obj_stubs.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-obj_stubs.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-obj_stubs.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-obj_stubs.patch))
-      (hashes (
-        sha256=9e9064f255c065a3152f665bd5b464040f3cfbbd2580aa4bb6e17be9c2b7fcc8))))
-    (js_of_ocaml-ocaml_version-ppx.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-ocaml_version-ppx.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-ocaml_version-ppx.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-ocaml_version-ppx.patch))
-      (hashes (
-        sha256=df6bcb6da8aa3dfd6bd0a178679987d41c400ec1803f4a66659cfc822d1b280f))))
-    (js_of_ocaml-optcomp_lite_fixes.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-optcomp_lite_fixes.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-optcomp_lite_fixes.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-optcomp_lite_fixes.patch))
-      (hashes (
-        sha256=b98305f8885c0377714677b2ca6d0d561c18bee6a8fc0d2f9d0abf52694968e0))))
-    (js_of_ocaml-remove-float-externals.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-remove-float-externals.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-remove-float-externals.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-remove-float-externals.patch))
-      (hashes (
-        sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855))))
-    (js_of_ocaml-revert_9c15703872_behavior_changing_rewrite_of_float_to_bits.patch
-     ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-revert_9c15703872_behavior_changing_rewrite_of_float_to_bits.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-revert_9c15703872_behavior_changing_rewrite_of_float_to_bits.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-revert_9c15703872_behavior_changing_rewrite_of_float_to_bits.patch))
-      (hashes (
-        sha256=899ec90b4c1f5f1251d2c77fdb842f11b5a07d01430da4e5c75610d4bf541faa))))
-    (js_of_ocaml-small-int-literals.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-small-int-literals.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-small-int-literals.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-small-int-literals.patch))
-      (hashes (
-        sha256=4c3fd2d3a50d220af2bdd377016e3f3354b98b770457ff200494be70bc9bb5b2))))
-    (js_of_ocaml-stop_evaluating_caml_int64_bits_of_float_to_avoid_breaking_float_u.patch
-     ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-stop_evaluating_caml_int64_bits_of_float_to_avoid_breaking_float_u.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-stop_evaluating_caml_int64_bits_of_float_to_avoid_breaking_float_u.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-stop_evaluating_caml_int64_bits_of_float_to_avoid_breaking_float_u.patch))
-      (hashes (
-        sha256=483e848b0dfe54b75c31cd990191730c0070ad8a21912b1beca97111e01a718e))))
-    (js_of_ocaml-symtable-5.2-api.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-symtable-5.2-api.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-symtable-5.2-api.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-symtable-5.2-api.patch))
-      (hashes (
-        sha256=9a999950e8984cc582e3830f447111e1082dc720609334de66a011347d26da9b))))
-    (js_of_ocaml-test-diffs-caused-by-build-differences.patch
-     ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-test-diffs-caused-by-build-differences.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-test-diffs-caused-by-build-differences.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-test-diffs-caused-by-build-differences.patch))
-      (hashes (
-        sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855))))
-    (js_of_ocaml-unboxed-indexing.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-unboxed-indexing.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-unboxed-indexing.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-unboxed-indexing.patch))
-      (hashes (
-        sha256=2c8b76947795fa34683e7c2bf1022a95058bde146c7832e1bd6e8a33b8d6cfc7))))
-    (js_of_ocaml-wasm-temp-differences.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-wasm-temp-differences.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-wasm-temp-differences.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-wasm-temp-differences.patch))
-      (hashes (
-        sha256=d644765237b939ab611c10f71672504ced91bf4ba0e8fe87a6cebc521bf2f34a))))
-    (js_of_ocaml-with_async_exns.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/js_of_ocaml-with_async_exns.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/js_of_ocaml-with_async_exns.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/js_of_ocaml-with_async_exns.patch))
-      (hashes (
-        sha256=0df2643d0b528b121e939506b6240cc35225bc5bffbcc80e6322e9cc8a269419))))
-    (wasm_of_ocaml-bring-back-eval.patch (
-      (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/wasm_of_ocaml-bring-back-eval.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/wasm_of_ocaml-bring-back-eval.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/wasm_of_ocaml-bring-back-eval.patch))
-      (hashes (
-        sha256=c413d9617e1122a9fdad8f1f63859bdf9f17a8440f78bdfbaecc432bae580fac))))
-    (wasm_of_ocaml-stub-caml_ml_set_channel_refill.patch
-     ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml/js_of_ocaml.6.0.1+ox/files/wasm_of_ocaml-stub-caml_ml_set_channel_refill.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-compiler/js_of_ocaml-compiler.6.0.1+ox/files/wasm_of_ocaml-stub-caml_ml_set_channel_refill.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/js_of_ocaml-ppx/js_of_ocaml-ppx.6.0.1+ox/files/wasm_of_ocaml-stub-caml_ml_set_channel_refill.patch))
-      (hashes (
-        sha256=005bce63009b9539b65036b22a7b7cc531755c7caa3cf1ed8d8697698090e136))))))
-  (patches (
-    js_of_ocaml-magic_number.ml.patch
-    js_of_ocaml-compilation_unit-name.patch
-    js_of_ocaml-with_async_exns.patch
-    js_of_ocaml-internal-obj-changes.patch
-    js_of_ocaml-add-unboxed-and-float-block.patch
-    js_of_ocaml-ident-is_global.patch
-    js_of_ocaml-remove-float-externals.patch
-    js_of_ocaml-ocaml_version-ppx.patch
-    js_of_ocaml-test-diffs-caused-by-build-differences.patch
-    js_of_ocaml-fix-build_fs.patch
-    js_of_ocaml-iarray-primitives.patch
-    js_of_ocaml-important-config-changes.patch
-    js_of_ocaml-internal-ocaml-5-compatibility.patch
-    js_of_ocaml-wasm-temp-differences.patch
-    js_of_ocaml-caml_provides_sub_local.patch
-    js_of_ocaml-caml_hash_exn.patch
-    wasm_of_ocaml-bring-back-eval.patch
-    js_of_ocaml-mixed-block-bytecode-op.patch
-    js_of_ocaml-mixed-block-bytecode-op-regression-test.patch
-    js_of_ocaml-int_u-array-primitives.patch
-    js_of_ocaml-symtable-5.2-api.patch
-    js_of_ocaml-jane-street-5.2-compatibility.patch
-    js_of_ocaml-migrate-labeled-tuples-shims.patch
-    js_of_ocaml-floatarray_create_local.patch
-    js_of_ocaml-jane-street-const_null-support.patch
-    js_of_ocaml-float32.patch
-    js_of_ocaml-caml_array_append.patch
-    js_of_ocaml-5.2.0-compiler-changes.patch
-    js_of_ocaml-5.3-tests-runtime.patch
-    js_of_ocaml-caml_bigstring_strncmp.patch
-    wasm_of_ocaml-stub-caml_ml_set_channel_refill.patch
-    js_of_ocaml-no-compression-module-5.2.patch
-    js_of_ocaml-obj_stubs.patch
-    js_of_ocaml-global_deadcode-fix.patch
-    js_of_ocaml-local-bytes.patch
-    js_of_ocaml-n-ary-functions.patch
-    js_of_ocaml-optcomp_lite_fixes.patch
-    js_of_ocaml-revert_9c15703872_behavior_changing_rewrite_of_float_to_bits.patch
-    js_of_ocaml-stop_evaluating_caml_int64_bits_of_float_to_avoid_breaking_float_u.patch
-    js_of_ocaml-gh2034.patch
-    js_of_ocaml-unboxed-indexing.patch
-    js_of_ocaml-atomics.patch
-    js_of_ocaml-flipped-conditions-in-test.patch
-    js_of_ocaml-atomic-cmpxchg.patch
-    js_of_ocaml-small-int-literals.patch
-    dune.patch))))
+          sha256=8c23fcbeab300974d23bbee87ec4f11ed705e074242e1e91346b78914d9a21c0)))))))))
 
 (js_of_ocaml_patches (
-  (provides ((js_of_ocaml_patches v0.18~preview.130.76+222)))
+  (provides ((js_of_ocaml_patches v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/js_of_ocaml_patches/archive/789194e43fb8692779638078c603d34f86ff29cd.tar.gz))
+          https://github.com/janestreet/js_of_ocaml_patches/archive/819a91d68d79edc040db68043a58d0cceacececc.tar.gz))
         (hashes (
-          sha256=68efd90e1a95f3db6030a33aabec39658ea7da630a8540625d10c6becb3f8af8)))))))))
+          sha256=de6c67c56f22079874b61c96d3645fd346ca8edc1588eef3613da654084d0540)))))))))
 
 (jsonaf (
-  (provides ((jsonaf v0.18~preview.130.76+222)))
+  (provides ((jsonaf v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/jsonaf/archive/e3ac214e6326522449f82b0165e0813f56dd86a6.tar.gz))
+          https://github.com/janestreet/jsonaf/archive/18927e1bce41129e8fa1f123e59ed41a2afb56a0.tar.gz))
         (hashes (
-          sha256=da86b8a2cdba7d864836512bd6d24ceb01b78c94885f5aea15ec35bc315b0f6c)))))))))
+          sha256=3055457af3a3505f9cc21d5f14618a9e8bc54a25cfa08f1370af3956fe9ade88)))))))))
 
 (jsonm (
   (provides ((jsonm 1.0.1+dune)))
@@ -1918,14 +1643,14 @@
           sha256=cb82b2742662636029644db0354a8ff028b9e7495d4fe5278ddef72656b88d1b)))))))))
 
 (jst-config (
-  (provides ((jst-config v0.18~preview.130.76+222)))
+  (provides ((jst-config v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/jst-config/archive/5d519710f74f3c3ed9f9e5f8ffb7d918b66ee7e3.tar.gz))
+          https://github.com/janestreet/jst-config/archive/941356366fe690b5a7f180f82beb2195eb60db95.tar.gz))
         (hashes (
-          sha256=885c0e87818008dbf62a22225cebf14fb177f977eb8e90ea4a938b653eff7e0e)))))))))
+          sha256=d41898c4758449ba6790da54c52411285d4171bcebaf5aba24ede74db1791045)))))))))
 
 (lambdasoup (
   (provides ((lambdasoup 1.1.1)))
@@ -1937,24 +1662,24 @@
           sha256=05d97f38e534a431176ed8d3dbe6dfb7bdcf7770109193c5a69dff53e38f10fe)))))))))
 
 (legacy_diffable (
-  (provides ((legacy_diffable v0.18~preview.130.76+222)))
+  (provides ((legacy_diffable v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/legacy_diffable/archive/a62fba5e53ca23921c4a561b31b83c745f869f5f.tar.gz))
+          https://github.com/janestreet/legacy_diffable/archive/05f1ad3ee14c081f8677963b480d13781853fed3.tar.gz))
         (hashes (
-          sha256=1cae207b75c377017138ca6c66f354247b2f5e0c7ef7f4386088610e73772eb7)))))))))
+          sha256=f67c690e33823aa73bb7df52902cef48bcd68f0e45e31bf9d4a855885a06b79e)))))))))
 
 (line-up-words (
-  (provides ((line-up-words v0.18~preview.130.76+222)))
+  (provides ((line-up-words v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/line-up-words/archive/a59d56f56afff252586eaa5ef296f162a6664634.tar.gz))
+          https://github.com/janestreet/line-up-words/archive/b7647ad89d97e27ddb5e08f364447f8a3eec56d6.tar.gz))
         (hashes (
-          sha256=d27616964d8a2a4430e69c8417b18571499b4df7e4d751097086a882d13fbb3f)))))))))
+          sha256=2521b43394eeb5fd82b1c4ca9cc1f8e8ed5e642fc7f8106543f7aabcd07b162c)))))))))
 
 (logs (
   (provides ((logs 0.10.0+dune)))
@@ -1968,41 +1693,41 @@
           sha512=62d6c40317b0c33e566b0135b22c5ab2be3be0efd0163b1686a316795428e1c07378b46ef6d9f01c80d173f68d4b74a5a83766ff93f285cf2a95ddd644d7067d)))))))))
 
 (lsp_rpc (
-  (provides ((lsp_rpc v0.18~preview.130.76+222)))
+  (provides ((lsp_rpc v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/lsp_rpc/archive/bc387d094c635cd7f3a9f765b315a848867212a8.tar.gz))
+          https://github.com/janestreet/lsp_rpc/archive/a1c96874a08d61ea72665b1ef35e327868bf6feb.tar.gz))
         (hashes (
-          sha256=d35d7a79026d922372b57725650a9ce8cdacd94632d1981a03454135feba24ef)))))))))
+          sha256=93e1a6946baa832852b3acedb0b4b43a036a9806e35bb3849b4c6a9148b527f7)))))))))
 
 (lwt (
-  (provides ((lwt 5.9.2+ox)))
+  (provides ((lwt 6.0.0+ox)))
   (source ((
     base (
       Http (
-        (urls (https://github.com/ocsigen/lwt/archive/refs/tags/5.9.2.tar.gz))
+        (urls (https://github.com/ocsigen/lwt/archive/refs/tags/6.0.0.tar.gz))
         (hashes (
-          md5=9687c14532a90af1098b646bde219a70
-          sha512=44ad793741a3ba52dfc07a190790d6e3207f146c42a4e1e11adc76f9d7fc9bee93d7fe18376882bb27e7e7e286be5807498884367b172a4ebc067028fa0c824c)))))))
+          md5=8bfdd7b36a40fc715c48b3a9edccf324
+          sha512=6d2f4866e06601f9e7e43ac6378f05a3ea915c94548d5a6c96e2fb2adc2c6cff233ffa56862ca7be809c2d2114ed9335c22fb7d768adf7fae5460bb52de3f938)))))))
   (extra ((
-    oxcaml-lwt.patch (
+    oxcaml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/lwt/lwt.5.9.2+ox/files/oxcaml-lwt.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/lwt/lwt.6.0.0+ox/files/oxcaml.patch))
       (hashes (
-        sha256=97dbcee73e200403694c9b9fd95f9ec7a1d08428343d4d163c945e7f0c431551))))))
-  (patches (oxcaml-lwt.patch))))
+        sha256=b59d8de3348cd496921d115514ee16942e2bde53a3ecbc4c468ba051e64f5a94))))))
+  (patches (oxcaml.patch))))
 
 (man_in_the_middle_debugger (
-  (provides ((man_in_the_middle_debugger v0.18~preview.130.76+222)))
+  (provides ((man_in_the_middle_debugger v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/man_in_the_middle_debugger/archive/8239b3dc48dc88659af9f559b1419a648d4fd6a5.tar.gz))
+          https://github.com/janestreet/man_in_the_middle_debugger/archive/16d68fc7e189a1dc0741aea0de085ed3a48f06e6.tar.gz))
         (hashes (
-          sha256=2fbc6d02cb2c0be268586f732f73baa559a246092958886b424dc8e24f52b6c5)))))))))
+          sha256=4719fd9702ba005376ab793a3f9a45c3b30d46d7a8a85a2ef45df35014243c02)))))))))
 
 (markup.ml (
   (provides ((markup 1.0.3)))
@@ -2015,59 +1740,82 @@
           md5=3609724f5408dff41b1cb43107bc24ef)))))))))
 
 (maybe_pushback (
-  (provides ((maybe_pushback v0.18~preview.130.76+222)))
+  (provides ((maybe_pushback v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/maybe_pushback/archive/abdd30154625565a32f0bfbf9e360f74ddfb80f1.tar.gz))
+          https://github.com/janestreet/maybe_pushback/archive/d1fea96d335a5d48f6c6e704b6f744909428bd64.tar.gz))
         (hashes (
-          sha256=0b7303fae46e4501aea07f8601153a94b52403e5faf0feaafd52f6f64adf656a)))))))))
+          sha256=94e93b3110dcfa11a3acf09505b0e7f20fc6eef0177d7635476187d3f6853624)))))))))
+
+(memtrace (
+  (provides ((memtrace v0.18~preview.130.83+317)))
+  (source ((
+    base (
+      Http (
+        (urls (
+          https://github.com/janestreet/memtrace/archive/0a77c6b76cadde796e366d8e8d4a4a8864e76717.tar.gz))
+        (hashes (
+          sha256=fff821af1c319dcd029f8d4bf17281e9fbc9ee99f99475b5fd10ce307e98c27b)))))))))
 
 (menhir (
   (provides (
-    (menhir    20250912)
-    (menhirCST 20250912)
-    (menhirLib 20250912)
-    (menhirSdk 20250912)))
+    (menhir    20260209)
+    (menhirCST 20260209)
+    (menhirGLR 20260209)
+    (menhirLib 20260209)
+    (menhirSdk 20260209)))
   (source ((
     base (
       Http (
         (urls (
-          https://gitlab.inria.fr/fpottier/menhir/-/archive/20250912/archive.tar.gz))
+          https://gitlab.inria.fr/fpottier/menhir/-/archive/20260209/archive.tar.gz))
         (hashes (
-          md5=b8f83df02226419f99e49f1b637dcb11
-          sha512=72c85ec63104d6a7c7b6305b4642b86909fcad2e46561427ad596e37e686b3c94cd382da440f058d32800a15b157b80a8242df8043440a209ba73d209657ea84)))))))))
+          md5=e993231085db95ab011ffe0cd606d9dd
+          sha512=aafad186f328ae8dd4cc69af0f30c1a0b208cf5148a7a94c150099be03838503c5ec12918de26cd7f794b5a72f114bc1bae8d81058bd0ea10372a3b06818687e)))))))))
+
+(merlin (
+  (provides (
+    (merlin-lib  5.2.1-502+ox)
+    (ocaml-index 1.1+ox)))
+  (source ((
+    base (
+      Http (
+        (urls (
+          https://github.com/oxcaml/merlin/archive/aaa0efaa313d28746105da47d11e2a049e7c74d9.tar.gz))
+        (hashes (
+          sha256=f7b76956485c97f17829c7f9aa8a99ba0d5956b0f0cbcde48b5180c80727bc8a)))))))))
 
 (mlt_parser (
-  (provides ((mlt_parser v0.18~preview.130.76+222)))
+  (provides ((mlt_parser v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/mlt_parser/archive/bb2e3e7b56de8190d535d5f85a3daec62005b2e3.tar.gz))
+          https://github.com/janestreet/mlt_parser/archive/092a3efce9ec5278710a4ed66e21caa4e1f98a36.tar.gz))
         (hashes (
-          sha256=87ecbd4d41d5d920b29f1946b43a5a8062c0ccfeb6fd62c85bbbaf2dfd5b1956)))))))))
+          sha256=580fc3a79665470e6272411d18f1e3820309d0269cc8e3d868efedf51625441a)))))))))
 
 (n_ary (
-  (provides ((n_ary v0.18~preview.130.76+222)))
+  (provides ((n_ary v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/n_ary/archive/04c9a3a52e4f19fd72e3614030f83b1174ea33cc.tar.gz))
+          https://github.com/janestreet/n_ary/archive/1e073bd16b599ed10a5ff32e12ade76c8513c3b5.tar.gz))
         (hashes (
-          sha256=cc0a703009677b55d6ab84168ce3ef255adea60e5d69ed816860ee39e03b6055)))))))))
+          sha256=fd7e7734122a574437f560327b3863e966a7f53394257bd9d16fd0e488b51452)))))))))
 
 (nonempty_interval_lib (
-  (provides ((nonempty_interval_lib v0.18~preview.130.76+222)))
+  (provides ((nonempty_interval_lib v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/nonempty_interval_lib/archive/caba5c5f0c231295d4898a33d3093ee778e50962.tar.gz))
+          https://github.com/janestreet/nonempty_interval_lib/archive/3a9cad8a4249f3197078b208c64fd1dd774477bc.tar.gz))
         (hashes (
-          sha256=44f4115067b0f34ae1996256b3f67568176efd17d11727dabbc6635464fdb185)))))))))
+          sha256=661bd8f849fa89e1d36d9c50c54bc691d94aa9ca7e40a4336deb1e2793e5203f)))))))))
 
 (notty-community (
   (provides ((notty-community 0.2.4+ox)))
@@ -2082,77 +1830,82 @@
   (extra (
     (dune.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/notty-community/notty-community.0.2.4+ox/files/dune.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/notty-community/notty-community.0.2.4+ox/files/dune.patch))
       (hashes (
         sha256=0c8ff250019a910256f1f4993de5c52bbaa8c6a38723fa5462d1acd12d38ec8c))))
     (lwt.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/notty-community/notty-community.0.2.4+ox/files/lwt.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/notty-community/notty-community.0.2.4+ox/files/lwt.patch))
       (hashes (
         sha256=bf322ab32307d3b8acfe289e3db6c353d2e7cd4781bf924d0d2fc864298a2565))))
     (notty-add_href_support.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/notty-community/notty-community.0.2.4+ox/files/notty-add_href_support.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/notty-community/notty-community.0.2.4+ox/files/notty-add_href_support.patch))
       (hashes (
         sha256=2a19f31a3ac1212b565d6fd09244ebde81a53c958eaa432ca90681e140f0099c))))
     (notty-ctrl_backspace.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/notty-community/notty-community.0.2.4+ox/files/notty-ctrl_backspace.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/notty-community/notty-community.0.2.4+ox/files/notty-ctrl_backspace.patch))
       (hashes (
         sha256=9a854a48a148883850a5e69529076a6c5998396146730bd92ebc1be0764187ad))))
     (notty-default_color.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/notty-community/notty-community.0.2.4+ox/files/notty-default_color.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/notty-community/notty-community.0.2.4+ox/files/notty-default_color.patch))
       (hashes (
         sha256=6fd41656ba6c55498122898b845efd430b4aa695b5ba8b0b788c42d394254f56))))
     (notty-defensively-ignore-corrupted-x10-vscode-mouse-codes.patch
      ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/notty-community/notty-community.0.2.4+ox/files/notty-defensively-ignore-corrupted-x10-vscode-mouse-codes.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/notty-community/notty-community.0.2.4+ox/files/notty-defensively-ignore-corrupted-x10-vscode-mouse-codes.patch))
       (hashes (
         sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855))))
     (notty-different_kinds_of_cursors.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/notty-community/notty-community.0.2.4+ox/files/notty-different_kinds_of_cursors.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/notty-community/notty-community.0.2.4+ox/files/notty-different_kinds_of_cursors.patch))
       (hashes (
         sha256=542de513fb251b39cb966d57c212af83c1e397cadd53269bfcd83e80a1bb833d))))
     (notty-disable_unsafe_multidomain.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/notty-community/notty-community.0.2.4+ox/files/notty-disable_unsafe_multidomain.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/notty-community/notty-community.0.2.4+ox/files/notty-disable_unsafe_multidomain.patch))
       (hashes (
         sha256=80af0d0d1772a9d7181a24e87d707907086850eaf2c1cbe28eb8305172646c61))))
     (notty-do_not_send_clear_eol_on_full_lines.patch
      ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/notty-community/notty-community.0.2.4+ox/files/notty-do_not_send_clear_eol_on_full_lines.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/notty-community/notty-community.0.2.4+ox/files/notty-do_not_send_clear_eol_on_full_lines.patch))
       (hashes (
         sha256=8c917c686ec312a61e5beba2cf3e6342e8ace5eef4e10a50a2b918ce394b50c0))))
     (notty-expose_fast_tty_width.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/notty-community/notty-community.0.2.4+ox/files/notty-expose_fast_tty_width.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/notty-community/notty-community.0.2.4+ox/files/notty-expose_fast_tty_width.patch))
       (hashes (
         sha256=7ceb153d99dbab34b14a5dbabb31a7c45eeaaea86605e561d875443491b08b04))))
     (notty-line_based_diffing_and_patching.patch
      ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/notty-community/notty-community.0.2.4+ox/files/notty-line_based_diffing_and_patching.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/notty-community/notty-community.0.2.4+ox/files/notty-line_based_diffing_and_patching.patch))
       (hashes (
         sha256=3a2becbec99cbf932efa69e632acdb3e1ce98ef0c75352edafa4a29d14eba245))))
     (notty-portabilize_notty_unix.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/notty-community/notty-community.0.2.4+ox/files/notty-portabilize_notty_unix.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/notty-community/notty-community.0.2.4+ox/files/notty-portabilize_notty_unix.patch))
       (hashes (
         sha256=6d9dbf2a122bd0eb723514bda4b13c988591e1b0625872d44a096caf6982f440))))
     (notty-reset-cursor-on-release.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/notty-community/notty-community.0.2.4+ox/files/notty-reset-cursor-on-release.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/notty-community/notty-community.0.2.4+ox/files/notty-reset-cursor-on-release.patch))
       (hashes (
         sha256=b460326841b528ba706c9292559770b6e65c81b8e09fa34b5d2d693cd4ebad9c))))
+    (notty-set_save_and_restore_title.patch (
+      (urls (
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/notty-community/notty-community.0.2.4+ox/files/notty-set_save_and_restore_title.patch))
+      (hashes (
+        sha256=bbb4bf0e73bcfa795c93495a7149f7ee8f54b6c33d666d9d79dfefdd51ddec5b))))
     (notty-use_correct_newline_escape_code_and_stop_clearing_the_last_text_element_of_a_line.patch
      ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/notty-community/notty-community.0.2.4+ox/files/notty-use_correct_newline_escape_code_and_stop_clearing_the_last_text_element_of_a_line.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/notty-community/notty-community.0.2.4+ox/files/notty-use_correct_newline_escape_code_and_stop_clearing_the_last_text_element_of_a_line.patch))
       (hashes (
         sha256=c7d0520d54dd1ef31ad9ba7617ee14e721747a370f032fe5fd990d10d29aa38c))))
     (notty-use_newline_instead_of_cursor_nextline_for_emacs_support.patch
      ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/notty-community/notty-community.0.2.4+ox/files/notty-use_newline_instead_of_cursor_nextline_for_emacs_support.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/notty-community/notty-community.0.2.4+ox/files/notty-use_newline_instead_of_cursor_nextline_for_emacs_support.patch))
       (hashes (
         sha256=086c946882270ba33305f6b4f11917757be36061ce28c041d04428023682f6e4))))))
   (patches (
@@ -2169,18 +1922,19 @@
     notty-portabilize_notty_unix.patch
     notty-add_href_support.patch
     notty-default_color.patch
+    notty-set_save_and_restore_title.patch
     dune.patch
     lwt.patch))))
 
 (notty_async (
-  (provides ((notty_async v0.18~preview.130.76+222)))
+  (provides ((notty_async v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/notty_async/archive/4d84255f1450b5daa5accba649b9ec6b38e47998.tar.gz))
+          https://github.com/janestreet/notty_async/archive/3a733accedbcb8343a224fba41a467eca79dc6aa.tar.gz))
         (hashes (
-          sha256=026ca4e93ee4b6768b44ca8eca22b0aecb185b85ffc2a1756f5e06a069c89241)))))))))
+          sha256=ce69882089cb1b2f84258b123baae759ef10e33031186b2e36d7b31f22ec9094)))))))))
 
 (num (
   (provides ((num 1.4+dune2)))
@@ -2194,14 +1948,14 @@
           sha512=7d6035bd96a71d248c31662b877330656cd29040f45a143695bfa96765b91cea2f4c04b6ff78fdfa5876c1032c3baf4fd22c679b0ae09858d93cf46c1474b5cb)))))))))
 
 (numeric_string (
-  (provides ((numeric_string v0.18~preview.130.76+222)))
+  (provides ((numeric_string v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/numeric_string/archive/9f3a12992eb73b3da5015a085dfe70fba8a5d3f1.tar.gz))
+          https://github.com/janestreet/numeric_string/archive/176be089ef9ba4b667497f251af61b2d4321d686.tar.gz))
         (hashes (
-          sha256=e07d06de64dcf7611c87ef68b3548184107369f75149777e4aedab764c07f267)))))))))
+          sha256=2d60246e1569803567b98e9d73d3b2adbc3a3c2047cbbefe4e199021af63e4be)))))))))
 
 (ocaml-base64 (
   (provides ((base64 3.5.2)))
@@ -2240,7 +1994,7 @@
   (extra ((
     read_cma.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ocaml-compiler-libs/ocaml-compiler-libs.v0.17.0+ox/files/read_cma.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ocaml-compiler-libs/ocaml-compiler-libs.v0.17.0+ox/files/read_cma.patch))
       (hashes (
         sha256=65c1f6a92d5c52781a0b6241d97ad0ce14dcd7834c14cef9a1e810ce85b27be4))))))
   (patches (read_cma.patch))))
@@ -2284,21 +2038,21 @@
   (extra ((
     bigarray.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ctypes/ctypes.0.23.0+ox/files/bigarray.patch
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ctypes-foreign/ctypes-foreign.0.23.0+ox/files/bigarray.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ctypes/ctypes.0.23.0+ox/files/bigarray.patch
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ctypes-foreign/ctypes-foreign.0.23.0+ox/files/bigarray.patch))
       (hashes (
         sha256=c5d59b4624382cd61ff8da5c9ec3153ada0880efc43fbb2a20491984bd509a3e))))))
   (patches (bigarray.patch))))
 
 (ocaml-embed-file (
-  (provides ((ocaml-embed-file v0.18~preview.130.76+222)))
+  (provides ((ocaml-embed-file v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ocaml-embed-file/archive/7ac1d0952c5071754cacb8c91f1ad2d1e63e12cc.tar.gz))
+          https://github.com/janestreet/ocaml-embed-file/archive/4492e12c318d209372dec79777cd16bdbb838fe1.tar.gz))
         (hashes (
-          sha256=de9ed4f9ea28947c28950d5776d0ee39c30c4e6e6edd1fa021cb1e9573b05ef3)))))))))
+          sha256=1a3a8b29e3c804aef3fb471c49f05c40e24fadd9f053ab9a4b10ebc5974be98f)))))))))
 
 (ocaml-hex (
   (provides ((hex 1.5.0)))
@@ -2334,29 +2088,30 @@
 
 (ocaml-ipaddr (
   (provides (
-    (ipaddr      5.6.1)
-    (ipaddr-sexp 5.6.1)
-    (macaddr     5.6.1)))
+    (ipaddr      5.6.2)
+    (ipaddr-sexp 5.6.2)
+    (macaddr     5.6.2)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/mirage/ocaml-ipaddr/releases/download/v5.6.1/ipaddr-5.6.1.tbz))
+          https://github.com/mirage/ocaml-ipaddr/releases/download/v5.6.2/ipaddr-5.6.2.tbz))
         (hashes (
-          sha256=1e617df8abd45843c823e9be75267d27426cb578661cf25622d50b25ae14a319
-          sha512=09c37f963d27f697ee17b83f26364002cc2e60516c2199f78cd20663aaf293a1ce4380d728641b4c9b79066dc814c8f9293722a567ce6898261c4e98b34d80c2)))))))))
+          sha256=08a3fa6e6411490b6661e5b10229ea9ec6b8c3738e9f6b255859b13f145be136
+          sha512=719f32fd5a5c854ff5af2c668d20f9c4de4659a3d7d03d260e537ab402d9dd85a5350e611bfc3b8df10f6be02b5941d55a96cd2b4dccc0ad2710c95a51373bd8)))))))))
 
 (ocaml-lsp (
   (provides (
-    (jsonrpc 1.19.0+ox)
-    (lsp     1.19.0+ox)))
+    (jsonrpc          1.19.0+ox)
+    (lsp              1.19.0+ox)
+    (ocaml-lsp-server 1.19.0+ox)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/oxcaml/ocaml-lsp/archive/78eb8d73509e24bb7b3ac36d34a6a41c05665b1a.tar.gz))
+          https://github.com/oxcaml/ocaml-lsp/archive/c415e03fae4b5823e84bbee21f8adf759e6f04dd.tar.gz))
         (hashes (
-          sha256=9dd1e2822f0334d064c714464acf7a45188063b5f3fc69f77cab83ddfdc1edc0)))))))))
+          sha256=ca1ff03da86fed33fedaa655fcfa8ce8f200e6b7c94fef94363587d45aad6d61)))))))))
 
 (ocaml-magic-mime (
   (provides ((magic-mime 1.3.1)))
@@ -2370,14 +2125,14 @@
           sha512=607f7469caa2e800a92e3c5248125108fad5e0513f4230a37ed774c86112eacdae0ee533c5c78ec2752e939e83e2201dd4ee02cbbff92ae32e25683710d7b365)))))))))
 
 (ocaml-probes (
-  (provides ((ocaml-probes v0.18~preview.130.76+222)))
+  (provides ((ocaml-probes v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ocaml-probes/archive/8ecf5cc5a46ad42f7aafa0c30f84b942ec355dd7.tar.gz))
+          https://github.com/janestreet/ocaml-probes/archive/2ebf332b7e4cd276f33b97002b92bddaf9643c70.tar.gz))
         (hashes (
-          sha256=224ab0d137f58c2a6b5a1d248b13a64e0640c62ee6e2ccd1d28e8e90fe3194f8)))))))))
+          sha256=ca9cb3fb7611f74f8aa24f383119cd1938d61d330094a17dfc05ad3479f1a5d4)))))))))
 
 (ocaml-re (
   (provides ((re 1.14.0+ox)))
@@ -2391,207 +2146,207 @@
   (extra (
     (re+lib+ast.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+ast.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+ast.ml.patch))
       (hashes (
         sha256=2bedd552999d255df78697aedba52d385d7cbd91da4643a576edea7f30773b1d))))
     (re+lib+ast.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+ast.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+ast.mli.patch))
       (hashes (
         sha256=760e82e5d280c1299bb9d35a5d5150f7e8494e7a688d716b99dcfa296119c5ce))))
     (re+lib+automata.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+automata.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+automata.ml.patch))
       (hashes (
         sha256=349a37a67abf5ab3ce7b7dcedd224ef95d5d829a894722df9e4354d3dfeaa174))))
     (re+lib+automata.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+automata.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+automata.mli.patch))
       (hashes (
         sha256=c8b3dd69dad3716e951cfafd6fe3d184413be053c8efcb26f9de089f43465d68))))
     (re+lib+bit_vector.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+bit_vector.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+bit_vector.mli.patch))
       (hashes (
         sha256=1d51ba85dba2d2b1255ae4535e9f13a5f8c879689e24cafc5d600f644cc1c35d))))
     (re+lib+category.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+category.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+category.mli.patch))
       (hashes (
         sha256=1153a33076ee54c4f92f54a51868cd50ff5344d8e7a0cd409717e82c92e72b4b))))
     (re+lib+color_map.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+color_map.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+color_map.mli.patch))
       (hashes (
         sha256=6b9d229b472b8fb8f44ba93f5c7d310613a8650efb3113990333803999c978c1))))
     (re+lib+compile.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+compile.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+compile.ml.patch))
       (hashes (
         sha256=b125e28894c2d33010f904f8d31ec42624564d2d89f9b18e63fc65554f13ac83))))
     (re+lib+compile.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+compile.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+compile.mli.patch))
       (hashes (
         sha256=1dcc4f24f7237200b8e156241f162aac567c33d2463fa59cb5caef6aea5e74ac))))
     (re+lib+core.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+core.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+core.mli.patch))
       (hashes (
         sha256=ca06a185e0bc6b11d61fdf91b1862262728e3e46c2a18ec14e9c6bfa39921a85))))
     (re+lib+cset.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+cset.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+cset.ml.patch))
       (hashes (
         sha256=798764c70219a81f179ed05c4a08c6c3a0b6d91f662a4e1a6e3702929bccfcea))))
     (re+lib+cset.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+cset.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+cset.mli.patch))
       (hashes (
         sha256=eae907501236762e0bfcb81cedaec5dacb32ce7c854998e3963cdc10a73cd4b7))))
     (re+lib+dense_map.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+dense_map.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+dense_map.ml.patch))
       (hashes (
         sha256=f656572ce04660eeee35a99fe825aa762f1df9a6abe2ea36bb6cc8e69bdf0543))))
     (re+lib+dense_map.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+dense_map.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+dense_map.mli.patch))
       (hashes (
         sha256=f2f59d1efa3475cc830e27e271e5604fa21ee4bbefcdd3a7004a431c8d2f82a4))))
     (re+lib+emacs.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+emacs.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+emacs.mli.patch))
       (hashes (
         sha256=43740791b3f06137bf062c2225167af8c952c5a8ed4a8cb6067569cb63f06f80))))
     (re+lib+fmt.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+fmt.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+fmt.mli.patch))
       (hashes (
         sha256=b8fa15ca9f38fb391a0fdb945c6cecb92afe18c70271017afb1e084dfa064b80))))
     (re+lib+glob.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+glob.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+glob.mli.patch))
       (hashes (
         sha256=10a4f6bbf4089eca476e3dfeac1d89938d666977453dbf2ca235b2e00bd6a01b))))
     (re+lib+group.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+group.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+group.mli.patch))
       (hashes (
         sha256=139f86a032e94bce0a9e02f4cfc12e77599c47201714db250c419dd971820258))))
     (re+lib+hash_set.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+hash_set.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+hash_set.ml.patch))
       (hashes (
         sha256=f5242e561f7a30a1860ea8aa3794707279677a348d208688788be5c404c424ec))))
     (re+lib+hash_set.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+hash_set.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+hash_set.mli.patch))
       (hashes (
         sha256=d251fdfa57a2cebfd9c5cff286b5f6ae39cdd1643eb8bfd13dadbae13e5f9d2d))))
     (re+lib+iarray.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+iarray.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+iarray.ml.patch))
       (hashes (
         sha256=f027af9153e3389d83f713be5707819f149d016d2d94910665afb7bcbeb4775c))))
     (re+lib+import.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+import.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+import.ml.patch))
       (hashes (
         sha256=01a4d815caed8b59fb8e6e2476f8bce1f77e183c1c1a1880184b02961dd65244))))
     (re+lib+mark_infos.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+mark_infos.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+mark_infos.ml.patch))
       (hashes (
         sha256=56c21e6fbbffa4d075dca85e3806d9ad4e1184bf1560a02f2c711af6f382942e))))
     (re+lib+mark_infos.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+mark_infos.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+mark_infos.mli.patch))
       (hashes (
         sha256=fc82c6d1ae57186f5c0ce21bfbeef69495b98f2a095b6599e5ad3ef79594ad98))))
     (re+lib+parse_buffer.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+parse_buffer.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+parse_buffer.mli.patch))
       (hashes (
         sha256=8e4028bf7205590732513b8c16557a9c5913f7f4c8b73ada96491f1958417e71))))
     (re+lib+pcre.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+pcre.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+pcre.ml.patch))
       (hashes (
         sha256=87d24cbf8ed09ec166f16675c5ae29f1e22a02f6886a0a539595370df2cd87e5))))
     (re+lib+pcre.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+pcre.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+pcre.mli.patch))
       (hashes (
         sha256=45f9cf0f4a423d6577d0b2e04cceb11cf672c9c8985995444dd22a28888e4a01))))
     (re+lib+perl.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+perl.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+perl.mli.patch))
       (hashes (
         sha256=88ad29c736dd3ec386811ed3f9ecc72ac01eddf582a9b7569aea2964725a0dd5))))
     (re+lib+pmark.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+pmark.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+pmark.ml.patch))
       (hashes (
         sha256=90e469a5d891d81511afe91271b0e62cc331c6f14e833c7cd14450416c257e92))))
     (re+lib+pmark.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+pmark.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+pmark.mli.patch))
       (hashes (
         sha256=b4ab8b02b29bf22b6c41dc237c402be24f776931d44536976081a43486eb9cc6))))
     (re+lib+posix.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+posix.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+posix.mli.patch))
       (hashes (
         sha256=7919b3e3cfb63d5baac5b36740e287dee2dfeb2a382238d17cf76851ba0db25a))))
     (re+lib+posix_class.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+posix_class.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+posix_class.mli.patch))
       (hashes (
         sha256=ce2bd4adcd8cf8ec3f841bf291c3ba9c5155ae485a6670956509ab59cf1f270f))))
     (re+lib+replace.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+replace.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+replace.mli.patch))
       (hashes (
         sha256=bb40364035045de319f9ebf186e77aa856f6128e14eaa0ad760dcbcd71a72bcc))))
     (re+lib+slice.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+slice.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+slice.mli.patch))
       (hashes (
         sha256=e81ee39fc1eb5ca98d33a782cc5d5d15decc8c40b1cdb2a57d44e88e6b2ed91c))))
     (re+lib+view.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib+view.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib+view.mli.patch))
       (hashes (
         sha256=2bca105404934893c997ade04298f2821fd9d586f179dd07d12065d07e0f0286))))
     (re+lib_test+expect+re_tests.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib_test+expect+re_tests.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib_test+expect+re_tests.ml.patch))
       (hashes (
         sha256=21e7178d639651ec8d73b0d5f5402f9a5bf7f780511ce87bc77b82270d8c62a0))))
     (re+lib_test+expect+test_partial.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib_test+expect+test_partial.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib_test+expect+test_partial.ml.patch))
       (hashes (
         sha256=341dd6dfc5da158304cfc35fe48831e29122c1be969041a27cf5321a66249564))))
     (re+lib_test+expect+test_pcre.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib_test+expect+test_pcre.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib_test+expect+test_pcre.ml.patch))
       (hashes (
         sha256=39b11b76365006294c1e61baaa6e70b7b80147a1701723f0a86c42c593d7a17a))))
     (re+lib_test+expect+test_pcre_split.ml.patch
      ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib_test+expect+test_pcre_split.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib_test+expect+test_pcre_split.ml.patch))
       (hashes (
         sha256=b23b20764f678fc1eecf2c9291f0b49eb4381762ef82daa042f9f7b95e14247d))))
     (re+lib_test+expect+test_re.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib_test+expect+test_re.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib_test+expect+test_re.ml.patch))
       (hashes (
         sha256=92720e296aa80fc76f30a05392e7ef63e8395ab5ac8a10cd6021ca5a75043629))))
     (re+lib_test+re_private.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/re/re.1.14.0+ox/files/re+lib_test+re_private.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/re/re.1.14.0+ox/files/re+lib_test+re_private.ml.patch))
       (hashes (
         sha256=73fa41e21e784b71b7b73bd07a24055a18cfa05aa05797c64bf7926b00039866))))))
   (patches (
@@ -2661,35 +2416,58 @@
           sha256=cdabaf6ef5cd2161e59cc7b74c6e4a68ecb80a9f4e96002e338e1b6bf17adec4
           sha512=88374143e0d8aaf6d40aa3cbd7593f9832e9c9727738c6e651498125150c83d5646e13b5737d5c3e81484dd041127f67f8acea13fdc0300ac4e46107559f8ae2)))))))))
 
-(ocaml_intrinsics (
-  (provides ((ocaml_intrinsics v0.18~preview.130.76+222)))
+(ocaml-version (
+  (provides ((ocaml-version 4.0.3)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ocaml_intrinsics/archive/6f35705a06e7d81e5a4628093ffd802220ebdc0b.tar.gz))
+          https://github.com/ocurrent/ocaml-version/releases/download/v4.0.3/ocaml-version-4.0.3.tbz))
         (hashes (
-          sha256=ed106279dc05a9873d4ef94487090db3161bd2cdcc3d0b797bafa84746ec883c)))))))))
+          md5=6a8cce4bd5b60149ca4302ce587bff94
+          sha512=199533647516b1bea700046437c3b1f0d605e593c4bfd3b694f16944a6bfdba44297a45d696da1742c57bc621ecaafa2237cb3dc379f66f7fa2e1b2d93743022)))))))))
+
+(ocaml_intrinsics (
+  (provides ((ocaml_intrinsics v0.18~preview.130.83+317)))
+  (source ((
+    base (
+      Http (
+        (urls (
+          https://github.com/janestreet/ocaml_intrinsics/archive/1769a55cdad0a9dc0e8622948d7e851d5e81422a.tar.gz))
+        (hashes (
+          sha256=0119940ec083dd2765d15f1a8e8c23367d2ff595b6725f6965d942c54d1e38aa)))))))))
 
 (ocaml_intrinsics_kernel (
-  (provides ((ocaml_intrinsics_kernel v0.18~preview.130.76+222)))
+  (provides ((ocaml_intrinsics_kernel v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ocaml_intrinsics_kernel/archive/1d595b2a7098e1199826bc1f609d631848990392.tar.gz))
+          https://github.com/janestreet/ocaml_intrinsics_kernel/archive/c11521aa497cd9818b3e2851f94036c92c2e7eb1.tar.gz))
         (hashes (
-          sha256=ef2d1425035fbb2b9ba27afae76037394e8b4cb0b960b885e2a0211a98e0be3c)))))))))
+          sha256=726da1173882de8d86b166857fd915f6c42cbfca610b9ac9f1b33e1e4c3cad08)))))))))
 
 (ocaml_openapi_generator (
-  (provides ((ocaml_openapi_generator v0.18~preview.130.76+222)))
+  (provides ((ocaml_openapi_generator v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ocaml_openapi_generator/archive/fc97d3da8f9261d9a408857c0c901a41bedac536.tar.gz))
+          https://github.com/janestreet/ocaml_openapi_generator/archive/455192195876b9e8696aa4fa9daf943386dec854.tar.gz))
         (hashes (
-          sha256=8e88f4901eb9c35dd63d250cfb2b3392f5b061db6b2fa39febbab8deacc0dd1c)))))))))
+          sha256=12bd2f8d7679eaa0a7f1fd856fc2a47977e935b0ea59cf781029a904fd49c75c)))))))))
+
+(ocamlformat (
+  (provides (
+    (ocamlformat     0.26.2+ox)
+    (ocamlformat-lib 0.26.2+ox)))
+  (source ((
+    base (
+      Http (
+        (urls (
+          https://github.com/oxcaml/ocamlformat/archive/a6f113c6211de01c8188e95ca5fc5fe8d78fb992.tar.gz))
+        (hashes (
+          sha256=3f251df04145372d68b8f3f592572761e7db68e382355828479c9baf3bb60a5f)))))))))
 
 (ocamlgraph (
   (provides ((ocamlgraph 2.0.0)))
@@ -2701,6 +2479,17 @@
         (hashes (
           sha256=20fe267797de5322088a4dfb52389b2ea051787952a8a4f6ed70fcb697482609
           sha512=c4973ac03bdff52d1c8a1ed01c81e0fbe2f76486995e57ff4e4a11bcc7b1793556139d52a81ff14ee8c8de52f1b40e4bd359e60a2ae626cc630ebe8bccefb3f1)))))))))
+
+(ocp-indent (
+  (provides ((ocp-indent 1.9.0)))
+  (source ((
+    base (
+      Http (
+        (urls (
+          https://github.com/OCamlPro/ocp-indent/releases/download/1.9.0/ocp-indent-1.9.0.tbz))
+        (hashes (
+          sha256=da4ff552f9fc230d7c07f64a8ef89295907bf8d3c581132f05dcf0dd87a172b3
+          sha512=d734487162ab1373110a4c4d4f83128b21c39ec2d6e6cd1f9708178b190553cf60faebf62483113ceed490d1b9948c6241e798ea81ee266f3ed7fd8113552684)))))))))
 
 (ocplib-endian (
   (provides ((ocplib-endian 1.2)))
@@ -2733,24 +2522,24 @@
         (commit 97e1daecb432d33a7137d525f7a554f203073a95))))))))
 
 (of_json (
-  (provides ((of_json v0.18~preview.130.76+222)))
+  (provides ((of_json v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/of_json/archive/f500bd26e23d4d9396f79008e77d54abe188f538.tar.gz))
+          https://github.com/janestreet/of_json/archive/8d8a49c59205a5e3cb22f8f7066cfd9fc3033197.tar.gz))
         (hashes (
-          sha256=ce2f7934274400e52c01cce4d4d18c256a94350ce8dea9765f06b5427ff266a9)))))))))
+          sha256=1310ab9054565992ac9a797b2cbee974f80d779661c1faa12c97308653edcc1a)))))))))
 
 (oklab (
-  (provides ((oklab v0.18~preview.130.76+222)))
+  (provides ((oklab v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/oklab/archive/6817d58ff67152d01a3234e382f93d8d0bddf59f.tar.gz))
+          https://github.com/janestreet/oklab/archive/c49739c773a4d1575a66497f1b90ce48396fd076.tar.gz))
         (hashes (
-          sha256=7491ec1c822b81e90a5c3d8d8829098d7e13ba1e85029032e2c4460c31991202)))))))))
+          sha256=141fb2c8fa39ebab17e95ebfb272789b1c766ebdf0b0fa3d2472198fb8b16dbb)))))))))
 
 (optint (
   (provides ((optint 0.3.0)))
@@ -2764,14 +2553,14 @@
           sha512=15ec97a076584e8ea28c589f1db3b9a0dd6fd5a7950528a1d136761cc13bca0e6e7bf6e0f87c73578a37393c213a7a0f3e7beaabd924e176459b29af52b8dd11)))))))))
 
 (ordinal_abbreviation (
-  (provides ((ordinal_abbreviation v0.18~preview.130.76+222)))
+  (provides ((ordinal_abbreviation v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ordinal_abbreviation/archive/e84c434ea17fd07b94e85f32778201c7c1d53890.tar.gz))
+          https://github.com/janestreet/ordinal_abbreviation/archive/bbadff8179fbcaa7d24a44b2be90b233e44c789c.tar.gz))
         (hashes (
-          sha256=f54454a822d80214b5be36cfd3992a116c2f4b7591f8e1b4e383f9ee06c4a297)))))))))
+          sha256=3c15946950c3e4ded40cb9daaf30c678b2d4f5baccca48d09c433435c388c70f)))))))))
 
 (owee (
   (provides ((owee 0.8)))
@@ -2784,95 +2573,95 @@
           sha256=064f6245f5995d5d2f4f1f9c6d2992e2fdbe3dde328216baec7cfabd4857940d
           sha512=c79cdaeedbd08ee58784e965a2865aff94d41013c4f978fd21ebd84df742402aeddaab2f1880bde0d0ff7311fe0565151882e6060590d751119ad0fd9d62a901)))))))))
 
-(oxcaml_effect (
-  (provides ((oxcaml_effect v0.18~preview.130.76+222)))
+(oxcaml_intrinsics (
+  (provides ((oxcaml_intrinsics v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/oxcaml_effect/archive/0216e836c8741c1fe9dd174f03c0cb384e8e0918.tar.gz))
+          https://github.com/janestreet/oxcaml_intrinsics/archive/337f51447a57ea45145ddca3219c42f7768e0646.tar.gz))
         (hashes (
-          sha256=cdf8bcaff1037342143ea144d9335e7020ee725eb4cbf4dba2b734f9e8143c45)))))))))
+          sha256=1b6bea0aedd684f392cf83de73ae98cf0e4ff8a7f3b42ed5674f98391265983e)))))))))
 
 (pam (
-  (provides ((pam v0.18~preview.130.76+222)))
+  (provides ((pam v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/pam/archive/c2f07f4bad733e75bd20f9c8bcb7472309d6249a.tar.gz))
+          https://github.com/janestreet/pam/archive/6b3eeba8cb36f14b6aafc0de3937d492b5f80608.tar.gz))
         (hashes (
-          sha256=52b7c9218a8cf3bf87d0feb2fb85d1b56b8d9970ac9fc558a6871d61950ee58a)))))))))
+          sha256=438c78570a3bf94e2e1467ab641426c3cee87d3e4b1c23ffcf1cf75687ecfe36)))))))))
 
 (parallel (
-  (provides ((parallel v0.18~preview.130.76+222)))
+  (provides ((parallel v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/parallel/archive/6177c32b7aae71e6a177532be6bcad92b49f109f.tar.gz))
+          https://github.com/janestreet/parallel/archive/e488373bb887e8cce4dab95bb23ec5d2f41d4f17.tar.gz))
         (hashes (
-          sha256=14ec41f116e10d6a0ca7a0fbaa6d49547ce778f30ce522fb6894355ca9cea797)))))))))
+          sha256=7b0f3180d7640a9418241c24d3e6616451ed494635e323c871c3dc46b44c0d8f)))))))))
 
 (parsexp (
-  (provides ((parsexp v0.18~preview.130.76+222)))
+  (provides ((parsexp v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/parsexp/archive/d6dd6af5e91035cf27337a65257e86c70455d80a.tar.gz))
+          https://github.com/janestreet/parsexp/archive/b8255bde3bade682a5b960958b9ce392513ede4e.tar.gz))
         (hashes (
-          sha256=03280c68f8fbba0592203c4ad202f18a8fa19f19077276b3a05a9f75d7b843ed)))))))))
+          sha256=e57b04822d7247e0324e3ec0bf82bcffdab577c7ec57d1aa84a2ef35630d577e)))))))))
 
 (parsexp_io (
-  (provides ((parsexp_io v0.18~preview.130.76+222)))
+  (provides ((parsexp_io v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/parsexp_io/archive/d13b378b91fe2c4d35f83aeb3e62e7918473bb9c.tar.gz))
+          https://github.com/janestreet/parsexp_io/archive/ab2c1eb5bf929c063a8408eae9a52968e9a6a271.tar.gz))
         (hashes (
-          sha256=767a5798da24a70c5db7eba955d52c7b872eccaf1d3ea9dcaf651b9dad24be22)))))))))
+          sha256=4135cc68f3525a40e16e6f668275a418bc0d1e98886852502c714563ff0a9a0f)))))))))
 
 (parsexp_prefix (
-  (provides ((parsexp_prefix v0.18~preview.130.76+222)))
+  (provides ((parsexp_prefix v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/parsexp_prefix/archive/f72c704c58ea9655d4482bc3495348f96bee081a.tar.gz))
+          https://github.com/janestreet/parsexp_prefix/archive/f3fdb8f992d9bbb8c211d2a2b4702d879bb0d312.tar.gz))
         (hashes (
-          sha256=89dec4511b8fc9406eeb61c0e23259f305de2b84f2c464b40026aa47d0ff7284)))))))))
+          sha256=32f62346d08f7cc0b3b231b831b279d53ef615931d1f5e0f568ce15ff4634ef2)))))))))
 
 (parsexp_symbolic_automaton (
-  (provides ((parsexp_symbolic_automaton v0.18~preview.130.76+222)))
+  (provides ((parsexp_symbolic_automaton v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/parsexp_symbolic_automaton/archive/98475048bb475fb473b005efcc9f68241a4c2c50.tar.gz))
+          https://github.com/janestreet/parsexp_symbolic_automaton/archive/2f420d18f1dcb157673575a1e3a8dbd50dc66156.tar.gz))
         (hashes (
-          sha256=e4fb5abe8b10e02fe31cf0c9c7e84697beed98381a13151ef44020795b394b86)))))))))
+          sha256=26549640adee912f0b99da643dad4f61fca8f418a66b33f9d1bd28e02b0d4475)))))))))
 
 (patdiff (
-  (provides ((patdiff v0.18~preview.130.76+222)))
+  (provides ((patdiff v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/patdiff/archive/826c12c417e08e7f739396325a6e51fb1a103dfe.tar.gz))
+          https://github.com/janestreet/patdiff/archive/5605e0b6ef8a41aa2d932f22778682396f6ea942.tar.gz))
         (hashes (
-          sha256=2c9e5830a06cf02bb02a7fc7842591be143a277900000fdf8057c209c7269847)))))))))
+          sha256=3e1f4d3286066d1487bf5c32826fd051c837bb3ff6af99d23291d943d250a7ea)))))))))
 
 (patience_diff (
-  (provides ((patience_diff v0.18~preview.130.76+222)))
+  (provides ((patience_diff v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/patience_diff/archive/9c773d25f021f57722afd46892d675013c350654.tar.gz))
+          https://github.com/janestreet/patience_diff/archive/c1e93497dccd03db2ecd684e505b53733f3f8f96.tar.gz))
         (hashes (
-          sha256=32e36659260a49098add950a2fe56770ec509ca7acdfb40360748b6ed70b845d)))))))))
+          sha256=4c698f93e169d3894fd5f4da57f4b148f0d7b295eeea4fb02c8a77a3479436da)))))))))
 
 (pcre-ocaml (
   (provides ((pcre 8.0.5)))
@@ -2886,254 +2675,265 @@
           sha512=3b221f39641864d16ee72ab80cc984eb8cd3b4bad0caa649e4fe0b89eb04e5d05ed3986135826761773fbbd83f87b28acc4f329bb0242790a2c1ea18602857a1)))))))))
 
 (pending_or_error (
-  (provides ((pending_or_error v0.18~preview.130.76+222)))
+  (provides ((pending_or_error v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/pending_or_error/archive/a8fc32a4a7753f862d75c15d95a845c1d451cd04.tar.gz))
+          https://github.com/janestreet/pending_or_error/archive/8c33410fdaf9939175f3112c2483a7af0c993f8b.tar.gz))
         (hashes (
-          sha256=391861d3aad128c31190ce713f0b6a817ce232f6cd6fc4d7fc91e00ac10ebecc)))))))))
+          sha256=067433945339a48c7c2a07c42514e8ab1199b8a2c31bf911166c31c728a30937)))))))))
 
 (pipe_with_writer_error (
-  (provides ((pipe_with_writer_error v0.18~preview.130.76+222)))
+  (provides ((pipe_with_writer_error v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/pipe_with_writer_error/archive/432697ed46a74a44fa6c60d2f0fa78eaec179143.tar.gz))
+          https://github.com/janestreet/pipe_with_writer_error/archive/e8c4baf5785141441bcecbf45c0376d6ff8f28e2.tar.gz))
         (hashes (
-          sha256=d808aa6c301464e56fe2db30afe526ccd2443732695b86027547bc927395c0c9)))))))))
+          sha256=19b528f2c71d830e9b46d469f52101ffb28d0e06216799ecff7950c8e8fb697d)))))))))
 
 (polling_state_rpc (
-  (provides ((polling_state_rpc v0.18~preview.130.76+222)))
+  (provides ((polling_state_rpc v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/polling_state_rpc/archive/900da08b09204ae270f75966f6f6a444ec8cfc35.tar.gz))
+          https://github.com/janestreet/polling_state_rpc/archive/aef90a2c0cef464a3bc29495144fe63b4367b53e.tar.gz))
         (hashes (
-          sha256=3264860543b55e2b7e70cca43e0d3b24239859435796f097370f94c6f19e1acb)))))))))
+          sha256=b76476710131ad50e1c3b4368a90ae1f478fc929035e3d13b0e7d2899cae7da7)))))))))
 
 (portable (
-  (provides ((portable v0.18~preview.130.76+222)))
+  (provides ((portable v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/portable/archive/b5fef34fc522264981b79c3c3248f73a40fbfb9e.tar.gz))
+          https://github.com/janestreet/portable/archive/6b861a5bb372a375a838a52e42792cbe2f570486.tar.gz))
         (hashes (
-          sha256=b302fcfe5b3d3f168e91ad97cf755cdcca6662f5870972f5f5bfacd2b5cbac2d)))))))))
+          sha256=02d90dead7f0aa50041701c9259b7d630ac76508f5214974e17e3eda758b097d)))))))))
 
 (portable_lockfree_htbl (
-  (provides ((portable_lockfree_htbl v0.18~preview.130.76+222)))
+  (provides ((portable_lockfree_htbl v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/portable_lockfree_htbl/archive/aa74db1949a9dd82f7dae343a4f4a673ef7e196e.tar.gz))
+          https://github.com/janestreet/portable_lockfree_htbl/archive/f9f385a3d289e970ca23ca2f9a54a195f51af48f.tar.gz))
         (hashes (
-          sha256=2f44025af1a37e444c24bf0e0668f4019f089845b2de3547fc146756f0a3c671)))))))))
+          sha256=ea41f6d8b739dc09ab354b2f8df84c5ea097f958c019795c8184273156804a46)))))))))
 
 (portable_ws_deque (
-  (provides ((portable_ws_deque v0.18~preview.130.76+222)))
+  (provides ((portable_ws_deque v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/portable_ws_deque/archive/3da2d35f0bd16d661ae4821d4ae4cbbbbc50669b.tar.gz))
+          https://github.com/janestreet/portable_ws_deque/archive/e53e7a54a71b7cd55825cab1eb001f0c7180f54a.tar.gz))
         (hashes (
-          sha256=fb4485578f927ef4b9ce52ca6c8b2beeb14927fb91a1abd6a9132e91e7b62709)))))))))
+          sha256=0b8deed205a01a2ebe254fb4c51fd917b6b7beb2c6c8fd28071ea8e10baca65d)))))))))
 
 (posixat (
-  (provides ((posixat v0.18~preview.130.76+222)))
+  (provides ((posixat v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/posixat/archive/71fe16fe53a1743af8b038361272dbc3eac807d1.tar.gz))
+          https://github.com/janestreet/posixat/archive/3bf4fb74f6f93060efc5373c14624d29a42fdcc0.tar.gz))
         (hashes (
-          sha256=f21ee4965867b6851d95610bfb0c97a0ecb2414530373f20a64692169e424aaf)))))))))
+          sha256=6b307ca5af64fb63e2c076b2165ccc146d5e2d6a690106c439c60fd6a52c904a)))))))))
 
 (postgres_async (
-  (provides ((postgres_async v0.18~preview.130.76+222)))
+  (provides ((postgres_async v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/postgres_async/archive/1aed2b4cbdca4c0650d4991671321cca2b087159.tar.gz))
+          https://github.com/janestreet/postgres_async/archive/515bb146a7f0a8e61dbfa3e23b8ce54bca3cf4e8.tar.gz))
         (hashes (
-          sha256=f4feb68968c95be7554d904b2586ec2717632e7d3b573bc190336a7aa678510e)))))))))
+          sha256=a56cac7ec248049e462f061741f517728c9cf8f52898b248f9471205824468cc)))))))))
+
+(pp (
+  (provides ((pp 2.0.0)))
+  (source ((
+    base (
+      Http (
+        (urls (
+          https://github.com/ocaml-dune/pp/releases/download/2.0.0/pp-2.0.0.tbz))
+        (hashes (
+          sha256=8651351518b092b4a2def4e08171c276152f92fb6a84a8b19b6b929ccdb44419
+          sha512=78cb68f35c0b975dd1e91bd83d5e33bcec1ee642431585d55864c483c70a032755dfcf21ec5697691e7e7554381ddb580639fd149e28ba6f74d04d2ee43d360d)))))))))
 
 (ppx_accessor (
-  (provides ((ppx_accessor v0.18~preview.130.76+222)))
+  (provides ((ppx_accessor v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_accessor/archive/79235a3ac1d270f7170baa7c4ad56c3ffdda6665.tar.gz))
+          https://github.com/janestreet/ppx_accessor/archive/f34d9d39e961575e2600bc767ed3f98a9ef41d7f.tar.gz))
         (hashes (
-          sha256=58611ae70106d839a72e5c3715e9aabbe35745df22097f1da5a4a6e5d4abf8a6)))))))))
+          sha256=a7e0766e8162c2940a2c03908c3a20338e3c240b25642eb0679bed43769fe888)))))))))
 
 (ppx_anonymous_record (
-  (provides ((ppx_anonymous_record v0.18~preview.130.76+222)))
+  (provides ((ppx_anonymous_record v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_anonymous_record/archive/b0622d3a92ab2ac1d23783083b8384ad8335805f.tar.gz))
+          https://github.com/janestreet/ppx_anonymous_record/archive/a7b7b6429b2cb981b36c3853660d10f45f7811d9.tar.gz))
         (hashes (
-          sha256=3c97980a0d1b0d7eecb2feef491181904469e3ba5bc67402a2170c0b39bf3427)))))))))
+          sha256=232580e08a8038fef3f4008146026b0618641c5a3fda0b3e040b1314464e2995)))))))))
 
 (ppx_array (
-  (provides ((ppx_array v0.18~preview.130.76+222)))
+  (provides ((ppx_array v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_array/archive/bf4f40493f96a6130cd5a99fc098226c0a648702.tar.gz))
+          https://github.com/janestreet/ppx_array/archive/02b57597b07263e7edd3a18b663ee3027887ce4a.tar.gz))
         (hashes (
-          sha256=1cd81b7e81c113c32c1d64bace8388b7340d7c9c3597ffb56b9a95cb9b721221)))))))))
+          sha256=630c65a46ddd94bab91cab2c2c92e4b5f6e0e9c8fd9226020f1296988cbffec3)))))))))
 
 (ppx_array_base (
-  (provides ((ppx_array_base v0.18~preview.130.76+222)))
+  (provides ((ppx_array_base v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_array_base/archive/e40c1b88ea26195da449a299e653fcebd1cf209f.tar.gz))
+          https://github.com/janestreet/ppx_array_base/archive/aedb5bbc200280143d4382a7ac2679567e97c850.tar.gz))
         (hashes (
-          sha256=b2c1ada22f8c5114ee7273e8a39c0b69a5e081c25e99f70cad0e803622b7c88b)))))))))
+          sha256=76d67e2d18d6e0951ac54cb477f72750c08832d12cbdac133b13f63d2417d724)))))))))
 
 (ppx_assert (
-  (provides ((ppx_assert v0.18~preview.130.76+222)))
+  (provides ((ppx_assert v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_assert/archive/b8abb372c99b297194a25ccbb1b30937ac6f1f70.tar.gz))
+          https://github.com/janestreet/ppx_assert/archive/18565f989c36f964a88a11aea04ce432331860e7.tar.gz))
         (hashes (
-          sha256=bd78c247aa9a567329f8bc051111e6d5da35009bac70313e9ebf4776839d5aee)))))))))
+          sha256=00f47eb547874baf5f1830c6a7999b283e40315471bec1908b0ff2f0a6b124cf)))))))))
 
 (ppx_base (
-  (provides ((ppx_base v0.18~preview.130.76+222)))
+  (provides ((ppx_base v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_base/archive/37790aa19a1b35c1c9f7bcc2aaeca585032b71b6.tar.gz))
+          https://github.com/janestreet/ppx_base/archive/71200b6e9fdef483e04f13adcc1b75a232e8e6b1.tar.gz))
         (hashes (
-          sha256=75873c9d4ddb5abde050f9bb444207614f0c5ace6e0b5e7ea6e1885694810d66)))))))))
+          sha256=69a84c7ba7541ff4373cfabedac54b7a05942a9276d764657b9f55d9708fcbc4)))))))))
 
 (ppx_bench (
-  (provides ((ppx_bench v0.18~preview.130.76+222)))
+  (provides ((ppx_bench v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_bench/archive/ade060d897a61359aa884dde9e691b709df2cddc.tar.gz))
+          https://github.com/janestreet/ppx_bench/archive/76e5c387b4ff7f23f224c2981ed18ec9d867b18f.tar.gz))
         (hashes (
-          sha256=17ec490bba0af338e1cc7ebe8b9cf257c2b4026f739f6a9a0a59f6489accfc55)))))))))
+          sha256=e3f3bc884340a7213d2556b39270e0d16c85bdec0d7fe3c8dc24ce63cd82ae9d)))))))))
 
 (ppx_bin_prot (
-  (provides ((ppx_bin_prot v0.18~preview.130.76+222)))
+  (provides ((ppx_bin_prot v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_bin_prot/archive/24e83f5fa6f6e561467b3a98cfc8c84727c5a13d.tar.gz))
+          https://github.com/janestreet/ppx_bin_prot/archive/8ac9310c8ebe6b9b116f8949ee7266f384e4ee91.tar.gz))
         (hashes (
-          sha256=87fdf0c50abf55e6bbfd5b03910324cd2a56701131dfcfed75030553740af2e0)))))))))
+          sha256=84943e31988f0825a106c01ccd9320f57c42b28c6258e55331e082120680bc1d)))))))))
 
 (ppx_box (
-  (provides ((ppx_box v0.18~preview.130.76+222)))
+  (provides ((ppx_box v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_box/archive/68af2e03c6358d57f3e1920d2881f4cdbf012dcf.tar.gz))
+          https://github.com/janestreet/ppx_box/archive/17592a10db1880d154bb5f0d189cf8766e44ee15.tar.gz))
         (hashes (
-          sha256=ed1575b932b11df4afd335dc6f63eb0b9a12fab6477d53dd4b3339ad8fde81b0)))))))))
+          sha256=39e7cdfe03b08296031c512294eea522969e77b9ec060fa86d17f6cfcd9aed6f)))))))))
 
 (ppx_cold (
-  (provides ((ppx_cold v0.18~preview.130.76+222)))
+  (provides ((ppx_cold v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_cold/archive/4ffdf1adc2bfa518584df1aab12618ba8df0a600.tar.gz))
+          https://github.com/janestreet/ppx_cold/archive/af39a96a1f3786cc3cc569c4400ec24cf811ea77.tar.gz))
         (hashes (
-          sha256=9ad1bd94aacea1b091ccde2083d386302f77eb611867f69dc9afb253465e6dc0)))))))))
+          sha256=9e7b93c29d2779c2be69b93862a1c1eab6a848bb003a2354778b14fdc162b6d1)))))))))
 
 (ppx_compare (
-  (provides ((ppx_compare v0.18~preview.130.76+222)))
+  (provides ((ppx_compare v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_compare/archive/140b883c0373cdf9739de245dc1dec34d99bfda0.tar.gz))
+          https://github.com/janestreet/ppx_compare/archive/4699b16c95c810d44a777ee0b9a8405d87c1eaae.tar.gz))
         (hashes (
-          sha256=9f46f7333bacb584e713b650452beef5e6cc73a2c1e37586cc97e2495e156b14)))))))))
+          sha256=460966eb5f9fea2b7970552e03893c7d126fa0af5bd9f4f3d4c856b1210b4fbb)))))))))
 
 (ppx_conv_func (
-  (provides ((ppx_conv_func v0.18~preview.130.76+222)))
+  (provides ((ppx_conv_func v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_conv_func/archive/ef2bb331bbb7468ea501dba92d17d23092304db6.tar.gz))
+          https://github.com/janestreet/ppx_conv_func/archive/c2bacdc33c799b005d1a719f71055e5bb17d62f0.tar.gz))
         (hashes (
-          sha256=7815f04aecb313844aa9b09baa91f89d7c3ac5a4e797acf5599dfe73fcc8d10f)))))))))
+          sha256=9d3d9b32219cd5afedfdc17de8362e6e7e1905cad192854070d4bddee85013f9)))))))))
 
 (ppx_css (
-  (provides ((ppx_css v0.18~preview.130.76+222)))
+  (provides ((ppx_css v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_css/archive/dbb61a559964af49a5b012182bb3f6e7918c8783.tar.gz))
+          https://github.com/janestreet/ppx_css/archive/65f2d182468a97e39741f3c6dbe710a416fd9a0e.tar.gz))
         (hashes (
-          sha256=31b238d5f56efdde51195467eac3cdf7c812928643db9d2fff4b964c777ade91)))))))))
+          sha256=7c6a7cda759d23e5015e9d23e6900b901668c6bad7f97864bf100193d9c893ab)))))))))
 
 (ppx_csv_conv (
-  (provides ((ppx_csv_conv v0.18~preview.130.76+222)))
+  (provides ((ppx_csv_conv v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_csv_conv/archive/25267ff6b3d4cd6832e4041f67fa5c54ec65af16.tar.gz))
+          https://github.com/janestreet/ppx_csv_conv/archive/6ac0bafe566760235c21ee87e14b839e4af49ddf.tar.gz))
         (hashes (
-          sha256=f53b875f2f36589d0b05a6b288490d831c806c0622f012169ff1cf8375e1a266)))))))))
+          sha256=26e7417dc5ee21b6b209c83dfa2e170dd38f2d43b01c7fdfff6dec8e919d8d1b)))))))))
 
 (ppx_custom_printf (
-  (provides ((ppx_custom_printf v0.18~preview.130.76+222)))
+  (provides ((ppx_custom_printf v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_custom_printf/archive/a71f8b42a24b75fba92ff666f5ace0718403e4b2.tar.gz))
+          https://github.com/janestreet/ppx_custom_printf/archive/7b748cf711c3a79dc4cd49be36b271eb5b6ed190.tar.gz))
         (hashes (
-          sha256=6a4ef45366054875dacae60e967abf8c34f36d5c0e64e33dee0f667666451020)))))))))
+          sha256=96f284119b0edff2f852a18e86237cca4a7bdde4057c0b51410a94fe9693919a)))))))))
 
 (ppx_debug_assert (
-  (provides ((ppx_debug_assert v0.18~preview.130.76+222)))
+  (provides ((ppx_debug_assert v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_debug_assert/archive/99db83036000ae4386f745aa4f64823f172a2697.tar.gz))
+          https://github.com/janestreet/ppx_debug_assert/archive/ac599cd3999e64b206382dc7d1ed15feceb6fbc1.tar.gz))
         (hashes (
-          sha256=8394cccfd7305455f6a6eb03397afc5b402f8b247a1125a1589a2fd3776c7707)))))))))
+          sha256=f11c4e58135c257b6393de379c81fc848776d4bf414b81cd8608887e8e8bef28)))))))))
 
 (ppx_derive_at_runtime (
-  (provides ((ppx_derive_at_runtime v0.18~preview.130.76+222)))
+  (provides ((ppx_derive_at_runtime v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_derive_at_runtime/archive/d879eab14aee45085aa69a66afc27ed13f9e59d1.tar.gz))
+          https://github.com/janestreet/ppx_derive_at_runtime/archive/77bc71fe61310071321df7006dc90fb18d9dc553.tar.gz))
         (hashes (
-          sha256=6b81e9ec878a861250067d94ecf2b8939f686e016062a72fb41fa7692235c108)))))))))
+          sha256=941143a84a150158b350549f9001645ca801132c92fbbbfadcc29a9e552375da)))))))))
 
 (ppx_derivers (
   (provides ((ppx_derivers 1.2.1)))
@@ -3154,504 +2954,504 @@
         (commit 4cb09f54ff13e525804852190bfed8abb9267014))))))))
 
 (ppx_diff (
-  (provides ((ppx_diff v0.18~preview.130.76+222)))
+  (provides ((ppx_diff v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_diff/archive/c2906771fe564e9d48594705558ec16287f5bb78.tar.gz))
+          https://github.com/janestreet/ppx_diff/archive/c0fcae322455daec64eddf351478c7829c021cf1.tar.gz))
         (hashes (
-          sha256=f239e042a3bc66dc206f1d0abde0b6307ee3e069bc1328a0874872dbfb088b0c)))))))))
+          sha256=6762322f5a67a396977c7b6e2aa9d10863b6cfd325f98261be36cfe924c9f9e9)))))))))
 
 (ppx_disable_unused_warnings (
-  (provides ((ppx_disable_unused_warnings v0.18~preview.130.76+222)))
+  (provides ((ppx_disable_unused_warnings v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_disable_unused_warnings/archive/1159e3d1e624b4b1f2912080e50657d3520e1ff7.tar.gz))
+          https://github.com/janestreet/ppx_disable_unused_warnings/archive/6de0c3174a1a03db4867686d80b3142191cc51e7.tar.gz))
         (hashes (
-          sha256=3ca05f9c4713db1e982e5567d9a521ee3731add6b239060f2b36657465207d8d)))))))))
+          sha256=a4771daf48e2d81bdfa844534c288ac00d273aabc7e46cefd7d26813f4183f9d)))))))))
 
 (ppx_embed_file (
-  (provides ((ppx_embed_file v0.18~preview.130.76+222)))
+  (provides ((ppx_embed_file v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_embed_file/archive/35637f0827c385a0fe565bfdd5a1dd0902f5982d.tar.gz))
+          https://github.com/janestreet/ppx_embed_file/archive/1722c3ed76ea9bb965317764f1a1ec7dc29172ee.tar.gz))
         (hashes (
-          sha256=a8d6dc00c9380dfc7f9a69117d10369925e35b7d84a362497195c7cbdc677511)))))))))
+          sha256=af3ab16ce419ecd9875d63f0c8dee65de508a0dec416a8f1e4e4452994e824b5)))))))))
 
 (ppx_enumerate (
-  (provides ((ppx_enumerate v0.18~preview.130.76+222)))
+  (provides ((ppx_enumerate v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_enumerate/archive/24e2d4ed38394500f39867517ffb5bcde467eee6.tar.gz))
+          https://github.com/janestreet/ppx_enumerate/archive/ee4e084591a04f73b9d244f8f3957a7a3ec3457f.tar.gz))
         (hashes (
-          sha256=8a3ea302f8222f4e42a13cf2856d996f337cbcd08b0b70b22117ab28ffd5ce86)))))))))
+          sha256=f7157b624ff6b0c7de1539efaa0b2244656fcc2e51da78e5b5afc5e6ac9f537a)))))))))
 
 (ppx_expect (
-  (provides ((ppx_expect v0.18~preview.130.76+222)))
+  (provides ((ppx_expect v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_expect/archive/24f0e416b7249d150c30e878aa7872f6656ce0df.tar.gz))
+          https://github.com/janestreet/ppx_expect/archive/720407288749a49accf9821594eebd5c7caaadeb.tar.gz))
         (hashes (
-          sha256=82aceea9725aaf1c0a392030a18dca92d1fa1c435bf8e286fd796dd8eb5177fa)))))))))
+          sha256=e2266c7d5c5fb9373143861f8f1a9665c0d0f3ca69140226ea3cd643f857039a)))))))))
 
 (ppx_fields_conv (
-  (provides ((ppx_fields_conv v0.18~preview.130.76+222)))
+  (provides ((ppx_fields_conv v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_fields_conv/archive/eae8daa286d10651df7b419e0ea4e2815f45a8ef.tar.gz))
+          https://github.com/janestreet/ppx_fields_conv/archive/5b615e95cb2bb7df5307d01329b04ad8b8b598f7.tar.gz))
         (hashes (
-          sha256=1a15fafc1c644f59c41c5daf8044cedf7b58dca544c3a43ea1345776927d43cc)))))))))
+          sha256=676451b22be3a994d8fb9a42853184b71134e947b3cceb8ba8e03f388abd1d43)))))))))
 
 (ppx_fixed_literal (
-  (provides ((ppx_fixed_literal v0.18~preview.130.76+222)))
+  (provides ((ppx_fixed_literal v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_fixed_literal/archive/181131270fb1e20fbe0f59695b84cf6919bd161e.tar.gz))
+          https://github.com/janestreet/ppx_fixed_literal/archive/a91895d1d93ed498508554e80a4ce1d862d813b4.tar.gz))
         (hashes (
-          sha256=8bdaa2f9b07caefae41838a88f2a9204e21244fafc8f3e1f84d52bce025ad6c9)))))))))
+          sha256=a7195951cdf46685b6120d129c1e5849339e46c5e7f44156d21b7fbb775b4153)))))))))
 
 (ppx_for_loop (
-  (provides ((ppx_for_loop v0.18~preview.130.76+222)))
+  (provides ((ppx_for_loop v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_for_loop/archive/17a186ba71f555cda09c0fdd80050ce0f7f9d4b7.tar.gz))
+          https://github.com/janestreet/ppx_for_loop/archive/71683a3b5558545cc148de016366e794ea27c9ea.tar.gz))
         (hashes (
-          sha256=4cc2f1bd97d726e2714c57666e20285daadec8d54b297570c32a532648aff7af)))))))))
+          sha256=fd39cd17e68ed60acefe1895d59493f460d53f8649c4c56e339acb861dcad3a2)))))))))
 
 (ppx_fuelproof (
-  (provides ((ppx_fuelproof v0.18~preview.130.76+222)))
+  (provides ((ppx_fuelproof v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_fuelproof/archive/dafdc262fd1dc1bfef8588a0013371cd4840d280.tar.gz))
+          https://github.com/janestreet/ppx_fuelproof/archive/4f76d726f76cc17f585bf665852cf8743c5386f3.tar.gz))
         (hashes (
-          sha256=7a3b2ae912c191c3cb8c501a3df188b83984981978eb60ddad93c33fc1d1616c)))))))))
+          sha256=2347dbda68071097ef73a39cae92313f0d43295cc4aabeae901f4672dcb229fe)))))))))
 
 (ppx_globalize (
-  (provides ((ppx_globalize v0.18~preview.130.76+222)))
+  (provides ((ppx_globalize v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_globalize/archive/61320552133d00da27a0919b66c7fe18099d6a68.tar.gz))
+          https://github.com/janestreet/ppx_globalize/archive/8830cc2037018149141bbfb0e454002820ea332c.tar.gz))
         (hashes (
-          sha256=2f3173d396d6ca8708b30b13285e3a6b300fd37f60365bd37358d01d1a5b7dcf)))))))))
+          sha256=84845e3f44b88a4f7c91f73a2793cae5a967b3c7c78aaecdc7314efcf5e9080e)))))))))
 
 (ppx_hardcaml (
-  (provides ((ppx_hardcaml v0.18~preview.130.76+222)))
+  (provides ((ppx_hardcaml v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_hardcaml/archive/6bacb9f9b1b88fe83309b7fe5646979cfd853b41.tar.gz))
+          https://github.com/janestreet/ppx_hardcaml/archive/b88bac198180358e62d756b81cf1959be1c20cd8.tar.gz))
         (hashes (
-          sha256=9aa615ced842c8347db1d6149f0acfaf6072acf02e652bb2759e478ae7b289dd)))))))))
+          sha256=9bd0f4c87fb0e2d1937a27008d9903fc972edb4e736fd27f5567e01445e75366)))))))))
 
 (ppx_hash (
-  (provides ((ppx_hash v0.18~preview.130.76+222)))
+  (provides ((ppx_hash v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_hash/archive/b9e7249ba535ac0f606026f5dbcc36eaa76f5253.tar.gz))
+          https://github.com/janestreet/ppx_hash/archive/463c6ea7cc9769f54953d979d63c11e3d5f59a2b.tar.gz))
         (hashes (
-          sha256=128b453002e00415807eb4181f39d0973744e84009de6312cc4e1b6176558be4)))))))))
+          sha256=9c375676390594fd00cba8d70db34cb894c3d98f5bb2d06451e0b7c5f412d13d)))))))))
 
 (ppx_helpers (
-  (provides ((ppx_helpers v0.18~preview.130.76+222)))
+  (provides ((ppx_helpers v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_helpers/archive/bc7461f47af33acfea05ac026fcd4b9e912049ca.tar.gz))
+          https://github.com/janestreet/ppx_helpers/archive/2434f81f2c86ca616550c1af29be42fe8d11491f.tar.gz))
         (hashes (
-          sha256=f6527f02c840fb38345045414999e0081916507920ca33467adbc3461bacfffa)))))))))
+          sha256=692a94ba050b118bf26a5b28bbf336adcfb00ef43ab37cd3c110bd19789d8092)))))))))
 
 (ppx_here (
-  (provides ((ppx_here v0.18~preview.130.76+222)))
+  (provides ((ppx_here v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_here/archive/af1c502efeeae19e51a3011f97de3d534c35247d.tar.gz))
+          https://github.com/janestreet/ppx_here/archive/08a96612a91bacc21061e5f42236d7e86b0f70f8.tar.gz))
         (hashes (
-          sha256=d5dfa41252f621cffc619d6ca137b6df9582093652cf9161b50960ed023b455c)))))))))
+          sha256=ad04cee6ce719a2dd72e64e52812f2f852ee56ee528b02df0fb4cf9819b26f3e)))))))))
 
 (ppx_html (
-  (provides ((ppx_html v0.18~preview.130.76+222)))
+  (provides ((ppx_html v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_html/archive/1d5c30b4025c9e6c0dbc97aed1a2150ab72f283b.tar.gz))
+          https://github.com/janestreet/ppx_html/archive/589edcdf7a3f716de5d1a256d3445877ed0df793.tar.gz))
         (hashes (
-          sha256=bc75506d05299385774362faa9f2171fd16f22938228a9308daf7c8ca31d9d93)))))))))
+          sha256=725aee02151f7beec170b8d2e092376399dd9140c6fe2add9efbe92d86915121)))))))))
 
 (ppx_ignore_instrumentation (
-  (provides ((ppx_ignore_instrumentation v0.18~preview.130.76+222)))
+  (provides ((ppx_ignore_instrumentation v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_ignore_instrumentation/archive/49f55a1f068dd4c4dbdba144dc692b610fc6445a.tar.gz))
+          https://github.com/janestreet/ppx_ignore_instrumentation/archive/f6dcd0ae603c940ad5dcd4772bb3c1de7b6f49a8.tar.gz))
         (hashes (
-          sha256=3fe9042c0cee98914daa391e1636a3a93144209675f295d5d508981648b41e58)))))))))
+          sha256=48c89d07c21096a25d6f687696b89aaf60abe3eb6b2b4a46e70abf92d6c1b581)))))))))
 
 (ppx_inline_test (
-  (provides ((ppx_inline_test v0.18~preview.130.76+222)))
+  (provides ((ppx_inline_test v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_inline_test/archive/3974e947bc02eb1c2cda5db3de29bb245697c2bc.tar.gz))
+          https://github.com/janestreet/ppx_inline_test/archive/f738af6a43decbc53dd4d2ea876ac2529ff8a6e2.tar.gz))
         (hashes (
-          sha256=5382d041c059cfba472b5b91c5097f50f3bed6a2bb5ce63a3c94d28ef14f3bf8)))))))))
+          sha256=eb01fbe6f3bb8ed58d0b5c30091647607189856a6635ce02a025abb86f9a351b)))))))))
 
 (ppx_int63_literal (
-  (provides ((ppx_int63_literal v0.18~preview.130.76+222)))
+  (provides ((ppx_int63_literal v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_int63_literal/archive/4de87ca44c65e26e16c9aa7595ff20c4d7ddff18.tar.gz))
+          https://github.com/janestreet/ppx_int63_literal/archive/6c33205aad493a2f1dfecb06e10fe41430c5736e.tar.gz))
         (hashes (
-          sha256=5bb50a5fbb7580fba9f850963294e7aa4ada73e8206b87cd8c4625fd0ada5647)))))))))
+          sha256=e010dd5cd9d48bb23c47f491cbd30677eb1678f465dd1fad288efa0580eb96b7)))))))))
 
 (ppx_jane (
-  (provides ((ppx_jane v0.18~preview.130.76+222)))
+  (provides ((ppx_jane v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_jane/archive/d9e98881028ef501d4c4f53c1662cdf62fa357eb.tar.gz))
+          https://github.com/janestreet/ppx_jane/archive/c45c9c988af916cf9a0415b4cc69e6ddc5bb9cad.tar.gz))
         (hashes (
-          sha256=26fda99a148503c7bcb6e076884ef555b07973f13f7ea03767bcb04cc2e94389)))))))))
+          sha256=b258a98c8c0bb1f11769cd9944d2ef58fea1536287a1c62d1d2a1e32a91c6072)))))))))
 
 (ppx_js_style (
-  (provides ((ppx_js_style v0.18~preview.130.76+222)))
+  (provides ((ppx_js_style v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_js_style/archive/69db81ce8c03b482743ee4dabd0bcefb06db0ee1.tar.gz))
+          https://github.com/janestreet/ppx_js_style/archive/c02f4ca377f3c199d481d5dd0d92ae0f0cf088e6.tar.gz))
         (hashes (
-          sha256=df5ed8d0b0f3c026cd6ad748a3cd20897f7f1707fe0d807fa2a35e2e3bc3bb74)))))))))
+          sha256=9a66aedc7b96983d3250b66f3acc7577f5b892d3f03855a8fec106da0a320462)))))))))
 
 (ppx_jsonaf_conv (
-  (provides ((ppx_jsonaf_conv v0.18~preview.130.76+222)))
+  (provides ((ppx_jsonaf_conv v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_jsonaf_conv/archive/1f10dd96b307e7b09109eaaac5e5d4f3daad033e.tar.gz))
+          https://github.com/janestreet/ppx_jsonaf_conv/archive/8af499477d935b933cacf10d8623cdbc7c0fd085.tar.gz))
         (hashes (
-          sha256=33d71fde062e64393e3d56c3e3098e5b4b417be6826cee57445b01fe8c3e856e)))))))))
+          sha256=1df25399803d3e67a7d20f0261e5ac39297cd7a8cd69bda944a90b3463bb5d7d)))))))))
 
 (ppx_let (
-  (provides ((ppx_let v0.18~preview.130.76+222)))
+  (provides ((ppx_let v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_let/archive/4ee7a8636838aed6b8112ef2daf5439df45792ff.tar.gz))
+          https://github.com/janestreet/ppx_let/archive/6934a4f768573b62db8e8b526a4994cd90745980.tar.gz))
         (hashes (
-          sha256=5aa0f405da21982228f82bc87b8d348a3bbf240bdead608b22e9c69649bef0df)))))))))
+          sha256=807e53245e4927b43d604a883b9c917237b04e048769a53e248f31cac1b483cf)))))))))
 
 (ppx_log (
-  (provides ((ppx_log v0.18~preview.130.76+222)))
+  (provides ((ppx_log v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_log/archive/4afb369c828e664de7a166e8ff7060797bd5e908.tar.gz))
+          https://github.com/janestreet/ppx_log/archive/ef30528f5103578d6cce9eb27a79bed764eec5db.tar.gz))
         (hashes (
-          sha256=46e5713f0d6c5ba605d06a92cec5dde0db9b549a5c2b5b2c021d243aadf8edc2)))))))))
+          sha256=1720b917b2f09b87d637a1ad824fb8a7062c38f884544ba469e7bd69a85ede45)))))))))
 
 (ppx_module_timer (
-  (provides ((ppx_module_timer v0.18~preview.130.76+222)))
+  (provides ((ppx_module_timer v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_module_timer/archive/66b5917c61e05d4535b216b8828f0d35e633cdf5.tar.gz))
+          https://github.com/janestreet/ppx_module_timer/archive/446135cf30592a8c6749862b4386514b6adfcdf8.tar.gz))
         (hashes (
-          sha256=05411abfabf3b7ed7ca696a83f63a603ff76a94ffee9d49bbf754a878b5fafaa)))))))))
+          sha256=72351b0d37b4ab8a3833266aa0318ef5e22a6dc3e50eeac0be376aa87f975e7c)))))))))
 
 (ppx_optcomp (
-  (provides ((ppx_optcomp v0.18~preview.130.76+222)))
+  (provides ((ppx_optcomp v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_optcomp/archive/4ac68eae07fd0d9cf30d0ae9752796a266fe21c0.tar.gz))
+          https://github.com/janestreet/ppx_optcomp/archive/28338f3057e4a8199ae3890b88d6654972fb336b.tar.gz))
         (hashes (
-          sha256=71fa7cb36395025a746b59de7791579b6600ec9d66900d3ac46ca90cfcfa3ffc)))))))))
+          sha256=d8cfddcc3198588d4cc4a80d638adefc29cf8c3fbb6d0af857dd25b83d211bcd)))))))))
 
 (ppx_optional (
-  (provides ((ppx_optional v0.18~preview.130.76+222)))
+  (provides ((ppx_optional v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_optional/archive/bdb3e33753ad7559bc65e8e204d51316b01d281d.tar.gz))
+          https://github.com/janestreet/ppx_optional/archive/5dcbffa051893af40cce35d00e9f7b07cab3a8b4.tar.gz))
         (hashes (
-          sha256=0cf097a6636ae4cc1fed6887226540fed7a26329e1fb84dfd2d345998fe23826)))))))))
+          sha256=0be7f8058dca7da504bc800650ce07e1b5955c0a41d24327e6bdddfbca693f29)))))))))
 
 (ppx_pattern_bind (
-  (provides ((ppx_pattern_bind v0.18~preview.130.76+222)))
+  (provides ((ppx_pattern_bind v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_pattern_bind/archive/d2de3ef44b836ec48ca3c7c744203878adc527d1.tar.gz))
+          https://github.com/janestreet/ppx_pattern_bind/archive/80f2c83c73e38d2f37429d06708c10746c7ea6a9.tar.gz))
         (hashes (
-          sha256=b4c30b661c6f03066352ffe71033102effc2f75ff1898317574afc3f1f1c566a)))))))))
+          sha256=086a35f1746f54a28f0f00e099e47e0e748110ed33a62cf46e3da1d5147dafb5)))))))))
 
 (ppx_pipebang (
-  (provides ((ppx_pipebang v0.18~preview.130.76+222)))
+  (provides ((ppx_pipebang v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_pipebang/archive/782c0a6be69ba7933664ebd3b880232fbf942d44.tar.gz))
+          https://github.com/janestreet/ppx_pipebang/archive/9c7e039b185823d8dbf24edde58cf80c7e93cab8.tar.gz))
         (hashes (
-          sha256=bf6fe929a731fe7dab6f6e6ce18a5a6b5767550a1554597e1c68e46e3cfc6e7b)))))))))
+          sha256=65ef7fd700856d270bd408ed3cebfcaea065813bb2dcdba616502d4b6a4206a2)))))))))
 
 (ppx_portable (
-  (provides ((ppx_portable v0.18~preview.130.76+222)))
+  (provides ((ppx_portable v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_portable/archive/6c142bf6bf00a63ee584c3c0ce2fc210a8fe980c.tar.gz))
+          https://github.com/janestreet/ppx_portable/archive/e0eafeebbddbd449990fb45f23faf41511f7531e.tar.gz))
         (hashes (
-          sha256=3d335493639762b0667ef9ea091599f660c7a184402a5f57e9cc5e932c4df2a9)))))))))
+          sha256=d7037fe334dd0fcfa1a0cd44ef143207bb832ae4d167cc809b91e45875c8351b)))))))))
 
 (ppx_quick_test (
-  (provides ((ppx_quick_test v0.18~preview.130.76+222)))
+  (provides ((ppx_quick_test v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_quick_test/archive/b24eec7e3ddcac47cda076aee6db459ebf05c127.tar.gz))
+          https://github.com/janestreet/ppx_quick_test/archive/52b66cfb7bf29573a5b9a186b6d87dbb78d7dcde.tar.gz))
         (hashes (
-          sha256=773f2ea854924afb9526d53aa7b251602b6e07fcbe7ae112cadfad9194e868d2)))))))))
+          sha256=8384c7f8141ba22e7433bf463fd389e5ec3fb1c95d30f8a9bf091433fa8ee65e)))))))))
 
 (ppx_rope (
-  (provides ((ppx_rope v0.18~preview.130.76+222)))
+  (provides ((ppx_rope v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_rope/archive/5ec507b94d0a828dbefb1aa6863931d6153869ef.tar.gz))
+          https://github.com/janestreet/ppx_rope/archive/4258bf5ccb13529753ba7cd21666a9100fbae12b.tar.gz))
         (hashes (
-          sha256=68605adc6c0e8ce16c5848c37201e6ce5cdf28fbf2a20a0e973e72e3d745acc7)))))))))
+          sha256=dae2e753dfa98b39decb8fc865f24127c2d034d817d353ff62329820d055bd19)))))))))
 
 (ppx_sexp_conv (
-  (provides ((ppx_sexp_conv v0.18~preview.130.76+222)))
+  (provides ((ppx_sexp_conv v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_sexp_conv/archive/e60e65e42330ae4cc1b705f0cfaaa0175f21a1d4.tar.gz))
+          https://github.com/janestreet/ppx_sexp_conv/archive/198ef6394b5831d8c7f211f4faa16b7047886038.tar.gz))
         (hashes (
-          sha256=ba37b149e6268901f3b4249189f9d0d64207cd42eea5dc49bdc42cde4020c615)))))))))
+          sha256=132d5c01b7d0220ef21322e66ee1ad3ee7a97f370138f904205981a471812840)))))))))
 
 (ppx_sexp_message (
-  (provides ((ppx_sexp_message v0.18~preview.130.76+222)))
+  (provides ((ppx_sexp_message v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_sexp_message/archive/1acb9d6fea06a16b93b7384e5e8370225f695267.tar.gz))
+          https://github.com/janestreet/ppx_sexp_message/archive/b0595e930cdb0b08c5aa7dde5ed631231d73594c.tar.gz))
         (hashes (
-          sha256=48f47897192eaea11a302cf8b36ed64d644c8973d9527f5597e95f9f880cde8d)))))))))
+          sha256=1168e9dcd0b74937b68d20a485aa50538f75e4ae6411529e81233c17e3b5f829)))))))))
 
 (ppx_sexp_value (
-  (provides ((ppx_sexp_value v0.18~preview.130.76+222)))
+  (provides ((ppx_sexp_value v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_sexp_value/archive/426ec1c103a8815f6f0d386e75c21919694e0bc8.tar.gz))
+          https://github.com/janestreet/ppx_sexp_value/archive/15db3a1769e4d6bb66206bd44030a089471a4b13.tar.gz))
         (hashes (
-          sha256=72c314c98054b05a121d4c975680fda65d894f9f116a83167f1c3d74bdac3df6)))))))))
+          sha256=e4c4e5b2af9b29a78dc5feb197606bd8a156f1d87e10549561f9e36b40cbece3)))))))))
 
 (ppx_shorthand (
-  (provides ((ppx_shorthand v0.18~preview.130.76+222)))
+  (provides ((ppx_shorthand v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_shorthand/archive/56df5b4a4f3f2eadd88c63cbe9d6c3631a6a32b0.tar.gz))
+          https://github.com/janestreet/ppx_shorthand/archive/75e5bd45556fcda037237f30c5d7c706c81f7451.tar.gz))
         (hashes (
-          sha256=4fdd6515ab03227944bd782e26b88904054d44e04e479a1fdcdf68beca961a00)))))))))
+          sha256=b1bce34ea3a528a6465146d5f0b06958857811fea5bfd63627a315b309ef61a2)))))))))
 
 (ppx_simple_xml_conv (
-  (provides ((ppx_simple_xml_conv v0.18~preview.130.76+222)))
+  (provides ((ppx_simple_xml_conv v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_simple_xml_conv/archive/886827adfd3437b8ca02b50adafd0cb1294659eb.tar.gz))
+          https://github.com/janestreet/ppx_simple_xml_conv/archive/b90648e69bf6cebf42189eb1f76455b376bef55d.tar.gz))
         (hashes (
-          sha256=20d42a99714b14f4e00f2f7e952c7a1a7d14f0587c7bcd65ca3041e57ba99ed9)))))))))
+          sha256=a33a7aa7a7109096c59953017ced57640028e4c04ff7b6a474ec6fe2b59c356c)))))))))
 
 (ppx_stable (
-  (provides ((ppx_stable v0.18~preview.130.76+222)))
+  (provides ((ppx_stable v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_stable/archive/bd8473fe2c5b9a66f2788d42b9f4c8132d6b304b.tar.gz))
+          https://github.com/janestreet/ppx_stable/archive/db0c934cefb17222e070a858d2bd308ca220cd96.tar.gz))
         (hashes (
-          sha256=823b0715d12eae037cd895e100687715579c08d1d1044fdede6f3d1a3f95275e)))))))))
+          sha256=95bbda88c29be70d4865a31d4ea06a804796a195ea2c7fe05c04006b78b760c5)))))))))
 
 (ppx_stable_witness (
-  (provides ((ppx_stable_witness v0.18~preview.130.76+222)))
+  (provides ((ppx_stable_witness v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_stable_witness/archive/37907daf6b804ee39d2e7a7abd18a87e9f461f8c.tar.gz))
+          https://github.com/janestreet/ppx_stable_witness/archive/270a1304af4365e6aab0161f4da799455da5a862.tar.gz))
         (hashes (
-          sha256=682cd26ca2b4987185a64bf3e5b153c8c6df219cedbb4dc84f820581e228cafe)))))))))
+          sha256=18561e8425d3c6a403f33a9402482493f760dbd71fbc83b3e1550b67d68eec2a)))))))))
 
 (ppx_string (
-  (provides ((ppx_string v0.18~preview.130.76+222)))
+  (provides ((ppx_string v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_string/archive/d24ea5e3a90ce6c18831d0c06745c57291ce852f.tar.gz))
+          https://github.com/janestreet/ppx_string/archive/501b14c052dd4ea1c5040909f2cd41b376ffe042.tar.gz))
         (hashes (
-          sha256=d4085d5973ca5ca2b2e9db6c9a0b74ccd98dfebfe701fcc7d172a0ae21255161)))))))))
+          sha256=4227d1481c27bd69c2f25c9991e96a95f1fa5539b926f80c9fe39ac6726af210)))))))))
 
 (ppx_string_conv (
-  (provides ((ppx_string_conv v0.18~preview.130.76+222)))
+  (provides ((ppx_string_conv v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_string_conv/archive/f671e88a398b3f234d2de3d76eea3d8f8a947f12.tar.gz))
+          https://github.com/janestreet/ppx_string_conv/archive/e32d1ab34ac1e54d2dcebf5e7a71976f8ea5ad07.tar.gz))
         (hashes (
-          sha256=09a400727925f52b03204c4f1052dbd859655039afaba2d98a28e5f505d50ca5)))))))))
+          sha256=73383789236ee4166e35f363303c67eeed0c8ce2460bcd976f1b22954a3d4673)))))))))
 
 (ppx_template (
-  (provides ((ppx_template v0.18~preview.130.76+222)))
+  (provides ((ppx_template v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_template/archive/aa546305305afe8bd30e38da29ae60034d6ec7af.tar.gz))
+          https://github.com/janestreet/ppx_template/archive/588665c75d2d732e12b489ee13caff2d23728d38.tar.gz))
         (hashes (
-          sha256=edafc1bd7a82ddf02008183336f46e3727c0d1359b85c4c7cc1b32f8a55a3049)))))))))
+          sha256=65c7b8283907318ac5a27de695399d755aaadca11178d6b762d9aac4791343e6)))))))))
 
 (ppx_tydi (
-  (provides ((ppx_tydi v0.18~preview.130.76+222)))
+  (provides ((ppx_tydi v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_tydi/archive/085142941df7de438a86db44ebebc0351136afeb.tar.gz))
+          https://github.com/janestreet/ppx_tydi/archive/7bde5775cb3aa03a55fe29b29eb235e7ad647ede.tar.gz))
         (hashes (
-          sha256=86222f4134743e8140e34675329c6f5e45174d6d8a724cf90cf48f183f804e4e)))))))))
+          sha256=b6ddf08de8108215aeb2c97813c8ab8ae5eb0180105fa18d5e357ef325b57045)))))))))
 
 (ppx_typed_fields (
-  (provides ((ppx_typed_fields v0.18~preview.130.76+222)))
+  (provides ((ppx_typed_fields v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_typed_fields/archive/b88068ae2a1bb6e4e9bef0da2a65c40fc397cb10.tar.gz))
+          https://github.com/janestreet/ppx_typed_fields/archive/c7e0fa1d76ecf10411c9dad5935c2d93e4f70c10.tar.gz))
         (hashes (
-          sha256=cc491f23949bc34d8e48b5abaa452d3e8cc5d4daee01cc4ab9417da5118d94a5)))))))))
+          sha256=28ed119f6444204ff1638e5d732cbb12e1caea9e6a8d821b7d6aeb0e732df502)))))))))
 
 (ppx_typerep_conv (
-  (provides ((ppx_typerep_conv v0.18~preview.130.76+222)))
+  (provides ((ppx_typerep_conv v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_typerep_conv/archive/b694c0fea0faa4ed8aa0e359e6375a05ceac7a70.tar.gz))
+          https://github.com/janestreet/ppx_typerep_conv/archive/0e0b91c53bc13f1a40abf34db412b8cf4c793f59.tar.gz))
         (hashes (
-          sha256=d6cc6700ac20b9e2e2ae9544541ef3ab76e549a3b18b4ffb02afe759fb217d15)))))))))
+          sha256=3ce8128385ac834b09cfcb8f4858cd3d5681163d11dfc615298fcd83b971aac1)))))))))
 
 (ppx_var_name (
-  (provides ((ppx_var_name v0.18~preview.130.76+222)))
+  (provides ((ppx_var_name v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_var_name/archive/0da8fefda39226b7e2fcdd4ec5671dd56b406b6f.tar.gz))
+          https://github.com/janestreet/ppx_var_name/archive/1c26fe5da3038ef577cbd7b51a839e5f251981ee.tar.gz))
         (hashes (
-          sha256=5c9bc9529cd5c8ef34999b855a4ff34370540032cb4810140c739b8a5ea853f3)))))))))
+          sha256=f5b3da3dae540e2c456d08ef4383eb873bf77085cd288d642ae2a341564fea3a)))))))))
 
 (ppx_variants_conv (
-  (provides ((ppx_variants_conv v0.18~preview.130.76+222)))
+  (provides ((ppx_variants_conv v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_variants_conv/archive/d53d4c1b0b232a0ac64a9196ff0e5fd353a04058.tar.gz))
+          https://github.com/janestreet/ppx_variants_conv/archive/e7b6a76ba7968adaa358faecec1b18bcf5e0dd88.tar.gz))
         (hashes (
-          sha256=c9e4f44648cca58fc4b7717062b79175ddda82579379e7877d8b315c9fbc6fc5)))))))))
+          sha256=0c1259b7d0fa159e93f43f6c8c65398455e55f3861eaacc13a973806d2145ea8)))))))))
 
 (ppx_with (
-  (provides ((ppx_with v0.18~preview.130.76+222)))
+  (provides ((ppx_with v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_with/archive/f64531ab18f3f42f2de7243e37c9df63d908f264.tar.gz))
+          https://github.com/janestreet/ppx_with/archive/048a3f548f75b05d924ce9c6a3e5157648ffe708.tar.gz))
         (hashes (
-          sha256=adbf2988d8040663806818e4b151d384dd7341913b76669d9b1429ed459e91f0)))))))))
+          sha256=d1f0540d46d74b92a149d235af37b716ad5224f14cb840850e7c569a9aca2358)))))))))
 
 (ppx_xml_conv (
-  (provides ((ppx_xml_conv v0.18~preview.130.76+222)))
+  (provides ((ppx_xml_conv v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_xml_conv/archive/f1f4eccb18f9c27f083344883871f9526be2a148.tar.gz))
+          https://github.com/janestreet/ppx_xml_conv/archive/76f9eac1e136fecb81bbf23efd7a7ccfa2dd9e6b.tar.gz))
         (hashes (
-          sha256=9320439f4daca434d7688b170f08608fb6b796890d30e829ac504f501f144140)))))))))
+          sha256=08b4e17f80f0f8abb8014f589c49eeba7f2d4b8207fe9b00d5df10ce0bc3e46c)))))))))
 
 (ppx_yojson_conv (
-  (provides ((ppx_yojson_conv v0.18~preview.130.76+222)))
+  (provides ((ppx_yojson_conv v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_yojson_conv/archive/9bfa7a11bb51cb430e53415395fb208dc443ea82.tar.gz))
+          https://github.com/janestreet/ppx_yojson_conv/archive/0586db659761a612ee941dd49657dcc60432d938.tar.gz))
         (hashes (
-          sha256=37c9003616700e7fefaad2c33feefc1ecb1eb300d001bb842c048d58a99ca1ce)))))))))
+          sha256=ae98ef1c85c77dfe11997e95332463702cc7c57330dd8faf80c1825266494d31)))))))))
 
 (ppx_yojson_conv_lib (
-  (provides ((ppx_yojson_conv_lib v0.18~preview.130.76+222)))
+  (provides ((ppx_yojson_conv_lib v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppx_yojson_conv_lib/archive/e065baa0180952195f069896387d06f6847bd5c6.tar.gz))
+          https://github.com/janestreet/ppx_yojson_conv_lib/archive/7b7e3b3ea30e12bfd9df408f3958f48141af6a32.tar.gz))
         (hashes (
-          sha256=f50eafa8173355ba2059e722ca50444973fd31ea43bb4d8e1fb7efb2d91414fe)))))))))
+          sha256=187b10ec22bc03052d7bef072829a893698853f1656696ff9740195ff3bcf78f)))))))))
 
 (ppxlib (
   (provides ((ppxlib 0.33.0+ox)))
@@ -3665,287 +3465,292 @@
   (extra (
     (dune.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/dune.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/dune.patch))
       (hashes (
-        sha256=e3659959f360d40f12103c6a3cc0e045bfb7edf11a91b1ac98e0ab918d7d8364))))
+        sha256=4858b355e99af25cda8c301cc685d53a9d110bcc1d3aa51a5131a19ea069aaa3))))
     (location_check.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/location_check.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/location_check.ml.patch))
       (hashes (
         sha256=29aa6beee5428730b9ca84f4d8d45d81d26bbbd7ff6225e2b00e6aa5224ba385))))
     (ppxlib+ast+ast.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+ast+ast.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+ast+ast.ml.patch))
       (hashes (
         sha256=256649e97269f4d2f55e150eb30c53310f9d75e359af8eb7b38da5c4515d8ce8))))
     (ppxlib+ast+ast_helper_lite.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+ast+ast_helper_lite.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+ast+ast_helper_lite.ml.patch))
       (hashes (
         sha256=15eeb736edb93d9888008bf830dfb92b803f11525271c19a51f21f258c972328))))
     (ppxlib+ast+ast_helper_lite.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+ast+ast_helper_lite.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+ast+ast_helper_lite.mli.patch))
       (hashes (
         sha256=1e684c100bc2fd01ca1d23c140ddb36f8fc4db57ba77d76fe8d0810fcf410b7f))))
     (ppxlib+ast+location_error.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+ast+location_error.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+ast+location_error.ml.patch))
       (hashes (
         sha256=c6392beb60da208e53264e8ef2b6aff87333dd616b4cdd7b7d639c58d781fa18))))
     (ppxlib+ast+location_error.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+ast+location_error.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+ast+location_error.mli.patch))
       (hashes (
         sha256=1f8146d575a3c0e95170b309b90c78c05f56cd8b4547ce536ed3ed91d9ddd8c5))))
     (ppxlib+ast+supported_version+supported_version.ml.patch
      ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+ast+supported_version+supported_version.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+ast+supported_version+supported_version.ml.patch))
       (hashes (
         sha256=a7762cf03e1aeb12d3916da21e08874737a0324e7e3ebd4d13431e04641dec7d))))
     (ppxlib+ast+versions.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+ast+versions.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+ast+versions.ml.patch))
       (hashes (
         sha256=b0860295416b010107a99dbd14f094376c6b44109747f3436935ad861aeda19d))))
     (ppxlib+ast+versions.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+ast+versions.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+ast+versions.mli.patch))
       (hashes (
         sha256=3ea1dd81309fa433ef498a9e756f6a6f815cc3a919bfbe177ceb1e085ffdb055))))
     (ppxlib+astlib+ast_414.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+astlib+ast_414.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+astlib+ast_414.ml.patch))
       (hashes (
         sha256=c4b85059cabbc633a2e9e191709804d9173ece743813ab11411509ba2b9260cc))))
     (ppxlib+astlib+ast_500.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+astlib+ast_500.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+astlib+ast_500.ml.patch))
       (hashes (
         sha256=cfb9281d210a4b7744b938afb39c06cb360b86b7fbdef86f0a496e9ce87e006d))))
     (ppxlib+astlib+ast_999.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+astlib+ast_999.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+astlib+ast_999.ml.patch))
       (hashes (
-        sha256=0005e7f6075c5245f560eef83dc13bedfef7a5571a81839005f5aaf8ade777d3))))
+        sha256=04a83268a19e761d2dab653b39e90b1b62b8dd48d4f83232e89069ad5abbed6e))))
     (ppxlib+astlib+ast_metadata.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+astlib+ast_metadata.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+astlib+ast_metadata.mli.patch))
       (hashes (
         sha256=f57b43dba6f1abba33cf8c302e12448f4c7262d9831bcfe5545f83f201d90549))))
     (ppxlib+astlib+astlib.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+astlib+astlib.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+astlib+astlib.ml.patch))
       (hashes (
         sha256=fc728f66702ffcd43060a8d034c053a2e24939eba89a18f1a3b4d86dee71c41b))))
     (ppxlib+astlib+cinaps+astlib_cinaps_helpers.ml.patch
      ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+astlib+cinaps+astlib_cinaps_helpers.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+astlib+cinaps+astlib_cinaps_helpers.ml.patch))
       (hashes (
         sha256=8a45c26531773e7bbc0ca0a195ac0ad7fc7b559fe97110f3adde66181e6f7781))))
     (ppxlib+astlib+config+gen.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+astlib+config+gen.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+astlib+config+gen.ml.patch))
       (hashes (
         sha256=63e1849d90ca2a6c391a401b0e87ce853dbfc44488ba3b8d449af7a81b5ddbad))))
     (ppxlib+astlib+migrate_500_999.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+astlib+migrate_500_999.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+astlib+migrate_500_999.ml.patch))
       (hashes (
         sha256=4e40da58c1f159ee59e88e53242028c7ab5a4e6ed5d2f18db4784816634adf67))))
     (ppxlib+astlib+migrate_999_500.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+astlib+migrate_999_500.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+astlib+migrate_999_500.ml.patch))
       (hashes (
         sha256=ff49f086e13725595b6ac45fae73151c4e3e5278d0e6070365e73682ada82058))))
     (ppxlib+astlib+parse.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+astlib+parse.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+astlib+parse.mli.patch))
       (hashes (
         sha256=48120552f6d9ac715f5c953d1182fb0d4f5aa294467b23e4f50ca4eeede9993a))))
     (ppxlib+astlib+pprintast.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+astlib+pprintast.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+astlib+pprintast.ml.patch))
       (hashes (
         sha256=3c70c302711a0e05843a720df746d3d3aa8c06b63b89079e07834a8ee716d56f))))
     (ppxlib+astlib+pprintast.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+astlib+pprintast.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+astlib+pprintast.mli.patch))
       (hashes (
         sha256=fa622981e0270f8233b4edaf7e6dde917d74664e53bf4d4b9aeff4c07a09e609))))
     (ppxlib+astlib+stdlib0.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+astlib+stdlib0.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+astlib+stdlib0.ml.patch))
       (hashes (
         sha256=b96db1df2b603c7c715529261993fdaa82e99972b014f63d8274b8bc1ff6ed80))))
     (ppxlib+doc+writing-ppxs.mld.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+doc+writing-ppxs.mld.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+doc+writing-ppxs.mld.patch))
       (hashes (
         sha256=ce1d3c2e9ede3a6dc24b4a1bf23a5758af651bf62f7f4ee856a9b6c36047c0ab))))
     (ppxlib+metaquot+ppxlib_metaquot.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+metaquot+ppxlib_metaquot.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+metaquot+ppxlib_metaquot.ml.patch))
       (hashes (
         sha256=dff0af8c3eeeeebedb154eed019815cb803bf3860778a9744c67af540043ef2e))))
     (ppxlib+runner_as_ppx+ppxlib_runner_as_ppx.ml.patch
      ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+runner_as_ppx+ppxlib_runner_as_ppx.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+runner_as_ppx+ppxlib_runner_as_ppx.ml.patch))
       (hashes (
         sha256=2d3c5106d177079785e1a81fddc4a7d2aee0a00c576976aab6e45ff82d619931))))
     (ppxlib+src+ast_builder.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+ast_builder.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+ast_builder.ml.patch))
       (hashes (
         sha256=acdbfaf94eacacedb58d36f494ebc71d93fc7135e8d6c28eb3398c77264ac915))))
     (ppxlib+src+ast_builder.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+ast_builder.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+ast_builder.mli.patch))
       (hashes (
         sha256=1fc8a974777c266e13df6cbc5af6df33182d55fc39eb5e59d6476b74fc18ef0d))))
     (ppxlib+src+ast_builder_intf.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+ast_builder_intf.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+ast_builder_intf.ml.patch))
       (hashes (
         sha256=938aabfd0d4f7eb48c4524a7f03154fcc76ec0c8bbf6ea28684c52c52aa318c4))))
     (ppxlib+src+ast_pattern.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+ast_pattern.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+ast_pattern.ml.patch))
       (hashes (
         sha256=061b75e7217469fd5a6d8ed6d8d74ded558eaa867aa7a3075b710675fad5ac4a))))
     (ppxlib+src+ast_pattern.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+ast_pattern.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+ast_pattern.mli.patch))
       (hashes (
         sha256=2d52385f3a734c3221ab8a7bd4cd36b4c81dd4c5b44b378bf966922fd18ce1ad))))
     (ppxlib+src+ast_traverse.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+ast_traverse.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+ast_traverse.ml.patch))
       (hashes (
         sha256=1cf7ff1940cac40a0386b65650ecf745c251a0f1cd14d88af41ca298ac6f1ae1))))
     (ppxlib+src+attribute.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+attribute.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+attribute.ml.patch))
       (hashes (
         sha256=74ecaaf97f58fa45ddf1c8600c9865ef23dfbba32d359f6d97181f0cdc57c835))))
     (ppxlib+src+attribute.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+attribute.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+attribute.mli.patch))
       (hashes (
         sha256=96ba1295d087f5f44d7af09ac34afb92df59508ea888f03a7c2acba084c4cb7e))))
     (ppxlib+src+cinaps+ppxlib_cinaps_helpers.ml.patch
      ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+cinaps+ppxlib_cinaps_helpers.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+cinaps+ppxlib_cinaps_helpers.ml.patch))
       (hashes (
         sha256=3d8434915c02f4e84e566cc08a3db42e1e6a861993bbed05c14a49bb98edf856))))
     (ppxlib+src+code_matcher.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+code_matcher.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+code_matcher.ml.patch))
       (hashes (
         sha256=252b7155b35908b002fefa54fd97cb4cbff7f0c30db89f2ba26dead895e3f0ad))))
     (ppxlib+src+code_matcher.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+code_matcher.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+code_matcher.mli.patch))
       (hashes (
         sha256=0014b9354e5a24c24d382db6afcae70c70a852768c82f10f6ca4cb5ca05a1249))))
     (ppxlib+src+common.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+common.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+common.ml.patch))
       (hashes (
         sha256=d8ed6370f9b7f14019a1b5953dac3fd63d59b9e6a963f89bafc237133a394d5f))))
     (ppxlib+src+common.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+common.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+common.mli.patch))
       (hashes (
         sha256=69769c220fc43d0b00d7033c6d1eb390df47538dac604aba15f6f51a1a504064))))
     (ppxlib+src+context_free.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+context_free.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+context_free.ml.patch))
       (hashes (
         sha256=5c8d14144863659cb8cbb32360511e32921fa1ae761ec60ec9ab8382bd5f58e5))))
     (ppxlib+src+context_free.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+context_free.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+context_free.mli.patch))
       (hashes (
         sha256=c41b9d84f8540a02d0e3743a1ec8cf686e4de09e052e2cfd6aae4b5c03e457ca))))
     (ppxlib+src+deriving.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+deriving.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+deriving.ml.patch))
       (hashes (
         sha256=37cbe0b81bbc045f411a95d8c05133075e0b748ca2d382c8f70439fda4bc2b40))))
     (ppxlib+src+deriving.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+deriving.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+deriving.mli.patch))
       (hashes (
         sha256=9092776cae8d31e1670061b18751383167477004d8e5f43ca9d09e4976ef52b3))))
     (ppxlib+src+driver.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+driver.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+driver.ml.patch))
       (hashes (
         sha256=fb30bb8efdf81e36fa014896e060b4bba20263f6b903fddab5822b5e0f7412db))))
     (ppxlib+src+driver.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+driver.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+driver.mli.patch))
       (hashes (
         sha256=2ad047047323d2d4eb0a217b20e6d599acf76212761dad90a43a1aeb291b0cfb))))
+    (ppxlib+src+extension.ml.patch (
+      (urls (
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+extension.ml.patch))
+      (hashes (
+        sha256=6cc2cef37dda53b5ff5b7b7dd714d4a6604b4048db3aea82413e5ce51fe3bcfc))))
     (ppxlib+src+gen+gen_ast_builder.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+gen+gen_ast_builder.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+gen+gen_ast_builder.ml.patch))
       (hashes (
         sha256=ac68b651aa66061c202c076e4e009b14fd580748ceebced4b1096b1e9fa3ebb4))))
     (ppxlib+src+gen+gen_ast_pattern.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+gen+gen_ast_pattern.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+gen+gen_ast_pattern.ml.patch))
       (hashes (
         sha256=b9b763a2f04c239231748c895b84e5f6ae6af4fae6727b041a5282bbcdd38317))))
     (ppxlib+src+gen+import.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+gen+import.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+gen+import.ml.patch))
       (hashes (
         sha256=217b43ca4ec72e0f590e44b4b280fdbce917f1b3835d9258471079e6978a39d2))))
     (ppxlib+src+ignore_unused_warning.ml.patch
      ((urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+ignore_unused_warning.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+ignore_unused_warning.ml.patch))
       (hashes (
         sha256=292bc60e7e628d839e5dcaaee1dbcfe60b65e51de6b7f588005d8ab4c65c1af6))))
     (ppxlib+src+location.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+location.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+location.ml.patch))
       (hashes (
         sha256=2773f5b33af2bb7537ad45567fd85df72a5b1090d6fc678bc9cd974de2fbb168))))
     (ppxlib+src+location.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+location.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+location.mli.patch))
       (hashes (
         sha256=c437419eb0cd3b2227c84b5860034fc8fb3fa2a5c82ef4f4a524af02ed079aee))))
     (ppxlib+src+name.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+name.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+name.ml.patch))
       (hashes (
         sha256=24f89c989df15d04a0f7339600b14b627311d5ce1d8da4b74c77f00a5c3652ff))))
     (ppxlib+src+ppxlib.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+ppxlib.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+ppxlib.ml.patch))
       (hashes (
         sha256=d598e4d2359ec08da08644ae866fff9ab67119b7bfc400232609107231b89a5d))))
     (ppxlib+src+utils.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+utils.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+src+utils.mli.patch))
       (hashes (
         sha256=f1aefb00cc5b06d6564920d80c3dfcda5c7211823f21c7d8bf8feb7efc3dd97d))))
     (ppxlib+stdppx+stdppx.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+stdppx+stdppx.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+stdppx+stdppx.ml.patch))
       (hashes (
         sha256=65ad51dcab1dc9580928e69e63393c7c3d94f115666d5e0e49897dde128ffd00))))
     (ppxlib+traverse+ppxlib_traverse.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+traverse+ppxlib_traverse.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/ppxlib+traverse+ppxlib_traverse.ml.patch))
       (hashes (
         sha256=51b412cfb18e773d24110c191b234683d2573d34dcb4e6de9e31fea41f9925ff))))
     (utils.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/ppxlib/ppxlib.0.33.0+ox/files/utils.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/ppxlib/ppxlib.0.33.0+ox/files/utils.ml.patch))
       (hashes (
         sha256=098c41f07f318c838dacafc753dbba6697c6e365305e8344d77a46f6a7df7853))))))
   (patches (
@@ -3994,6 +3799,7 @@
     ppxlib+src+deriving.mli.patch
     ppxlib+src+driver.ml.patch
     ppxlib+src+driver.mli.patch
+    ppxlib+src+extension.ml.patch
     ppxlib+src+gen+gen_ast_builder.ml.patch
     ppxlib+src+gen+gen_ast_pattern.ml.patch
     ppxlib+src+gen+import.ml.patch
@@ -4008,54 +3814,54 @@
     utils.ml.patch))))
 
 (ppxlib_jane (
-  (provides ((ppxlib_jane v0.18~preview.130.76+222)))
+  (provides ((ppxlib_jane v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/ppxlib_jane/archive/a097f8757a6a5d8b727720fd22d621850974c66d.tar.gz))
+          https://github.com/janestreet/ppxlib_jane/archive/2ef9c6356041bc74895c99f43d997f3a690050b0.tar.gz))
         (hashes (
-          sha256=f4140b4565da85b42a6acf26acb187c6c8bfdd4cef120455baa1ccac92900bd5)))))))))
+          sha256=8144635b21c33f31b0ff0e708a95c2f60e4ff2609039965486d495c909088e5f)))))))))
 
 (profunctor (
-  (provides ((profunctor v0.18~preview.130.76+222)))
+  (provides ((profunctor v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/profunctor/archive/dd11a667bc0f7357df00a38b61db39f99b8bfe56.tar.gz))
+          https://github.com/janestreet/profunctor/archive/54c9451803c62b84a6416b116ae5e28e074db3dc.tar.gz))
         (hashes (
-          sha256=6b425af17c5316e0d1ebc57f58bb26d48c1e6f0d909528a8bb778a3f411c5021)))))))))
+          sha256=21c7770c55816348c2143cb069778e0b4c96abc598056bbaf2e22f6fd4c7c021)))))))))
 
 (protocol_version_header (
-  (provides ((protocol_version_header v0.18~preview.130.76+222)))
+  (provides ((protocol_version_header v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/protocol_version_header/archive/e90a870b0e6fd02b1ca87b5bd13e247fdf288092.tar.gz))
+          https://github.com/janestreet/protocol_version_header/archive/01c11451931ff72df0e2287421713f5800057cb0.tar.gz))
         (hashes (
-          sha256=c0455118cff9cd2fc7f1064fb44f55a3b2b90c16c2ec5f4a61d51d2a94e438a2)))))))))
+          sha256=2899f4d9e1f05d46d6536f8f2a47dbd2c8f1d58652ee5ded83e2a17ff7eb6fd2)))))))))
 
 (re2 (
-  (provides ((re2 v0.18~preview.130.76+222)))
+  (provides ((re2 v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/re2/archive/e2ac97f6497760529d493a79a16b765d3c91a3fa.tar.gz))
+          https://github.com/janestreet/re2/archive/729549119764c4a8a95d90f873c30ff8bb973d61.tar.gz))
         (hashes (
-          sha256=214c7ea2be9eafb2b082429ce71a9c4878ec7f799e77fa38351aaf9fae12f02b)))))))))
+          sha256=1ff83f6af78aa4dfcc7c5117a7284598784203872df19052e0b68262def37733)))))))))
 
 (re_parser (
-  (provides ((re_parser v0.18~preview.130.76+222)))
+  (provides ((re_parser v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/re_parser/archive/c835f3509696fafa3d06afcd1248b507bf8c4a70.tar.gz))
+          https://github.com/janestreet/re_parser/archive/9b8bf5d4bb3954686c938eaf84f0286cdeeea5dc.tar.gz))
         (hashes (
-          sha256=84dcfc042ca84d226d1552dbdd024da67f6d14b3e8ba71f44ab8a8b8e256eb4a)))))))))
+          sha256=cf29a6bc74c2cd789e5a0f984b01e434cc7688bcec404aae8b98a120b61f6265)))))))))
 
 (react (
   (provides ((react 1.2.2)))
@@ -4067,44 +3873,44 @@
           sha512=18cdd544d484222ba02db6bd9351571516532e7a1c107b59bbe39193837298f5c745eab6754f8bc6ff125b387be7018c6d6e6ac99f91925a5e4f53af688522b1)))))))))
 
 (record_builder (
-  (provides ((record_builder v0.18~preview.130.76+222)))
+  (provides ((record_builder v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/record_builder/archive/ca68f39901b5fb8176e313be00655ed46299cddb.tar.gz))
+          https://github.com/janestreet/record_builder/archive/a971d7ab234998b622084a44adf0c8dd24b92c93.tar.gz))
         (hashes (
-          sha256=07bd8f084706a8034483b0e72b96c1337574f868c3fd8be7685ba5dca7422908)))))))))
+          sha256=37c1230c95fda516033c48f12b3e7bc602d756b539dbaf4ec38638713baabf4d)))))))))
 
 (redis-async (
-  (provides ((redis-async v0.18~preview.130.76+222)))
+  (provides ((redis-async v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/redis-async/archive/caa214953d7e4d5d6f924587e209a83cd136afa4.tar.gz))
+          https://github.com/janestreet/redis-async/archive/96bf3340c74a0329044e9ffceda55eb0f61b71c7.tar.gz))
         (hashes (
-          sha256=aa980c3f561f8835d786c87cdd98263feacd5255dd926706c92b0e030d201912)))))))))
+          sha256=805542daf9a431433cd62d9b47eb8ebc75c5ebd90202fb7cf89da9c0d5b92203)))))))))
 
 (regex_parser_intf (
-  (provides ((regex_parser_intf v0.18~preview.130.76+222)))
+  (provides ((regex_parser_intf v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/regex_parser_intf/archive/e01b4594706212a212053387b65ab56b5b3afca3.tar.gz))
+          https://github.com/janestreet/regex_parser_intf/archive/6bbbf60cf02c414da2b64f8a5abab2d80e504bba.tar.gz))
         (hashes (
-          sha256=2c14ab4f057697251380b35dca6b00b436a2443b51b783a59dce3644545ee6da)))))))))
+          sha256=433280c485711f2961cf41fd07542347712e1ef353b4d98eb4f8823eff251f90)))))))))
 
 (resource_cache (
-  (provides ((resource_cache v0.18~preview.130.76+222)))
+  (provides ((resource_cache v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/resource_cache/archive/1eaa5ad7637af39d5204179c5383ba8cbd747c45.tar.gz))
+          https://github.com/janestreet/resource_cache/archive/3f713a8a9c0d9e00bf27418c5fe61bc906829cb1.tar.gz))
         (hashes (
-          sha256=7a6a6817ff773b72900813e88b69ba8c44d786314931119c90075b69d12aae88)))))))))
+          sha256=5adf29f080627da508abb7f7af9a9ffe05108dd5363957b07a3c943b3e1034df)))))))))
 
 (result (
   (provides ((result 1.5)))
@@ -4118,14 +3924,14 @@
           md5=1b82dec78849680b49ae9a8a365b831b)))))))))
 
 (rpc_parallel (
-  (provides ((rpc_parallel v0.18~preview.130.76+222)))
+  (provides ((rpc_parallel v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/rpc_parallel/archive/e3aa1369c10c87f6891f73ff95e804ab485b88f4.tar.gz))
+          https://github.com/janestreet/rpc_parallel/archive/710f0265f945856f2240ac9f0753d391319be2c3.tar.gz))
         (hashes (
-          sha256=30746cd229b59b3f55e9ddd15401c37770fc257a223d1ff4dcaec34a769c1875)))))))))
+          sha256=8d9a2de048ccdf3f4ecc96416fb497475c694dc3c557f607e55a87ee7eef6a12)))))))))
 
 (sedlex (
   (provides ((sedlex 3.6+ox)))
@@ -4140,160 +3946,170 @@
   (extra ((
     sedlex+syntax+ppx_sedlex.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/sedlex/sedlex.3.6+ox/files/sedlex+syntax+ppx_sedlex.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/sedlex/sedlex.3.6+ox/files/sedlex+syntax+ppx_sedlex.ml.patch))
       (hashes (
         sha256=08231e9b4a12d7ce662031b104c91f2765be67da114ea26891a656e254a3e075))))))
   (patches (sedlex+syntax+ppx_sedlex.ml.patch))))
 
 (semantic_version (
-  (provides ((semantic_version v0.18~preview.130.76+222)))
+  (provides ((semantic_version v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/semantic_version/archive/f20f7ea417f7e6a0a2b27d81bda429c182521196.tar.gz))
+          https://github.com/janestreet/semantic_version/archive/f3ab0e465d7665beb74aeeb7c043a5f1dea677b1.tar.gz))
         (hashes (
-          sha256=e73681b5a9c050fac80aafdddbe704dcf3f8b4f36c5bd6a1671a2874c3923102)))))))))
+          sha256=a5c028b9d10c3d55aea6f5f3b5998b126eaa311c3e48b261cc4da3d61e01ffef)))))))))
+
+(seq (
+  (provides ((seq base+dune)))
+  (source ((
+    base (
+      Http (
+        (urls (https://github.com/c-cube/seq/archive/0.2.2.tar.gz))
+        (hashes (
+          md5=9033e02283aa3bde9f97f24e632902e3
+          sha512=cab0eb4cb6d9788b7cbd7acbefefc15689d706c97ff7f75dd97faf3c21e466af4d0ff110541a24729db587e7172b1a30a3c2967e17ec2e49cbd923360052c07c)))))))))
 
 (sequencer_table (
-  (provides ((sequencer_table v0.18~preview.130.76+222)))
+  (provides ((sequencer_table v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/sequencer_table/archive/fc7eaf77d105f710ea264b742c9f52175e78b9c0.tar.gz))
+          https://github.com/janestreet/sequencer_table/archive/ad6711a0441f0a21e66d347ab39770402b50f2ac.tar.gz))
         (hashes (
-          sha256=7af55b25795f6fdad7d7d24679c03bbdf83f0188bff22fe5b89887fe639d800d)))))))))
+          sha256=db8eef6f4a1ba01be353546b998c5c62b11d9d41204b6368320e668064167ca5)))))))))
 
 (sexp (
-  (provides ((sexp v0.18~preview.130.76+222)))
+  (provides ((sexp v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/sexp/archive/e72b4192957ac098832346c96538facf618ca6aa.tar.gz))
+          https://github.com/janestreet/sexp/archive/27affd1ee777733e37da333f223de3a5a74c76ef.tar.gz))
         (hashes (
-          sha256=bfc9f709c1f6142357bf35a8e7094d4ba88ad90aa6ec1143afc7474935640f7b)))))))))
+          sha256=af427d04b2d329552eb84f463d28bad1183a2091e239a03fd119c8cc26a5a052)))))))))
 
 (sexp_diff (
-  (provides ((sexp_diff v0.18~preview.130.76+222)))
+  (provides ((sexp_diff v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/sexp_diff/archive/a616d6f59325482449009b4c4add5b7cba90da5c.tar.gz))
+          https://github.com/janestreet/sexp_diff/archive/bf7616b6d6efe27c515e8a82c309aca61bb9e0f8.tar.gz))
         (hashes (
-          sha256=79e362e77e2545be8e9192cc6ff7eec2c35ef6cdf958ca47760f77a188e4fcfb)))))))))
+          sha256=3eb1c6a68c4b79dcc041f531c9c8912bf3fb314d4185ce8285d4da8f9074c55f)))))))))
 
 (sexp_grammar (
-  (provides ((sexp_grammar v0.18~preview.130.76+222)))
+  (provides ((sexp_grammar v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/sexp_grammar/archive/8fc0a622df5c74e2d45bc7a0ece54b4ff543e0fb.tar.gz))
+          https://github.com/janestreet/sexp_grammar/archive/c177567be7450a271bea3fc9eb0bfaf2ac44e6c3.tar.gz))
         (hashes (
-          sha256=4a872f7c27de64afe2d2ea1c8b54781586db301012fd4cc47532154f75d73ea4)))))))))
+          sha256=d90007cd890b3ce57cf139a9e3d692636559bb4f0fe9f98e6a4e8ae82f119c38)))))))))
 
 (sexp_macro (
-  (provides ((sexp_macro v0.18~preview.130.76+222)))
+  (provides ((sexp_macro v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/sexp_macro/archive/a092a51213d05217ab5940088d3ea415213f088b.tar.gz))
+          https://github.com/janestreet/sexp_macro/archive/5d70dd25066ad1ad71a9e40c52e5b2641eeb5705.tar.gz))
         (hashes (
-          sha256=5dd71f896557b48eeab989387020e93d3a8e7927122865059329e700fba13250)))))))))
+          sha256=8f140a6c8fba4ecce0c4af3a26b8f1f8e1845c1acb3cf83545f057be6724d877)))))))))
 
 (sexp_pretty (
-  (provides ((sexp_pretty v0.18~preview.130.76+222)))
+  (provides ((sexp_pretty v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/sexp_pretty/archive/3c6fd114e048599916bd5d67cf6a215cd0d4cee7.tar.gz))
+          https://github.com/janestreet/sexp_pretty/archive/590ddd865badce965fd77d7b26f49ea64f333f28.tar.gz))
         (hashes (
-          sha256=7f0325b660a1c6ec4f5e4711ebdc1d6a4738ae2eca27fabb15f07bfbdd45ad3a)))))))))
+          sha256=7a0c9d7e4aee771ddfce0d5fc99f0b64db016ce09adce038170cf71305c6d6d6)))))))))
 
 (sexp_select (
-  (provides ((sexp_select v0.18~preview.130.76+222)))
+  (provides ((sexp_select v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/sexp_select/archive/3d5bfdb2b0ab8258b77373bd719b6bdae8f437ec.tar.gz))
+          https://github.com/janestreet/sexp_select/archive/087fa42aa31e9d2725ba5b54c3ac6880d1540031.tar.gz))
         (hashes (
-          sha256=d0d9954ae9000692e87f8bcf28eeb58e271faaa02bfb1d0291e47c2083f6d13a)))))))))
+          sha256=4ec90b56240e607108f5a255e344cd51defc98e815950e1ba117b5597b72076e)))))))))
 
 (sexp_string_quickcheck (
-  (provides ((sexp_string_quickcheck v0.18~preview.130.76+222)))
+  (provides ((sexp_string_quickcheck v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/sexp_string_quickcheck/archive/d12df0bd7238962c7aae6cd1641aa61a9f170785.tar.gz))
+          https://github.com/janestreet/sexp_string_quickcheck/archive/8be61287228201b7868916091716e0e346572014.tar.gz))
         (hashes (
-          sha256=dcf82361be0dffb2fec363c71144740819bd319cd1742f550bbc1d271d973e55)))))))))
+          sha256=03697ab19e6e114d038e410816e5a3f949feeb19f33c6290a68b2689617bc82f)))))))))
 
 (sexp_type (
-  (provides ((sexp_type v0.18~preview.130.76+222)))
+  (provides ((sexp_type v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/sexp_type/archive/883ee97d5820c0203d764c11fcada300efa330df.tar.gz))
+          https://github.com/janestreet/sexp_type/archive/56a326fa9c5d6a3c4cf2247c1273e9c321c9a415.tar.gz))
         (hashes (
-          sha256=7f0ef1fec2ee57eb3efd2dc10ef5e14641ba2b50d8cbfc1d7d4b693cf2ac687d)))))))))
+          sha256=21231bb9aa4f063b8767170d2fef29efc2a13d6d2732b175ebc29fd7ee5b09cc)))))))))
 
 (sexplib (
-  (provides ((sexplib v0.18~preview.130.76+222)))
+  (provides ((sexplib v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/sexplib/archive/ae31eab5c313cc15889b48bba07f448920bd4f7c.tar.gz))
+          https://github.com/janestreet/sexplib/archive/7e8d9d53effd434f689593bb5331eedd051edb17.tar.gz))
         (hashes (
-          sha256=4cc89ef620d7c778d6c278e9da8508f41dd77355adc73637af6aef0951ebb5ba)))))))))
+          sha256=c5c227fe3d99dc16f102a18c00fe9a0f5534e21a02fa25418094bfa7fbd05c91)))))))))
 
 (sexplib0 (
-  (provides ((sexplib0 v0.18~preview.130.76+222)))
+  (provides ((sexplib0 v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/sexplib0/archive/9225b2dc191ac09927422ff749d21f60fd1b14d2.tar.gz))
+          https://github.com/janestreet/sexplib0/archive/90faa35aee9d85883ec1ee1ee4c2ba3ba9bc6796.tar.gz))
         (hashes (
-          sha256=1bf7933068105debc288d007536a1fe297d8f422ebff6eb5e6d29e600e865882)))))))))
+          sha256=0d2d14603b9812959e82b99d37c2d9cceb3b1d4dac0d3af6b0376d736e8c5e35)))))))))
 
 (shell (
-  (provides ((shell v0.18~preview.130.76+222)))
+  (provides ((shell v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/shell/archive/cf2b43d4fadf126fe93088dcc4a664cc7a37956d.tar.gz))
+          https://github.com/janestreet/shell/archive/d49f939ca2d8412dd7ca4f7f3ba012139b056e4b.tar.gz))
         (hashes (
-          sha256=ce6b7401e9b2b1f91fc3b552803ffab876d020f57475a15ec93255c86858e3d6)))))))))
+          sha256=07da9a14f933bbac1f2e37dc9e7975ae23575545bf903aa8cbc21ae5ecbbefd0)))))))))
 
 (shexp (
-  (provides ((shexp v0.18~preview.130.76+222)))
+  (provides ((shexp v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/shexp/archive/09cef246a9f244b6e747ccce5e7d51d59da09c78.tar.gz))
+          https://github.com/janestreet/shexp/archive/0623664096ef41f34a8534d572ce3041c98f2820.tar.gz))
         (hashes (
-          sha256=946c25587b2ab85ca5d93a4b4176a39db97c5f3b08b8aacffcf40ae7bc64392c)))))))))
+          sha256=7e944f33bbd1fe2e27f21c1bb2e6464aaf7910efcd11cae098cae795821644f3)))))))))
 
 (simple_xml (
-  (provides ((simple_xml v0.18~preview.130.76+222)))
+  (provides ((simple_xml v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/simple_xml/archive/a077aacef09d73fa3500e975a843a1a94adb1d87.tar.gz))
+          https://github.com/janestreet/simple_xml/archive/0948ffa9e96ffb98dbd1f92fb451f6d37acba40f.tar.gz))
         (hashes (
-          sha256=b3caa8197cb7d03c74918c61f4a9f13c2a029bf60ac64e6dee5f519041075dde)))))))))
+          sha256=55746b957d6f415e4a0aa596137459b94b01c2d93ccb36982238b30a4f7be7e1)))))))))
 
 (spawn (
   (provides ((spawn v0.15.1+ox)))
@@ -4307,17 +4123,17 @@
   (extra (
     (spawn+src+spawn.ml.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/spawn/spawn.v0.15.1+ox/files/spawn+src+spawn.ml.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/spawn/spawn.v0.15.1+ox/files/spawn+src+spawn.ml.patch))
       (hashes (
         sha256=babfc849dc15cdfbd7622f3b2d7d5edf0e519a163b682fa3fe2bc63bbac5933f))))
     (spawn+src+spawn.mli.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/spawn/spawn.v0.15.1+ox/files/spawn+src+spawn.mli.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/spawn/spawn.v0.15.1+ox/files/spawn+src+spawn.mli.patch))
       (hashes (
         sha256=58b66053584bd01bb433437a92aaecde83899d8f1be4343273fa80593581a485))))
     (spawn+src+spawn_stubs.c.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/spawn/spawn.v0.15.1+ox/files/spawn+src+spawn_stubs.c.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/spawn/spawn.v0.15.1+ox/files/spawn+src+spawn_stubs.c.patch))
       (hashes (
         sha256=3429fd13b77648ffaa92ef808d72bbabbd82a119222deda7ddef85e4aa6d3567))))))
   (patches (
@@ -4326,34 +4142,34 @@
     spawn+src+spawn_stubs.c.patch))))
 
 (splay_tree (
-  (provides ((splay_tree v0.18~preview.130.76+222)))
+  (provides ((splay_tree v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/splay_tree/archive/b2f3998ec904d5548b4be31b858fdcba6120c039.tar.gz))
+          https://github.com/janestreet/splay_tree/archive/7b594d058db2ad3a5e6bfde46f285d0c4bc08e14.tar.gz))
         (hashes (
-          sha256=3ebc36875c18f1962d5b64360cd5a67eae84a4764e313cabf7b0d46429251938)))))))))
+          sha256=a35662624ad342ac23f2831142a0c450ca7db7c079646f921728b09833a4d373)))))))))
 
 (splittable_random (
-  (provides ((splittable_random v0.18~preview.130.76+222)))
+  (provides ((splittable_random v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/splittable_random/archive/91ad170293e68f71b541e4a3afe011b948389897.tar.gz))
+          https://github.com/janestreet/splittable_random/archive/4845f096604992ccd28b6ddb7a2c21d6a412c54c.tar.gz))
         (hashes (
-          sha256=419559477eff06081f7678c2e4974be41262dfba22a6d2f3f43fd0eaa7020af2)))))))))
+          sha256=4c395381387385a3c3b6f89d8b1a4428a19b2c4b77eb014d11a7cac56a1ba16d)))))))))
 
 (stdio (
-  (provides ((stdio v0.18~preview.130.76+222)))
+  (provides ((stdio v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/stdio/archive/1e41d740ebde3c09c6cb424fef9395fa0afdcd13.tar.gz))
+          https://github.com/janestreet/stdio/archive/4051f477c3f366a0516c92c2219074a69c0a3f3e.tar.gz))
         (hashes (
-          sha256=01518789d7de1c61a7200427a24ca12d6bb651853464016571e5e7fc221f04b6)))))))))
+          sha256=66072b43fbcbccb700662f46b4aa2c12828960aaa8e19a35ac4db859f7771a21)))))))))
 
 (stdlib-shims (
   (provides ((stdlib-shims 0.3.0)))
@@ -4367,34 +4183,34 @@
           sha512=1151d7edc8923516e9a36995a3f8938d323aaade759ad349ed15d6d8501db61ffbe63277e97c4d86149cf371306ac23df0f581ec7e02611f58335126e1870980)))))))))
 
 (stored_reversed (
-  (provides ((stored_reversed v0.18~preview.130.76+222)))
+  (provides ((stored_reversed v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/stored_reversed/archive/86e7ac6cf8f6fd3cd97b80295ad3bd8f5b358f58.tar.gz))
+          https://github.com/janestreet/stored_reversed/archive/04cba281561f43bd8f4267ddd46834ebc11fb88e.tar.gz))
         (hashes (
-          sha256=8a05a197123e11c2f24fa7a042071b8bf4f5209f0543678357c7e8c01ee551e3)))))))))
+          sha256=2889d967fc3667df823e221aadb3e7e360e163c98f509b224189863cc324e3a3)))))))))
 
 (streamable (
-  (provides ((streamable v0.18~preview.130.76+222)))
+  (provides ((streamable v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/streamable/archive/a1b373bc37bb305031a850ec7958e3be14811b28.tar.gz))
+          https://github.com/janestreet/streamable/archive/01a58e0a54288747c12848a2378ce9c3f3f4576b.tar.gz))
         (hashes (
-          sha256=326ea29ad7d18111b65c5909b37833cafe5725fc17f7b13962d4fe11c59fefb0)))))))))
+          sha256=489b8f908e3143b7f12df1d9853dde8c2b93f3964fac9d0303e9dfb26f6cc0b0)))))))))
 
 (string_dict (
-  (provides ((string_dict v0.18~preview.130.76+222)))
+  (provides ((string_dict v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/string_dict/archive/31d6ffe84bff1ac68f4ead07166201102b474eb6.tar.gz))
+          https://github.com/janestreet/string_dict/archive/71333fb03e64f837e294b14998d88061f522a808.tar.gz))
         (hashes (
-          sha256=b856769070fbc54c0196420aef7b8aa814228193ced120cc8a09eb772a899485)))))))))
+          sha256=265d3a91963158358096736ff4475e102a4925130d4ed3cd9765fc5cf6b58800)))))))))
 
 (stringext (
   (provides ((stringext 1.6.0)))
@@ -4408,74 +4224,74 @@
           sha512=d8ebe40f42b598a9bd99f1ef4b00ba93458385a4accd121af66a0bf3b3f8d7135f576740adf1a43081dd409977c2219fd4bdbb5b3d1308890d301d553ed49900)))))))))
 
 (testable_timeout (
-  (provides ((testable_timeout v0.18~preview.130.76+222)))
+  (provides ((testable_timeout v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/testable_timeout/archive/df62f55d101b1c47572421a5af18cc67be626a2f.tar.gz))
+          https://github.com/janestreet/testable_timeout/archive/efc0caa78352cc20c1cc7a90561d41e29657b727.tar.gz))
         (hashes (
-          sha256=4213787e2eedf929548b8438e3a7b505c3b6b9fac2877aba6247347bc055cc14)))))))))
+          sha256=04eb58120c064b871ebcc049a54242028eb45d3b1ec87591345c47b58a84abff)))))))))
 
 (textutils (
-  (provides ((textutils v0.18~preview.130.76+222)))
+  (provides ((textutils v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/textutils/archive/ce2dbfd0cacd36655dc1aa9f7c14c746d8ec69bb.tar.gz))
+          https://github.com/janestreet/textutils/archive/cebeec9453668fff10002f45c13cf0ae916e47de.tar.gz))
         (hashes (
-          sha256=e0ba373359d6bdfd0a328747439aed040b1f1824afa46dde3f4e9ccce495e77a)))))))))
+          sha256=81b26547621f5ff149ad5131c5c76fd316d09eaac23a7a20ca4f8750441ee8e3)))))))))
 
 (textutils_kernel (
-  (provides ((textutils_kernel v0.18~preview.130.76+222)))
+  (provides ((textutils_kernel v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/textutils_kernel/archive/bb86f8f60090441880dee5c44faf593633056e1b.tar.gz))
+          https://github.com/janestreet/textutils_kernel/archive/64cf1be6368ecd26066f81b4dd6f5cfcd7a7c914.tar.gz))
         (hashes (
-          sha256=441c61fed04e30ebedb5c85f19e5cc1ec830e672141518d45bafc8a69c4114ea)))))))))
+          sha256=9266345f3e34a29c132161f1b9d3df8e27866270d9364a6f62e9aa13b4e3d3ed)))))))))
 
 (tilde_f (
-  (provides ((tilde_f v0.18~preview.130.76+222)))
+  (provides ((tilde_f v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/tilde_f/archive/7fd7214693d67197f686572979e5297750a0f06f.tar.gz))
+          https://github.com/janestreet/tilde_f/archive/f1f7a83f9c2fd0613516a217d70f261b65ffa638.tar.gz))
         (hashes (
-          sha256=c082e4fee84124305ebe361daa1b5c66441fd4754bb6d467cc681d7c85282065)))))))))
+          sha256=231334da90288199878376b90966016d789b94993835ff3e1e9989d211c0f1a8)))))))))
 
 (time_ago (
-  (provides ((time_ago v0.18~preview.130.76+222)))
+  (provides ((time_ago v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/time_ago/archive/76b2d81d59b9365919cefe927e285618cde6b2c6.tar.gz))
+          https://github.com/janestreet/time_ago/archive/c8b57fe557b5e1f4f0001d6ea0162be23bb74987.tar.gz))
         (hashes (
-          sha256=b303a0b5891948165de1eb73773825803f76aee13c06b50023a91fba2d3cd6e5)))))))))
+          sha256=ee48af9809b23fd55be7980df45f44fb018b6e31d4344a3ad32b207b86eee22f)))))))))
 
 (time_now (
-  (provides ((time_now v0.18~preview.130.76+222)))
+  (provides ((time_now v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/time_now/archive/54bc5e246deee6853bbba8aa80157dac1b108fb4.tar.gz))
+          https://github.com/janestreet/time_now/archive/97677726d51ec340d9db4f79986bb12ecf66a57e.tar.gz))
         (hashes (
-          sha256=6aac87d3e862af096e4b37509e9c1f5017f0436b6fcc212693842eb940305dfa)))))))))
+          sha256=99ee93b98ad0c9255ddbb31c62a0dbc94c528774485839b0758b2381c55e92b0)))))))))
 
 (timezone (
-  (provides ((timezone v0.18~preview.130.76+222)))
+  (provides ((timezone v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/timezone/archive/3f524e4389e9ab0f50158fffbfabc53e42359e22.tar.gz))
+          https://github.com/janestreet/timezone/archive/c9124c1ecde1ecfb560e05d81cc27dfc92449d80.tar.gz))
         (hashes (
-          sha256=983e71d86204554b96e30ebf6d20839d7cb3c5f0c392995134ff458a7890a942)))))))))
+          sha256=d53793a16b23bfa5eb5c238bfec7d5a68fc278548a5af6fc9ff8c416e1946f3d)))))))))
 
 (topkg (
   (provides ((topkg 1.0.8+ox)))
@@ -4488,70 +4304,70 @@
   (extra ((
     topkg_string.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/topkg/topkg.1.0.8+ox/files/topkg_string.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/topkg/topkg.1.0.8+ox/files/topkg_string.patch))
       (hashes (
         sha256=a3c3a44d4ec429039a1463ef2c0ce3153a5c8c98af8e7c2c09905150e17d0e5a))))))
   (patches (topkg_string.patch))))
 
 (toplayer (
-  (provides ((toplayer v0.18~preview.130.76+222)))
+  (provides ((toplayer v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/toplayer/archive/02e927635e5c7c9a125e33d7f7eb8ec7857cef70.tar.gz))
+          https://github.com/janestreet/toplayer/archive/620dcade97e0b20cd99941c4f5f4f2d554064231.tar.gz))
         (hashes (
-          sha256=46d30df5241f14a2a6ae34a4cc77c266488beb808e5746cae763925a912baa17)))))))))
+          sha256=67e3d92e4e7a586023d48503317afd1bd41e28009159101dae7d77b3115d9b23)))))))))
 
 (toplevel_backend (
-  (provides ((toplevel_backend v0.18~preview.130.76+222)))
+  (provides ((toplevel_backend v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/toplevel_backend/archive/ee92612a106374e30f1416a3b80ead10c968c894.tar.gz))
+          https://github.com/janestreet/toplevel_backend/archive/7cab812a6c1dd34575acfb413994cc8f43c9ab0f.tar.gz))
         (hashes (
-          sha256=1606e3ccc6d9e05d36ee474f00909711b4040ce7b65a39e64de47d169107fdf7)))))))))
+          sha256=9079a3861e989cbcad689623f4068b1393b201812262ac545dd378d08edd3692)))))))))
 
 (toplevel_expect_test (
-  (provides ((toplevel_expect_test v0.18~preview.130.76+222)))
+  (provides ((toplevel_expect_test v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/toplevel_expect_test/archive/6c4eba7cb2ffc239467dc49ec32f9655a6371177.tar.gz))
+          https://github.com/janestreet/toplevel_expect_test/archive/d263c3ae089aa6e226657db2c92bc071a2d86de3.tar.gz))
         (hashes (
-          sha256=f26f26d815b5aa4c8e74204bdcd743c9b72bd2cfd73a1c84039e4c871004c319)))))))))
+          sha256=a22ce13f9083b5c95fa71afbb9d2e66707d5df4409351c5504b1e54442c2f453)))))))))
 
 (topological_sort (
-  (provides ((topological_sort v0.18~preview.130.76+222)))
+  (provides ((topological_sort v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/topological_sort/archive/8a8e7359f31931509281d94905ef2bec19ab5de8.tar.gz))
+          https://github.com/janestreet/topological_sort/archive/cee464cbfd88a8f6c21f8f7312744c8dd76f46d9.tar.gz))
         (hashes (
-          sha256=b16bcfff1aff91afa8b32f977603360087a517d00d8afd28eeea05368bc06d98)))))))))
+          sha256=96afdf00452d4b33bdd7a4e8bca2f2e046eab113c5aed5375d61d0de39b067ee)))))))))
 
 (tracing (
-  (provides ((tracing v0.18~preview.130.76+222)))
+  (provides ((tracing v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/tracing/archive/8a6058059cb581bd96d031c3777a099797478cb1.tar.gz))
+          https://github.com/janestreet/tracing/archive/84575d7424ed8a81ae2ca37244e5ae1cf1a75cb8.tar.gz))
         (hashes (
-          sha256=7a10f8b586761b011895d92852b556c1f9b3d908ebff0d7b6c65a9a119a5e368)))))))))
+          sha256=05b4d62aaebf8fe48ed8d2b6366d93f7f95575b49f8f6c07dd60865c0662ed98)))))))))
 
 (typerep (
-  (provides ((typerep v0.18~preview.130.76+222)))
+  (provides ((typerep v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/typerep/archive/92eb8e56eb2e2f80b5cb2c2b312941d9bcb16c71.tar.gz))
+          https://github.com/janestreet/typerep/archive/455d06b9f9bb1bc1526073a7c413e7b2df38fc87.tar.gz))
         (hashes (
-          sha256=56765b7bcb46439cfeb740d38391b98b5b3143d46bb39ead561c29448af64a54)))))))))
+          sha256=516126d01866b93d529fc671cd8438dedaab291329bc923f6f77bca25b2b36ae)))))))))
 
 (tyxml (
   (provides ((tyxml 4.6.0)))
@@ -4576,85 +4392,104 @@
           sha512=a568b7a040f3c7ebb5c15d0a9e5f84ce9c80307c132159e3f139f96db16e89e0cb4bbaadefea55557b6b9f26b79238e45223806570c6f2b95d5045ff71413d23)))))))))
 
 (unboxed (
-  (provides ((unboxed v0.18~preview.130.76+222)))
+  (provides ((unboxed v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/unboxed/archive/e30327b7f79b7d82f4dbb3caec0762d17bf614eb.tar.gz))
+          https://github.com/janestreet/unboxed/archive/ff3189fa49ad04086bbc111cb4937a75c7f09e8d.tar.gz))
         (hashes (
-          sha256=934195dd341ff37cd7b019b443ea92daab0d67b4c7a260abaf94928e1d8d50b8)))))))))
+          sha256=0c3524aa3046fbfbdda33593fd8f456d97c18bd680eaa198617e90544002b3f9)))))))))
+
+(unboxed_datatypes (
+  (provides ((unboxed_datatypes v0.18~preview.130.83+317)))
+  (source ((
+    base (
+      Http (
+        (urls (
+          https://github.com/janestreet/unboxed_datatypes/archive/160be410901cc3014cabb75b8cbfca96b9e6c89f.tar.gz))
+        (hashes (
+          sha256=018463e3fd556f3e547895aa6be58e47db8e93e52e6ee5a44f2b8f0b94cb8851)))))))))
 
 (unique (
-  (provides ((unique v0.18~preview.130.76+222)))
+  (provides ((unique v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/unique/archive/74aa3b9b3c404819e5e4f9aba2b63679464f20eb.tar.gz))
+          https://github.com/janestreet/unique/archive/10b634e770d6fc85d2d8b410f7040fec657aca45.tar.gz))
         (hashes (
-          sha256=ccdfec16831997b2bf5ee613d0a8ce2f86f29c8c5d32e09978cbcb639d403292)))))))))
+          sha256=48494dae96fe218f1da5bb239052000f11d9c1e0671bfa31596035828386f08d)))))))))
 
 (univ_map (
-  (provides ((univ_map v0.18~preview.130.76+222)))
+  (provides ((univ_map v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/univ_map/archive/b7ae0ac2bf569b214db557ad8b16c8d739ac66a0.tar.gz))
+          https://github.com/janestreet/univ_map/archive/2782d482aff2235818b3a0ec14add927d5fb5be1.tar.gz))
         (hashes (
-          sha256=631a76bb95c9470a2c9a0bb5271d0c3a5749f5adcaf4691a7609d122b07b157f)))))))))
+          sha256=21db58870a7bf073b4cc42b8a4b1b6fb993042f32fb7e259eaf211086edc2ed1)))))))))
 
 (unsafe_clear (
-  (provides ((unsafe_clear v0.18~preview.130.76+222)))
+  (provides ((unsafe_clear v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/unsafe_clear/archive/8506b0548961d2b8144b076355613b319e2f6c2c.tar.gz))
+          https://github.com/janestreet/unsafe_clear/archive/a9e22373493446aa66de421e84cbb20e0a80b47b.tar.gz))
         (hashes (
-          sha256=9d5c65cf8d815c40be94e6b451d5e704ddd0c07428330e7695996a2769514f1a)))))))))
+          sha256=68c3798ba8eec017f62af2fef7a9d6e5f7f8c262de8f7ee10b0195d4269b6e68)))))))))
 
 (uopt (
-  (provides ((uopt v0.18~preview.130.76+222)))
+  (provides ((uopt v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/uopt/archive/5996c5b1e50a37f8163c45254bb381f86cf94e2f.tar.gz))
+          https://github.com/janestreet/uopt/archive/6656136cf6d69f483db2945f873434f25fc61e7c.tar.gz))
         (hashes (
-          sha256=d0e9fc245b07d606f379fd9dfabe1843893912a654236db3e9bc2e4894ac35a0)))))))))
+          sha256=2b8ce74a288d67bd1e84641ff17248d5abbc9084f56ded163e88fbdb407dd975)))))))))
 
 (uri_parsing (
-  (provides ((uri_parsing v0.18~preview.130.76+222)))
+  (provides ((uri_parsing v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/uri_parsing/archive/47b111281182ba38ccfd82943476de033dc8a8d4.tar.gz))
+          https://github.com/janestreet/uri_parsing/archive/b67be029c20b2d35502d41ef378018203a7729b8.tar.gz))
         (hashes (
-          sha256=943d39a52bcce89141e3eb7664d3a7c9829458ce8f9f65f400feca0bd12fb8ad)))))))))
+          sha256=788d72b22c175a9066fa4dd93c08aa95e3fb47f4551f62129641d3ee1be1b910)))))))))
 
 (username_kernel (
-  (provides ((username_kernel v0.18~preview.130.76+222)))
+  (provides ((username_kernel v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/username_kernel/archive/20671c8d5b83a90bdce30602edc42ccf55ca673d.tar.gz))
+          https://github.com/janestreet/username_kernel/archive/ac5b4e6dab379f35eadca0e7171783ad318ebacb.tar.gz))
         (hashes (
-          sha256=b2b2dd95eccb66dd1a9247413f176228c924db17bc7ce67aa48c223b72c527d3)))))))))
+          sha256=53ce06fa42f7306f704e0ea728dd056d5a32909d1d4f35a538a9b03975b7070c)))))))))
 
 (uucp (
-  (provides ((uucp 17.0.0+dune)))
+  (provides ((uucp 15.0.0+dune)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/dune-universe/uucp/releases/download/v17.0.0%2Bdune/uucp-17.0.0.dune.tbz))
+          https://github.com/dune-universe/uucp/releases/download/v15.0.0%2Bdune/uucp-15.0.0.dune.tbz))
         (hashes (
-          sha256=7e67f7167b73beb48f2e78c4544b07ed50f0b1cf5697d581f2bbdfe00762ab2a
-          sha512=4e9eabf92bec65b9e04d74f224953086a935bf25be7f94848dcdd5d1c08c4abdd7f68ff7f141ef8c97b291762ad405194d7c6505e6852a84aa069afc502334f9)))))))))
+          sha256=e89d2730a7d8a709cf9868cd2f654fb7df282e9bdc3e778a5c56ef388195f475
+          sha512=ffe8c7facefeb6912089a4e5c3a7d6346ac71af1a543dc665793a04b692ecbc70015298e770775b63e9e18a643f251fc6d6be3cc6b77ace1f888f324b56dad36)))))))))
+
+(uuseg (
+  (provides ((uuseg 15.0.0)))
+  (source ((
+    base (
+      Http (
+        (urls (https://erratique.ch/software/uuseg/releases/uuseg-15.0.0.tbz))
+        (hashes (
+          sha512=37ea83b582dd779a026cfae11f08f5d67ef79fce65a2cf03f2a9aabc7eb5de60c8e812524fa7531e4ff6e22a3b18228e3438a0143ce43be95f23237cc283576f)))))))))
 
 (uutf (
   (provides ((uutf 1.0.3+ox)))
@@ -4667,65 +4502,65 @@
   (extra (
     (uutf-locals.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/uutf/uutf.1.0.3+ox/files/uutf-locals.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/uutf/uutf.1.0.3+ox/files/uutf-locals.patch))
       (hashes (
         sha256=cf3a0969653b405ad165312dfa6ef9038fe087ac9dd070f4b27bf4790e84e0ce))))
     (uutf-portable.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/uutf/uutf.1.0.3+ox/files/uutf-portable.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/uutf/uutf.1.0.3+ox/files/uutf-portable.patch))
       (hashes (
         sha256=06130fcb93a61add6f7f0ca80d6a220c5e9f24568da5bd6f60f975f67417e5c9))))))
   (patches (uutf-locals.patch uutf-portable.patch))))
 
 (variantslib (
-  (provides ((variantslib v0.18~preview.130.76+222)))
+  (provides ((variantslib v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/variantslib/archive/211184518f02e48a5998e5282f75f448fc5519c8.tar.gz))
+          https://github.com/janestreet/variantslib/archive/a45b37d3197e7a2268076c29412b417776919e58.tar.gz))
         (hashes (
-          sha256=6a74762f55f5601b9847e9de78f27cb2d89d64a33ec68e08a1491850cd9a14e7)))))))))
+          sha256=ea28ec982f54e0000f37508546fde08c64edd34c5afc60ecd912a2c6f2e1c4cb)))))))))
 
 (vcaml (
-  (provides ((vcaml v0.18~preview.130.76+222)))
+  (provides ((vcaml v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/vcaml/archive/2cbf69551a2586d9d063427e2a7a673c0108267d.tar.gz))
+          https://github.com/janestreet/vcaml/archive/7b36392e236926dc47a17dae008087cb518fa7e6.tar.gz))
         (hashes (
-          sha256=2207949720e7b63290f4fb1afbddb3134d08c18c218e7a8180912e11ee597fd8)))))))))
+          sha256=c8f12a30a96d179bfdcabc1a27e40c301f29d9ae9d8fe5cd54042e7cbf662482)))))))))
 
 (vec (
-  (provides ((vec v0.18~preview.130.76+222)))
+  (provides ((vec v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/vec/archive/136d5d7dd611cc6dc7fc38b1b3a1b020411c83de.tar.gz))
+          https://github.com/janestreet/vec/archive/ecf8276dda42a70885b4531077165db6bf539ed0.tar.gz))
         (hashes (
-          sha256=871d9c527060c78cbe2d94b328fd44085bcbd3d640ecaff54cea524d52b482a0)))))))))
+          sha256=c53ae2fc0ab12f491b8f7c9103727e3badb7923bc814a009134cc128165b4a84)))))))))
 
 (versioned_polling_state_rpc (
-  (provides ((versioned_polling_state_rpc v0.18~preview.130.76+222)))
+  (provides ((versioned_polling_state_rpc v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/versioned_polling_state_rpc/archive/d98689599581a2d804581666d30c6fe8b12decd9.tar.gz))
+          https://github.com/janestreet/versioned_polling_state_rpc/archive/6cf5bb26601ade1c85aa01056fce3701e5e0e144.tar.gz))
         (hashes (
-          sha256=3379b219c1c9b607c9403a7b7d0a5dd2b74fe1d8ba45806ba5b85245ed9221cd)))))))))
+          sha256=5aa11721023de01b096d2b84500ce3d05b3278f72dacdd7b677e53f5233efd47)))))))))
 
 (virtual_dom (
-  (provides ((virtual_dom v0.18~preview.130.76+222)))
+  (provides ((virtual_dom v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/virtual_dom/archive/b1e65e8d4ac4f5f29eca0bb337096f85b947f8e4.tar.gz))
+          https://github.com/janestreet/virtual_dom/archive/8d0db31728b19da995fab5d4477c0d648c9ea15f.tar.gz))
         (hashes (
-          sha256=2c906a4078c60b394aa15d1ac651eb9df9d187cdac277912aad44b9c06fa5fbc)))))))))
+          sha256=29568188c6cfd00c66aedacdbad4cc1a56a955e119123a23a645bf493e1c4f44)))))))))
 
 (xmlm (
   (provides ((xmlm 1.4.0+dune)))
@@ -4739,14 +4574,14 @@
           sha512=52611353dbb2ed347db69623c3cbbad544459c6e963a7c0ff1b3b86bfe4cdfc61ff5a22c8b5ac00c4a55bd63546598b65460a7f70145f68cb2d6a7c925ba6bdd)))))))))
 
 (xpath (
-  (provides ((xpath v0.18~preview.130.76+222)))
+  (provides ((xpath v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/xpath/archive/27d9a1eb7a9ae66c3635b2af48d389e827b36c2e.tar.gz))
+          https://github.com/janestreet/xpath/archive/95356d9627b52b12e68ae3f73fa8066d6a8a50cc.tar.gz))
         (hashes (
-          sha256=188445bc41586cb4273b7f334ffcca023c770e4f852ab859b449fd9cfce941e1)))))))))
+          sha256=d3afc57b82bec17c71a68d0684d6ae65ab304aad948dfe5f5ddba90a78be46d9)))))))))
 
 (yojson (
   (provides ((yojson 2.2.2)))
@@ -4771,22 +4606,22 @@
   (extra (
     (zarith-abs.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/zarith/zarith.1.12+ox/files/zarith-abs.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/zarith/zarith.1.12+ox/files/zarith-abs.patch))
       (hashes (
         sha256=0e8ac23bfd2846424eb2a5c9116cdf8c62d3b4e56f318347886ca7431d8c195e))))
     (zarith-gc.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/zarith/zarith.1.12+ox/files/zarith-gc.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/zarith/zarith.1.12+ox/files/zarith-gc.patch))
       (hashes (
         sha256=7b6129d76df91ef2d6d9ed427b621d7f6c20c79436d6c97bad55e0b452a62851))))
     (zarith-local.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/zarith/zarith.1.12+ox/files/zarith-local.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/zarith/zarith.1.12+ox/files/zarith-local.patch))
       (hashes (
         sha256=bd168f393265f734efda1cb5b61588bf8edb07e10f1d49d9fc1df81aafcfecc2))))
     (zarith-portability.patch (
       (urls (
-        https://raw.githubusercontent.com/oxcaml/opam-repository/fec0e1ab7a249b11dfb0786baa0f1ab4502f1796/packages/zarith/zarith.1.12+ox/files/zarith-portability.patch))
+        https://raw.githubusercontent.com/oxcaml/opam-repository/dde24fbc07390ada8c41508871d4741e06069241/packages/zarith/zarith.1.12+ox/files/zarith-portability.patch))
       (hashes (
         sha256=92c4036a9fc4eb5e996b0e704a032d748bf09197ee567909513bc991d6b4dddd))))))
   (patches (
@@ -4796,21 +4631,21 @@
     zarith-portability.patch))))
 
 (zarith_stubs_js (
-  (provides ((zarith_stubs_js v0.18~preview.130.76+222)))
+  (provides ((zarith_stubs_js v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/zarith_stubs_js/archive/9d0e5c347a5d13d1e2c2e78830be77b6a3b41e1c.tar.gz))
+          https://github.com/janestreet/zarith_stubs_js/archive/207a20bece3f632e5a7461f9d92c91078171705e.tar.gz))
         (hashes (
-          sha256=36596b25702070871f85eefd607d012e455ff75dd0488981c3dcc462bbe44031)))))))))
+          sha256=c2f5f3906b962b195e60b1c138a302b5c43d186046167a5b9372a5615f634b66)))))))))
 
 (zstandard (
-  (provides ((zstandard v0.18~preview.130.76+222)))
+  (provides ((zstandard v0.18~preview.130.83+317)))
   (source ((
     base (
       Http (
         (urls (
-          https://github.com/janestreet/zstandard/archive/1f5f210e38731d7d77bf8f6bedd87ef456d8bd42.tar.gz))
+          https://github.com/janestreet/zstandard/archive/4aaf5d09c2eb8649dd0fb90ad0277098fcf5f22b.tar.gz))
         (hashes (
-          sha256=d97c89bd26fe90cc220256543f6587d56c224fadb2a31a4535df94e6102ab5f8)))))))))
+          sha256=762d4df5c3c6fd70829754607769334cb3b12e95cf02c43791051e8dc9c1f52e)))))))))
