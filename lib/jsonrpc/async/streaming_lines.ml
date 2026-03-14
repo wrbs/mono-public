@@ -7,7 +7,7 @@ module Input = struct
     | Response of Jsonrpc.Response.t
 
   let of_string s =
-    [%log.global.debug_string "got message: %{s}"];
+    [%log.debug_string "got message: %{s}"];
     match Jsonaf.parse s with
     | Error _ -> Request (Error `bad_json)
     | Ok json ->
@@ -26,7 +26,7 @@ let create
   ~connection_state
   =
   let write_line line =
-    [%log.global.debug_string "sent message: %{line}"];
+    [%log.debug_string "sent message: %{line}"];
     Writer.write_line writer line
   in
   let conn, `handle_response handle_response =

@@ -14,9 +14,9 @@ let%expect_test "Every parsed byte roundtrips" =
     ((Status (MIDI (1 Note_on))) vs (Status (MIDI (1 Note_off)))
       (Loc lib/midi/test/test_parsed_bytes.ml:8:15)))
   Raised at Ppx_assert_lib__Runtime.test_eq__stack in file "vendor/ppx_assert/runtime-lib/runtime.ml", line 116, characters 22-69
-  Called from Base__List0.iter__bits64__local.loop in file "vendor/base/src/list0.ml" (inlined), line 99, characters 6-9
-  Called from Base__List0.iter__bits64__local in file "vendor/base/src/list0.ml", line 102, characters 2-11
-  Called from Ppx_expect_runtime__Test_block.Configured.dump_backtrace in file "vendor/ppx_expect/runtime/test_block.ml", line 358, characters 10-25
+  Called from Base__List0.iter__bits64__local.loop in file "vendor/base/src/list0.ml" (inlined), line 97, characters 6-9
+  Called from Base__List0.iter__bits64__local in file "vendor/base/src/list0.ml", line 100, characters 2-11
+  Called from Ppx_expect_runtime__Test_block.Configured.dump_backtrace in file "vendor/ppx_expect/runtime/test_block.ml", line 359, characters 10-25
   |}]
 ;;
 

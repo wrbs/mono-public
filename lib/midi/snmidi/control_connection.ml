@@ -50,7 +50,7 @@ let call
   Problem.try_with_join
   @@ fun () ->
   let operation = M.desc in
-  [%log.global.debug "Sending control message" (arg : M.Request.t)];
+  [%log.debug "Sending control message" (arg : M.Request.t)];
   let () = write_exn t [%jsonaf_of: M.Request.t] arg in
   let%bind () = Writer.flushed t.writer in
   match%map
@@ -59,7 +59,7 @@ let call
       (read t [%of_jsonaf: M.Response.t] ~waiting_for:[%string "%{operation} response"])
   with
   | `Result result ->
-    [%log.global.debug "Read control message" (result : (M.Response.t, Problem.t) result)];
+    [%log.debug "Read control message" (result : (M.Response.t, Problem.t) result)];
     result
   | `Timeout ->
     Problem.error_s

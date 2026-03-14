@@ -202,6 +202,15 @@ let call f = create ~acc:() ~add:(fun () x -> f x) ~finish:(fun () -> ())
 let list_prepend l = fold ~init:l ~f:(fun l elem -> elem :: l)
 let list = T { acc = []; add = (fun l elem -> elem :: l); finish = List.rev }
 let list_append prefix = list >>| fun l2 -> prefix @ l2
+
+let nonempty_list fst =
+  T
+    { acc = []
+    ; add = (fun l elem -> elem :: l)
+    ; finish = (fun l -> Nonempty_list.create fst (List.rev l))
+    }
+;;
+
 let set cmp = fold ~init:(Set.empty cmp) ~f:Set.add
 
 let vec' cont =

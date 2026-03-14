@@ -39,7 +39,7 @@ let create addr ~on_send =
     then (
       Iobuf.flip_lo iobuf;
       let seq = !seqnum in
-      [%log.global.debug
+      [%log.debug
         "Flushing packet"
           (seq : Protocol.Seqnum.t)
           (length : int)
@@ -63,7 +63,7 @@ let shutdown t = t.shutdown ()
 let new_packet t ~kind =
   t.flush ();
   let seq = !(t.seqnum) in
-  [%log.global.debug "Starting packet" (kind : Packet.Kind.t) (seq : Protocol.Seqnum.t)];
+  [%log.debug "Starting packet" (kind : Packet.Kind.t) (seq : Protocol.Seqnum.t)];
   Iobuf.Fill.stringo t.iobuf Packet.magic_bytes;
   Iobuf.Fill.char t.iobuf (Packet.Kind.to_char kind);
   Iobuf.Fill.Int_repr.uint32_be t.iobuf !(t.seqnum)

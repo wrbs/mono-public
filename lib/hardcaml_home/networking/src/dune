@@ -1,0 +1,6 @@
+(library
+ (name hardcaml_home_networking)
+ (libraries core hardcaml hardcaml_home)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane ppx_hardcaml)))

@@ -1,0 +1,11 @@
+(library
+ (name hardcaml_home_test_helpers)
+ (libraries
+  core
+  hardcaml
+  hardcaml_waveterm
+  higher_kinded
+  core_unix.filename_unix)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane)))

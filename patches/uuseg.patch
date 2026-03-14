@@ -1,0 +1,46 @@
+diff --git b/dune-project b/dune-project
+new file mode 100644
+index 0000000..73e5b91
+--- /dev/null
++++ b/dune-project
+@@ -0,0 +1,6 @@
++(lang dune 1.10)
++
++(name uuseg)
++
++(package
++ (name uuseg))
+diff --git b/src/dune b/src/dune
+new file mode 100644
+index 0000000..f7aec8c
+--- /dev/null
++++ b/src/dune
+@@ -0,0 +1,15 @@
++(library
++ (name uuseg)
++ (public_name uuseg)
++ (wrapped false)
++ (modules :standard \ uuseg_string)
++ (libraries uucp)
++ (flags :standard -w -50-39-37-32-27))
++
++(library
++ (name uuseg_string)
++ (public_name uuseg.string)
++ (wrapped false)
++ (modules uuseg_string)
++ (libraries uuseg uutf)
++ (flags :standard -w -50-39-37-32))
+diff --git a/src/uuseg_string.ml b/src/uuseg_string.ml
+index 5d25119..09ae436 100644
+--- a/src/uuseg_string.ml
++++ b/src/uuseg_string.ml
+@@ -6,7 +6,7 @@
+ type 'a folder = 'a -> string -> 'a
+ 
+ let fold
+-    (fold : ?pos:int -> ?len:int -> 'a Uutf.String.folder -> 'a -> string -> 'a)
++    (fold : ?pos:int -> ?len:int -> 'a Uutf.String.folder @ local -> 'a -> string -> 'a)
+     enc seg f acc0 s
+   =
+   let b = Buffer.create 42 in

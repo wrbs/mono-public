@@ -1,0 +1,101 @@
+diff --git a/src/nexys_a7_100t.ml b/src/nexys_a7_100t.ml
+index 6dc45e1..a674865 100644
+--- a/src/nexys_a7_100t.ml
++++ b/src/nexys_a7_100t.ml
+@@ -298,3 +298,11 @@ let generate_top ?dir board =
+     ~custom_constraints
+     board
+ ;;
++
++let generate_files board ~name =
++  Xilinx_top.generate_files
++    ~name
++    ~pins:(Xml_pins.Part_and_pins.pins part_info)
++    ~custom_constraints
++    board
++;;
+diff --git a/src/nexys_a7_100t_intf.ml b/src/nexys_a7_100t_intf.ml
+index b628d80..4be6d9d 100644
+--- a/src/nexys_a7_100t_intf.ml
++++ b/src/nexys_a7_100t_intf.ml
+@@ -190,4 +190,5 @@ module type Nexys_a7_100t = sig
+   end
+ 
+   val generate_top : ?dir:string -> Board.t -> unit
++  val generate_files : Board.t -> name:string -> verilog:string * xdc:string
+ end
+diff --git a/src/xilinx_top.ml b/src/xilinx_top.ml
+index 510b49c..e00a65f 100644
+--- a/src/xilinx_top.ml
++++ b/src/xilinx_top.ml
+@@ -100,7 +100,7 @@ let generate_xdc_pins (pins : Pin.t list) board =
+   Rope.concat [ Rope.concat i; Rope.concat o; Rope.concat t ]
+ ;;
+ 
+-let generate ?custom_constraints ?dir ~name ~part ~pins board =
++let generate' ?custom_constraints ?dir ~name ~pins board =
+   let subsystems = Board.subsystems board in
+   Hashtbl.iteri subsystems ~f:(fun ~key:subsystem ~data ->
+     if not data.complete then raise_s [%message "Not completed" (subsystem : string)]);
+@@ -112,6 +112,17 @@ let generate ?custom_constraints ?dir ~name ~part ~pins board =
+     | None -> xdc_pin_constraints
+     | Some custom -> Rope.concat [ xdc_pin_constraints; custom ]
+   in
++  let verilog =
++    Rope.concat
++      [ rtl_of_hardcaml_circuit board hardcaml_circuit
++      ; Structural.to_verilog structural_circuit
++      ]
++  in
++  ~verilog, ~xdc_constraints
++;;
++
++let generate ?custom_constraints ?dir ~name ~part ~pins board =
++  let ~verilog, ~xdc_constraints = generate' ?custom_constraints ~name ~pins board in
+   let tcl = Vivado_scripts.build_tcl ~name ~part in
+   let flash_tcl = Vivado_scripts.flash_tcl ~name in
+   let run_vivado_remotely_script = Vivado_scripts.run_vivado_remotely_sh ~name in
+@@ -125,12 +136,7 @@ let generate ?custom_constraints ?dir ~name ~part ~pins board =
+     Stdio.Out_channel.write_all file_path ~data:(data |> Rope.to_string);
+     if set_executable then Core_unix.chmod ~perm:0o755 file_path
+   in
+-  write_rope_to_file
+-    ~filename:(name ^ ".v")
+-    (Rope.concat
+-       [ rtl_of_hardcaml_circuit board hardcaml_circuit
+-       ; Structural.to_verilog structural_circuit
+-       ]);
++  write_rope_to_file ~filename:(name ^ ".v") verilog;
+   write_rope_to_file ~filename:(name ^ ".xdc") xdc_constraints;
+   write_rope_to_file ~filename:(name ^ ".tcl") tcl;
+   write_rope_to_file ~filename:"flash.tcl" flash_tcl;
+@@ -140,6 +146,11 @@ let generate ?custom_constraints ?dir ~name ~part ~pins board =
+     run_vivado_remotely_script
+ ;;
+ 
++let generate_files ?custom_constraints ~name ~pins board =
++  let ~verilog, ~xdc_constraints = generate' ?custom_constraints ~name ~pins board in
++  ~verilog:(Rope.to_string verilog), ~xdc:(Rope.to_string xdc_constraints)
++;;
++
+ module For_testing = struct
+   let rtl_of_hardcaml_circuit board =
+     let subsystems = Board.subsystems board in
+diff --git a/src/xilinx_top.mli b/src/xilinx_top.mli
+index e263657..2826464 100644
+--- a/src/xilinx_top.mli
++++ b/src/xilinx_top.mli
+@@ -10,6 +10,13 @@ val generate
+   -> Board.t
+   -> unit
+ 
++val generate_files
++  :  ?custom_constraints:Rope.t
++  -> name:string
++  -> pins:Pin.t list
++  -> Board.t
++  -> verilog:string * xdc:string
++
+ module For_testing : sig
+   val rtl_of_hardcaml_circuit : Board.t -> String.t
+ end

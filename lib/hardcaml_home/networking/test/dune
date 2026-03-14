@@ -1,0 +1,13 @@
+(library
+ (name test_hardcaml_home_networking)
+ (libraries
+  core
+  hardcaml
+  hardcaml_home_networking
+  hardcaml_home_udp_arp
+  vec
+  hardcaml_waveterm
+  hardcaml_home_test_helpers)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane ppx_hardcaml)))

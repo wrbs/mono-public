@@ -1,6 +1,0 @@
-(library
- (name hardcaml_wr)
- (libraries core hardcaml)
- (inline_tests)
- (preprocess
-  (pps ppx_jane ppx_hardcaml)))

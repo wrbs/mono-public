@@ -27,6 +27,7 @@ val call : ('acc -> unit) -> ('acc, unit) t
 val list : ('a, 'a list) t
 val list_prepend : 'a list -> ('a, 'a list) t
 val list_append : 'a list -> ('a, 'a list) t
+val nonempty_list : 'a -> ('a, 'a Nonempty_list.t) t
 val set : ('a, 'cmp) Comparator.Module.t -> ('a, ('a, 'cmp) Set.t) t
 val sequence : unit -> ('a, 'a Sequence.t) t
 val vec : unit -> ('a, 'a Vec.t) t

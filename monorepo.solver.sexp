@@ -8,7 +8,7 @@
     ;; old versions)
     (filter (
       include (
-        astring ocamlfind findlib fmt fpath jsonm logs num uchar uucp xmlm)))))
+        astring ocamlfind findlib fmt fpath jsonm logs num uchar uucp xmlm uutf cmarkit seq)))))
   (opam ((source (github ocaml/opam-repository master))))))
 
 (env (
@@ -20,6 +20,7 @@
 
 (package_selection (
   (include ((ocaml-variants = 5.2.0+ox)))
+  (include (ocaml-lsp-server ocamlformat))
   (include_all_matching_version
     ;; this is highly specialized for getting latest version of all JS packages
     ;; in ox, probably no other use case
@@ -44,7 +45,13 @@
   (include (decompress))))
 
 (vendoring (
-  (exclude_pkgs (ocamlbuild ocamlfind findlib dune-configurator ppxlib_ast))
+  (exclude_pkgs (
+    ocamlbuild
+    ocamlfind
+    findlib
+    dune-configurator
+    ppxlib_ast
+    ocamlformat-rpc-lib))
   ;; avoid naming conflicts where oxcaml repo splits same source into different
   ;; packages with different patches
   (rename_dirs ())

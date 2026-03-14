@@ -662,7 +662,7 @@ module Using_effects = struct
   module Unique_driver = struct
     type (_, _) effect = Yield : 'a -> (unit, 'a) effect
 
-    module E = Effect.Make1 (struct
+    module E = Handled_effect.Make1 (struct
         type ('a, 'p) t = ('a, 'p) effect
       end)
 
@@ -684,14 +684,14 @@ module Using_effects = struct
     ;;
 
     let step (t : _ t) @ unique =
-      (match Effect.continue t () [] with
+      (match Handled_effect.continue t () [] with
        | Value () -> Done
        | Exception exn -> raise exn
        | Operation (Yield x, t') -> Next (x, t'))
     ;;
 
     let step_with (t : _ t) handlers @ unique =
-      (match Effect.continue t () handlers with
+      (match Handled_effect.continue t () handlers with
        | Value () -> Done
        | Exception exn -> raise exn
        | Operation (Yield x, t') -> Next (x, t'))
@@ -702,7 +702,7 @@ module Using_effects = struct
     type 'a t =
       | T :
           { ref : ('a, 'es) Unique_driver.t option Unique.Ref.t
-          ; handlers : 'es Effect.Handler.List.t
+          ; handlers : 'es Handled_effect.Handler.List.t
           }
           -> 'a t
 
@@ -712,7 +712,9 @@ module Using_effects = struct
     ;;
 
     let create_with handlers f =
-      let driver = Unique_driver.create_with (Effect.Handler.List.length handlers) f in
+      let driver =
+        Unique_driver.create_with (Handled_effect.Handler.List.length handlers) f
+      in
       exclave_ T { ref = Unique.Ref.make (Some driver); handlers }
     ;;
 

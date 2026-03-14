@@ -1,0 +1,117 @@
+diff --git a/src/ocaml/preprocess/dune b/src/ocaml/preprocess/dune
+index 515193c..cb03509 100644
+--- a/src/ocaml/preprocess/dune
++++ b/src/ocaml/preprocess/dune
+@@ -1,48 +1,48 @@
+ (ocamllex lexer_ident lexer_raw)
+ 
+ (library
+-  (name ocaml_preprocess)
+-  (public_name merlin-lib.ocaml_preprocess)
+-  (flags :standard -open Ocaml_parsing -open Ocaml_utils -open Merlin_utils)
+-  (libraries ocaml_parsing ocaml_utils merlin_utils))
++ (name ocaml_preprocess)
++ (public_name merlin-lib.ocaml_preprocess)
++ (flags :standard -open Ocaml_parsing -open Ocaml_utils -open Merlin_utils)
++ (libraries ocaml_parsing ocaml_utils merlin_utils))
+ 
+-(menhir
+- (modules parser_raw)
+- (enabled_if (<> %{profile} "release"))
+- (mode    (promote (only parser_raw.ml parser_raw.mli)))
+- (flags :standard --inspection --table --cmly --lalr))
+-
+-(rule
+-  (targets parser_recover.ml)
+-  (enabled_if (<> %{profile} "release"))
+-  (deps    parser_raw.cmly)
+-  (mode    promote)
+-  (action
+-    (with-stdout-to %{targets}
+-       (run %{exe:./recover/gen_recover.exe} %{deps}))))
+-
+-(rule
+-  (targets parser_explain.ml)
+-  (enabled_if (<> %{profile} "release"))
+-  (deps    parser_raw.cmly)
+-  (mode    promote)
+-  (action
+-    (with-stdout-to %{targets}
+-       (run %{exe:./explain/gen_explain.exe} %{deps}))))
+-
+-(rule
+-  (targets parser_printer.ml)
+-  (enabled_if (<> %{profile} "release"))
+-  (deps    parser_raw.cmly)
+-  (mode    promote)
+-  (action
+-    (with-stdout-to %{targets}
+-       (run %{exe:./printer/gen_printer.exe} %{deps}))))
+-
+-(rule
+- (targets menhirLib.ml menhirLib.mli)
+- (mode promote)
+- (action
+-  (progn
+-   (copy %{lib:menhirLib:menhirLib.ml}  menhirLib.ml)
+-   (copy %{lib:menhirLib:menhirLib.mli} menhirLib.mli))))
++;; (menhir
++;;  (modules parser_raw)
++;;  (enabled_if (<> %{profile} "release"))
++;;  (mode    (promote (only parser_raw.ml parser_raw.mli)))
++;;  (flags :standard --inspection --table --cmly --lalr))
++;; 
++;; (rule
++;;   (targets parser_recover.ml)
++;;   (enabled_if (<> %{profile} "release"))
++;;   (deps    parser_raw.cmly)
++;;   (mode    promote)
++;;   (action
++;;     (with-stdout-to %{targets}
++;;        (run %{exe:./recover/gen_recover.exe} %{deps}))))
++;; 
++;; (rule
++;;   (targets parser_explain.ml)
++;;   (enabled_if (<> %{profile} "release"))
++;;   (deps    parser_raw.cmly)
++;;   (mode    promote)
++;;   (action
++;;     (with-stdout-to %{targets}
++;;        (run %{exe:./explain/gen_explain.exe} %{deps}))))
++;; 
++;; (rule
++;;   (targets parser_printer.ml)
++;;   (enabled_if (<> %{profile} "release"))
++;;   (deps    parser_raw.cmly)
++;;   (mode    promote)
++;;   (action
++;;     (with-stdout-to %{targets}
++;;        (run %{exe:./printer/gen_printer.exe} %{deps}))))
++;; 
++;; (rule
++;;  (targets menhirLib.ml menhirLib.mli)
++;;  (mode promote)
++;;  (action
++;;   (progn
++;;    (copy %{lib:menhirLib:menhirLib.ml}  menhirLib.ml)
++;;    (copy %{lib:menhirLib:menhirLib.mli} menhirLib.mli))))
+diff --git a/src/sherlodoc/dune b/src/sherlodoc/dune
+index 6d03533..437c2fe 100644
+--- a/src/sherlodoc/dune
++++ b/src/sherlodoc/dune
+@@ -2,10 +2,10 @@
+  (name merlin_sherlodoc)
+  (public_name merlin-lib.sherlodoc))
+ 
+-(menhir
+- (modules type_parser)
+- (enabled_if (<> %{profile} "release"))
+- (mode promote)
+- (flags :standard --explain --lalr))
++;; (menhir
++;;  (modules type_parser)
++;;  (enabled_if (<> %{profile} "release"))
++;;  (mode promote)
++;;  (flags :standard --explain --lalr))
+ 
+ (ocamllex type_lexer)

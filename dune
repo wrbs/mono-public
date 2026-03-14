@@ -1,0 +1,10 @@
+(data_only_dirs _monorepo-solver.lock)
+
+(alias
+ (name tooling)
+ (deps
+  (package ocaml-lsp-server)
+  (package sexp)
+  (package patdiff)
+  (package ocamlformat)
+  (package janestreet_csv)))

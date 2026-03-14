@@ -4,6 +4,7 @@
   core
   hardcaml
   hardcaml_hobby_boards
+  hardcaml_home_udp_arp
   core_unix.command_unix
   hardcaml_xilinx
   nes_file

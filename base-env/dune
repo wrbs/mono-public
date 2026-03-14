@@ -1,0 +1,27 @@
+(executable
+ (name gen)
+ (libraries core core_unix.command_unix)
+ (preprocess
+  (pps ppx_jane)))
+
+(rule
+ (mode promote)
+ (target make-switch.sh)
+ (deps %{workspace_root}/_monorepo-solver.lock/repos.sexp)
+ (action
+  (progn
+   (with-stdout-to
+    %{target}
+    (run ./gen.exe make-switch %{deps}))
+   (run chmod +x %{target}))))
+
+(rule
+ (mode promote)
+ (target install-tools.sh)
+ (deps %{workspace_root}/_monorepo-solver.lock/repos.sexp)
+ (action
+  (progn
+   (with-stdout-to
+    %{target}
+    (run ./gen.exe install-tools))
+   (run chmod +x %{target}))))

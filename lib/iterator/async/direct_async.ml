@@ -3,12 +3,12 @@ open! Async
 
 type _ effect = Await : 'a Deferred.t -> 'a aliased many effect
 
-module E = Effect.Make (struct
+module E = Handled_effect.Make (struct
     type 'a t = 'a effect
   end)
 
 type async = E.t
-type t = async Effect.Handler.t
+type t = async Handled_effect.Handler.t
 
 let await t deferred = (E.perform t (Await deferred)).many.aliased
 
@@ -21,8 +21,8 @@ let rec handle_result (result @ unique) =
     let cont @ unique = Obj.magic_unique cont in
     handle_result
       (match wait_result with
-       | Ok value -> Effect.continue cont { many = { aliased = value } } []
-       | Error exn -> Effect.discontinue cont exn [])
+       | Ok value -> Handled_effect.continue cont { many = { aliased = value } } []
+       | Error exn -> Handled_effect.discontinue cont exn [])
 ;;
 
 let run f = handle_result (E.run (fun async -> f ~async [@nontail]))

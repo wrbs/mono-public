@@ -1,6 +1,6 @@
 (library
  (name iterator)
- (libraries core vec oxcaml_effect unique)
+ (libraries core vec handled_effect unique)
  (inline_tests)
  (preprocess
   (pps ppx_jane)))

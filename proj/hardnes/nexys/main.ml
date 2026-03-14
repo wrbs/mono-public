@@ -7,6 +7,8 @@ open struct
   module Nexys = Nexys_a7_100t
 end
 
+module Cur_toplevel = Ethernet_test
+
 let generate_top =
   Command.basic ~summary:"generate the toplevel in the directory"
   @@
@@ -14,7 +16,7 @@ let generate_top =
     flag [%var_dash_name] (required string) ~doc:"- path to dir to generate"
   in
   fun () ->
-    let board = Top.create () in
+    let board = Cur_toplevel.create () in
     Nexys.generate_top board ~dir
 ;;
 
@@ -47,7 +49,7 @@ let build_files =
     flag "name" (required string) ~doc:"_ name of the toplevel part"
   and dir = flag "dir" (required string) ~doc:"_ dir to write files in" in
   fun () ->
-    let board = Top.create () in
+    let board = Cur_toplevel.create () in
     let ~verilog, ~xdc = Nexys.generate_files board ~name in
     let filename ext = dir ^/ [%string "%{name}.%{ext}"] in
     Out_channel.write_all (filename "v") ~data:verilog;

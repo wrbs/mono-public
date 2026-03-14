@@ -598,7 +598,7 @@ module Using_effects = struct
   module Unique_driver = struct
     type (_, _) effect = Yield : 'a -> (unit, 'a) effect
 
-    module E = Effect.Make1 (struct
+    module E = Handled_effect.Make1 (struct
         type ('a, 'p) t = ('a, 'p) effect
       end)
 
@@ -614,7 +614,7 @@ module Using_effects = struct
     ;;
 
     let step (t : _ t) @ unique =
-      (match Effect.continue t () [] with
+      (match Handled_effect.continue t () [] with
        | Value () -> Done
        | Exception exn -> raise exn
        | Operation (Yield x, t') -> Next (x, t'))

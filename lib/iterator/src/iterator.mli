@@ -212,13 +212,13 @@ module Using_effects : sig
     val step : ('a, unit) t @ unique -> ('a, unit) step @ unique
 
     val create_with
-      :  'es Effect.Handler.List.Length.t
-      -> ('es Effect.Handler.List.t @ local -> 'a iter)
+      :  'es Handled_effect.Handler.List.Length.t
+      -> ('es Handled_effect.Handler.List.t @ local -> 'a iter)
       -> ('a, 'es) t @ unique
 
     val step_with
       :  ('a, 'es) t @ unique
-      -> 'es Effect.Handler.List.t
+      -> 'es Handled_effect.Handler.List.t
       -> ('a, 'es) step @ unique
   end
 
@@ -229,8 +229,8 @@ module Using_effects : sig
     val create : 'a iter -> 'a t
 
     val create_with
-      :  'es Effect.Handler.List.t @ local
-      -> ('es Effect.Handler.List.t @ local -> 'a iter @ local)
+      :  'es Handled_effect.Handler.List.t @ local
+      -> ('es Handled_effect.Handler.List.t @ local -> 'a iter @ local)
       -> 'a t @ local
 
     val next : 'a t @ local -> 'a option

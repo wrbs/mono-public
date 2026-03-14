@@ -1,0 +1,62 @@
+diff --git b/dune-project b/dune-project
+new file mode 100644
+index 0000000..e849c8a
+--- /dev/null
++++ b/dune-project
+@@ -0,0 +1,3 @@
++(lang dune 1.0)
++
++(name uutf)
+diff --git b/src/dune b/src/dune
+new file mode 100644
+index 0000000..d9a5904
+--- /dev/null
++++ b/src/dune
+@@ -0,0 +1,6 @@
++(library
++ (name uutf)
++ (public_name uutf)
++ (flags
++  (:standard -w -3-27))
++ (wrapped false))
+diff --git b/uutf.opam b/uutf.opam
+new file mode 100644
+index 0000000..42c72cc
+--- /dev/null
++++ b/uutf.opam
+@@ -0,0 +1,35 @@
++version: "1.0.3"
++opam-version: "2.0"
++name: "uutf"
++synopsis: """Non-blocking streaming Unicode codec for OCaml"""
++maintainer: ["Daniel Bünzli <daniel.buenzl i@erratique.ch>"]
++authors: ["The uutf programmers"]
++homepage: "https://erratique.ch/software/uutf"
++doc: "https://erratique.ch/software/uutf/doc/"
++dev-repo: "git+https://erratique.ch/repos/uutf.git"
++bug-reports: "https://github.com/dbuenzli/uutf/issues"
++license: ["ISC"]
++tags: ["unicode" "text" "utf-8" "utf-16" "codec" "org:erratique"]
++depends: ["ocaml" {>= "4.03.0"}
++          "ocamlfind" {build}
++          "ocamlbuild" {build}
++          "topkg" {build & >= "1.0.3"}]
++depopts: ["cmdliner"]
++conflicts: ["cmdliner" {< "0.9.8"}]
++build: [["ocaml" "pkg/pkg.ml" "build" "--dev-pkg" "%{dev}%"
++          "--with-cmdliner" "%{cmdliner:installed}%"]]
++description: """
++Uutf is a non-blocking streaming codec to decode and encode the UTF-8,
++UTF-16, UTF-16LE and UTF-16BE encoding schemes. It can efficiently
++work character by character without blocking on IO. Decoders perform
++character position tracking and support newline normalization.
++
++Functions are also provided to fold over the characters of UTF encoded
++OCaml string values and to directly encode characters in OCaml
++Buffer.t values. **Note** that since OCaml 4.14, that functionality
++can be found in the Stdlib and you are encouraged to migrate to.
++
++Uutf has no dependency and is distributed under the ISC license.
++
++Home page: http://erratique.ch/software/uutf  
++Contact: Daniel Bünzli `<daniel.buenzl i@erratique.ch>`"""
