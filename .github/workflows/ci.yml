@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * *"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: archlinux/archlinux
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies and opam
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm \
+            base-devel git curl pkgconf \
+            openssl zlib gmp libffi pcre zstd \
+            opam
+
+      - name: Init opam
+        run: opam init --bare -y --disable-sandboxing
+
+      - name: Restore compiler cache
+        id: compiler-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: base-env/_opam
+          key: compiler-${{ runner.os }}-${{ hashFiles('base-env/make-switch.sh') }}
+
+      - name: First install - create switch
+        if: steps.compiler-cache.outputs.cache-hit != 'true'
+        run: |
+          touch base-env/_opam.bak
+          base-env/make-switch.sh
+
+      - name: Save compiler cache
+        if: steps.compiler-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: base-env/_opam
+          key: ${{ steps.compiler-cache.outputs.cache-primary-key }}
+
+      - name: Restore tools cache
+        id: tools-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            _tools
+            ~/.cache/dune
+          key: tools-${{ runner.os }}-${{ hashFiles('monorepo.lock.sexp', 'base-env/install-tools.sh', 'base-env/make-switch.sh') }}
+
+      - name: First install - install tools
+        if: steps.tools-cache.outputs.cache-hit != 'true'
+        run: |
+          eval $(opam env --switch=./base-env)
+          base-env/install-tools.sh
+
+      - name: Save tools cache
+        if: steps.tools-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            _tools
+            ~/.cache/dune
+          key: ${{ steps.tools-cache.outputs.cache-primary-key }}
+
+      - name: Build and test
+        run: |
+          eval $(opam env --switch=./base-env)
+          dune build @default @runtest
