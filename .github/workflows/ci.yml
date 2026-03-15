@@ -60,7 +60,7 @@ jobs:
       - name: First install - install tools
         if: steps.tools-cache.outputs.cache-hit != 'true'
         run: |
-          eval $(opam env --switch=./base-env)
+          eval $(opam env --switch=./base-env --set-switch)
           base-env/install-tools.sh
 
       - name: Save tools cache
@@ -74,5 +74,5 @@ jobs:
 
       - name: Build and test
         run: |
-          eval $(opam env --switch=./base-env)
+          eval $(opam env --switch=./base-env --set-switch)
           dune build @default @runtest
