@@ -2,10 +2,8 @@
  (name merlin_sherlodoc)
  (public_name merlin-lib.sherlodoc))
 
-;; (menhir
-;;  (modules type_parser)
-;;  (enabled_if (<> %{profile} "release"))
-;;  (mode promote)
-;;  (flags :standard --explain --lalr))
+(menhir
+ (modules type_parser)
+ (flags :standard --explain --lalr))
 
 (ocamllex type_lexer)

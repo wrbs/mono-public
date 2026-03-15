@@ -1,6 +1,16 @@
 (lang dune 3.17)
 
 (env
- (_
+ (dev
   (ocamlopt_flags
-   (:standard -zero-alloc-check none))))
+   (:standard -zero-alloc-check none)))
+ (release
+  (ocamlopt_flags
+   (:standard -O3))))
+
+(context default)
+
+(context
+ (default
+  (name opt)
+  (profile release)))

@@ -1,5 +1,8 @@
 (packages (
-  decompress ocaml-lsp-server ocamlformat
+  decompress
+  grace
+  ocaml-lsp-server
+  ocamlformat
   (abstract_algebra        =  v0.18~preview.130.83+317)
   (accessor                =  v0.18~preview.130.83+317)
   (accessor_async          =  v0.18~preview.130.83+317)

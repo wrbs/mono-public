@@ -8,7 +8,20 @@
     ;; old versions)
     (filter (
       include (
-        astring ocamlfind findlib fmt fpath jsonm logs num uchar uucp xmlm uutf cmarkit seq)))))
+        astring
+        ocamlfind
+        findlib
+        fmt
+        fpath
+        jsonm
+        logs
+        num
+        uchar
+        uucp
+        xmlm
+        uutf
+        cmarkit
+        seq)))))
   (opam ((source (github ocaml/opam-repository master))))))
 
 (env (
@@ -42,7 +55,7 @@
     (cohttp       = 5.3.0)
     (cohttp-async = 5.3.0)))
   ;; custom for mono
-  (include (decompress))))
+  (include (decompress grace))))
 
 (vendoring (
   (exclude_pkgs (
@@ -58,4 +71,15 @@
   ;; exclude source dirs, no matter what packages provided them
   (exclude_dirs (ocaml bytes))
   ;; custom commands in the opam file that need to run before the build
-  (prepare_commands ())))
+  (prepare_commands ((
+    merlin ((
+      rm
+      src/ocaml/preprocess/parser_raw.ml
+      src/ocaml/preprocess/parser_raw.mli
+      src/ocaml/preprocess/parser_recover.ml
+      src/ocaml/preprocess/parser_explain.ml
+      src/ocaml/preprocess/parser_printer.ml
+      src/ocaml/preprocess/menhirLib.ml
+      src/ocaml/preprocess/menhirLib.mli
+      src/sherlodoc/type_parser.ml
+      src/sherlodoc/type_parser.mli)))))))

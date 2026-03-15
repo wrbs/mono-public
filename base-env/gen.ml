@@ -43,7 +43,10 @@ opam switch create . 5.2.0+ox \
 	--repos %{repo_arg} \
 	--no-install
 eval $(opam env --switch .)
-opam install dune ocamlfind
+
+# optimized dune
+OCAMLPARAM="_,O3=1" opam install dune
+opam install ocamlfind
 |}]
 ;;
 
@@ -77,8 +80,10 @@ cd ..
 
 eval $(opam env --switch . --set-switch)
 
+context="${CONTEXT:-opt}"
+
 set -x
-dune build @tooling
+dune build @_build/$context/tooling
 
 mkdir -p _tools
 %{install_commands}
@@ -113,7 +118,8 @@ let install_tools =
     let install_commands =
       List.map tools ~f:(fun (target_name, built_name) ->
         [%string
-          "install -m 755 _build/install/default/bin/%{built_name} _tools/%{target_name}"])
+          "install -m 755 _build/install/${context}/bin/%{built_name} \
+           _tools/%{target_name}"])
       |> String.concat_lines
     in
     let ensure_link_commands =

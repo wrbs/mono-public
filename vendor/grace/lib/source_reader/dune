@@ -1,0 +1,6 @@
+(library
+ (name grace_source_reader)
+ (public_name grace.source_reader)
+ (libraries grace grace.std unix iter)
+ (preprocess
+  (pps ppx_sexp_conv)))

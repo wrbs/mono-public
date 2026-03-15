@@ -1179,6 +1179,17 @@
     gen-js-api-ast.patch
     dune.patch))))
 
+(grace (
+  (provides ((grace 0.3.0)))
+  (source ((
+    base (
+      Http (
+        (urls (
+          https://github.com/johnyob/grace/releases/download/0.3.0/grace-0.3.0.tbz))
+        (hashes (
+          sha256=6948979d6ffb5e596773baead81e9ceef36726d6956261bdd62abb2666a45bfc
+          sha512=db8b39cc9a77d919ab3123bb4047bb6c672c61db9fc6810951e267b2b113c4ac07266ef57188c6db0c02cb4d43d054204cd66ebc91648dbd1da1228022b0e67b)))))))))
+
 (handled_effect (
   (provides ((handled_effect v0.18~preview.130.83+317)))
   (source ((
@@ -1529,6 +1540,17 @@
         (hashes (
           sha256=4f5d66f5503986df2dfb44dc3cc942dc43e53eaf2e83e29179a9750b78553170)))))))))
 
+(iter (
+  (provides ((iter 1.9)))
+  (source ((
+    base (
+      Http (
+        (urls (
+          https://github.com/c-cube/iter/releases/download/v1.9/iter-1.9.tbz))
+        (hashes (
+          sha256=dba9e5bb152e0d0db0054c36b2a9476747a284a7738f15f1195a3e2035c7e968
+          sha512=6c8e0fd57ebca9db642ef6105cb23353fb4f4aa2a37b49ceb61adc9881d0d42e0212326efddea183fae7e27313321680036c3932863004b1853b5fbf37c521de)))))))))
+
 (jane-street-headers (
   (provides ((jane-street-headers v0.18~preview.130.83+317)))
   (source ((
@@ -1785,7 +1807,18 @@
         (urls (
           https://github.com/oxcaml/merlin/archive/aaa0efaa313d28746105da47d11e2a049e7c74d9.tar.gz))
         (hashes (
-          sha256=f7b76956485c97f17829c7f9aa8a99ba0d5956b0f0cbcde48b5180c80727bc8a)))))))))
+          sha256=f7b76956485c97f17829c7f9aa8a99ba0d5956b0f0cbcde48b5180c80727bc8a)))))))
+  (prepare_commands ((
+    rm
+    src/ocaml/preprocess/parser_raw.ml
+    src/ocaml/preprocess/parser_raw.mli
+    src/ocaml/preprocess/parser_recover.ml
+    src/ocaml/preprocess/parser_explain.ml
+    src/ocaml/preprocess/parser_printer.ml
+    src/ocaml/preprocess/menhirLib.ml
+    src/ocaml/preprocess/menhirLib.mli
+    src/sherlodoc/type_parser.ml
+    src/sherlodoc/type_parser.mli)))))
 
 (mlt_parser (
   (provides ((mlt_parser v0.18~preview.130.83+317)))

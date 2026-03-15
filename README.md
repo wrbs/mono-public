@@ -24,6 +24,8 @@ Dev-tools are built locally in the repo and copied/linked into the switch by
     opam switch link ./base-env
     eval $(opam env)
     base-env/install-tools.sh
+    # OR to get less optimized tools
+    # CONTEXT=default base-env/install-tools.sh
 
 ### Upgrading
 
@@ -31,9 +33,16 @@ Dev-tools are built locally in the repo and copied/linked into the switch by
     base-env/make-switch.sh
     rm -rf _build
     base-env/install-tools.sh
+    # OR to get less optimized tools
+    # CONTEXT=default base-env/install-tools.sh
 
 ## Using
 
-Build everything with dune
+Build everything with dune _in the default context_ (or else you'll build
+optimized at the same time)
 
-    dune build --watch @default @runtest
+    dune build --watch @_build/default/default @_build/default/runtest
+
+For opt builds (I'd avoid tbh outside of tools)
+
+    dune build --watch @_build/opt/default @_build/opt/runtest

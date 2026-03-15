@@ -18,4 +18,7 @@ opam switch create . 5.2.0+ox \
 	--repos ox-dde24fbc07=git+https://github.com/oxcaml/opam-repository.git#dde24fbc07390ada8c41508871d4741e06069241,opam-8d34e0cf3c=git+https://github.com/ocaml/opam-repository.git#8d34e0cf3c0ccacb6c8a26c24d0e5eb0b17fbf9d \
 	--no-install
 eval $(opam env --switch .)
-opam install dune ocamlfind
+
+# optimized dune
+OCAMLPARAM="_,O3=1" opam install dune
+opam install ocamlfind

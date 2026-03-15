@@ -7,21 +7,23 @@ cd ..
 
 eval $(opam env --switch . --set-switch)
 
+context="${CONTEXT:-opt}"
+
 set -x
-dune build @tooling
+dune build @_build/$context/tooling
 
 mkdir -p _tools
-install -m 755 _build/install/default/bin/janestreet_csv _tools/csv
-install -m 755 _build/install/default/bin/ocamlformat-rpc _tools/ocamlformat-rpc
-install -m 755 _build/install/default/bin/patdiff-git-wrapper _tools/patdiff-git-wrapper
-install -m 755 _build/install/default/bin/sexp-group _tools/sexp-group
-install -m 755 _build/install/default/bin/ocamllsp _tools/ocamllsp
-install -m 755 _build/install/default/bin/menhir _tools/menhir
-install -m 755 _build/install/default/bin/ocp-indent _tools/ocp-indent
-install -m 755 _build/install/default/bin/ocp-indent-gen-rules _tools/ocp-indent-gen-rules
-install -m 755 _build/install/default/bin/ocamlformat _tools/ocamlformat
-install -m 755 _build/install/default/bin/patdiff _tools/patdiff
-install -m 755 _build/install/default/bin/sexp _tools/sexp
+install -m 755 _build/install/${context}/bin/janestreet_csv _tools/csv
+install -m 755 _build/install/${context}/bin/ocamlformat-rpc _tools/ocamlformat-rpc
+install -m 755 _build/install/${context}/bin/patdiff-git-wrapper _tools/patdiff-git-wrapper
+install -m 755 _build/install/${context}/bin/sexp-group _tools/sexp-group
+install -m 755 _build/install/${context}/bin/ocamllsp _tools/ocamllsp
+install -m 755 _build/install/${context}/bin/menhir _tools/menhir
+install -m 755 _build/install/${context}/bin/ocp-indent _tools/ocp-indent
+install -m 755 _build/install/${context}/bin/ocp-indent-gen-rules _tools/ocp-indent-gen-rules
+install -m 755 _build/install/${context}/bin/ocamlformat _tools/ocamlformat
+install -m 755 _build/install/${context}/bin/patdiff _tools/patdiff
+install -m 755 _build/install/${context}/bin/sexp _tools/sexp
 
 set +x 
 
