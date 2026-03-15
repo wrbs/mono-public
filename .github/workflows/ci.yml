@@ -34,7 +34,6 @@ jobs:
         with:
           path: |
             base-env/_opam
-            _opam
           key: compiler-${{ runner.os }}-${{ hashFiles('base-env/make-switch.sh') }}
 
       - name: First install - create switch
@@ -50,32 +49,10 @@ jobs:
         with:
           path: |
             base-env/_opam
-            _opam
           key: ${{ steps.compiler-cache.outputs.cache-primary-key }}
-
-      - name: Restore tools cache
-        id: tools-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            .tools-built
-          key: tools-${{ runner.os }}-${{ hashFiles('monorepo.lock.sexp', 'base-env/install-tools.sh', 'base-env/make-switch.sh') }}
-
-      - name: First install - install tools
-        if: steps.tools-cache.outputs.cache-hit != 'true'
-        run: |
-          base-env/install-tools.sh
-          touch .tools-built
-
-      - name: Save tools cache
-        if: steps.tools-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            .tools-built
-          key: ${{ steps.tools-cache.outputs.cache-primary-key }}
 
       - name: Build and test
         run: |
+          opam switch link ./base-env
           eval $(opam env)
           dune build @default @runtest
