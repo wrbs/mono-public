@@ -54,4 +54,4 @@ jobs:
         run: |
           opam switch link ./base-env
           eval $(opam env)
-          dune build @default @runtest
+          dune build @_build/default/default @_build/default/runtest
