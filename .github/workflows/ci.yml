@@ -32,7 +32,9 @@ jobs:
         id: compiler-cache
         uses: actions/cache/restore@v4
         with:
-          path: base-env/_opam
+          path: |
+            base-env/_opam
+            _opam
           key: compiler-${{ runner.os }}-${{ hashFiles('base-env/make-switch.sh') }}
 
       - name: First install - create switch
@@ -40,6 +42,7 @@ jobs:
         run: |
           touch base-env/_opam.bak
           base-env/make-switch.sh
+          opam switch link . ./base-env
 
       - name: Save compiler cache
         if: steps.compiler-cache.outputs.cache-hit != 'true'
@@ -60,7 +63,6 @@ jobs:
       - name: First install - install tools
         if: steps.tools-cache.outputs.cache-hit != 'true'
         run: |
-          eval $(opam env --switch=./base-env --set-switch)
           base-env/install-tools.sh
 
       - name: Save tools cache
@@ -74,5 +76,5 @@ jobs:
 
       - name: Build and test
         run: |
-          eval $(opam env --switch=./base-env --set-switch)
+          eval $(opam env)
           dune build @default @runtest
