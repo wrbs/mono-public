@@ -369,6 +369,7 @@
     (bigstringaf           0.10.0)
     (camlp-streams         5.0.1)
     (checkseum             0.5.2)
+    (cinaps                v0.15.1)
     (cmdliner              1.3.0)
     (cohttp                5.3.0)
     (cohttp-async          5.3.0)

@@ -7,4 +7,5 @@
   (package sexp)
   (package patdiff)
   (package ocamlformat)
-  (package janestreet_csv)))
+  (package janestreet_csv)
+  (package cinaps)))

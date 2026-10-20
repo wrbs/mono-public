@@ -1,4 +1,5 @@
 (packages (
+  cinaps
   decompress
   grace
   ocaml-lsp-server

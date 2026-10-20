@@ -2,6 +2,8 @@ open! Core
 open! Async
 module Port = Port
 
+let default_server_port = 4836
+
 module Problem = struct
   module Server = struct
     type t = Protocol.Error_response.t

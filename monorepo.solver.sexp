@@ -34,6 +34,7 @@
 (package_selection (
   (include ((ocaml-variants = 5.2.0+ox)))
   (include (ocaml-lsp-server ocamlformat))
+  (include (cinaps))
   (include_all_matching_version
     ;; this is highly specialized for getting latest version of all JS packages
     ;; in ox, probably no other use case

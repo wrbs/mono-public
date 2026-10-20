@@ -67,6 +67,7 @@
   (package capsule0)
   (package checkseum)
   (package chrome-trace)
+  (package cinaps)
   (package cmarkit)
   (package cmdliner)
   (package codicons)

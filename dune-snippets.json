@@ -15,9 +15,7 @@
 		"body": [
 			"(executable",
 			" (name main)",
-			" (libraries core_unix.command_unix ${1:your_app})",
-			" (preprocess",
-			"  (pps ppx_jane)))",
+			" (libraries ${1:your_app}))",
 			""
 		],
 		"description": "jane-style executable"
@@ -40,9 +38,7 @@
 			"(executable",
 			" (name main)",
 			" (modes js)",
-			" (libraries core async_js ${1:your_app})",
-			" (preprocess",
-			"  (pps ppx_jane bonsai.ppx_bonsai ppx_css js_of_ocaml-ppx)))",
+			" (libraries ${1:your_app}))",
 			""
 		],
 		"description": "jane-style executable"

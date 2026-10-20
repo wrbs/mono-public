@@ -1,0 +1,12 @@
+(library
+ (name mc)
+ (libraries
+  core
+  re
+  decompress.gz
+  core_kernel.iobuf
+  expectree
+  heterogeneous_list)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane ppx_typed_fields)))

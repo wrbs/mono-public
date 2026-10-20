@@ -1,6 +1,8 @@
 open! Core
 open! Async
 
+val default_server_port : int
+
 module Problem : sig
   module Server : sig
     type t [@@deriving sexp_of]

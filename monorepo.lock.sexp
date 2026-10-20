@@ -592,6 +592,16 @@
           sha256=9e5e4fd4405cb4a8b4df00877543251833e08a6499ef42ccb8dba582df0dafc8
           sha512=b66261effaa561ce5cb8d92a3ec78565a5579bf3d3c4b7f08eba59998ac4d7f49ae9c240986c231b22b965c93a949a8a2e35edec42277ecb5602829945fba6db)))))))))
 
+(cinaps (
+  (provides ((cinaps v0.15.1)))
+  (source ((
+    base (
+      Http (
+        (urls (https://github.com/ocaml-ppx/cinaps/archive/v0.15.1.tar.gz))
+        (hashes (
+          sha256=1be18e70f5d8a6b03566c3619b62836a26094fc7208fde46ab7b32ee64116170
+          sha512=ca53a9da8aa71ce7cddf7e24778e9c4d3f3e5784209da85a5a6b2d5af83cd8ad769fbe3009d2757ebf4a25ca39d76af00ebc693b1b01c3b53c8775ea479123a5)))))))))
+
 (cmarkit (
   (provides ((cmarkit 0.3.0+dune)))
   (source ((
