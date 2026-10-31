@@ -14,8 +14,9 @@ if [[ ! -e "_opam.bak" ]]; then
 	exit
 fi
 
-opam switch create . 5.2.0+ox \
-	--repos ox-dde24fbc07=git+https://github.com/oxcaml/opam-repository.git#dde24fbc07390ada8c41508871d4741e06069241,opam-8d34e0cf3c=git+https://github.com/ocaml/opam-repository.git#8d34e0cf3c0ccacb6c8a26c24d0e5eb0b17fbf9d \
+opam switch create . \
+	--packages oxcaml-compiler.5.2.0minus40 \
+	--repos ox-afddc83379=git+https://github.com/oxcaml/opam-repository.git#afddc8337950dbc02863fe30ae58735a1cf2719f,opam-2ffc351875=git+https://github.com/ocaml/opam-repository.git#2ffc3518756432a5bea7cda8ae467ea8b4e0362a \
 	--no-install
 eval $(opam env --switch .)
 

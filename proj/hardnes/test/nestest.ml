@@ -227,7 +227,7 @@ module Make_sim (I : IO) = struct
       match enable_waves with
       | false -> None, sim
       | true ->
-        let waves, sim = Hardcaml_waveterm.Waveform.create sim in
+        let waves, sim = Cyclesim.Waveform.create sim in
         Some waves, sim
     in
     (Cyclesim.inputs sim).enable := Bits.vdd;

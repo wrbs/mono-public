@@ -2,11 +2,11 @@ open! Core
 
 module Block_id = struct
   include
-    String_id.Make
-      (struct
-        let module_name = "Block_id"
-      end)
-      ()
+    (val String_id.make
+           ~caller_identity:String_id.legacy_identity
+           ~module_name:"Block_id"
+           ~include_default_validation:true
+           ())
 
   include functor Nbt_conv.Of_stringable
 end

@@ -1,0 +1,55 @@
+diff --git a/src/fixed_list.ml b/src/fixed_list.ml
+index 4ce9791..df9717c 100644
+--- a/src/fixed_list.ml
++++ b/src/fixed_list.ml
+@@ -80,23 +80,26 @@ let rec last : type n. (_, n succ) t -> _ = function
+   | _ :: (_ :: _ as tl) -> last tl
+ ;;
+ 
+-let[@tail_mod_cons] rec map : type n. (_, n) t -> f:_ -> (_, n) t =
++let[@tail_mod_cons] rec map : type n. (_, n) t -> f:_ @ local -> (_, n) t =
+   fun t ~f ->
+   match t with
+   | [] -> []
+   | hd :: tl -> f hd :: map tl ~f
+ ;;
+ 
+-let mapi : type n. (_, n) t -> f:(int -> _ -> _) -> (_, n) t =
+-  fun t ~f ->
+-  let[@tail_mod_cons] rec loop : type n. int -> (_, n) t -> (_, n) t =
+-    fun i -> function
+-    | [] -> []
+-    | hd :: tl -> f i hd :: loop (i + 1) tl
+-  in
+-  loop 0 t
++(* [f] is passed along rather than captured so that the loop stays a global
++   closure and [@tail_mod_cons] applies. *)
++let[@tail_mod_cons] rec mapi_loop
++  : type n. int -> (_, n) t -> f:(int -> _ -> _) @ local -> (_, n) t
++  =
++  fun i t ~f ->
++  match t with
++  | [] -> []
++  | hd :: tl -> f i hd :: mapi_loop (i + 1) tl ~f
+ ;;
+ 
++let mapi t ~f = mapi_loop 0 t ~f
++
+ module Indexed_fold (M : sig
+     type item
+     type 'n t
+diff --git a/src/fixed_list.mli b/src/fixed_list.mli
+index b961590..3cc4e76 100644
+--- a/src/fixed_list.mli
++++ b/src/fixed_list.mli
+@@ -57,8 +57,8 @@ val to_list : ('a, _) t -> 'a list
+ val of_sequence : 'a Sequence.t -> 'a packed
+ val to_sequence : ('a, _) t -> 'a Sequence.t
+ val rev : ('a, 'n) t -> ('a, 'n) t
+-val map : ('a, 'n) t -> f:('a -> 'b) -> ('b, 'n) t
+-val mapi : ('a, 'n) t -> f:(int -> 'a -> 'b) -> ('b, 'n) t
++val map : ('a, 'n) t -> f:('a -> 'b) @ local -> ('b, 'n) t
++val mapi : ('a, 'n) t -> f:(int -> 'a -> 'b) @ local -> ('b, 'n) t
+ val unzip : ('a * 'b, 'n) t -> ('a, 'n) t * ('b, 'n) t
+ 
+ (** The sort is stable: the order of equal elements is preserved. *)

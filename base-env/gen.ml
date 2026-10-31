@@ -21,7 +21,16 @@ module Repo_entry = struct
   type t = string * data [@@deriving of_sexp]
 end
 
-let switch_template ~repo_arg =
+(* [packages.sexp] nests package entries as [(name version)] or
+   [(name version dir)] *)
+let rec find_package_version (sexp : Sexp.t) ~name =
+  match sexp with
+  | Atom _ -> None
+  | List (Atom name' :: Atom version :: _) when String.equal name name' -> Some version
+  | List sexps -> List.find_map sexps ~f:(find_package_version ~name)
+;;
+
+let switch_template ~repo_arg ~compiler_version =
   [%string
     {|#!/bin/bash
 
@@ -39,7 +48,8 @@ if [[ ! -e "_opam.bak" ]]; then
 	exit
 fi
 
-opam switch create . 5.2.0+ox \
+opam switch create . \
+	--packages oxcaml-compiler.%{compiler_version} \
 	--repos %{repo_arg} \
 	--no-install
 eval $(opam env --switch .)
@@ -53,9 +63,15 @@ opam install ocamlfind
 let make_switch =
   Command.basic ~summary:"generate the bash script"
   @@
-  let%map_open.Command sexp_path = anon ("SEXP_PATH" %: string) in
+  let%map_open.Command sexp_path = anon ("REPOS_SEXP_PATH" %: string)
+  and packages_sexp_path = anon ("PACKAGES_SEXP_PATH" %: string) in
   fun () ->
     let repos = Sexp.load_sexps_conv_exn sexp_path [%of_sexp: Repo_entry.t] in
+    let compiler_version =
+      Sexp.load_sexps packages_sexp_path
+      |> List.find_map ~f:(find_package_version ~name:"oxcaml-compiler")
+      |> Option.value_exn ~message:"oxcaml-compiler not found in packages.sexp"
+    in
     let repo_arg =
       [ "ox"; "opam" ]
       |> List.map ~f:(fun name ->
@@ -66,7 +82,7 @@ let make_switch =
           [%string "%{name}-%{short_hash}=%{full_repo}"]))
       |> String.concat ~sep:","
     in
-    print_string (switch_template ~repo_arg)
+    print_string (switch_template ~repo_arg ~compiler_version)
 ;;
 
 let install_tools_template ~install_commands ~ensure_link_commands =

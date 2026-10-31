@@ -3,11 +3,11 @@ open Jsonaf.Export
 
 module Id = struct
   include
-    String_id.Make
-      (struct
-        let module_name = "Snmidi.Port.Id"
-      end)
-      ()
+    (val String_id.make
+           ~caller_identity:String_id.legacy_identity
+           ~module_name:"Snmidi.Port.Id"
+           ~include_default_validation:true
+           ())
 
   include functor Jsonaf.Jsonafable.Of_stringable
 end

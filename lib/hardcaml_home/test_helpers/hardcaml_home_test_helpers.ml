@@ -21,7 +21,7 @@ module Make_sim (C : Component) = struct
   ;;
 
   let create_waveform () =
-    Hardcaml_waveterm.Waveform.create (create ~config:Cyclesim.Config.trace_all ())
+    Cyclesim.Waveform.create (create ~config:Cyclesim.Config.trace_all ())
   ;;
 
   let inputs (sim : Sim.t) = Cyclesim.inputs sim

@@ -7,7 +7,9 @@
 (rule
  (mode promote)
  (target make-switch.sh)
- (deps %{workspace_root}/_monorepo-solver.lock/repos.sexp)
+ (deps
+  %{workspace_root}/_monorepo-solver.lock/repos.sexp
+  %{workspace_root}/_monorepo-solver.lock/packages.sexp)
  (action
   (progn
    (with-stdout-to

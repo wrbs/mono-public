@@ -1,0 +1,67 @@
+diff --git b/cmarkit.opam b/cmarkit.opam
+new file mode 100644
+index 0000000..c322a2a
+--- /dev/null
++++ b/cmarkit.opam
+@@ -0,0 +1,41 @@
++version: "0.3.0+dune"
++opam-version: "2.0"
++name: "cmarkit"
++synopsis: "CommonMark parser and renderer for OCaml"
++description: """\
++Cmarkit parses the [CommonMark specification]. It provides:
++
++- A CommonMark parser for UTF-8 encoded documents. Link label resolution
++  can be customized and a non-strict parsing mode can be activated to add: 
++  strikethrough, LaTeX math, footnotes, task items and tables.
++  
++- An extensible abstract syntax tree for CommonMark documents with
++  source location tracking and best-effort source layout preservation.
++
++- Abstract syntax tree mapper and folder abstractions for quick and
++  concise tree transformations.
++  
++- Extensible renderers for HTML, LaTeX and CommonMark with source
++  layout preservation.
++
++Cmarkit is distributed under the ISC license. It has no dependencies.
++
++[CommonMark specification]: https://spec.commonmark.org/
++
++Homepage: <https://erratique.ch/software/cmarkit>"""
++maintainer: "Daniel Bünzli <daniel.buenzl i@erratique.ch>"
++authors: "The cmarkit programmers"
++license: "ISC"
++tags: ["codec" "commonmark" "markdown" "org:erratique"]
++homepage: "https://github.com/dune-universe/cmarkit"
++bug-reports: "https://github.com/dbuenzli/cmarkit/issues"
++depends: [
++  "ocaml" {>= "4.14.0"}
++  "dune"
++]
++depopts: ["cmdliner"]
++conflicts: [
++  "cmdliner" {< "1.1.0"}
++]
++build: [ "dune" "build" "-p" name "-j" jobs ]
++dev-repo: "git+https://github.com/dune-universe/cmarkit.git"
+\ No newline at end of file
+diff --git b/dune-project b/dune-project
+new file mode 100644
+index 0000000..c1e225d
+--- /dev/null
++++ b/dune-project
+@@ -0,0 +1,3 @@
++(lang dune 1.1)
++(name cmarkit)
++(version v0.3.0+dune)
+diff --git b/src/dune b/src/dune
+new file mode 100644
+index 0000000..a3a41f8
+--- /dev/null
++++ b/src/dune
+@@ -0,0 +1,4 @@
++(library
++  (public_name cmarkit)
++  (flags :standard -w -9-27-30-35-32)
++  (wrapped false))

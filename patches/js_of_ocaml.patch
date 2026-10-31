@@ -1,0 +1,282 @@
+diff --git a/compiler/lib/effects.ml b/compiler/lib/effects.ml
+index c6e7c92..bd26c20 100644
+--- a/compiler/lib/effects.ml
++++ b/compiler/lib/effects.ml
+@@ -162,7 +162,10 @@ let empty_body b =
+ 
+ let effect_primitive_or_application = function
+   | Prim
+-      ( Extern ("%resume" | "%perform" | "%reperform" | "%with_stack" | "%with_stack_bind")
++      ( Extern ("%resume" | "%perform" | "%reperform" | "%with_stack"
++               | "%with_stack_bind"
++               | "%with_stack_preemptible"
++               | "%with_stack_bind_preemptible" )
+       , _ )
+   | Apply _ -> true
+   | Block (_, _, _, _)
+@@ -660,7 +663,9 @@ let cps_block ~st ~k ~orig_pc block =
+               ~check:true
+               ~f
+               [ arg; k' ])
+-    | Prim (Extern "%with_stack", [ Pv hv; Pv hx; Pv hf; Pv f; Pv arg ]) ->
++    | Prim (Extern "%with_stack", [ Pv hv; Pv hx; Pv hf; Pv f; Pv arg ])
++    | Prim (Extern "%with_stack_preemptible", [ Pv hv; Pv hx; Pv hf; Pv _; Pv f; Pv arg ])
++      ->
+         Some
+           (fun ~k ->
+             let stack = Var.fresh_n "stack" in
+@@ -678,7 +683,10 @@ let cps_block ~st ~k ~orig_pc block =
+               [ arg; k' ])
+     | Prim
+         ( Extern "%with_stack_bind"
+-        , [ Pv hv; Pv hx; Pv hf; Pv _dyn; Pv _bind; Pv f; Pv arg ] ) ->
++        , [ Pv hv; Pv hx; Pv hf; Pv _dyn; Pv _bind; Pv f; Pv arg ] )
++    | Prim
++        ( Extern "%with_stack_bind_preemptible"
++        , [ Pv hv; Pv hx; Pv hf; Pv _; Pv _dyn; Pv _bind; Pv f; Pv arg ] ) ->
+         Some
+           (fun ~k ->
+             let stack = Var.fresh_n "stack" in
+@@ -774,7 +782,10 @@ let rewrite_direct_block ~st ~cps_needed ~closure_info ~pc block =
+       | Let (x, Prim (Extern "%reperform", [ effect_; _continuation; _tail ])) ->
+           (* Similar to previous case *)
+           [ Let (x, Prim (Extern "caml_raise_unhandled", [ effect_ ])) ]
+-      | Let (x, Prim (Extern "%with_stack", [ Pv hv; Pv hx; Pv hf; f; arg ])) ->
++      | Let (x, Prim (Extern "%with_stack", [ Pv hv; Pv hx; Pv hf; f; arg ]))
++      | Let
++          (x, Prim (Extern "%with_stack_preemptible", [ Pv hv; Pv hx; Pv hf; _; f; arg ]))
++        ->
+           let stack = Var.fresh_n "stack" in
+           [ Let (stack, Prim (Extern "caml_alloc_stack", [ Pv hv; Pv hx; Pv hf ]))
+           ; Let (x, Prim (Extern "caml_resume", [ f; arg; Pv stack; Pv stack ]))
+@@ -782,7 +793,12 @@ let rewrite_direct_block ~st ~cps_needed ~closure_info ~pc block =
+       | Let
+           ( x
+           , Prim (Extern "%with_stack_bind", [ Pv hv; Pv hx; Pv hf; _dyn; _bind; f; arg ])
+-          ) ->
++          )
++      | Let
++          ( x
++          , Prim
++              ( Extern "%with_stack_bind_preemptible"
++              , [ Pv hv; Pv hx; Pv hf; _; _dyn; _bind; f; arg ] ) ) ->
+           let stack = Var.fresh_n "stack" in
+           [ Let (stack, Prim (Extern "caml_alloc_stack", [ Pv hv; Pv hx; Pv hf ]))
+           ; Let (x, Prim (Extern "caml_resume", [ f; arg; Pv stack; Pv stack ]))
+@@ -1091,7 +1107,10 @@ let rewrite_toplevel_instr (p, cps_needed, accu) instr =
+       ( x
+       , (Prim
+            ( Extern
+-               ("%resume" | "%perform" | "%reperform" | "%with_stack" | "%with_stack_bind")
++               ("%resume" | "%perform" | "%reperform" | "%with_stack"
++               | "%with_stack_bind"
++               | "%with_stack_preemptible"
++               | "%with_stack_bind_preemptible" )
+            , _ ) as e) ) -> wrap_primitive ~cps_needed p x e accu
+   | _ -> p, cps_needed, [ instr ] :: accu
+ 
+diff --git a/compiler/lib/eval.ml b/compiler/lib/eval.ml
+index fdf67e1..41510a0 100644
+--- a/compiler/lib/eval.ml
++++ b/compiler/lib/eval.ml
+@@ -668,7 +668,10 @@ let eval_instr update_count inline_constant ~target info i =
+       ( _
+       , Prim
+           ( Extern
+-              ("%resume" | "%perform" | "%reperform" | "%with_stack" | "%with_stack_bind")
++              ("%resume" | "%perform" | "%reperform" | "%with_stack"
++               | "%with_stack_bind"
++               | "%with_stack_preemptible"
++               | "%with_stack_bind_preemptible" )
+           , _ ) ) ->
+       [ i ] (* We need that the arguments to this primitives remain variables *)
+   | Let (x, Prim (prim, prim_args)) -> (
+diff --git a/compiler/lib/generate.ml b/compiler/lib/generate.ml
+index 07c1033..b9dfffa 100644
+--- a/compiler/lib/generate.ml
++++ b/compiler/lib/generate.ml
+@@ -1693,7 +1693,10 @@ let rec translate_expr ctx loc x e level : (_ * J.statement_list) Expr_builder.t
+             return e
+         | Extern "caml_alloc_dummy_function", _ -> assert false
+         | ( Extern
+-              ("%resume" | "%perform" | "%reperform" | "%with_stack" | "%with_stack_bind")
++              ("%resume" | "%perform" | "%reperform" | "%with_stack"
++               | "%with_stack_bind"
++               | "%with_stack_preemptible"
++               | "%with_stack_bind_preemptible" )
+           , _ ) ->
+             assert (not (cps_transform ()));
+             if not !(ctx.effect_warning)
+diff --git a/compiler/lib/instr.ml b/compiler/lib/instr.ml
+index e25fad4..3b62dde 100644
+--- a/compiler/lib/instr.ml
++++ b/compiler/lib/instr.ml
+@@ -176,6 +176,8 @@ type t =
+   | MAKE_FAUX_MIXEDBLOCK
+   | WITH_STACK
+   | WITH_STACK_BIND
++  | WITH_STACK_PREEMPTIBLE
++  | WITH_STACK_BIND_PREEMPTIBLE
+   | FIRST_UNIMPLEMENTED_OP
+ 
+ let equal (a : t) b = Poly.equal a b
+@@ -370,6 +372,8 @@ let ops =
+      ; MAKE_FAUX_MIXEDBLOCK, if_oxcaml KBinary, "MAKE_FAUX_MIXEDBLOCK"
+      ; WITH_STACK, if_oxcaml KNullaryCall, "WITH_STACK"
+      ; WITH_STACK_BIND, if_oxcaml KNullaryCall, "WITH_STACK_BIND"
++     ; WITH_STACK_PREEMPTIBLE, if_oxcaml KNullaryCall, "WITH_STACK_PREEMPTIBLE"
++     ; WITH_STACK_BIND_PREEMPTIBLE, if_oxcaml KNullaryCall, "WITH_STACK_BIND_PREEMPTIBLE"
+      ; FIRST_UNIMPLEMENTED_OP, K_will_not_happen, "FIRST_UNIMPLEMENTED_OP"
+     |]
+   in
+diff --git a/compiler/lib/instr.mli b/compiler/lib/instr.mli
+index d4fd570..a556b31 100644
+--- a/compiler/lib/instr.mli
++++ b/compiler/lib/instr.mli
+@@ -175,6 +175,8 @@ type t =
+   | MAKE_FAUX_MIXEDBLOCK
+   | WITH_STACK
+   | WITH_STACK_BIND
++  | WITH_STACK_PREEMPTIBLE
++  | WITH_STACK_BIND_PREEMPTIBLE
+   | FIRST_UNIMPLEMENTED_OP
+ 
+ type kind =
+diff --git a/compiler/lib/parse_bytecode.ml b/compiler/lib/parse_bytecode.ml
+index 6e14f53..5686482 100644
+--- a/compiler/lib/parse_bytecode.ml
++++ b/compiler/lib/parse_bytecode.ml
+@@ -2682,6 +2682,87 @@ and compile infos pc state (instrs : instr list) =
+                  ( Extern "%with_stack_bind"
+                  , [ Pv valuec; Pv exnc; Pv effc; Pv dyn; Pv bind; Pv f; Pv arg ] ) )
+           :: instrs)
++    | WITH_STACK_PREEMPTIBLE ->
++        let valuec = State.accu state in
++        let exnc = State.peek 0 state in
++        let effc = State.peek 1 state in
++        let tickc = State.peek 2 state in
++        let f = State.peek 3 state in
++        let arg = State.peek 4 state in
++        let state = State.pop 5 state in
++        let x, state = State.fresh_var state in
++        if debug_parser ()
++        then
++          Format.printf
++            "%a = with_stack_preemptible(%a, %a, %a, %a, %a, %a)@."
++            Var.print
++            x
++            Var.print
++            valuec
++            Var.print
++            exnc
++            Var.print
++            effc
++            Var.print
++            tickc
++            Var.print
++            f
++            Var.print
++            arg;
++        compile
++          infos
++          (pc + 1)
++          state
++          (Let
++             ( x
++             , Prim
++                 ( Extern "%with_stack_preemptible"
++                 , [ Pv valuec; Pv exnc; Pv effc; Pv tickc; Pv f; Pv arg ] ) )
++          :: instrs)
++    | WITH_STACK_BIND_PREEMPTIBLE ->
++        let valuec = State.accu state in
++        let exnc = State.peek 0 state in
++        let effc = State.peek 1 state in
++        let tickc = State.peek 2 state in
++        let dyn = State.peek 3 state in
++        let bind = State.peek 4 state in
++        let f = State.peek 5 state in
++        let arg = State.peek 6 state in
++        let state = State.pop 7 state in
++        let x, state = State.fresh_var state in
++        if debug_parser ()
++        then
++          Format.printf
++            "%a = with_stack_bind_preemptible(%a, %a, %a, %a, %a, %a, %a, %a)@."
++            Var.print
++            x
++            Var.print
++            valuec
++            Var.print
++            exnc
++            Var.print
++            effc
++            Var.print
++            tickc
++            Var.print
++            dyn
++            Var.print
++            bind
++            Var.print
++            f
++            Var.print
++            arg;
++        compile
++          infos
++          (pc + 1)
++          state
++          (Let
++             ( x
++             , Prim
++                 ( Extern "%with_stack_bind_preemptible"
++                 , [ Pv valuec; Pv exnc; Pv effc; Pv tickc; Pv dyn; Pv bind; Pv f; Pv arg ]
++                 ) )
++          :: instrs)
+     | EVENT | BREAK | FIRST_UNIMPLEMENTED_OP -> assert false)
+ 
+ (****)
+diff --git a/compiler/lib/partial_cps_analysis.ml b/compiler/lib/partial_cps_analysis.ml
+index 657df40..bdfc252 100644
+--- a/compiler/lib/partial_cps_analysis.ml
++++ b/compiler/lib/partial_cps_analysis.ml
+@@ -101,7 +101,9 @@ let block_deps ~info ~vars ~tail_deps ~deps ~blocks ~fun_name pc =
+                   | "%reperform"
+                   | "%resume"
+                   | "%with_stack"
+-                  | "%with_stack_bind" )
++                  | "%with_stack_bind"
++                  | "%with_stack_preemptible"
++                  | "%with_stack_bind_preemptible" )
+               , _ ) ) -> (
+           add_var vars x;
+           match fun_name with
+@@ -167,7 +169,10 @@ let cps_needed ~info ~in_mutual_recursion ~rev_deps st x =
+   | Expr
+       (Prim
+          ( Extern
+-             ("%perform" | "%reperform" | "%resume" | "%with_stack" | "%with_stack_bind")
++             ("%perform" | "%reperform" | "%resume" | "%with_stack"
++               | "%with_stack_bind"
++               | "%with_stack_preemptible"
++               | "%with_stack_bind_preemptible" )
+          , _ )) ->
+       (* Effects primitives are in CPS *)
+       true
+diff --git a/compiler/lib/unit_info.ml b/compiler/lib/unit_info.ml
+index 3ec1fa7..8336246 100644
+--- a/compiler/lib/unit_info.ml
++++ b/compiler/lib/unit_info.ml
+@@ -59,7 +59,13 @@ let of_cmo (cmo : Ocaml_compiler.Cmo_format.t) =
+       | `Disabled | `Jspi | `Native -> true
+       | `Cps | `Double_translation -> false)
+     && List.exists (Cmo_format.primitives cmo) ~f:(function
+-      | "%resume" | "%reperform" | "%perform" | "%with_stack" | "%with_stack_bind" -> true
++      | "%resume"
++      | "%reperform"
++      | "%perform"
++      | "%with_stack"
++      | "%with_stack_bind"
++      | "%with_stack_preemptible"
++      | "%with_stack_bind_preemptible" -> true
+       | _ -> false)
+   in
+   let force_link = Cmo_format.force_link cmo in
