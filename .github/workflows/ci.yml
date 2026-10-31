@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * *"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: archlinux/archlinux
+
+    steps:
+      - name: Install system dependencies and opam
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm \
+            base-devel git curl pkgconf \
+            openssl zlib gmp libffi pcre zstd \
+            opam rsync ripgrep
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Init opam
+        run: opam init --bare -y --disable-sandboxing
+
+      - name: Restore compiler cache
+        id: compiler-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            base-env/_opam
+          key: compiler-${{ runner.os }}-${{ hashFiles('base-env/make-switch.sh') }}
+
+      - name: First install - create switch
+        if: steps.compiler-cache.outputs.cache-hit != 'true'
+        run: |
+          touch base-env/_opam.bak
+          base-env/make-switch.sh
+
+      - name: Save compiler cache
+        if: steps.compiler-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            base-env/_opam
+          key: ${{ steps.compiler-cache.outputs.cache-primary-key }}
+
+      - name: Build and test
+        run: |
+          opam switch link ./base-env
+          eval $(opam env)
+          dune build @_build/default/default @_build/default/runtest
