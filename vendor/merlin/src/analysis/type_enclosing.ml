@@ -37,7 +37,12 @@ let print_type ~verbosity type_info =
         Format.flush_str_formatter ())
   | Jkind (env, jkind) ->
     wrap_printing_env env (fun () ->
-        Jkind.format_expanded ppf jkind;
+        let verbosity : Jkind.Format_verbosity.t =
+          match Mconfig.Verbosity.to_int ~for_smart:0 verbosity > 0 with
+          | false -> Expanded
+          | true -> Expanded_with_all_mod_bounds
+        in
+        (Format_doc.compat (Jkind.format_verbose ~verbosity env)) ppf jkind;
         Format.flush_str_formatter ())
   | String s -> s
 
@@ -73,17 +78,17 @@ let from_nodes ~path =
         (* The context isn't important. It's just used for printing error messages, which
            we immediately discard anyways. *)
         let jkind =
-          Jkind.of_annotation ~context:(Type_variable "fake_for_merlin") annot
+          Jkind.of_annotation ~context:(Type_variable "fake_for_merlin") env
+            annot
         in
         ret (Jkind (env, jkind))
       with Jkind.Error.User_error _ -> None)
     | Class_field
         { cf_desc = Tcf_method (_, _, Tcfk_concrete (_, { exp_type })) } ->
-    begin
-      match Types.get_desc exp_type with
+      begin match Types.get_desc exp_type with
       | Tarrow (_, _, t, _) -> ret (Type (env, t))
       | _ -> None
-    end
+      end
     | Class_field
         { cf_desc = Tcf_val (_, _, _, Tcfk_concrete (_, { exp_type = t }), _) }
       -> ret (Type (env, t))

@@ -26,32 +26,23 @@ let implicit_default_alias dir =
 ;;
 
 let execution_parameters =
-  let f context path =
-    let path = Path.Build.drop_build_context_exn path in
-    let open Memo.O in
-    let* ep = Execution_parameters.default in
-    if Context_name.equal context Private_context.t.name
-    then Memo.return ep
-    else
-      let+ dir = Source_tree.nearest_dir path in
+  let f path =
+    match Path.Build.drop_build_context path with
+    | None -> Dune_engine.Execution_parameters.default
+    | Some path ->
+      let open Memo.O in
+      let+ dir = Source_tree.nearest_dir path
+      and+ ep = Execution_parameters.default in
       Dune_project.update_execution_parameters (Source_tree.Dir.project dir) ep
   in
   let memo =
-    let module Input = struct
-      type t = Context_name.t * Path.Build.t
-
-      let hash = Tuple.T2.hash Context_name.hash Path.Build.hash
-      let equal = Tuple.T2.equal Context_name.equal Path.Build.equal
-      let to_dyn = Tuple.T2.to_dyn Context_name.to_dyn Path.Build.to_dyn
-    end
-    in
     Memo.create
       "execution-parameters-of-dir"
-      ~input:(module Input)
+      ~input:(module Path.Build)
       ~cutoff:Execution_parameters.equal
-      (fun (ctx, path) -> f ctx path)
+      f
   in
-  fun context ~dir -> Memo.exec memo (context, dir)
+  fun ~dir -> Memo.exec memo dir
 ;;
 
 let init

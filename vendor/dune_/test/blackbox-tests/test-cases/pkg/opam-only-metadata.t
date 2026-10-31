@@ -34,7 +34,7 @@ Test that we can read package metadata from opam files.
   > ]
   > EOF
 
-  $ dune_pkg_lock_normalized
+  $ dune pkg lock
   Solution for dune.lock:
   - a.0.1
   - b.0.6
@@ -52,8 +52,7 @@ Test that we can read package metadata from opam files.
     
 
   $ cat > dune-workspace <<EOF
-  > (lang dune 3.20)
-  > (pkg enabled)
+  > (lang dune 3.12)
   > (lock_dir
   >  (repositories mock)
   >  (solver_env
@@ -63,7 +62,7 @@ Test that we can read package metadata from opam files.
   >  (url "$PWD/mock-opam-repository"))
   > EOF
 
-  $ dune_pkg_lock_normalized
+  $ dune pkg lock
   Solution for dune.lock:
   - a.0.1
   - b.0.6

@@ -1,0 +1,15 @@
+(library
+ (public_name promise_jsoo)
+ (name promise)
+ (js_of_ocaml
+  (javascript_files indirect_promise.js))
+ (libraries ojs)
+ (preprocess
+  (pps gen_js_api.ppx))
+ (modes byte))
+
+(rule
+ (targets internal.ml)
+ (deps internal.mli)
+ (action
+  (run %{bin:gen_js_api} %{deps})))

@@ -1,0 +1,3 @@
+(alias
+ (name mdx_dependencies)
+ (deps test/test_ppx_loc.ml))

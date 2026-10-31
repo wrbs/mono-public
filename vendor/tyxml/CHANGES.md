@@ -1,3 +1,237 @@
+# 5.0.0
+
+TyXML now follows the current specifications: the WHATWG living standard for
+HTML, and SVG 2 with the Filter Effects module for SVG, whose support had not
+moved since SVG 1.1.
+
+## Breaking changes
+
+* The `hidden` attribute takes an enumerated argument
+  (`` [`Hidden | `Until_found] ``) instead of no argument, and
+  `contenteditable` takes an enumerated argument
+  (`` [`True | `False | `Plaintext_only] ``) instead of a boolean, so that the
+  until-found and plaintext-only states can be expressed
+* `a_itemtype` and `a_ping` take an `Xml.uri list` instead of a `string list`
+  and go through `Xml.uris_attrib`, like every other URL-valued attribute.
+  `Tyxml.Html` is unaffected, its `Xml.uri` is `string`
+* The SVG attributes whose value is a URL follow the same rule: `a_href`,
+  `a_xlink_href`, `a_xml_base`, `a_xlink_role`, `a_xlink_arcrole` and the
+  `a_ping` this release adds to the SVG `a` element take an `Xml.uri`, where
+  they used to take the `iri` type, which is `string`. The presentation
+  attributes that accept a funciri such as `url(#id)` or a keyword such as
+  `none`, that is `clip-path`, `mask` and the `marker-*` ones, keep `iri`
+* SVG documents are printed without a doctype. `Svg.Info` declared SVG 1.1 and
+  every printed document carried the SVG 1.1 DTD, which forbids the SVG 2
+  elements and attributes TyXML now emits, and SVG 2 defines no DTD.
+  `Info.version` and `Info.standard` name SVG 2
+* Unlike their HTML counterparts, the `Svg_types.*_content` types are widened
+  along with the content models they describe: the SVG element functions use
+  them directly, there is no `_content_fun` on that side. Code that names one
+  of them and constrains it with `=` has to be updated
+* Misspelled names are corrected: `a_baseFrenquency` becomes `a_baseFrequency`,
+  `a_externalRessourcesRequired` becomes `a_externalResourcesRequired`, the
+  `stroke-linejoin` value `` `Bever `` becomes `` `Bevel ``, and the types
+  `Html_types.subressource_integrity` and `Svg_types.paint_whitout_icc` become
+  `subresource_integrity` and `paint_without_icc`
+* The newly deprecated elements and attributes are an error, and not a warning,
+  for the users of the PPX and the JSX syntax who build in dune's dev profile,
+  where alerts are fatal. The alert is reported on the markup literal, so it
+  has to be silenced on the enclosing definition
+* The `Wrapped_functions` module type has four new functions, which the
+  implementations of the functorial interface must provide:
+  `string_of_blocking` and `string_of_ol_type` for HTML, `unoption_string`
+  and `string_of_semicolonstrings` for SVG
+* The build now requires OCaml 4.08, dune 3.18 and ppxlib 0.36
+  (Sora Morimoto, and #340 by Patrick Ferris for the OCaml 5.2 AST)
+* The test matrix covers OCaml 4.14 and the 5.x series. The lower bound stays
+  at 4.08, but the versions from 4.08 to 4.13 are no longer tested
+
+## HTML
+
+* New elements: `s`, `bdi`, `search`, `data`, `slot`, and `track` with its
+  `kind`, `srclang` (as `a_track_srclang`) and `default` attributes, `audio`
+  and `video` taking an optional `?tracks` argument. `meta_itemprop` is the
+  form of `meta` carrying an `itemprop` attribute, which the specification
+  allows wherever phrasing content is expected and not only in the head
+  (#343 by toastal)
+* New global attributes: `popover`, `inert`, `enterkeyhint`, `autocapitalize`,
+  `autocorrect`, `writingsuggestions`, `nonce`, `slot` and `is`, the microdata
+  attributes `itemscope`, `itemtype`, `itemid`, `itemprop` and `itemref`, the
+  CSS shadow parts attributes `part` and `exportparts`, and the `` `Auto ``
+  value of `dir`
+  (#341 by @SylvainBoilard for popover, #343 by toastal for microdata)
+* New attributes on elements: `popovertarget` and `popovertargetaction` on
+  buttons and inputs, `command` and `commandfor` (invoker commands) on
+  buttons, `loading`, `decoding` and `fetchpriority` on images, `srcdoc`,
+  `allow` and `loading` on iframes, `as`, `imagesrcset` and `imagesizes` on
+  links (`a_as`), `nomodule` on scripts, `blocking` on links, scripts and styles,
+  `ping` on `a` and `area`, `dirname` on inputs and textareas, `capture`
+  (W3C HTML Media Capture) on inputs, `a_ol_type` on ordered lists, `abbr` on
+  th cells, `closedby` on dialogs, `media` on meta, `name` on `details`,
+  `playsinline` and `disablepictureinpicture` on videos,
+  `disableremoteplayback` on audios and videos, and the declarative shadow DOM
+  attributes on templates (`shadowrootmode`, `shadowrootdelegatesfocus`,
+  `shadowrootclonable` and `shadowrootserializable`). Also allow `crossorigin`,
+  `usemap` and `referrerpolicy` on images, `referrerpolicy` on `a` and `area`,
+  and `autocomplete` on selects and textareas
+  (#341 by @SylvainBoilard for `name` on `details`, fixes #268)
+* New event handler attributes: the pointer events (`a_onpointerdown` and
+  its siblings), `a_onwheel`,
+  `a_onauxclick`, and the global handlers that were missing
+  (`a_onbeforeinput`, `a_onbeforematch`, `a_onbeforetoggle`, `a_oncancel`,
+  `a_oncontextlost`, `a_oncontextrestored`, `a_oncopy`, `a_oncut`,
+  `a_onpaste`, `a_oncuechange`, `a_onscrollend`,
+  `a_onsecuritypolicyviolation`, `a_onslotchange` and `a_ontoggle`), plus
+  `a_onlanguagechange`, `a_onrejectionhandled` and `a_onunhandledrejection`
+  on body
+* New attribute values: `dialog` for `method` and `formmethod`, and the newer
+  `sandbox` tokens (`allow-downloads`, `allow-modals`,
+  `allow-orientation-lock`, `allow-popups-to-escape-sandbox`,
+  `allow-presentation`, `allow-top-navigation-by-user-activation` and
+  `allow-top-navigation-to-custom-protocols`)
+* Content models brought in line with the specification: `div` groups `dt` and
+  `dd` inside `dl`, the script-supporting elements (`script`, `template`) are
+  accepted in `dl`, `ol`, `ul`, `menu`, `table` and its row groups, `tr`,
+  `select` and `optgroup`, `hgroup` accepts `p`, and `select` accepts `hr`.
+  The `_content` types keep their previous value, only the types the element
+  functions use are widened
+  (#344 by toastal, fixes #342 and #321)
+* Undeprecate the `scope` attribute, which is valid on table header cells in
+  the living standard
+* Deprecate `a_version`, `a_xml_space` and `a_scrolling`, which produce a type
+  tag that is in no attribute category, so no element ever accepted them
+
+## SVG
+
+* New elements: `mask`, `feMergeNode` and `feDropShadow`. `mask` was declared
+  in `Svg_types` but the element itself was missing, and `feMerge` could be
+  given no child at all since `feMergeNode` did not exist
+* Presentation attributes: add the ones whose type tags were already declared
+  but had no function (`baseline-shift`, `clip-rule`, `color`,
+  `color-interpolation`, `color-interpolation-filters`, `color-rendering`,
+  `cursor`, `direction`, `display`, `fill-opacity`, `filter`, `flood-color`,
+  `flood-opacity`, `font-size-adjust`, `image-rendering`, `letter-spacing`,
+  `lighting-color`, `marker-end`, `marker-mid`, `marker-start`, `mask`,
+  `opacity`, `overflow`, `pointer-events`, `shape-rendering`, `unicode-bidi`,
+  `visibility`, `word-spacing` and `writing-mode`) and the ones new in SVG 2
+  (`paint-order`, `text-overflow`, `transform-origin`, `vector-effect` and
+  `white-space`). The ones SVG 2 removed are added as deprecated: `clip`,
+  `color-profile`, `enable-background`, `glyph-orientation-horizontal`,
+  `glyph-orientation-vertical` and `kerning`
+  (#333 by Martin @MBodin Bodin for `clip-path`)
+* Other new attributes: the `tabindex` and `autofocus` global attributes,
+  `lang` becomes global, ARIA support (`a_role` and `a_aria`), the SVG 2 link
+  attributes on the `a` element (`download`, `hreflang`, `ping`,
+  `referrerpolicy`, `rel` and `type`), `crossorigin`, `decoding` and
+  `fetchpriority`, `fr` on radial gradients, `side` and `path` on `textPath`,
+  and the SVG 2 geometry attributes on `symbol` (`x`, `y`, `width`, `height`,
+  `refX`, `refY`)
+* Attribute functions missing for type tags that were already declared:
+  `a_end` (SMIL timing), `a_z` (light sources), `a_filterUnits`, `a_title` (on
+  `style`), `a_origin`, `a_panose_1`, `a_descent`, and the deprecated
+  `a_xlink_type`, `a_xlink_role` and `a_xlink_arcrole`
+* New values of existing attributes: `miter-clip` and `arcs` for
+  `stroke-linejoin`, all the CSS blend modes for the `mode` attribute of
+  `feBlend`, and `text-top` and `text-bottom` for `alignment-baseline` and
+  `dominant-baseline`
+* The HTML event handler attributes, which SVG 2 reuses on every element
+  (focus, keyboard, pointer, wheel, clipboard, drag and media events), and the
+  window event handler attributes on the `svg` element
+* Content models widened to SVG 2: shapes accept paint servers, `clipPath`,
+  `marker`, `mask`, `script` and `style`; `use` and `image` accept `clipPath`,
+  `mask`, `script` and `style`; text elements accept paint servers, `script`
+  and `style`; filter primitives accept descriptive elements, `animate`,
+  `script` and `set`; gradients, `stop` and `clipPath` accept `script`
+* Separate the values of the `values`, `keyTimes` and `keySplines` animation
+  attributes with semicolons, as SMIL requires, instead of commas
+  (#308 by @rand00)
+* Deprecate what SVG 2 removed and was not deprecated yet:
+  `externalResourcesRequired`, `filterRes`, `zoomAndPan`, the `onzoom`,
+  `onactivate`, `onfocusin` and `onfocusout` event handlers, and the `cursor`
+  and `animateColor` elements. Conversely, undeprecate `a_onload`: the load
+  event is still fired on SVG elements
+
+## Fixes
+
+* The `area` element could not be used at all: it had no `href` attribute, and
+  its type tag was in no content model, so a `map` containing areas fitted
+  nowhere. It is now phrasing content, and its signature uses `area_attrib`
+  instead of repeating a shorter list that left out `download`, `ping` and
+  `referrerpolicy`
+  (fixes part of #184)
+* The `li` children of `menu` could not be built: the `` `Lis `` branch
+  required an `li` whose attributes were a subset of the common ones,
+  excluding the `value` attribute that `li` always allows
+* Several attribute names were emitted misspelled: `reversed` (emitted
+  `reserved`), the `allow-scripts` sandbox token (`allow-script`) and, in SVG,
+  `zoomAndPan`, `requiredExtensions`, `externalResourcesRequired`, `edgeMode`
+  (emitted `targetY`), `filterRes`, `target` (emitted `xlink:target`),
+  `glyph-name` and the `font-face-format` element (emitted `font-face-uri`).
+  Several SVG attribute values were too: the hyphens missing from the
+  `rendering-intent` and `dominant-baseline` values, the case of the `in` and
+  `in2` keywords (`SourceGraphic` and the other built-in inputs), and
+  `` `Align ``, emitted as the empty string
+  (Hugo @hhugo Heuzard)
+* Several type tags did not match their attribute, making `a_edgeMode`,
+  `a_preserveAlpha`, `a_filterRes`, `a_target`, `a_glyph_name`,
+  `a_arabic_form`, `a_requiredExtensions`, `a_xlink_title` and `a_low`
+  unusable, and some element type tags were misspelled or duplicated
+  (`feFuncR`, `feFuncG` and `feFuncB` were all defined as `` `FeFuncA ``)
+  (Hugo @hhugo Heuzard)
+* The `symbol` element accepted neither the core attributes, so no `id`, which
+  made it impossible to reference, nor the presentation and event attributes,
+  nor shape children
+* The `xml:base`, `xml:lang` and `xml:space` attributes and the touch event
+  handler attributes of SVG had type tags listed in no attribute category,
+  which made them unusable on every element
+* `Xml_print.compose_decl` emitted a literal `\n` instead of a newline, which
+  made the XML declaration invalid
+  (#348 by Martin @MBodin Bodin)
+* In the JSX syntax, `Html` used as an element name was mistaken for a
+  user-defined component: the test lowercased the name and then compared it
+  with a capitalised string, so it never matched
+* Fix the development-profile build with recent compilers by anonymizing the
+  unused functor parameters of the printer and functor signatures (warning 67)
+* Fix the typo `whitout` in a type definition
+  (#324 by Martin @MBodin Bodin)
+* Fix the typo `subresource` and various English orthographic mistakes
+  (#345 by toastal)
+* `Unsafe` gains `uris_attrib`, the escape hatch that was missing for an
+  attribute holding a space-separated list of URLs, next to `uri_attrib`
+
+## PPX and JSX syntax
+
+* No camel case SVG attribute was recognised, so `viewBox`, `maskUnits`,
+  `stdDeviation`, `gradientTransform`, `preserveAspectRatio`, `refX`,
+  `markerWidth` and many others were rejected
+* Whitespace between SVG tags is ignored for the elements whose content model
+  does not accept text. Indented SVG, as the specification itself writes it,
+  was rejected: `[%svg "<g> </g>"]` failed to typecheck. Whitespace is still
+  significant in `text`, `tspan`, `textPath`, `desc`, `title`, `style` and
+  `script`
+  (#331 by Martin @MBodin Bodin, fixes #330)
+* A `transform` attribute whose arguments were comma separated, such as
+  `translate(1,1)`, was rejected. Any whitespace, and not only the space
+  character, is now accepted around the separators of list-valued attributes
+  (#328 by Martin @MBodin Bodin, fixes #326)
+* Two transforms must now be separated by whitespace or a comma, as the
+  grammar of the attribute requires. `transform="translate(1,2)rotate(45)"`
+  used to be accepted and silently turned into valid output
+* The `values`, `keyTimes` and `keySplines` animation attributes are split on
+  semicolons, where they used to be split on spaces
+  (#308 by @rand00)
+* An empty `option` is accepted, as for `script` and `textarea`: an option
+  carrying a `label` and a `value` attribute has no content, which is the
+  usual form inside a `datalist`
+  (fixes #228)
+
+## Documentation
+
+* The manual is converted from wikicreole to odoc, and the API references in
+  the interfaces are native odoc references. The themed site published on
+  ocsigen.org is built by wodoc
+  (#352 by Hugo @hhugo Heuzard for the rendering)
+
 # 4.6.0
 
 * Update for OCaml 5.0 and drop support for OCaml 4.2.0

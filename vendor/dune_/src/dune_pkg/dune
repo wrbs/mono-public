@@ -6,20 +6,18 @@
   (language c))
  (libraries
   stdune
-  lmdb
   fiber
   fiber_util
+  chrome_trace
   dune_engine
   dune_util
-  dune_trace
+  dune_stats
   dune_lang
   dune_console
-  dune_digest
-  re
+  dune_re
   dune_vcs
   dune_config
   opam_format
   build_info
   sat
-  unix
   xdg))

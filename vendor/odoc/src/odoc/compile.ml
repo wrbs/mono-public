@@ -1,7 +1,7 @@
+open Odoc_utils
+open ResultMonad
 open Odoc_model
 open Odoc_model.Names
-open Or_error
-open Odoc_utils
 
 (*
  * Copyright (c) 2014 Leo White <leo@lpw25.net>
@@ -113,7 +113,13 @@ let resolve_imports resolver imports =
   List.map
     (function
       | Lang.Compilation_unit.Import.Resolved _ as resolved -> resolved
-      | Unresolved (name, _) as unresolved -> (
+      | Unresolved (_, None) as unresolved ->
+          (* Don't try to resolve imports without a digest. Looking up
+             modules in the include path could find stale artifacts from
+             a previous build, associating the wrong digest with this
+             import and breaking incremental rebuilds. *)
+          unresolved
+      | Unresolved (name, Some _) as unresolved -> (
           match Resolver.resolve_import resolver name with
           | Some root -> Resolved (root, Names.ModuleName.make_std name)
           | None -> unresolved))

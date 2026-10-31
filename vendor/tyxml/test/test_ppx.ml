@@ -189,6 +189,147 @@ let basics = "ppx basics", HtmlTests.make Html.[
   [[%html {|<dialog open>foo</dialog>|}]],
   [dialog ~a:[a_open ()] [txt "foo"] ];
 
+  "s",
+  [[%html {|<s>foo</s>|}]],
+  [s [txt "foo"] ];
+
+  "bdi",
+  [[%html {|<bdi>foo</bdi>|}]],
+  [bdi [txt "foo"] ];
+
+  "search",
+  [[%html {|<search><p>foo</p></search>|}]],
+  [search [p [txt "foo"]] ];
+
+  "data",
+  [[%html {|<data value="42">foo</data>|}]],
+  [data ~value:"42" [txt "foo"] ];
+
+  "slot",
+  [[%html {|<div><slot name="s1">fallback</slot></div>|}]],
+  [div [slot ~a:[a_name "s1"] [txt "fallback"]] ];
+
+  "body window handlers",
+  [[%html {|<body onlanguagechange="l()" onrejectionhandled="r()" onunhandledrejection="u()"></body>|}]],
+  [body ~a:[a_onlanguagechange "l()"; a_onrejectionhandled "r()";
+            a_onunhandledrejection "u()"] [] ];
+
+  "global event handlers",
+  [[%html {|<dialog oncancel="c()" ontoggle="t()" oncuechange="q()">x</dialog>|}]],
+  [dialog ~a:[a_oncancel "c()"; a_ontoggle "t()"; a_oncuechange "q()"]
+     [txt "x"] ];
+
+  "pointer events",
+  [[%html {|<div onpointerdown="d()" onpointerup="u()" onwheel="w()"></div>|}]],
+  [div ~a:[a_onpointerdown "d()"; a_onpointerup "u()"; a_onwheel "w()"] [] ];
+
+  "declarative shadow DOM",
+  [[%html {|<template shadowrootmode="closed" shadowrootclonable><p>x</p></template>|}]],
+  [template ~a:[a_shadowrootmode `Closed; a_shadowrootclonable ()]
+     [p [txt "x"]] ];
+
+  "video attributes",
+  [[%html {|<video playsinline disablepictureinpicture disableremoteplayback></video>|}]],
+  [video ~a:[a_playsinline (); a_disablepictureinpicture ();
+             a_disableremoteplayback ()] [] ];
+
+  "ol type lower",
+  [[%html {|<ol type="a"><li>x</li></ol>|}]],
+  [ol ~a:[a_ol_type `Lower_alpha] [li [txt "x"]] ];
+
+  "ol type upper",
+  [[%html {|<ol type="A"><li>x</li></ol>|}]],
+  [ol ~a:[a_ol_type `Upper_alpha] [li [txt "x"]] ];
+
+  "th abbr and dialog closedby",
+  [[%html {|<div><table><tr><th abbr="P">x</th></tr></table><dialog closedby="any">y</dialog></div>|}]],
+  [div [tablex [tbody [tr [th ~a:[a_abbr "P"] [txt "x"]]]] ;
+        dialog ~a:[a_closedby `Any] [txt "y"]] ];
+
+  "meta media",
+  [[%html {|<meta name="theme-color" media="(prefers-color-scheme: dark)" content="black"/>|}]],
+  [meta ~a:[a_name "theme-color";
+            a_media [`Raw_mediadesc "(prefers-color-scheme: dark)"];
+            a_content "black"] () ];
+
+  "form control attributes",
+  [[%html {|<div><input dirname="c.dir" capture="user"/><select autocomplete="off"></select><textarea autocomplete="on"></textarea></div>|}]],
+  [div [input ~a:[a_dirname "c.dir"; a_capture `User] () ;
+        select ~a:[a_autocomplete `Off] [] ;
+        textarea ~a:[a_autocomplete `On] (txt "")] ];
+
+  "a ping",
+  [[%html {|<a href="/x" ping="https://a.example https://b.example">x</a>|}]],
+  [a ~a:[a_href "/x"; a_ping ["https://a.example"; "https://b.example"]]
+     [txt "x"] ];
+
+  "link preload",
+  [[%html {|<link rel="stylesheet" href="a.css" blocking="render" fetchpriority="low"/>|}]],
+  [link ~rel:[`Stylesheet] ~href:"a.css"
+     ~a:[a_blocking [`Render]; a_fetchpriority `Low] () ];
+
+  "link imagesrcset",
+  [[%html {|<link rel="preload" href="i.png" as="image" imagesrcset="i2.png 2x" imagesizes="50vw"/>|}]],
+  [link ~rel:[`Other "preload"] ~href:"i.png"
+     ~a:[a_as `Image; a_imagesrcset [`Url_pixel ("i2.png", 2.)];
+         a_imagesizes ["50vw"]] () ];
+
+  "script nomodule",
+  [[%html {|<script nomodule src="a.js"></script>|}]],
+  [script ~a:[a_nomodule (); a_src "a.js"] (txt "") ];
+
+  "img loading",
+  [[%html {|<img src="x.png" alt="x" loading="eager" decoding="auto" fetchpriority="high"/>|}]],
+  [img ~src:"x.png" ~alt:"x"
+     ~a:[a_loading `Eager; a_decoding `Auto; a_fetchpriority `High] () ];
+
+  "iframe srcdoc",
+  [[%html {|<iframe srcdoc="hello" allow="fullscreen" loading="lazy"></iframe>|}]],
+  [iframe ~a:[a_srcdoc "hello"; a_allow "fullscreen"; a_loading `Lazy] [] ];
+
+  "popovertarget",
+  [[%html {|<button popovertarget="p" popovertargetaction="toggle">x</button>|}]],
+  [button ~a:[a_popovertarget "p"; a_popovertargetaction `Toggle]
+     [txt "x"] ];
+
+  "invoker commands",
+  [[%html {|<button commandfor="d" command="request-close">x</button>|}]],
+  [button ~a:[a_commandfor "d"; a_command `Request_close] [txt "x"] ];
+
+  "custom command",
+  [[%html {|<button commandfor="d" command="--my-cmd">x</button>|}]],
+  [button ~a:[a_commandfor "d"; a_command (`Other "--my-cmd")] [txt "x"] ];
+
+  "shadow parts",
+  [[%html {|<span part="label value" exportparts="a,b:c"></span>|}]],
+  [span ~a:[a_part ["label"; "value"]; a_exportparts ["a"; "b:c"]] [] ];
+
+  "microdata",
+  [[%html {|<div itemscope itemtype="https://schema.org/Person" itemid="urn:isbn:123" itemref="a b"><span itemprop="name">X</span></div>|}]],
+  [div ~a:[a_itemscope (); a_itemtype ["https://schema.org/Person"];
+           a_itemid "urn:isbn:123"; a_itemref ["a"; "b"]]
+     [span ~a:[a_itemprop ["name"]] [txt "X"]] ];
+
+  "popover bare",
+  [[%html {|<div popover></div>|}]],
+  [div ~a:[a_popover `Auto] [] ];
+
+  "popover manual",
+  [[%html {|<div popover="manual"></div>|}]],
+  [div ~a:[a_popover `Manual] [] ];
+
+  "global attributes",
+  [[%html {|<div inert dir="auto" autocapitalize="sentences" autocorrect="off" writingsuggestions="true" enterkeyhint="send" nonce="n" slot="s" is="my-elt"></div>|}]],
+  [div ~a:[a_inert (); a_dir `Auto; a_autocapitalize `Sentences;
+           a_autocorrect false; a_writingsuggestions true;
+           a_enterkeyhint `Send; a_nonce "n"; a_slot "s";
+           a_is "my-elt"] [] ];
+
+  "track in video",
+  [[%html {|<video><track src="v.vtt" kind="subtitles" srclang="en" default/></video>|}]],
+  [video ~tracks:[track ~src:"v.vtt"
+      ~a:[a_kind `Subtitles; a_track_srclang "en"; a_default ()] ()] []];
+
   "picture",
   [[%html {|<div><picture id="idpicture">
     <img src="picture/img.png" alt="test picture/img.png" id="idimg"/>
@@ -224,12 +365,28 @@ let basics = "ppx basics", HtmlTests.make Html.[
 let attribs = "ppx attribs", HtmlTests.make Html.[
 
   "unit absent",
-  [[%html "<div hidden></div>"]],
-  [div ~a:[a_hidden ()] []] ;
+  [[%html "<input disabled/>"]],
+  [input ~a:[a_disabled ()] ()] ;
 
   "unit present",
-  [[%html "<div hidden=hidden></div>"]],
-  [div ~a:[a_hidden ()] []] ;
+  [[%html {|<input disabled="disabled"/>|}]],
+  [input ~a:[a_disabled ()] ()] ;
+
+  "hidden bare",
+  [[%html "<div hidden></div>"]],
+  [div ~a:[a_hidden `Hidden] []] ;
+
+  "hidden until-found",
+  [[%html "<div hidden=until-found></div>"]],
+  [div ~a:[a_hidden `Until_found] []] ;
+
+  "contenteditable bare",
+  [[%html "<div contenteditable></div>"]],
+  [div ~a:[a_contenteditable `True] []] ;
+
+  "contenteditable plaintext-only",
+  [[%html "<div contenteditable=plaintext-only></div>"]],
+  [div ~a:[a_contenteditable `Plaintext_only] []] ;
 
   "bool default",
   [[%html "<div draggable></div>"]],
@@ -298,6 +455,22 @@ let attribs = "ppx attribs", HtmlTests.make Html.[
   "input min time",
   [[%html "<input min='2002-10-02T15:00:00Z'>"]],
   [input ~a:[a_input_min (`Datetime "2002-10-02T15:00:00Z")] ()] ;
+
+  "script-supporting elements in lists and tables",
+  [[%html "<ol><li>1</li><script>f()</script></ol>"]],
+  [ol [li [txt "1"]; script (txt "f()")]] ;
+
+  "script-supporting elements in select",
+  [[%html "<select><option>o</option><script>f()</script></select>"]],
+  [select [option (txt "o"); script (txt "f()")]] ;
+
+  "empty option in a datalist",
+  [[%html "<datalist><option value='foo'></option></datalist>"]],
+  [datalist ~children:(`Options [option ~a:[a_value "foo"] (txt "")]) ()] ;
+
+  "dl with div groups",
+  [[%html "<dl><div><dt>term</dt><dd>definition</dd></div></dl>"]],
+  [dl [div [dt [txt "term"]; dd [txt "definition"]]]] ;
 
   "aria attributes",
   [[%html "<div aria-hidden=true></div>"]],
@@ -383,6 +556,24 @@ let svg = "svg", SvgTests.make Svg.[
   [text
     ~a:[a_dx_list [1., None; 2., None]; a_dy_list [3., None; 4., None]] []] ;
 
+  "whitespace between svg tags",
+  [[%svg "<g> </g>"]],
+  [g []] ;
+
+  "indented svg",
+  [[%svg {|
+     <g>
+       <g>
+         <rect/>
+       </g>
+     </g>
+   |}]],
+  [g [g [rect []]]] ;
+
+  "whitespace is kept in text",
+  [[%svg "<text> spaced </text>"]],
+  [text [txt " spaced "]] ;
+
   "svg data-*",
   [[%svg "<text data-foo='valfoo' />"]],
   [text
@@ -413,8 +604,98 @@ let svg = "svg", SvgTests.make Svg.[
   [feMorphology ~a:[a_feMorphology_operator `Erode] []] ;
 
   "animate fill, values",
-  [[%svg "<animate fill='freeze' values='1 2'/>"]],
+  [[%svg "<animate fill='freeze' values='1;2'/>"]],
   [animate ~a:[a_animation_fill `Freeze; a_animation_values ["1"; "2"]] []] ;
+
+  "animate keyTimes, keySplines",
+  [[%svg "<animate keyTimes='0; 0.5; 1' keySplines='0 0 1 1; .5 0 .5 1'/>"]],
+  [animate ~a:[a_keyTimes ["0"; "0.5"; "1"];
+               a_keySplines ["0 0 1 1"; ".5 0 .5 1"]] []] ;
+
+  "a single animation value keeps its spaces",
+  [[%svg "<animate values='1 2'/>"]],
+  [animate ~a:[a_animation_values ["1 2"]] []] ;
+
+  "feBlend blend mode",
+  [[%svg "<feBlend mode='soft-light'/>"]],
+  [feBlend ~a:[a_mode `Soft_light] []] ;
+
+  "radialGradient fr, textPath side",
+  [[%svg "<radialGradient fr='0.1'/>"]],
+  [radialGradient ~a:[a_fr (0.1, None)] []] ;
+
+  "image crossorigin, decoding",
+  [[%svg "<image crossorigin='use-credentials' decoding='async'/>"]],
+  [image ~a:[a_crossorigin `Use_credentials; a_decoding `Async] []] ;
+
+  "a link attributes",
+  [[%svg "<a href='p.html' rel='noopener' referrerpolicy='no-referrer' \
+             download='p.html'/>"]],
+  [a ~a:[a_href "p.html"; a_rel ["noopener"];
+         a_referrerpolicy `No_referrer; a_download (Some "p.html")] []] ;
+
+  "global event handlers",
+  [[%svg "<circle onblur='f()' onkeydown='g(event)' onwheel='h(event)'/>"]],
+  [circle ~a:[a_onblur "f()"; a_onkeydown "g(event)";
+              a_onwheel "h(event)"] []] ;
+
+  "role, aria-*",
+  [[%svg "<g role='img' aria-label='circle'/>"]],
+  [g ~a:[a_role ["img"]; a_aria "label" ["circle"]] []] ;
+
+  "autofocus",
+  [[%svg "<a autofocus=''/>"]],
+  [a ~a:[a_autofocus ()] []] ;
+
+  "tabindex, lang",
+  [[%svg "<circle tabindex='0' lang='fr'/>"]],
+  [circle ~a:[a_tabindex 0; a_lang "fr"] []] ;
+
+  "svg viewBox",
+  [[%svg "<svg viewBox='0 0 10 10'/>"]],
+  [svg ~a:[a_viewBox (0., 0., 10., 10.)] []] ;
+
+  "mask maskUnits",
+  [[%svg "<mask maskUnits='objectBoundingBox'/>"]],
+  [mask ~a:[a_maskUnits `ObjectBoundingBox] []] ;
+
+  "filter filterUnits",
+  [[%svg "<filter filterUnits='userSpaceOnUse'/>"]],
+  [filter ~a:[a_filterUnits `UserSpaceOnUse] []] ;
+
+  "feGaussianBlur stdDeviation",
+  [[%svg "<feGaussianBlur stdDeviation='0.5'/>"]],
+  [feGaussianBlur ~a:[a_stdDeviation (0.5, None)] []] ;
+
+  "marker markerWidth, refX",
+  [[%svg "<marker markerWidth='3' refX='1'/>"]],
+  [marker ~a:[a_markerWidth (3., None); a_refX (1., None)] []] ;
+
+  "fePointLight z",
+  [[%svg "<fePointLight z='3'/>"]],
+  [fePointLight ~a:[a_z 3.] []] ;
+
+  "animate end",
+  [[%svg "<animate end='4s'/>"]],
+  [animate ~a:[a_end "4s"] []] ;
+
+  "presentation attributes",
+  [[%svg "<rect opacity='0.5' pointer-events='visiblePainted' \
+                visibility='collapse' mask='url(#m)'/>"]],
+  [rect ~a:[a_opacity 0.5; a_pointer_events `VisiblePainted;
+            a_visibility `Collapse; a_mask "url(#m)"] []] ;
+
+  "vector-effect, white-space",
+  [[%svg "<path vector-effect='non-scaling-stroke' white-space='pre-line'/>"]],
+  [path ~a:[a_vector_effect `Non_scaling_stroke; a_white_space `Pre_line] []] ;
+
+  "writing-mode, unicode-bidi",
+  [[%svg "<text writing-mode='vertical-rl' unicode-bidi='bidi-override'/>"]],
+  [text ~a:[a_writing_mode `Vertical_rl; a_unicode_bidi `Bidi_override] []] ;
+
+  "color-interpolation-filters",
+  [[%svg "<filter color-interpolation-filters='linearRGB'/>"]],
+  [filter ~a:[a_color_interpolation_filters `LinearRGB] []] ;
 
   "fill_rule type nonzero",
   [[%svg "<path fill-rule='nonzero'/>"]],
@@ -424,6 +705,66 @@ let svg = "svg", SvgTests.make Svg.[
   [[%svg "<path fill-rule='evenodd'/>"]],
   [path ~a:[a_fill_rule `Evenodd] []] ;
 
+  "transform with a comma",
+  [[%svg "<g transform='translate(1,1)'/>"]],
+  [g ~a:[a_transform [`Translate (1., Some 1.)]] []] ;
+
+  "transform with arbitrary whitespace",
+  [[%svg "<g transform='translate   ( 200 ,  200)\tmatrix(-0,1,.1,.0,1e-5,1.E5) \
+                         scale ( -1. , 0 )'/>"]],
+  [g ~a:[a_transform [`Translate (200., Some 200.);
+                      `Matrix (-0., 1., 0.1, 0., 1e-5, 1e5);
+                      `Scale (-1., Some 0.)]] []] ;
+
+  "transform on several lines",
+  [[%svg "<g transform='translate(1,2)
+                        rotate(45)
+                        scale(2)'/>"]],
+  [g ~a:[a_transform [`Translate (1., Some 2.);
+                      `Rotate ((45., None), None);
+                      `Scale (2., None)]] []] ;
+
+  (* A value that starts with a newline, as indented SVG has it. *)
+  "transform after a line break",
+  [[%svg "<g transform='
+translate(1,2)  rotate(45)'/>"]],
+  [g ~a:[a_transform [`Translate (1., Some 2.);
+                      `Rotate ((45., None), None)]] []] ;
+
+  "transform with a rotation centre",
+  [[%svg "<g transform='rotate(10, 0.5, 0.5)'/>"]],
+  [g ~a:[a_transform [`Rotate ((10., None), Some (0.5, 0.5))]] []] ;
+
+]
+
+let svg_document = "svg document", SvgTests.make Svg.[
+
+  "a realistic document",
+  [[%svg "<svg viewBox='0 0 100 100' role='img' aria-label='shape'>\
+            <defs>\
+              <filter id='shadow'>\
+                <feDropShadow dx='1' dy='1' stdDeviation='2'/>\
+              </filter>\
+              <mask id='m'><rect width='100' height='100'/></mask>\
+              <symbol id='sym' viewBox='0 0 10 10'>\
+                <circle cx='5' cy='5' r='4'/>\
+              </symbol>\
+            </defs>\
+            <use href='#sym' mask='url(#m)' filter='url(#shadow)' \
+                 opacity='0.8' tabindex='0'/>\
+          </svg>"]],
+  [svg ~a:[a_viewBox (0., 0., 100., 100.); a_role ["img"];
+           a_aria "label" ["shape"]]
+     [defs
+        [filter ~a:[a_id "shadow"]
+           [feDropShadow ~a:[a_dx 1.; a_dy 1.; a_stdDeviation (2., None)] []] ;
+         mask ~a:[a_id "m"]
+           [rect ~a:[a_width (100., None); a_height (100., None)] []] ;
+         symbol ~a:[a_id "sym"; a_viewBox (0., 0., 10., 10.)]
+           [circle ~a:[a_cx (5., None); a_cy (5., None); a_r (4., None)] []]] ;
+      use ~a:[a_href "#sym"; a_mask "url(#m)"; a_filter "url(#shadow)";
+              a_opacity 0.8; a_tabindex 0] []]] ;
+
 ]
 
 let svg_element_names = "svg element names", SvgTests.make Svg.[
@@ -432,6 +773,7 @@ let svg_element_names = "svg element names", SvgTests.make Svg.[
   "linearGradient", [[%svg "<linearGradient/>"]], [linearGradient []] ;
   "radialGradient", [[%svg "<radialGradient/>"]], [radialGradient []] ;
   "clipPath", [[%svg "<clipPath/>"]], [clipPath []] ;
+  "mask", [[%svg "<mask/>"]], [mask []] ;
   "feDistantLight", [[%svg "<feDistantLight/>"]], [feDistantLight []] ;
   "fePointLight", [[%svg "<fePointLight/>"]], [fePointLight []] ;
   "feSpotLight", [[%svg "<feSpotLight/>"]], [feSpotLight []] ;
@@ -447,10 +789,12 @@ let svg_element_names = "svg element names", SvgTests.make Svg.[
   "feConvolveMatrix", [[%svg "<feConvolveMatrix/>"]], [feConvolveMatrix []] ;
   "feDiffuseLighting", [[%svg "<feDiffuseLighting/>"]], [feDiffuseLighting []] ;
   "feDisplacementMap", [[%svg "<feDisplacementMap/>"]], [feDisplacementMap []] ;
+  "feDropShadow", [[%svg "<feDropShadow/>"]], [feDropShadow []] ;
   "feFlood", [[%svg "<feFlood/>"]], [feFlood []] ;
   "feGaussianBlur", [[%svg "<feGaussianBlur/>"]], [feGaussianBlur []] ;
   "feImage", [[%svg "<feImage/>"]], [feImage []] ;
   "feMerge", [[%svg "<feMerge/>"]], [feMerge []] ;
+  "feMergeNode", [[%svg "<feMergeNode/>"]], [feMergeNode []] ;
   "feMorphology", [[%svg "<feMorphology/>"]], [feMorphology []] ;
   "feOffset", [[%svg "<feOffset/>"]], [feOffset []] ;
   "feSpecularLighting",
@@ -458,7 +802,6 @@ let svg_element_names = "svg element names", SvgTests.make Svg.[
   "feTile", [[%svg "<feTile/>"]], [feTile []] ;
   "feTurbulence", [[%svg "<feTurbulence/>"]], [feTurbulence []] ;
   "animateMotion", [[%svg "<animateMotion/>"]], [animateMotion []] ;
-  "animateColor", [[%svg "<animateColor/>"]], [animateColor []] ;
   "animateTransform", [[%svg "<animateTransform/>"]], [animateTransform []] ;
 
 ]
@@ -559,6 +902,7 @@ let tests = [
   ns_nesting ;
   antiquot ;
   svg ;
+  svg_document ;
   svg_element_names ;
   wrapping ;
 ]

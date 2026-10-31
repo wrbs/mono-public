@@ -11,7 +11,8 @@
 open StackLang
 
 (**This module creates a StackLang program, based on information about the
-   grammar and about the LR(1) automaton. *)
+   grammar and about the LR(1) automaton that is extracted from the modules
+   Grammar, Lr1, and Default. *)
 module Run () : sig
 
   val program : program

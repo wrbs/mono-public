@@ -101,8 +101,6 @@
       (func $caml_copy_nativeint (param i32) (result (ref eq))))
    (import "int32" "Nativeint_val"
       (func $Nativeint_val (param (ref eq)) (result i32)))
-   (import "string" "caml_string_concat"
-      (func $caml_string_concat (param (ref eq) (ref eq)) (result (ref eq))))
 
    (type $block (array (mut (ref eq))))
    (type $float (struct (field f64)))
@@ -131,21 +129,17 @@
       (ref.i31 (call $strict_equals
                   (call $unwrap (local.get 0)) (call $unwrap (local.get 1)))))
 
-   (func $caml_js_eval_string (export "caml_js_eval_string")
-      (param $vs (ref eq)) (result (ref eq))
+   (export "caml_pure_js_expr" (func $caml_js_expr))
+   (export "caml_js_var" (func $caml_js_expr))
+   (export "caml_js_eval_string" (func $caml_js_expr))
+   (func $caml_js_expr (export "caml_js_expr")
+      (param (ref eq)) (result (ref eq))
       (local $s (ref $bytes))
-      (local.set $s (ref.cast (ref $bytes) (local.get $vs)))
-      (return_call $wrap (call $eval (call $jsstring_of_bytes (local.get $s)))))
-
-   (@string $rparen "(")
-   (@string $lparen ")")
-
-   (func (export "caml_js_expr") (export "caml_pure_js_expr")
-         (export "caml_js_var")
-      (param $s (ref eq)) (result (ref eq))
-      (return_call $caml_js_eval_string
-         (call $caml_string_concat (global.get $rparen)
-            (call $caml_string_concat (local.get $s) (global.get $lparen)))))
+      (local.set $s (ref.cast (ref $bytes) (local.get 0)))
+      (return_call $wrap
+         (call $eval
+             (call $jsstring_of_bytes
+                (local.get $s)))))
 
    (func (export "caml_js_global") (param (ref eq)) (result (ref eq))
       (call $wrap (global.get $global_this)))
@@ -629,17 +623,17 @@
       (local.set $a
          (ref.as_non_null (extern.convert_any (call $unwrap (local.get 0)))))
       (local.set $len (call $array_length (local.get $a)))
-      (local.set $i (i32.const 0))
+      (local.set $i (local.get $len))
       (local.set $l (ref.i31 (i32.const 0)))
       (loop $loop
-         (if (i32.lt_u (local.get $i) (local.get $len))
+         (if (local.get $i)
             (then
+               (local.set $i (i32.sub (local.get $i) (i32.const 1)))
                (local.set $l
                   (array.new_fixed $block 3 (ref.i31 (i32.const 0))
                      (call $wrap
                         (call $array_get (local.get $a) (local.get $i)))
                      (local.get $l)))
-               (local.set $i (i32.add (local.get $i) (i32.const 1)))
                (br $loop))))
       (local.get $l))
 
@@ -701,7 +695,25 @@
                      (array.get $block (local.get $exn) (i32.const 2)))))))
       (call $wrap (ref.null any)))
 
+   (func (export "caml_exn_with_js_backtrace")
+      (param $exn (ref eq)) (param (ref eq)) (result (ref eq))
+      (local.get $exn))
+
    (func (export "caml_jsoo_flags_use_js_string")
       (param (ref eq)) (result (ref eq))
       (ref.i31 (i32.const 0)))
+
+   (func (export "caml_jsoo_flags_effects")
+      (param (ref eq)) (result (ref eq))
+(@if (= effects "cps")
+(@then
+      (@string "cps"))
+(@else
+(@if (= effects "jspi")
+(@then
+      (@string "jspi"))
+(@else
+      (@string "disabled"))
+))
+))
 )

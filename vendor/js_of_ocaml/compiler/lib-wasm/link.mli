@@ -16,7 +16,7 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  *)
 
-open Stdlib
+open! Stdlib
 
 module Wasm_binary : sig
   type import =
@@ -42,12 +42,7 @@ type unit_data =
   }
 
 val add_info :
-     Zip.output
-  -> ?predefined_exceptions:StringSet.t
-  -> build_info:Build_info.t
-  -> unit_data:unit_data list
-  -> unit
-  -> unit
+  Zip.output -> build_info:Build_info.t -> unit_data:unit_data list -> unit -> unit
 
 val build_runtime_arguments :
      link_spec:(string * int list option) list
@@ -55,6 +50,7 @@ val build_runtime_arguments :
   -> missing_primitives:string list
   -> wasm_dir:string
   -> generated_js:(string option * (string * Javascript.expression) list) list
+  -> embedded_files:(string * string) list
   -> unit
   -> Javascript.expression
 
@@ -65,6 +61,7 @@ val link :
   -> linkall:bool
   -> mklib:bool
   -> enable_source_maps:bool
+  -> embedded_files:(string * string) list
   -> files:string list
   -> unit
 

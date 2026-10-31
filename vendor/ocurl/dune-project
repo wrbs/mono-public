@@ -1,12 +1,12 @@
 (lang dune 3.0)
 (name curl)
-(version 0.10.0)
+(version 0.10.1)
 
 (formatting disabled)
 (generate_opam_files true)
 
 (maintainers
- "ygrek@autistici.org"
+ "root@ygrek.org"
  "Antonin Décimo <antonin@tarides.com>")
 (authors
  "Lars Nilsson"
@@ -26,7 +26,7 @@
   (ocaml (>= "4.11"))
   (dune-configurator (>= "3.18.1"))
   base-bigarray
-  base-unix  
+  base-unix
   conf-libcurl)
  (conflicts
   (ocurl (<> "transition")))
@@ -44,10 +44,3 @@
   lwt
   (lwt_ppx :with-dev-setup))
  (tags (org:ygrek clib:curl)))
-
-(package
- (name ocurl)
- (synopsis "This is a transition package, ocurl is now named curl. Use the curl package instead")
- (description "This is a transition package, ocurl is now named curl. Use the curl package instead.")
- (allow_empty)
- (version transition))

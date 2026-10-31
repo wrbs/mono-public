@@ -1,0 +1,6 @@
+(library
+ (name portable_memo)
+ (public_name portable_memo)
+ (libraries core)
+ (preprocess
+  (pps ppx_jane -compare-require-explicit-locality)))

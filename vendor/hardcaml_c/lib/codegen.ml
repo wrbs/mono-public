@@ -267,8 +267,8 @@ let compile_mux_branchless ?(chunk_size = 1000) tgt selector signals =
     let target = tgt.:(offset) in
     let rec traverse idx l =
       match List.split_n l chunk_size with
-      | [], _ -> []
-      | start, next ->
+      | #([], _) -> []
+      | #(start, next) ->
         let selects =
           List.mapi start ~f:(fun i signal ->
             (* [%rope "(%{signal.:(offset)} & (-(%{selector.:(0)} == %{(idx+i)#Int})))"] *)
@@ -501,7 +501,7 @@ let compile_reset_signal ~to_signal_info signal =
     Option.value_map
       ~default:Rope.empty
       reset
-      ~f:(fun { reset = _; reset_edge = _; reset_to } ->
+      ~f:(fun { reset = _; reset_level = _; reset_to } ->
         Rope.concat
           [ compile_copy ~tgt:(to_signal_info signal) (to_signal_info reset_to)
           ; newline

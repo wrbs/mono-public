@@ -1,4 +1,0 @@
-- person.name: {{ person.name }}
-- person.age: {{ person.age }}
-- person["name"]: {{ person["name"] }}
-- person["age"]: {{ person["age"] }}

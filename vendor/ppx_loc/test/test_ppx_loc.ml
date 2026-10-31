@@ -1,0 +1,169 @@
+open! Core
+
+(* Evaluated at toplevel. *)
+let%expect_test _ =
+  print_endline [%loc.module_name];
+  [%expect {| Ppx_loc_tests__Test_ppx_loc |}];
+  print_endline [%loc.toplevel_module_name];
+  [%expect {| Ppx_loc_tests__Test_ppx_loc |}];
+  print_endline [%loc.this_module_name];
+  [%expect {| Ppx_loc_tests__Test_ppx_loc |}];
+  print_endline [%loc.ml_file_name];
+  [%expect {| test_ppx_loc.ml |}];
+  print_endline [%loc.mli_file_name];
+  [%expect {| test_ppx_loc.mli |}];
+  print_endline [%loc.intf_file_name];
+  [%expect {| test_ppx_loc_intf.ml |}];
+  print_endline [%loc.file_name];
+  [%expect {| test_ppx_loc.ml |}];
+  printf !"%{sexp: string * int * int * int}\n" [%loc.pos];
+  [%expect {| (test_ppx_loc.ml 19 48 58) |}];
+  let f () = print_endline [%loc.function_name] in
+  f ();
+  [%expect {| Ppx_loc_tests__Test_ppx_loc.(fun).f |}];
+  let f () = print_endline [%loc.this_function_name] in
+  f ();
+  [%expect {| f |}];
+  print_endline (Int.to_string [%loc.line_number]);
+  [%expect {| 27 |}]
+;;
+
+module Submodule = struct
+  (* Evaluated within submodule. *)
+  let%expect_test _ =
+    print_endline [%loc.module_name];
+    [%expect {| Ppx_loc_tests__Test_ppx_loc.Submodule |}];
+    print_endline [%loc.toplevel_module_name];
+    [%expect {| Ppx_loc_tests__Test_ppx_loc |}];
+    print_endline [%loc.this_module_name];
+    [%expect {| Submodule |}];
+    print_endline [%loc.ml_file_name];
+    [%expect {| test_ppx_loc.ml |}];
+    print_endline [%loc.mli_file_name];
+    [%expect {| test_ppx_loc.mli |}];
+    print_endline [%loc.intf_file_name];
+    [%expect {| test_ppx_loc_intf.ml |}];
+    print_endline [%loc.file_name];
+    [%expect {| test_ppx_loc.ml |}];
+    printf !"%{sexp: string * int * int * int}\n" [%loc.pos];
+    [%expect {| (test_ppx_loc.ml 48 50 60) |}];
+    let f () = print_endline [%loc.function_name] in
+    f ();
+    [%expect {| Ppx_loc_tests__Test_ppx_loc.Submodule.(fun).f |}];
+    let f () = print_endline [%loc.this_function_name] in
+    f ();
+    [%expect {| f |}];
+    print_endline (Int.to_string [%loc.line_number]);
+    [%expect {| 56 |}]
+  ;;
+
+  module Subsubmodule = struct
+    (* Evaluated within subsubmodule. *)
+    let%expect_test _ =
+      print_endline [%loc.module_name];
+      [%expect {| Ppx_loc_tests__Test_ppx_loc.Submodule.Subsubmodule |}];
+      print_endline [%loc.toplevel_module_name];
+      [%expect {| Ppx_loc_tests__Test_ppx_loc |}];
+      print_endline [%loc.this_module_name];
+      [%expect {| Subsubmodule |}];
+      print_endline [%loc.ml_file_name];
+      [%expect {| test_ppx_loc.ml |}];
+      print_endline [%loc.mli_file_name];
+      [%expect {| test_ppx_loc.mli |}];
+      print_endline [%loc.intf_file_name];
+      [%expect {| test_ppx_loc_intf.ml |}];
+      print_endline [%loc.file_name];
+      [%expect {| test_ppx_loc.ml |}];
+      printf !"%{sexp: string * int * int * int}\n" [%loc.pos];
+      [%expect {| (test_ppx_loc.ml 77 52 62) |}];
+      let f () = print_endline [%loc.function_name] in
+      f ();
+      [%expect {| Ppx_loc_tests__Test_ppx_loc.Submodule.Subsubmodule.(fun).f |}];
+      let f () = print_endline [%loc.this_function_name] in
+      f ();
+      [%expect {| f |}];
+      print_endline (Int.to_string [%loc.line_number]);
+      [%expect {| 85 |}]
+    ;;
+  end
+
+  module _ = Subsubmodule
+end
+
+module _ = Submodule
+
+module type Empty = sig end
+
+let%expect_test _ =
+  (* Evaluated within submodule in a let-body. *)
+  let (module _ : Empty) =
+    (module struct
+      module Another_submodule = struct
+        let () = print_endline [%loc.module_name]
+        let () = print_endline [%loc.toplevel_module_name]
+        let () = print_endline [%loc.this_module_name]
+        let () = print_endline [%loc.ml_file_name]
+        let () = print_endline [%loc.mli_file_name]
+        let () = print_endline [%loc.intf_file_name]
+        let () = print_endline [%loc.file_name]
+        let () = printf !"%{sexp: string * int * int * int}\n" [%loc.pos]
+        let f () = print_endline [%loc.function_name]
+        let () = f ()
+        let f () = print_endline [%loc.this_function_name]
+        let () = f ()
+        let () = print_endline (Int.to_string [%loc.line_number])
+      end
+
+      module _ = Another_submodule
+    end)
+  in
+  [%expect
+    {|
+    Ppx_loc_tests__Test_ppx_loc.Another_submodule
+    Ppx_loc_tests__Test_ppx_loc
+    Another_submodule
+    test_ppx_loc.ml
+    test_ppx_loc.mli
+    test_ppx_loc_intf.ml
+    test_ppx_loc.ml
+    (test_ppx_loc.ml 109 63 73)
+    Ppx_loc_tests__Test_ppx_loc.(fun).Another_submodule.f
+    f
+    114
+    |}]
+;;
+
+(* Evaluated within a functor. *)
+module Make (_ : Empty) = struct
+  let () = print_endline [%loc.module_name]
+  let () = print_endline [%loc.toplevel_module_name]
+  let () = print_endline [%loc.this_module_name]
+  let () = print_endline [%loc.ml_file_name]
+  let () = print_endline [%loc.mli_file_name]
+  let () = print_endline [%loc.intf_file_name]
+  let () = print_endline [%loc.file_name]
+  let () = printf !"%{sexp: string * int * int * int}\n" [%loc.pos]
+  let f () = print_endline [%loc.function_name]
+  let () = f ()
+  let f () = print_endline [%loc.this_function_name]
+  let () = f ()
+  let () = print_endline (Int.to_string [%loc.line_number])
+end
+
+let%expect_test _ =
+  let (module _ : Empty) = (module Make (struct end)) in
+  [%expect
+    {|
+    Ppx_loc_tests__Test_ppx_loc.Make
+    Ppx_loc_tests__Test_ppx_loc
+    Make
+    test_ppx_loc.ml
+    test_ppx_loc.mli
+    test_ppx_loc_intf.ml
+    test_ppx_loc.ml
+    (test_ppx_loc.ml 145 57 67)
+    Ppx_loc_tests__Test_ppx_loc.Make.f
+    f
+    150
+    |}]
+;;

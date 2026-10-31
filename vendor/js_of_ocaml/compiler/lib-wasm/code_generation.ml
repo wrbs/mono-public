@@ -227,6 +227,16 @@ let get_global name =
     | _ -> None)
 
 let register_import ?(allow_tail_call = true) ?(import_module = "env") ~name typ st =
+  let name =
+    (*
+       Workaround for use of caml_sys_exit with wrong arity in
+       OxCaml's native dynlink.
+       https://github.com/oxcaml/oxcaml/blob/1f2201cda5bea6ed25d4b5ac7116ac1baf3f161f/otherlibs/dynlink/native/dynlink.ml#L40-L55 *)
+    match name, typ with
+    | "caml_sys_exit", Wasm_ast.Fun { params = [ _; _ ]; _ } ->
+        "caml_nat_dynlink_dummy_function"
+    | _ -> name
+  in
   let x =
     try
       let x, typ' =
@@ -423,6 +433,72 @@ let is_small_constant e =
   | W.GlobalGet name -> global_is_constant name
   | _ -> return false
 
+let rec check_is_constant st (e : W.expression) =
+  match e with
+  | Const _ | RefFunc _ | RefNull _ -> true
+  | RefI31 e -> check_is_constant st e
+  | GlobalGet x -> (
+      match Var.Map.find_opt x st.context.constant_globals with
+      | Some { init = Some _; _ } -> true
+      | Some { init = None; _ } | None -> false)
+  | ArrayNewFixed (_, args) | StructNew (_, args) ->
+      List.for_all ~f:(fun x -> check_is_constant st x) args
+  | RefCast (_, e) | ExternConvertAny e | AnyConvertExtern e -> check_is_constant st e
+  | UnOp _
+  | BinOp _
+  | I32WrapI64 _
+  | I64ExtendI32 _
+  | F32DemoteF64 _
+  | F64PromoteF32 _
+  | LocalGet _
+  | LocalTee _
+  | BlockExpr _
+  | Call _
+  | Seq _
+  | Pop _
+  | Call_ref _
+  | I31Get _
+  | ArrayNew _
+  | ArrayNewData _
+  | ArrayGet _
+  | ArrayLen _
+  | StructGet _
+  | RefTest _
+  | RefEq _
+  | Br_on_cast _
+  | Br_on_cast_fail _
+  | Br_on_null _
+  | IfExpr _
+  | Try _ -> false
+
+let is_constant_expression e st = check_is_constant st e, st
+
+let partial_const_init x e st =
+  match e with
+  | W.ArrayNewFixed (ty, args) ->
+      let placeholder =
+        match (Var.Hashtbl.find st.context.types ty).typ with
+        | Array { typ = Value (Ref { typ = Eq; _ }); _ } -> W.RefI31 (W.Const (I32 0l))
+        | Array { typ = Value F64; _ } -> W.Const (F64 0.)
+        | _ -> assert false
+      in
+      let init_args, patches, _ =
+        List.fold_left
+          ~f:(fun (init_args, patches, i) a ->
+            if check_is_constant st a
+            then a :: init_args, patches, i + 1
+            else
+              ( placeholder :: init_args
+              , W.ArraySet (ty, W.GlobalGet x, W.Const (I32 (Int32.of_int i)), a)
+                :: patches
+              , i + 1 ))
+          ~init:([], [], 0)
+          args
+      in
+      assert (not (List.is_empty patches));
+      Some (W.ArrayNewFixed (ty, List.rev init_args), List.rev patches), st
+  | _ -> None, st
+
 let load x =
   let* x = var x in
   match x with
@@ -566,34 +642,47 @@ let rec store ?(always = false) ?typ x e =
         let* b = should_make_global x in
         if b
         then
-          let* () =
-            let* b = global_is_registered x in
-            if b
-            then return ()
+          let* b = global_is_registered x in
+          if b
+          then instr (GlobalSet (x, e))
+          else
+            let* typ =
+              match typ with
+              | Some typ -> return typ
+              | None -> (
+                  if always
+                  then value_type
+                  else
+                    let* typ = expression_type e in
+                    match typ with
+                    | None -> value_type
+                    | Some typ -> return typ)
+            in
+            let* is_const = if always then return false else is_constant_expression e in
+            if is_const
+            then
+              let* () = register_constant x (W.GlobalGet x) in
+              register_global x { mut = false; typ } e
             else
-              let* typ =
-                match typ with
-                | Some typ -> return typ
-                | None -> (
-                    if always
-                    then value_type
-                    else
-                      let* typ = expression_type e in
-                      match typ with
-                      | None -> value_type
-                      | Some typ -> return typ)
-              in
-              let* default, typ', cast = default_value typ in
-              let* () =
-                register_constant
-                  x
-                  (match cast with
-                  | Some typ -> W.RefCast (typ, W.GlobalGet x)
-                  | None -> W.GlobalGet x)
-              in
-              register_global ~constant:true x { mut = true; typ = typ' } default
-          in
-          instr (GlobalSet (x, e))
+              let* partial = if always then return None else partial_const_init x e in
+              match partial with
+              | Some (init_expr, patches) ->
+                  let* () = register_constant x (W.GlobalGet x) in
+                  let* () = register_global x { mut = false; typ } init_expr in
+                  instrs patches
+              | None ->
+                  let* default, typ', cast = default_value typ in
+                  let* () =
+                    register_constant
+                      x
+                      (match cast with
+                      | Some typ -> W.RefCast (typ, W.GlobalGet x)
+                      | None -> W.GlobalGet x)
+                  in
+                  let* () =
+                    register_global ~constant:true x { mut = true; typ = typ' } default
+                  in
+                  instr (GlobalSet (x, e))
         else
           let* typ =
             match typ with
@@ -660,51 +749,57 @@ let need_apply_fun ~cps ~arity st =
   let ctx = st.context in
   ( (if cps
      then (
-       try IntMap.find arity ctx.cps_apply_funs
-       with Not_found ->
-         let x = Var.fresh_n (Printf.sprintf "cps_apply_%d" arity) in
-         ctx.cps_apply_funs <- IntMap.add arity x ctx.cps_apply_funs;
-         x)
+       match IntMap.find_opt arity ctx.cps_apply_funs with
+       | Some x -> x
+       | None ->
+           let x = Var.fresh_n (Printf.sprintf "cps_apply_%d" arity) in
+           ctx.cps_apply_funs <- IntMap.add arity x ctx.cps_apply_funs;
+           x)
      else
-       try IntMap.find arity ctx.apply_funs
-       with Not_found ->
-         let x = Var.fresh_n (Printf.sprintf "apply_%d" arity) in
-         ctx.apply_funs <- IntMap.add arity x ctx.apply_funs;
-         x)
+       match IntMap.find_opt arity ctx.apply_funs with
+       | Some x -> x
+       | None ->
+           let x = Var.fresh_n (Printf.sprintf "apply_%d" arity) in
+           ctx.apply_funs <- IntMap.add arity x ctx.apply_funs;
+           x)
   , st )
 
 let need_curry_fun ~cps ~arity st =
   let ctx = st.context in
   ( (if cps
      then (
-       try IntMap.find arity ctx.cps_curry_funs
-       with Not_found ->
-         let x = Var.fresh_n (Printf.sprintf "cps_curry_%d" arity) in
-         ctx.cps_curry_funs <- IntMap.add arity x ctx.cps_curry_funs;
-         x)
+       match IntMap.find_opt arity ctx.cps_curry_funs with
+       | Some x -> x
+       | None ->
+           let x = Var.fresh_n (Printf.sprintf "cps_curry_%d" arity) in
+           ctx.cps_curry_funs <- IntMap.add arity x ctx.cps_curry_funs;
+           x)
      else
-       try IntMap.find arity ctx.curry_funs
-       with Not_found ->
-         let x = Var.fresh_n (Printf.sprintf "curry_%d" arity) in
-         ctx.curry_funs <- IntMap.add arity x ctx.curry_funs;
-         x)
+       match IntMap.find_opt arity ctx.curry_funs with
+       | Some x -> x
+       | None ->
+           let x = Var.fresh_n (Printf.sprintf "curry_%d" arity) in
+           ctx.curry_funs <- IntMap.add arity x ctx.curry_funs;
+           x)
   , st )
 
 let need_dummy_fun ~cps ~arity st =
   let ctx = st.context in
   ( (if cps
      then (
-       try IntMap.find arity ctx.cps_dummy_funs
-       with Not_found ->
-         let x = Var.fresh_n (Printf.sprintf "cps_dummy_%d" arity) in
-         ctx.cps_dummy_funs <- IntMap.add arity x ctx.cps_dummy_funs;
-         x)
+       match IntMap.find_opt arity ctx.cps_dummy_funs with
+       | Some x -> x
+       | None ->
+           let x = Var.fresh_n (Printf.sprintf "cps_dummy_%d" arity) in
+           ctx.cps_dummy_funs <- IntMap.add arity x ctx.cps_dummy_funs;
+           x)
      else
-       try IntMap.find arity ctx.dummy_funs
-       with Not_found ->
-         let x = Var.fresh_n (Printf.sprintf "dummy_%d" arity) in
-         ctx.dummy_funs <- IntMap.add arity x ctx.dummy_funs;
-         x)
+       match IntMap.find_opt arity ctx.dummy_funs with
+       | Some x -> x
+       | None ->
+           let x = Var.fresh_n (Printf.sprintf "dummy_%d" arity) in
+           ctx.dummy_funs <- IntMap.add arity x ctx.dummy_funs;
+           x)
   , st )
 
 let init_code context = instrs context.init_code

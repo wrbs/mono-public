@@ -1,6 +1,7 @@
 (library
  (name source)
  (libraries
+  chrome_trace
   dune_config
   dune_config_file
   dune_console
@@ -9,14 +10,13 @@
   dune_glob
   dune_lang
   dune_pkg
-  re
+  dune_re
   dune_rpc_private
-  dune_trace
+  dune_stats
   dune_util
   dune_vcs
   memo
   ocaml_config
   predicate_lang
-  stdune
-  unix)
+  stdune)
  (synopsis "Internal Dune library, do not use!"))

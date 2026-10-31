@@ -1,0 +1,6 @@
+(library
+ (name ppx_loc_tests)
+ (public_name ppx_loc.tests)
+ (libraries core)
+ (preprocess
+  (pps ppx_jane ppx_loc -compare-require-explicit-locality)))

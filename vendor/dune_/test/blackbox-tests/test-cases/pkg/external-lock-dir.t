@@ -2,10 +2,8 @@ A lock directory which does not exist in the source tree:
 
   $ . ./helpers.sh
 
-  $ mkdir project
-
-  $ make_lockdir
-  $ make_lockpkg foo <<EOF
+  $ mkdir dune.lock project
+  $ cat >dune.lock/foo.pkg <<EOF
   > (build (run echo foo))
   > (version 1.0.0)
   > EOF

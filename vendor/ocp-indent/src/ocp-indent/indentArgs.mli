@@ -3,7 +3,7 @@
 (*  Copyright 2011 Jun Furuse                                             *)
 (*  Copyright 2013 OCamlPro                                               *)
 (*                                                                        *)
-(*  All rights reserved.This file is distributed under the terms of the   *)
+(*  All rights reserved. This file is distributed under the terms of the   *)
 (*  GNU Lesser General Public License version 2.1 with linking            *)
 (*  exception.                                                            *)
 (*                                                                        *)
@@ -29,6 +29,8 @@ type t = private {
   indent_printer: out_channel -> unit IndentPrinter.output_kind;
   syntax_exts: string list;
   dynlink : [`Pkg of string | `Mod of string ] list;
+  strict : bool;
+  check: bool;
 }
 
 val options: (t * input list) Cmdliner.Term.t

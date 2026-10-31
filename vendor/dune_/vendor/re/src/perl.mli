@@ -23,24 +23,19 @@
 (** Perl-style regular expressions *)
 
 exception Parse_error
-
-(** Errors that can be raised during the parsing of the regular expression *)
 exception Not_supported
+(** Errors that can be raised during the parsing of the regular expression *)
+
 
 type opt =
-  [ `Ungreedy
-  | `Dotall
-  | `Dollar_endonly
-  | `Multiline
-  | `Anchored
-  | `Caseless
-  ]
+  [ `Ungreedy | `Dotall | `Dollar_endonly
+  | `Multiline | `Anchored | `Caseless ]
 
-(** Parsing of a Perl-style regular expression *)
 val re : ?opts:opt list -> string -> Core.t
+(** Parsing of a Perl-style regular expression *)
 
-(** (Same as [Re.compile]) *)
 val compile : Core.t -> Core.re
+(** (Same as [Re.compile]) *)
 
-(** Regular expression compilation *)
 val compile_pat : ?opts:opt list -> string -> Core.re
+(** Regular expression compilation *)

@@ -25,8 +25,15 @@ function caml_gc_counters(_unit) {
   return [254, 0, 0, 0];
 }
 //Provides: caml_gc_quick_stat
+//Version: < 5.5
 function caml_gc_quick_stat(_unit) {
   return [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+}
+
+//Provides: caml_gc_quick_stat
+//Version: >= 5.5
+function caml_gc_quick_stat(_unit) {
+  return [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 }
 
 //Provides: caml_gc_stat
@@ -86,6 +93,12 @@ function caml_memprof_discard(_t) {
   return 0;
 }
 
+//Provides: caml_memprof_is_sampling const
+//Version: >= 5.5
+function caml_memprof_is_sampling(_unit) {
+  return 0;
+}
+
 //Provides: caml_memprof_participate
 //Version: >= 5.2, < 5.3
 //OxCaml
@@ -142,9 +155,24 @@ function caml_get_major_credit(_n) {
 
 //Provides: caml_gc_tweak_get
 //Requires: caml_invalid_argument
+//Version: >= 5.5
+//OxCaml
+function caml_gc_tweak_get(_name) {
+  caml_invalid_argument("Gc.Tweak: parameter not found");
+}
+
+//Provides: caml_gc_tweak_get
+//Requires: caml_invalid_argument
 //Version: >= 5.2, < 5.3
 //OxCaml
 function caml_gc_tweak_get(_name) {
+  caml_invalid_argument("Gc.Tweak: parameter not found");
+}
+
+//Provides: caml_gc_tweak_set
+//Requires: caml_invalid_argument
+//Version: >= 5.5
+function caml_gc_tweak_set(_name, _v) {
   caml_invalid_argument("Gc.Tweak: parameter not found");
 }
 
@@ -154,6 +182,12 @@ function caml_gc_tweak_get(_name) {
 //OxCaml
 function caml_gc_tweak_set(_name, _value) {
   caml_invalid_argument("Gc.Tweak: parameter not found");
+}
+
+//Provides: caml_gc_tweak_list_active const
+//Version: >= 5.5
+function caml_gc_tweak_list_active(_unit) {
+  return 0;
 }
 
 //Provides: caml_gc_tweak_list_active

@@ -1,3 +1,4 @@
+open! Stdune
 open Import
 
 (* The path after the man section mangling done by opam-installer. This roughly

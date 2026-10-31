@@ -6,7 +6,6 @@ let arg =
         [ "lang" ]
         ~docv:"VERSION"
         ~doc:
-          (Some
-             "This argument has no effect and is deprecated. It exists solely for \
-              backwards compatibility."))
+          "This argument has no effect and is deprecated. It exists solely for backwards \
+           compatibility.")
 ;;

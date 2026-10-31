@@ -1,23 +1,15 @@
-(**************************************************************************)
-(*                                                                        *)
-(*                              OCamlFormat                               *)
-(*                                                                        *)
-(*            Copyright (c) Facebook, Inc. and its affiliates.            *)
-(*                                                                        *)
-(*      This source code is licensed under the MIT license found in       *)
-(*      the LICENSE file in the root directory of this source tree.       *)
-(*                                                                        *)
-(**************************************************************************)
+(**************************************************************************
+ *                                                                        *
+ *                              OCamlFormat                               *
+ *                                                                        *
+ *            Copyright (c) Facebook, Inc. and its affiliates.            *
+ *                                                                        *
+ *      This source code is licensed under the MIT license found in       *
+ *      the LICENSE file in the root directory of this source tree.       *
+ *                                                                        *
+ **************************************************************************)
 
 module Error = Conf_t.Error
-
-let ocaml_version_conv =
-  let parse x =
-    match Ocaml_version.of_string x with
-    | Ok x -> `Ok x
-    | Error (`Msg x) -> `Error x
-  in
-  (parse, Ocaml_version.pp)
 
 type typ = Int | Bool | Range | Ocaml_version | Choice of string list
 
@@ -30,6 +22,8 @@ module UI = struct
 end
 
 open Cmdliner
+
+let ocaml_version_conv = Arg.conv (Ocaml_version.of_string, Ocaml_version.pp)
 
 type kind = Formatting | Operational
 (* type from = [ `Default | `Profile of string * updated_from | `Updated of

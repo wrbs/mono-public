@@ -1,6 +1,7 @@
-(lang dune 3.7)
+(lang dune 3.21)
 
 (name odoc)
+(version 3.2.2)
 
 (documentation "https://ocaml.org/p/odoc")
 

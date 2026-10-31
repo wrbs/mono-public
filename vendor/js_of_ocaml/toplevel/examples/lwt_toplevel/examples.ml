@@ -1,17 +1,15 @@
+[@@@ocamlformat "let-binding-spacing=compact"]
+
+[@@@ocamlformat "module-item-spacing=compact"]
+
 (** Overview *)
 
 let x = 10 + 10
-
 let y = x * 3
-
 let c = String.make x 'a'
-
 let sin1 = sin 1.
-
 let rec fact n = if n = 0 then 1. else float n *. fact (n - 1)
-
 let _ = Printf.printf "fact 20 = %f\n" (fact 20)
-
 let _ = "abc" < "def"
 
 (** Mutually recursive function *)
@@ -52,9 +50,7 @@ let display x =
 module RList = ReactiveData.RList
 
 let rl, rhandle = RList.create []
-
 let li_rl = RList.map (fun x -> Tyxml_js.Html.(li [ txt x ])) rl
-
 let ul_elt = Tyxml_js.R.Html.ul li_rl
 
 let init =
@@ -65,11 +61,8 @@ let init =
   ()
 
 let snoc s = RList.snoc s rhandle
-
 let cons s = RList.cons s rhandle
-
 let insert s pos = RList.insert s pos rhandle
-
 let remove pos = RList.remove pos rhandle
 
 let time_signal =
@@ -101,64 +94,76 @@ let _ = display div_elt
 open Graphics_js
 
 let () =
-  loop [ Mouse_motion ] (function { mouse_x = x; mouse_y = y } -> fill_circle x y 5)
-
-(** Graphics: Draw chars*)
-
-open Graphics_js
-
-let () =
-  loop [ Mouse_motion; Key_pressed ] (function
-    | { key = '\000'; _ } -> ()
-    | { mouse_x = x; mouse_y = y; key } ->
-        moveto x y;
-        draw_char key)
+  let canvas = Js_of_ocaml.Dom_html.createCanvas Js_of_ocaml.Dom_html.document in
+  canvas##.width := 500;
+  canvas##.height := 200;
+  Js_of_ocaml.Dom.appendChild (Js_of_ocaml.Dom_html.getElementById "output") canvas;
+  open_canvas canvas;
+  set_line_width 1;
+  set_color (rgb 50 50 70);
+  set_text_size 18;
+  moveto 200 100;
+  draw_string "click and draw";
+  set_color (rgb 20 20 40);
+  let last_pos = ref None in
+  let ctx = get_context () in
+  loop [ Button_down; Button_up; Mouse_motion ] (function
+      | { button; mouse_x = x; mouse_y = y } ->
+      if button
+      then (
+        set_context ctx;
+        (match !last_pos with
+        | Some (px, py) ->
+            moveto px py;
+            lineto x y
+        | None -> fill_circle x y 1);
+        last_pos := Some (x, y))
+      else last_pos := None)
 
 (** Graphics: PingPong *)
 
 open Js_of_ocaml_lwt
 open Graphics_js
 
-let c = 3
-
-let x0 = 0
-
-and x1 = size_x ()
-
-and y0 = 0
-
-and y1 = size_y ()
-
-let draw_ball x y =
-  set_color foreground;
-  fill_circle x y c
-
-let state = ref (Lwt.task ())
-
-let wait () = fst !state
-
-let rec pong_aux x y dx dy =
-  draw_ball x y;
-  let new_x = x + dx and new_y = y + dy in
-  let new_dx = if new_x - c <= x0 || new_x + c >= x1 then -dx else dx
-  and new_dy = if new_y - c <= y0 || new_y + c >= y1 then -dy else dy in
-  Lwt.bind (wait ()) (fun () -> pong_aux new_x new_y new_dx new_dy)
-
-let rec start () =
-  let t = Lwt.task () in
-  let _, w = !state in
-  state := t;
-  clear_graph ();
-  Lwt.wakeup w ();
-  Lwt.bind (Lwt_js.sleep (1. /. 60.)) start
-
-let pong x y dx dy = pong_aux x y dx dy
-
-let _ = pong 111 87 2 3
-
-let _ = pong 28 57 5 3
-
-let _ = start ()
+let () =
+  let canvas = Js_of_ocaml.Dom_html.createCanvas Js_of_ocaml.Dom_html.document in
+  canvas##.width := 200;
+  canvas##.height := 200;
+  Js_of_ocaml.Dom.appendChild (Js_of_ocaml.Dom_html.getElementById "output") canvas;
+  open_canvas canvas;
+  let ctx = get_context () in
+  let i x = int_of_float x in
+  let f x = float_of_int x in
+  let c = 3. in
+  let x0 = 0. and x1 = f (size_x ()) and y0 = 0. and y1 = f (size_y ()) in
+  let draw_ball x y =
+    set_color foreground;
+    fill_circle (i x) (i y) (i c)
+  in
+  let state = ref (Lwt.task ()) in
+  let wait () = fst !state in
+  let rec pong_aux x y dx dy =
+    set_context ctx;
+    draw_ball x y;
+    let new_x = x +. dx and new_y = y +. dy in
+    let new_dx = if new_x -. c <= x0 || new_x +. c >= x1 then ~-.dx else dx
+    and new_dy = if new_y -. c <= y0 || new_y +. c >= y1 then ~-.dy else dy in
+    Lwt.bind (wait ()) (fun () -> pong_aux new_x new_y new_dx new_dy)
+  in
+  let rec start () =
+    let t = Lwt.task () in
+    let _, w = !state in
+    state := t;
+    set_context ctx;
+    clear_graph ();
+    Lwt.wakeup w ();
+    Lwt.bind (Lwt_js.sleep (1. /. 60.)) start
+  in
+  let pong x y dx dy = pong_aux x y dx dy in
+  let _ = pong 111. 87. 2. 1.7 in
+  let _ = pong 28. 57. 2.3 3.2 in
+  let _ = start () in
+  ()
 
 (** Effect handler *)
 
@@ -166,18 +171,14 @@ module Txn : sig
   type 'a t
 
   val atomically : (unit -> unit) -> unit
-
   val ref : 'a -> 'a t
-
   val ( ! ) : 'a t -> 'a
-
   val ( := ) : 'a t -> 'a -> unit
 end = struct
   open Effect
   open Effect.Deep
 
   type 'a t = 'a ref
-
   type _ Effect.t += Update : 'a t * 'a -> unit Effect.t
 
   let atomically f =
@@ -207,9 +208,7 @@ end = struct
     comp (fun () -> ())
 
   let ref = ref
-
   let ( ! ) = ( ! )
-
   let ( := ) r v = perform (Update (r, v))
 end
 

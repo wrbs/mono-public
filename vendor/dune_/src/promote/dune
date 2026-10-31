@@ -8,5 +8,4 @@
   dune_sexp
   dune_util
   fiber
-  stdune
-  unix))
+  stdune))

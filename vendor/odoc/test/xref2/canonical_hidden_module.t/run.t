@@ -73,7 +73,7 @@ See the comments on the types at the end of test.mli for the expectation.
   <html xmlns="http://www.w3.org/1999/xhtml">
    <head><title>Test (Test)</title><meta charset="utf-8"/>
     <link rel="stylesheet" href="../odoc.css"/>
-    <meta name="generator" content="odoc %%VERSION%%"/>
+    <meta name="generator" content="odoc 3.2.2"/>
     <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
     <script src="../highlight.pack.js"></script>
     <script>hljs.initHighlightingOnLoad();</script>

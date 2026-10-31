@@ -35,7 +35,8 @@ Check that default implementation data is installed in the dune package file.
    (libexec (default-impl/a_default.cmxs)))
   (library
    (name a)
-   (kind virtual)
+   (kind normal)
+   (virtual)
    (default_implementation a.default-impl)
    (main_module_name A)
    (modes byte native)

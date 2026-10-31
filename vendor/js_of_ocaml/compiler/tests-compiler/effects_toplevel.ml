@@ -62,9 +62,7 @@ let%expect_test "test-compiler/lib-effects/test1.ml" =
                 : runtime.caml_trampoline_return(f, [a0, a1], 0);
        }
        var
-        dummy = 0,
-        global_data = runtime.caml_get_global_data(),
-        Stdlib_Printf = global_data.Stdlib__Printf,
+        Stdlib_Printf = runtime.caml_get_global("Stdlib__Printf"),
         _a_ =
           [0,
            [11, caml_string_of_jsbytes("abc"), 0],
@@ -72,13 +70,14 @@ let%expect_test "test-compiler/lib-effects/test1.ml" =
        function g(param, cont){
         return caml_trampoline_cps_call2(Stdlib_Printf[2], _a_, cont);
        }
+       var dummy = 0;
        function f(param, cont){
         function _a_(i){
          return caml_exact_trampoline_cps_call
                  (g,
                   dummy,
-                  function(_c_){
-                   var _b_ = i + 1 | 0;
+                  function(_b_){
+                   _b_ = i + 1 | 0;
                    return 5 !== i ? caml_exact_trampoline_call1(_a_, _b_) : cont();
                   });
         }
@@ -87,8 +86,7 @@ let%expect_test "test-compiler/lib-effects/test1.ml" =
        caml_callback(g, [dummy]);
        caml_callback(f, [dummy]);
        caml_callback(g, [dummy]);
-       var Test = [0];
-       runtime.caml_register_global(2, Test, "Test");
+       runtime.caml_register_global([0], "Test");
        return;
       }
       (globalThis));

@@ -1,3 +1,29 @@
+## 1.10.0
+
++ Bump OCaml lower bound to 4.11 (#343, @NathanReb)
++ Add explicit support for effect syntax (#342, @NathanReb)
++ Remove support for legacy camlp4 extensions that was causing misidentation of
+  code using some predefined identifiers (`TEST`, `BENCH`, `IFDEF`)
+  (#345, @NathanReb)
++ Add support for starred style comments (#347, @NathanReb)
++ Add explicit support for labeled tuples syntax (#349, @NathanReb)
++ Fix `strict_with` so it applies to extensible variant types in the
+  same way it applies to variant types (#350, @NathanReb)
++ Fix a bug where `-` would be rejected as `ocp-indent` input argument
+  instead of being interpreted as `stdin` (#351, @NathanReb)
++ Update to cmdliner 2 and install completion scripts for common shells
+  (#351, @NathanReb)
++ Add explicit support for external types (#353, @NathanReb)
++ Add explicit support for new 5.5 let in constructs: `let type`, `let
+  external`, `let class` (#354, @NathanReb)
++ Add `--strict` flag to make warnings fatal and parsing stricter
+  (#356, @NathanReb)
++ Add `--check` flag and corresponding check mode which does not print
+  indented version but instead succeed if the input is already correctly
+  indented and fails otherwise. (#357, @NathanReb)
++ Add `?filename` argument to `Nstream` functions to allow properly
+  setting the filename for parsing errors. (#357, @NathanReb)
+
 ## 1.9.0
 
 + Fix detection of let vs letin after a struct (#324, @Julow)
@@ -39,7 +65,7 @@
 * fixes some cases of comments
 * supports new cases of ppx
 * fixed cases of unstable indentation within records
-* supports local excemtions
+* supports local exceptions
 * fixed handling of polymorphic methods
 * uses cmdliner 1.0.0
 

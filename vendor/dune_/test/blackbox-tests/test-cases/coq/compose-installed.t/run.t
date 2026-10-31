@@ -28,10 +28,6 @@ so this also tests that it won't be a problem.
 
   $ dune build --root B @install
   Entering directory 'B'
-  Warning: Dune's Coq Build Language is deprecated, and will be removed in Dune
-  3.24. Please upgrade to the new Rocq Build Language.
-  Hint: To disable this warning, add the following to your dune-project file:
-  (warnings (deprecated_coq_lang disabled))
   Leaving directory 'B'
   $ dune install --root B --prefix=$PWD --display=short
   Installing $TESTCASE_ROOT/lib/B/META
@@ -46,10 +42,6 @@ so this also tests that it won't be a problem.
 Next we go into our Dune project and build it.
   $ dune build --root A
   Entering directory 'A'
-  Warning: Dune's Coq Build Language is deprecated, and will be removed in Dune
-  3.24. Please upgrade to the new Rocq Build Language.
-  Hint: To disable this warning, add the following to your dune-project file:
-  (warnings (deprecated_coq_lang disabled))
   Inductive hello : Set :=
       I : hello | am : hello | an : hello | install : hello | loc : hello.
   Leaving directory 'A'
@@ -81,10 +73,6 @@ As expected, Dune can no longer build A:
 
   $ dune build --root A
   Entering directory 'A'
-  Warning: Dune's Coq Build Language is deprecated, and will be removed in Dune
-  3.24. Please upgrade to the new Rocq Build Language.
-  Hint: To disable this warning, add the following to your dune-project file:
-  (warnings (deprecated_coq_lang disabled))
   File "dune", line 3, characters 15-16:
   3 |  (theories Coq B))
                      ^
@@ -106,10 +94,6 @@ all the directories found in COQPATH.
 
   $ dune build --root A
   Entering directory 'A'
-  Warning: Dune's Coq Build Language is deprecated, and will be removed in Dune
-  3.24. Please upgrade to the new Rocq Build Language.
-  Hint: To disable this warning, add the following to your dune-project file:
-  (warnings (deprecated_coq_lang disabled))
   Inductive hello : Set :=
       I : hello | am : hello | an : hello | install : hello | loc : hello.
   Leaving directory 'A'
@@ -118,10 +102,6 @@ We test if having B in the workspace and in user-contrib will cause Dune
 any problems. It shouldn't do, as the workspace should take precedence.
 
   $ dune build A
-  Warning: Dune's Coq Build Language is deprecated, and will be removed in Dune
-  3.24. Please upgrade to the new Rocq Build Language.
-  Hint: To disable this warning, add the following to your dune-project file:
-  (warnings (deprecated_coq_lang disabled))
   Inductive hello : Set :=
       I : hello | am : hello | an : hello | install : hello | loc : hello.
 
@@ -140,8 +120,4 @@ with the loadpath semantics of Coq.
 
   $ dune build --root A
   Entering directory 'A'
-  Warning: Dune's Coq Build Language is deprecated, and will be removed in Dune
-  3.24. Please upgrade to the new Rocq Build Language.
-  Hint: To disable this warning, add the following to your dune-project file:
-  (warnings (deprecated_coq_lang disabled))
   Leaving directory 'A'

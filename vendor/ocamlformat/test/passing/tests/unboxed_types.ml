@@ -134,3 +134,13 @@ let f x =
    | -#6666666n | -#7777777n ->
       true
   | _ -> false
+
+module Wildcard_with_jkind : sig
+  type (_ : any) t
+
+  type ('a, _ : any) t
+end = struct
+  type (_ : any) t
+
+  type ('a, _ : any) t
+end

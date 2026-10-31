@@ -102,13 +102,8 @@ module Mode_conf = struct
   ;;
 
   let decode =
-    enum'
-      [ "byte", return Byte
-      ; "js", return (Jsoo JS)
-      ; "native", return Native
-      ; "best", return Best
-      ; "wasm", Syntax.since Stanza.syntax (3, 17) >>> return (Jsoo Wasm)
-      ]
+    enum [ "byte", Byte; "js", Jsoo JS; "native", Native; "best", Best ]
+    <|> sum [ "wasm", Syntax.since Stanza.syntax (3, 17) >>> return (Jsoo Wasm) ]
   ;;
 
   module O = Comparable.Make (T)
@@ -134,7 +129,6 @@ module Tests = struct
     ; executable_link_flags : Ordered_set_lang.Unexpanded.t
     ; backend : (Loc.t * Lib_name.t) option
     ; libraries : (Loc.t * Lib_name.t) list
-    ; arguments : (Loc.t * Lib_name.t) list
     ; enabled_if : Blang.t
     }
 
@@ -166,12 +160,6 @@ module Tests = struct
                    ocaml_flags, link_flags))
        and+ backend = field_o "backend" (located Lib_name.decode)
        and+ libraries = field "libraries" (repeat (located Lib_name.decode)) ~default:[]
-       and+ arguments =
-         field
-           "arguments"
-           (Dune_lang.Syntax.since Dune_lang.Oxcaml.syntax (0, 1)
-            >>> repeat (located Lib_name.decode))
-           ~default:[]
        and+ modes =
          field
            "modes"
@@ -187,7 +175,6 @@ module Tests = struct
        ; executable_link_flags
        ; backend
        ; libraries
-       ; arguments
        ; modes
        ; enabled_if
        })

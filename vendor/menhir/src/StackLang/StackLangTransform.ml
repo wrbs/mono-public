@@ -11,7 +11,6 @@
 let map, length = List.(map, length)
 let take, drop = MList.(take, drop)
 open Printf
-open Channels
 open StackLang
 let state = EmitStackLang.state
 let print = Tag.print
@@ -360,17 +359,17 @@ let rec spec_block env block =
          request (if necessary) and replace this instruction with a jump to
          the specialized block. *)
       if env.state <> None && can_inline_when_known_state label then
-        let tag = Option.get env.state in
+        let tag = Option.force env.state in
         info "(spec) Inlining %s (state = %s)" (Label.export label) (print tag)
         (spec_block env (lookup program label).block)
 
       else if env.stack <> None && can_inline_when_known_stack label then
-        let tag = Option.get env.stack in
+        let tag = Option.force env.stack in
         info "(spec) Inlining %s (stack = %s)" (Label.export label) (print tag)
         (spec_block env (lookup program label).block)
 
       else if env.state <> None && can_specialize label then begin
-        let tag = Option.get env.state in
+        let tag = Option.force env.state in
         enqueue label tag;
         info "(spec) Specializing %s (state = %s)" (Label.export label) (print tag)
         (IJump (spec_label label tag))
@@ -449,20 +448,21 @@ let inspect_routine _label tblock =
 
 let program =
   cfg := Label.Map.mapi inspect_routine program.cfg;
-  MQueue.repeat queue spec_routine;
+  Misc.qiter spec_routine queue;
   { program with cfg = !cfg }
 
 let () =
-  Report.log (getC 1)
-    "%d specialized copies of %d functions have been created."
-    (LTSet.cardinal !inserted)
-    (Label.Set.cardinal !labels)
+  Error.logC 1 (fun f ->
+    fprintf f "%d specialized copies of %d functions have been created.\n"
+      (LTSet.cardinal !inserted)
+      (Label.Set.cardinal !labels)
+  )
 
 end (* SpecializeState *)
 
 let specialize_state program =
-  Time.time "StackLang: specialization with respect to the state" @@ fun () ->
   let module S = SpecializeState(struct let program = program end) in
+  Time.tick "StackLang: specialization with respect to the state";
   S.program
 
 (* -------------------------------------------------------------------------- *)
@@ -942,13 +942,13 @@ and transform_casetok env r branches odefault : int * int * block =
   (* Compute the total happiness. *)
   let add2 (_, happiness, _) accu = happiness + accu in
   let happiness = List.fold_right add2 branches 0 in
-  let happiness = MOption.fold add2 odefault happiness in
+  let happiness = Option.fold add2 odefault happiness in
   (* Compute the maximum number of PUSHes that are absorbed by a branch.
      This is the number of PUSHes that we must move into the [casetok]
      construct. It is therefore the number of PUSHes that we absorb. *)
   let max1 (j, _, _) accu = max j accu in
   let k = List.fold_right max1 branches 0 in
-  let k = MOption.fold max1 odefault k in
+  let k = Option.fold max1 odefault k in
   assert (k <= List.length env.pushes);
   (* Keep only the PUSHes that we wish to absorb. *)
   let pushes = take k env.pushes in
@@ -982,7 +982,7 @@ let transform_tblock label tblock =
   let path = Label.Set.singleton label in
   let pushes = []
   and bs = Bindings.empty
-  and fresh = MInt.mkgensym() in
+  and fresh = Misc.mkgensym() in
   let env = { path; pushes; bs; fresh } in
   let k, _happiness, block = transform_block env tblock.block in
   assert (k = 0);
@@ -998,7 +998,7 @@ let program =
     discover label
   end;
   (* Process the waiting labels. *)
-  MQueue.repeat waiting begin fun label ->
+  waiting |> Misc.qiter begin fun label ->
     assert (Label.Set.mem label !discovered);
     assert (not (Label.Map.mem label !cfg));
     let tblock = lookup program label in
@@ -1011,8 +1011,8 @@ let program =
 end (* CommutePushes *)
 
 let commute_pushes program =
-  Time.time "StackLang: moving PUSHes" @@ fun () ->
   let module CP = CommutePushes(struct let program = program end) in
+  Time.tick "StackLang: moving PUSHes";
   CP.program
 
 (* -------------------------------------------------------------------------- *)
@@ -1046,8 +1046,8 @@ let in_degree program =
     degree := Label.Map.add label (d + delta) !degree
   in
 
-  (* [visit label] examines the block at address [label]. *)
-  let visit label =
+  (* [visit () label] examines the block at address [label]. *)
+  let visit () label =
     (lookup program label).block
     |> Block.jumps tick
   in
@@ -1060,12 +1060,8 @@ let in_degree program =
     degree := Label.Map.add label 2 !degree
   );
 
-  (* Process the queue until it becomes empty. Return the final table. *)
-  while not (Queue.is_empty queue) do
-    let label = Queue.take queue in
-    visit label
-  done;
-
+  (* Process the queue until it  becomes empty. Return the final table. *)
+  Misc.qfold visit () queue;
   !degree
 
 (* -------------------------------------------------------------------------- *)
@@ -1081,7 +1077,6 @@ let in_degree program =
    considered ill-typed. *)
 
 let remove_unreachable_blocks program =
-  Time.time "StackLang: removing unreachable blocks" @@ fun () ->
   let degree = in_degree program in
   let cfg = Label.Map.fold (fun label block accu ->
     if Label.Map.mem label degree then
@@ -1089,6 +1084,7 @@ let remove_unreachable_blocks program =
     else
       accu
   ) program.cfg Label.Map.empty in
+  Time.tick "StackLang: removing unreachable blocks";
   { program with cfg }
 
 (* -------------------------------------------------------------------------- *)
@@ -1099,11 +1095,7 @@ let remove_unreachable_blocks program =
 module Inline (X : sig
   val cautious: bool
   val program : program
-end) = struct
-open X
-
-let start_time =
-  Time.start()
+end) = struct open X
 
 (* Compute every label's in-degree. *)
 
@@ -1198,7 +1190,7 @@ let program =
     discover label
   end;
   (* Process the waiting labels. *)
-  MQueue.repeat waiting begin fun label ->
+  waiting |> Misc.qiter begin fun label ->
     assert (Label.Set.mem label !discovered);
     assert (not (Label.Map.mem label !cfg));
     let tblock = lookup program label in
@@ -1208,9 +1200,9 @@ let program =
   { program with cfg = !cfg }
 
 let () =
-  Time.stop start_time "StackLang: inlining"
+  Time.tick "StackLang: inlining"
 
-end (* Inline *)
+end
 
 let inline cautious program =
   let module I = Inline(struct
@@ -1258,17 +1250,6 @@ let (enum, foreach, singleton, map) = Enum.(enum, foreach, singleton, map)
 
 module T    = Grammar.Terminal
 module TSet = Grammar.TerminalSet
-
-(* A few extra operations on sets of terminal symbols. *)
-
-let cardinal_universe =
-  T.n - 2
-
-let () =
-  assert (TSet.(cardinal universe) = cardinal_universe)
-
-let is_universe s =
-  TSet.cardinal s = cardinal_universe
 
 (* -------------------------------------------------------------------------- *)
 
@@ -1424,21 +1405,8 @@ let _ =
    and a printer for conditions (for debugging purposes only). *)
 
 module Condition = struct
-
   type t = condition
-
-  let compare c1 c2 =
-    match c1, c2 with
-    | CondNone, CondNone   ->  0
-    | CondNone, _          -> -1
-    | _, CondNone          -> +1
-    | CondTag _, CondTok _ -> -1
-    | CondTok _, CondTag _ -> +1
-    | CondTag tag1, CondTag tag2 ->
-        Tag.compare tag1 tag2
-    | CondTok tok1, CondTok tok2 ->
-        T.compare tok1 tok2
-
+  let compare = Generic.compare (* again brittle but convenient *)
   let print condition =
     match condition with
     | CondNone ->
@@ -1447,7 +1415,6 @@ module Condition = struct
         sprintf "CondTag %s" (Tag.print tag)
     | CondTok t ->
         sprintf "CondTok %s" (T.print t)
-
 end
 
 (* -------------------------------------------------------------------------- *)
@@ -1593,7 +1560,7 @@ let rec walk
       assert (r = token);
       (* The current token must be known, because the transformation inserts
          a [CASEtok] instruction immediately after every lexer call. *)
-      let t = Option.get env in
+      let t = Option.force env in
       (* Thus, this [CASEtok] instruction can be simplified. Only one branch
          can be taken, and we can statically tell which branch that is. *)
       begin match find_tokbranch branches (TSet.singleton t), odefault with
@@ -1789,7 +1756,7 @@ let decode_vertex' (s : M.state) : vertex' =
        [(label, Some t)] for some terminal symbol [t], and construct a
        single vertex' [(label, Some toks)] where the set [toks ]gathers
        all of these terminal symbols. *)
-    let extract (label', t) = assert (label = label'); Option.get t in
+    let extract (label', t) = assert (label = label'); Option.force t in
     let toks = List.map extract ss in
     let toks = TSet.of_list toks in
     (label, Some toks)
@@ -1820,7 +1787,7 @@ let () =
 let transport (v : vertex) : vertex' =
   v
   |> DFA.encode_vertex
-  |> M.transport_state |> Option.get
+  |> M.transport_state |> Option.force
   |> decode_vertex'
 
 (* [enlarge] maps a candidate new vertex [v'] to a valid new vertex.
@@ -1848,7 +1815,7 @@ let enlarge (v' : vertex') : vertex' =
       let v' = transport (label, Some t) in
       assert (
         let label', otoks' = v' in
-        let toks' = Option.get otoks' in
+        let toks' = Option.force otoks' in
         Label.equal label label' &&
         TSet.subset toks toks'
       );
@@ -1885,7 +1852,7 @@ let groups block : TSet.t list =
     let target' : M.state =
       target
       |> DFA.encode_vertex
-      |> M.transport_state |> Option.get
+      |> M.transport_state |> Option.force
     in
     (* Add [t] to the set stored at index [target'] in the vector. *)
     let toks = Indexing.Vector.get edges target' in
@@ -1900,7 +1867,7 @@ let groups block : TSet.t list =
     ) [] edges
   in
   (* A sanity check. *)
-  assert (is_universe (TSet.big_union groups));
+  assert TSet.(is_universe (big_union groups));
   groups
 
 (* -------------------------------------------------------------------------- *)
@@ -1915,7 +1882,7 @@ let name_vertex' (v' : vertex') : label =
   | None ->
       label
   | Some toks ->
-      if TSet.cardinal toks > cardinal_universe / 2 then
+      if TSet.cardinal toks > TSet.cardinal_universe / 2 then
         (* If [toks] involves more than half of all tokens then we do not
            need to include a list of all of its members in the name. *)
         sprintf "%s_majority" (Label.export label)
@@ -1978,7 +1945,7 @@ let rec spec_block (env : env) block =
       assert (r = token);
       (* because we insert a [CASEtok] instruction immediately after every
          lexer call, the current token must be known. *)
-      let toks = Option.get env in
+      let toks = Option.force env in
       assert (not (TSet.is_empty toks));
       (* Thus, this CASEtok instruction can be simplified. *)
       begin match find_tokbranch branches toks, odefault with
@@ -2034,8 +2001,8 @@ end (* SpecializeToken *)
 (* Make this program transformation accessible to the outside as a function.  *)
 
 let specialize_token program =
-  Time.time "StackLang: specialization with respect to the token" @@ fun () ->
   let module S = SpecializeToken(struct let program = program end) in
+  Time.tick "StackLang: specialization with respect to the token";
   S.program
 
 (* -------------------------------------------------------------------------- *)
@@ -2115,6 +2082,6 @@ end (* StopEarlier *)
 (* Make this program transformation accessible to the outside as a function.  *)
 
 let stop_earlier program =
-  Time.time "StackLang: propagating STOP instructions" @@ fun () ->
   let module S = StopEarlier(struct let program = program end) in
+  Time.tick "StackLang: propagating STOP instructions";
   S.program

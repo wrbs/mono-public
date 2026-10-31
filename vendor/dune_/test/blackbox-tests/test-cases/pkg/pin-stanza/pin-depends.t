@@ -30,7 +30,7 @@ respect the pin-depends
   > build: [ "echo" "bar" ]
   > EOF
 
-  $ dune_pkg_lock_normalized
+  $ dune pkg lock
   Solution for dune.lock:
   - bar.1.0.0
   - foo.dev

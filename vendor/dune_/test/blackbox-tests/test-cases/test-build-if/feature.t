@@ -50,10 +50,8 @@ We test the various combinations:
   $ test_all () {
   >   test_one @all
   >   test_one @runtest
-  >   export ENABLED=true
-  >   test_one @all
-  >   test_one @runtest
-  >   unset ENABLED
+  >   ENABLED=true test_one @all
+  >   ENABLED=true test_one @runtest
   > }
 
   $ test_all

@@ -37,6 +37,17 @@ let man_target_rule path =
     Gen_rules_lib.Dune.arg_dep path;
   ]
 
+let markdown_target_rule path =
+  [
+    "odoc";
+    "markdown-generate";
+    "-o";
+    ".";
+    "--extra-suffix";
+    "gen";
+    Gen_rules_lib.Dune.arg_dep path;
+  ]
+
 (** Returns filenames, not paths. *)
 let read_files_from_dir dir =
   let arr = Sys.readdir (Fpath.to_string dir) in
@@ -49,13 +60,16 @@ let constraints =
     ("stop_dead_link_doc.mli", Min "4.04");
     ("bugs_post_406.mli", Min "4.06");
     ("ocamlary.mli", Min "4.14");
-    ("recent.mli", Min "4.09");
+    ("recent.mli", Min "5.4");
     ("labels.mli", Min "4.09");
     ("recent_impl.ml", Min "4.09");
     ("bugs_pre_410.ml", Max "4.09");
     ("module_type_subst.mli", Min "4.13");
     ("class_comments.mli", Min "4.08");
     ("functor_ml.ml", Min "4.14");
+    ("ocaml_55.mli", Min "5.5");
+    ("ocaml_56.mli", Min "5.6");
+    ("oxcaml.mli", OxCaml);
   ]
 
 let test_cases_dir = Fpath.v "cases"
@@ -103,6 +117,7 @@ let () =
         (html_target_rule, Fpath.v "html", Some "--flat");
         (latex_target_rule, Fpath.v "latex", None);
         (man_target_rule, Fpath.v "man", None);
+        (markdown_target_rule, Fpath.v "markdown", None);
       ]
       cases
   in

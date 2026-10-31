@@ -1,13 +1,13 @@
-(**************************************************************************)
-(*                                                                        *)
-(*                              OCamlFormat                               *)
-(*                                                                        *)
-(*            Copyright (c) Facebook, Inc. and its affiliates.            *)
-(*                                                                        *)
-(*      This source code is licensed under the MIT license found in       *)
-(*      the LICENSE file in the root directory of this source tree.       *)
-(*                                                                        *)
-(**************************************************************************)
+(**************************************************************************
+ *                                                                        *
+ *                              OCamlFormat                               *
+ *                                                                        *
+ *            Copyright (c) Facebook, Inc. and its affiliates.            *
+ *                                                                        *
+ *      This source code is licensed under the MIT license found in       *
+ *      the LICENSE file in the root directory of this source tree.       *
+ *                                                                        *
+ **************************************************************************)
 
 (** Abstract syntax tree terms *)
 
@@ -100,7 +100,9 @@ module Tyd : sig
 end
 
 type toplevel_item =
-  [`Item of structure_item | `Directive of toplevel_directive]
+  [ `Item of structure_item
+  | `Directive of toplevel_directive
+  | `Lexer of lexer_directive ]
 
 (** Ast terms of various forms. *)
 type t =

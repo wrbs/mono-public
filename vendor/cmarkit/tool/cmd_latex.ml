@@ -106,7 +106,7 @@ buffer_add_inline_preambles inline_preambles
 buffer_add_author author
 (buffer_add_title r doc) title
 (Cmarkit_renderer.buffer_add_doc r) doc
-Buffer.add_string (if files <> [] then "\n" else "")
+(fun b s -> Buffer.add_string b s) (if files <> [] then "\n" else "")
 (buffer_add_docs ~defs ~accumulate_defs parse r) files
 
 let latex

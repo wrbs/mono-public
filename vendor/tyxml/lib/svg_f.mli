@@ -23,7 +23,7 @@
     and the interface is very low level and do not take deeply into account
     the needs of SVG elements.
 
-    {% See <<a_manual chapter="functors"|the manual of the functorial interface>>. %}
+    See {{!page-"functors"}the manual of the functorial interface}.
 *)
 
 (*
@@ -99,7 +99,7 @@ module Wrapped_functions
 (** Similar to {!Make} but with a custom set of wrapped functions. *)
 module Make_with_wrapped_functions
     (Xml : Xml_sigs.T)
-    (C : Svg_sigs.Wrapped_functions with module Xml = Xml)
+    (_ : Svg_sigs.Wrapped_functions with module Xml = Xml)
   : Svg_sigs.Make(Xml).T
     with type +'a elt = Xml.elt
      and type +'a attrib = Xml.attrib

@@ -21,10 +21,10 @@ We try to pull an opam package that isn't a dune project
   > build: [ "echo" "foo" ]
   > EOF
 
-  $ dune_pkg_lock_normalized
+  $ dune pkg lock
   Solution for dune.lock:
   - foo.dev
-  $ pkg="${default_lock_dir}/foo.dev.pkg"
+  $ pkg="dune.lock/foo.pkg"
   $ grep version $pkg
   (version dev)
   $ grep dev $pkg

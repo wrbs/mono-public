@@ -97,9 +97,8 @@ let inspect_pattern (type a) ~cursor ~lid (p : a Typedtree.general_pattern) =
       Format.fprintf fmt "current pattern is: %a" (Printtyped.pattern 0) p);
   match p.pat_desc with
   | Tpat_any when Longident.last lid = "_" -> None
-  | Tpat_var (_, str_loc, _, _, _) when Longident.last lid = str_loc.txt -> None
-  | Tpat_alias (_, _, str_loc, _, _, _, _) when Longident.last lid = str_loc.txt
-    ->
+  | Tpat_var { name = str_loc; _ } when Longident.last lid = str_loc.txt -> None
+  | Tpat_alias { name = str_loc; _ } when Longident.last lid = str_loc.txt ->
     (* Assumption: if [Browse.enclosing] stopped on this node and not on the
        subpattern, then it must mean that the cursor is on the alias. *)
     None
@@ -122,7 +121,7 @@ let inspect_expression ~cursor ~lid e : t =
         Constructor (cd, lid_loc.loc)
       else Module_path
     else Module_path
-  | Texp_ident (p, lid_loc, _, _, _) ->
+  | Texp_ident { path = p; lid = lid_loc; _ } ->
     let name = Path.last p in
     log ~title:"inspect_context" "name is: [%s]" name;
     if name = "*type-error*" then
@@ -137,10 +136,14 @@ let inspect_expression ~cursor ~lid e : t =
   | Texp_constant _ -> Constant
   | _ -> Expr
 
-let inspect_browse_tree ?let_pun_behavior ~cursor lid browse : t option =
+let inspect_browse_tree ?let_pun_behavior ?record_pattern_pun_behavior ~cursor
+    lid browse : t option =
   log ~title:"inspect_context" "current node is: [%s]"
     (String.concat ~sep:"|" (List.map ~f:(Mbrowse.print ()) browse));
-  match Mbrowse.enclosing ?let_pun_behavior cursor browse with
+  match
+    Mbrowse.enclosing ?let_pun_behavior ?record_pattern_pun_behavior cursor
+      browse
+  with
   | [] ->
     log ~title:"inspect_context" "no enclosing around: %a" Lexing.print_position
       cursor;

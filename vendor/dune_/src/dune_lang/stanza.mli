@@ -5,7 +5,6 @@ open Import
 type repr = ..
 type t
 
-val package : t -> Package_id.t option
 val repr : t -> repr
 
 module Key : sig
@@ -20,9 +19,7 @@ module type S = sig
   type t
   type repr += T of t
 
-  val make_stanza : t -> Package_id.t option -> stanza
-  val decode_stanza : t Decoder.t -> stanza list Decoder.t
-  val decode_stanzas : t list Decoder.t -> stanza list Decoder.t
+  val make_stanza : t -> stanza
   val key : t Key.t
 end
 

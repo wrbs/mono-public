@@ -39,8 +39,7 @@ type label_parent_lookup_result =
 type fragment_type_parent_lookup_result =
   [ `S of signature_lookup_result | `T of datatype_lookup_result ]
 
-type 'a ref_result =
-  ('a, Errors.Tools_error.reference_lookup_error) Result.t
+type 'a ref_result = ('a, Errors.Tools_error.reference_lookup_error) result
 (** The result type for every functions in this module. *)
 
 let kind_of_find_result = function
@@ -531,13 +530,7 @@ module CS = struct
     match parent with
     | `S (parent', parent_cp, sg) -> (
         let sg = Tools.prefix_signature (parent_cp, sg) in
-        let find_ambiguous =
-        (find_ambiguous : ?kind:([> `Any ] as 'a) ->
-         (Component.Signature.t -> string -> Find.any_in_type_in_sig list)
-         ->
-         Component.Signature.t -> string -> (Find.any_in_type_in_sig, [> `Find_by_name of 'a * string ]) result)
-        in
-        find_ambiguous Find.any_in_type_in_sig  sg name_s >>= function
+        find_ambiguous Find.any_in_type_in_sig sg name_s >>= function
         | `In_type (_, _, `FField _) -> not_a_constructor name_s
         | `In_type (_, _, `FUnboxedField _) -> not_a_constructor name_s
         | `In_type (typ_name, _, `FPoly cs) ->
@@ -615,8 +608,8 @@ module UF = struct
   type t = Resolved.UnboxedField.t
 
   let in_env env name =
-    env_lookup_by_name Env.s_unboxed_field name env >>= fun (`UnboxedField (id, _)) ->
-    Ok (`Identifier id :> t)
+    env_lookup_by_name Env.s_unboxed_field name env
+    >>= fun (`UnboxedField (id, _)) -> Ok (`Identifier id :> t)
 
   let not_an_unboxed_field name =
     (* Let's pretend we didn't see the constructor/field and say we didn't find anything. *)
@@ -634,19 +627,23 @@ module UF = struct
         | `In_type (typ_name, _, `FUnboxedField _) ->
             Ok
               (`UnboxedField
-                ((`Type (parent', typ_name) :> Resolved.UnboxedFieldParent.t), name)))
+                 ( (`Type (parent', typ_name) :> Resolved.UnboxedFieldParent.t),
+                   name )))
     | `T (parent', t) -> (
         find Find.any_in_type t (fun x -> x) name_s >>= function
         | `FConstructor _ -> not_an_unboxed_field name_s
         | `FPoly _ -> not_an_unboxed_field name_s
         | `FField _ -> not_an_unboxed_field name_s
-        | `FUnboxedField _ -> Ok (`UnboxedField ((parent' :> Resolved.UnboxedFieldParent.t), name)))
+        | `FUnboxedField _ ->
+            Ok
+              (`UnboxedField ((parent' :> Resolved.UnboxedFieldParent.t), name))
+        )
 
   let of_component _env parent name =
     Ok
       (`UnboxedField
-        ( (parent : Resolved.DataType.t :> Resolved.UnboxedFieldParent.t),
-          UnboxedFieldName.make_std name ))
+         ( (parent : Resolved.DataType.t :> Resolved.UnboxedFieldParent.t),
+           UnboxedFieldName.make_std name ))
 end
 
 module MM = struct

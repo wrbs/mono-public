@@ -1,4 +1,4 @@
-version: "6.2.0"
+version: "6.3.0"
 opam-version: "2.0"
 maintainer:   "anil@recoil.org"
 authors:      ["Anil Madhavapeddy" "Richard Mortier" "Thomas Gazagnaire"
@@ -17,7 +17,7 @@ build: [
 depends: [
   "ocaml" {>= "4.08.0"}
   "base-unix"
-  "dune" {>= "2.0.0"}
+  "dune" {>= "3.17"}
   "lwt"
   "cstruct" {=version}
 ]
@@ -29,3 +29,4 @@ structures, and they are accessed via the `Bigarray` module."""
 url {
   src: "git+https://github.com/mirage/ocaml-cstruct.git"
 }
+x-maintenance-intent: [ "(latest)" ]

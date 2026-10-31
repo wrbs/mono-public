@@ -203,7 +203,9 @@ module Releases = struct
   let v4_14_0 = of_string_exn "4.14.0"
   let v4_14_1 = of_string_exn "4.14.1"
   let v4_14_2 = of_string_exn "4.14.2"
-  let v4_14 = v4_14_2
+  let v4_14_3 = of_string_exn "4.14.3"
+  let v4_14_4 = of_string_exn "4.14.4"
+  let v4_14 = v4_14_4
 
   let v5_0_0 = of_string_exn "5.0.0"
   let v5_0 = v5_0_0
@@ -220,10 +222,16 @@ module Releases = struct
   let v5_3 = v5_3_0
 
   let v5_4_0 = of_string_exn "5.4.0"
-  let v5_4 = v5_4_0
+  let v5_4_1 = of_string_exn "5.4.1"
+  let v5_4 = v5_4_1
 
   let v5_5_0 = of_string_exn "5.5.0"
-  let v5_5 = v5_5_0
+  let v5_5_1 = of_string_exn "5.5.1"
+  let v5_5_2 = of_string_exn "5.5.2"
+  let v5_5 = v5_5_2
+
+  let v5_6_0 = of_string_exn "5.6.0"
+  let v5_6 = v5_6_0
 
   let all_patches = [
     v3_07_0; v3_07_1; v3_07_2; v3_08_0; v3_08_1;
@@ -236,21 +244,29 @@ module Releases = struct
     v4_07_1; v4_08_0; v4_08_1; v4_09_0; v4_09_1;
     v4_10_0; v4_10_1; v4_10_2; v4_11_0; v4_11_1;
     v4_11_2; v4_12_0; v4_12_1; v4_13_0; v4_13_1;
-    v4_14_0; v4_14_1; v4_14_2; v5_0_0; v5_1_0;
-    v5_1_1; v5_2_0; v5_2_1; v5_3_0; v5_4_0 ]
+    v4_14_0; v4_14_1; v4_14_2; v4_14_3; v4_14_4;
+    v5_0_0; v5_1_0; v5_1_1; v5_2_0; v5_2_1;
+    v5_3_0; v5_4_0; v5_4_1; v5_5_0; v5_5_1;
+    v5_5_2 ]
 
   let all = [ v3_07; v3_08; v3_09; v3_10; v3_11;
               v3_12; v4_00; v4_01; v4_02; v4_03;
               v4_04; v4_05; v4_06; v4_07; v4_08;
               v4_09; v4_10; v4_11; v4_12; v4_13;
-              v4_14; v5_0; v5_1; v5_2; v5_3; v5_4 ]
+              v4_14; v5_0; v5_1; v5_2; v5_3; v5_4;
+              v5_5
+            ]
 
-  let recent = [ v4_08; v4_09; v4_10; v4_11; v4_12; v4_13; v4_14; v5_0; v5_1; v5_2; v5_3; v5_4 ]
+  let recent = [ v4_08; v4_09; v4_10; v4_11; v4_12; v4_13; v4_14; v5_0; v5_1; v5_2; v5_3; v5_4; v5_5 ]
+  let significant =
+    let last_two = match List.rev all with
+      | a :: b :: _ -> [b; a] | _ -> [] in
+    List.sort_uniq compare ([ v4_11; v4_14; v5_2 ] @ last_two)
 
-  let latest = v5_4
+  let latest = v5_5
 
   let unreleased_betas = [ ]
-  let dev = [ v5_5 ]
+  let dev = [ v5_6 ]
 
   let trunk =
     match dev with

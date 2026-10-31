@@ -1,0 +1,6 @@
+(library
+ (name hardcaml_computation_dsl_generators)
+ (public_name hardcaml_computation_dsl.generators)
+ (libraries core hardcaml hardcaml_computation_dsl)
+ (preprocess
+  (pps ppx_hardcaml ppx_jane)))

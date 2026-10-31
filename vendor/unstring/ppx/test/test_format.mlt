@@ -1,0 +1,204 @@
+#print_line_numbers true
+
+#reset_line_numbers_after_expect true
+
+open! Core
+open! Unstring.Export;;
+
+(* ============================================================ *)
+(* Parsing: percent sign behavior *)
+(* *)
+(* %{} produces interpolation. %% produces literal %. *)
+(* Lone % is left intact. *)
+(* ============================================================ *)
+
+(* - Literal percent sign
+   - Percent at the end of the literal test
+   - Escaped [%{] produces literal [%{]
+   - Escaped percent followed by interpolation: [%%%{_}]
+   - Double escape: %%%% produces %%
+   - Escaped percent mixed with interpolation
+   - Escaped percent before interpolation
+   - Lone % is treated as a literal *)
+
+Unstring.print_shape [%unstring "%%"];
+Unstring.print_shape [%unstring "100%%"];
+Unstring.print_shape [%unstring "%%{not interpolated}"];
+Unstring.print_shape [%unstring ("%%%{_}" : string)];
+Unstring.print_shape [%unstring "%%%%"];
+Unstring.print_shape [%unstring ("x=%{_}%%" : string)];
+Unstring.print_shape [%unstring ("%%{_}=%{_}" : string)];
+Unstring.print_shape [%unstring ("100% done=%{_}" : string)]
+
+[%%expect
+  {|
+%
+100%
+"%{not interpolated}"
+% «·⋆»
+%%
+x= «·⋆» %
+%{_}= «·⋆»
+"100% done=" «·⋆»
+|}]
+
+(* Unterminated interpolation *)
+
+let (_ : _ Unstring.t) = [%unstring ("%{_" : int)]
+
+[%%expect
+  {|
+Line 1, characters 38-41:
+Error: unterminated %{
+|}]
+
+(* Invalid field name *)
+
+let _ = [%unstring ("%{foo bar}" : string)]
+
+[%%expect
+  {|
+Line 1, characters 21-31:
+Error: invalid field name: "foo bar"
+|}]
+
+(* Quoted string delimiters parse correctly *)
+;;
+
+Unstring.print_shape [%unstring ({|x=%{_}|} : int)]
+
+[%%expect
+  {|
+x= «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧»
+|}]
+
+(* Multiline format string parses correctly *)
+;;
+
+Unstring.print_shape
+  [%unstring
+    ({|header
+%{_}
+footer|}
+     : string)]
+
+[%%expect
+  {|
+"header\n" «·⋆» "\nfooter"
+|}]
+
+(* String with escape sequences parses correctly *)
+;;
+
+Unstring.print_shape [%unstring ("line1\nline2=%{_}" : int)]
+
+[%%expect
+  {|
+"line1\nline2=" «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧»
+|}]
+
+(* Single_named (a single non-numeric, non-underscore hole) produces a labeled argument.
+   This can only be exercised via [@@deriving unstring], so it is tested in
+   test_deriving.mlt. *)
+
+(* ============================================================ *)
+(* Hole classification: Numbered *)
+(* ============================================================ *)
+
+(* Basic numbered holes *)
+;;
+
+Unstring.print_shape [%unstring ("x=%{1} y=%{2}" : int * string)]
+
+[%%expect
+  {|
+x= «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧» " y=" «·⋆»
+|}]
+
+(* Out-of-order: the result tuple matches the numbering, not the appearance order. *)
+;;
+
+Unstring.print_shape [%unstring ("%{2} %{1}" : bool * string)];
+Unstring.print_shape [%unstring ("%{2} %{3} %{1}" : bool * int * string)];
+Unstring.print_shape [%unstring ("%{2} %{name} %{1}" : bool * int * name:string)]
+
+[%%expect
+  {|
+«·⋆» " " (false ‖ true)
+«(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧» " " «·⋆» " " (false ‖ true)
+«(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧» " " «·⋆» " " (false ‖ true)
+|}]
+
+(* Lone numbered hole is rejected *)
+
+let (_ : _ Unstring.t) = [%unstring ("x=%{2}" : int)]
+
+[%%expect
+  {|
+Line 1, characters 38-44:
+Error: Used 2 in a numbered hole, but there is only 1 numbered hole.
+|}]
+
+(* Non-consecutive numbered holes *)
+
+let (_ : _ Unstring.t) = [%unstring ("%{1} and %{3}" : int * int)]
+
+[%%expect
+  {|
+Line 1, characters 38-51:
+Error: Used 3 in a numbered hole, but there are only 2 numbered holes.
+|}]
+
+(* ============================================================ *)
+(* Hole classification: Named *)
+(* ============================================================ *)
+
+(* Basic named holes *)
+;;
+
+Unstring.print_shape [%unstring ("x=%{x} y=%{y}" : x:int * y:string)]
+
+[%%expect
+  {|
+x= «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧» " y=" «·⋆»
+|}]
+
+(* Out-of-order: result labels are sorted alphabetically regardless of appearance order. *)
+;;
+
+Unstring.print_shape [%unstring ("%{y} %{x}" : x:int * y:string)]
+
+[%%expect
+  {|
+«·⋆» " " «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧»
+|}]
+
+(* Specifying %{_} twice is rejected *)
+
+let _ = [%unstring ("%{_} %{_}" : string * string)]
+
+[%%expect
+  {|
+Line 1, characters 21-30:
+Error: Cannot use %{_} if there's more than one unnamed hole, found 2 such holes.
+|}]
+
+(* Mixing numbered and underscore holes is rejected *)
+
+let _ = [%unstring ("%{_} %{2}" : int * string)]
+
+[%%expect
+  {|
+Line 1, characters 21-30:
+Error: Cannot use %{_} if there's more than one unnamed hole, found 2 such holes.
+|}]
+
+(* Duplicate named hole is rejected *)
+
+let _ = [%unstring ("%{x} %{x} %{1} %{1}" : string)]
+
+[%%expect
+  {|
+Line 1, characters 21-40:
+Error: The following holes have been specified more than once: 1, x.
+|}]

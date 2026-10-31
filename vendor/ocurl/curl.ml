@@ -2,7 +2,7 @@
  * curl.ml
  *
  * Copyright (c) 2003-2008, Lars Nilsson, <lars@quantumchamaeleon.com>
- * Copyright (c) 2009, ygrek, <ygrek@autistici.org>
+ * Copyright (c) 2009, <root@ygrek.org>
  *)
 
 type t
@@ -90,6 +90,26 @@ type curlCode =
   | CURLE_SSH
   | CURLE_SSL_SHUTDOWN_FAILED
   | CURLE_AGAIN
+  | CURLE_SSL_CRL_BADFILE
+  | CURLE_SSL_ISSUER_ERROR
+  | CURLE_FTP_PRET_FAILED
+  | CURLE_RTSP_CSEQ_ERROR
+  | CURLE_RTSP_SESSION_ERROR
+  | CURLE_FTP_BAD_FILE_LIST
+  | CURLE_CHUNK_FAILED
+  | CURLE_NO_CONNECTION_AVAILABLE
+  | CURLE_SSL_PINNEDPUBKEYNOTMATCH
+  | CURLE_SSL_INVALIDCERTSTATUS
+  | CURLE_HTTP2_STREAM
+  | CURLE_RECURSIVE_API_CALL
+  | CURLE_AUTH_ERROR
+  | CURLE_HTTP3
+  | CURLE_QUIC_CONNECT_ERROR
+  | CURLE_PROXY
+  | CURLE_SSL_CLIENTCERT
+  | CURLE_UNRECOVERABLE_POLL
+  | CURLE_TOO_LARGE
+  | CURLE_ECH_REQUIRED
 
 exception CurlException of (curlCode * int * string)
 
@@ -136,6 +156,10 @@ type curlSSLVersion =
   | SSLVERSION_TLSv1_1
   | SSLVERSION_TLSv1_2
   | SSLVERSION_TLSv1_3
+  | SSLVERSION_MAX_TLSv1_0
+  | SSLVERSION_MAX_TLSv1_1
+  | SSLVERSION_MAX_TLSv1_2
+  | SSLVERSION_MAX_TLSv1_3
 
 type curlTimeCondition =
   | TIMECOND_NONE
@@ -240,12 +264,24 @@ type curlSeek =
   | SEEK_END
 
 type curlProxyType =
-  | CURLPROXY_HTTP
-  | CURLPROXY_HTTP_1_0 (** added in 7.19.4 *)
-  | CURLPROXY_SOCKS4 (** added in 7.15.2 *)
-  | CURLPROXY_SOCKS5
-  | CURLPROXY_SOCKS4A (** added in 7.18.0 *)
-  | CURLPROXY_SOCKS5_HOSTNAME (** added in 7.18.0 *)
+  | CURLPROXY_HTTP (** since libcurl 7.10 *)
+  | CURLPROXY_HTTP_1_0 (** since libcurl 7.19.4 *)
+  | CURLPROXY_SOCKS4 (** since libcurl 7.15.2 *)
+  | CURLPROXY_SOCKS5 (** since libcurl 7.10 *)
+  | CURLPROXY_SOCKS4A (** since libcurl 7.18.0 *)
+  | CURLPROXY_SOCKS5_HOSTNAME (** since libcurl 7.18.0 *)
+  | CURLPROXY_HTTPS (** since libcurl 7.52.0 *)
+  | CURLPROXY_HTTPS2 (** since libcurl 8.1.0 *)
+
+type curlSockType =
+  | CURLSOCKTYPE_IPCXN
+
+type curlSockAddr = {
+  family: Unix.socket_domain;
+  socktype: Unix.socket_type;
+  protocol: int;
+  address: Unix.sockaddr;
+}
 
 type data_source =
   | String of string (** Equivalent to `CURLMIME_DATA` *)
@@ -469,6 +505,7 @@ type curlOption =
   | CURLOPT_SEEKFUNCTION of (int64 -> curlSeek -> curlSeekResult)
   | CURLOPT_AUTOREFERER of bool
   | CURLOPT_OPENSOCKETFUNCTION of (Unix.file_descr -> unit)
+  | CURLOPT_OPENSOCKETFUNCTION2 of (curlSockType -> curlSockAddr -> Unix.file_descr option)
 (*   | CURLOPT_CLOSESOCKETFUNCTION of (Unix.file_descr -> unit) *)
   | CURLOPT_PROXYTYPE of curlProxyType
   | CURLOPT_PROTOCOLS of curlProto list
@@ -501,6 +538,7 @@ type curlOption =
   | CURLOPT_TCP_KEEPIDLE of int
   | CURLOPT_TCP_KEEPINTVL of int
   | CURLOPT_NOPROXY of string
+  | CURLOPT_UNIX_SOCKET_PATH of string
 
 type initOption =
   | CURLINIT_GLOBALALL
@@ -640,6 +678,26 @@ type headerOrigin =
 external get_headers_rev: t -> headerOrigin list -> int -> (string * string) list = "caml_curl_get_headers_rev"
 
 let get_headers t origins ~request = get_headers_rev t origins request |> List.rev
+
+(** WebSocket support *)
+type curlWSFlag =
+  | CURLWS_TEXT
+  | CURLWS_BINARY
+  | CURLWS_CONT
+  | CURLWS_CLOSE
+  | CURLWS_PING
+  | CURLWS_PONG
+  | CURLWS_OFFSET
+
+type curlWSFrame = {
+  age: int;
+  flags: curlWSFlag list;
+  offset: int;
+  bytesleft: int;
+}
+
+external ws_meta : t -> curlWSFrame option = "caml_curl_ws_meta"
+external ws_send : t -> string -> curlWSFlag list -> int = "caml_curl_ws_send"
 
 let set_writefunction conn closure =
   setopt conn (CURLOPT_WRITEFUNCTION closure)
@@ -1052,6 +1110,9 @@ let set_autoreferer conn b =
 let set_opensocketfunction conn closure =
   setopt conn (CURLOPT_OPENSOCKETFUNCTION closure)
 
+let set_opensocketfunction2 conn closure =
+  setopt conn (CURLOPT_OPENSOCKETFUNCTION2 closure)
+
 (*
 let set_closesocketfunction conn closure =
   setopt conn (CURLOPT_CLOSESOCKETFUNCTION closure)
@@ -1124,6 +1185,9 @@ let set_proxy_ssl_options conn opts =
 
 let set_noproxy conn s =
   setopt conn (CURLOPT_NOPROXY s)
+
+let set_unix_socket_path conn unix_socket_path =
+  setopt conn (CURLOPT_UNIX_SOCKET_PATH unix_socket_path)
 
 let get_effectiveurl conn =
   match (getinfo conn CURLINFO_EFFECTIVE_URL) with
@@ -1472,6 +1536,7 @@ class handle =
     method set_dns_servers l = set_dns_servers conn l
     method set_autoreferer b = set_autoreferer conn b
     method set_opensocketfunction closure = set_opensocketfunction conn closure
+    method set_opensocketfunction2 closure = set_opensocketfunction2 conn closure
 (*     method set_closesocketfunction closure = set_closesocketfunction conn closure *)
     method set_proxytype t = set_proxytype conn t
     method set_mimepost p = set_mimepost conn p
@@ -1486,6 +1551,7 @@ class handle =
     method set_tcpkeepidle seconds = set_tcpkeepidle conn seconds
     method set_tcpkeepintvl seconds = set_tcpkeepintvl conn seconds
     method set_noproxy s = set_noproxy conn s
+    method set_unix_socket_path unix_socket_path = set_unix_socket_path conn unix_socket_path
 
     method get_effectiveurl = get_effectiveurl conn
     method get_redirecturl = get_redirecturl conn
@@ -1526,6 +1592,8 @@ class handle =
     method get_conditionunmet = get_conditionunmet conn
     method get_certinfo = get_certinfo conn
     method get_http_version = get_http_version conn
+    method ws_meta = ws_meta conn
+    method ws_send = ws_send conn
 end
 
 module Multi = struct
@@ -1590,7 +1658,8 @@ module Multi = struct
   external action_all : mt -> int = "caml_curl_multi_socket_all"
   external socket_action : mt -> Unix.file_descr option -> fd_status -> int = "caml_curl_multi_socket_action"
 
-  let action_timeout mt = ignore (socket_action mt None EV_AUTO)
+  let action_timeout' mt = socket_action mt None EV_AUTO
+  let action_timeout mt = ignore (action_timeout' mt)
   let action mt fd status = socket_action mt (Some fd) status
 
   external timeout : mt -> int = "caml_curl_multi_timeout"

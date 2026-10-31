@@ -3,7 +3,7 @@
 (*  Copyright 2011 Jun Furuse                                             *)
 (*  Copyright 2012-2013 OCamlPro                                          *)
 (*                                                                        *)
-(*  All rights reserved.This file is distributed under the terms of the   *)
+(*  All rights reserved. This file is distributed under the terms of the   *)
 (*  GNU Lesser General Public License version 2.1 with linking            *)
 (*  exception.                                                            *)
 (*                                                                        *)
@@ -32,7 +32,7 @@ type cons =
 
 and t = cons lazy_t
 
-let of_string ?(start_pos=Position.zero) ?(start_offset=0) string =
+let of_string ?filename ?(start_pos=Position.zero) ?(start_offset=0) string =
   let lexbuf = {
     Lexing.
     refill_buff = (fun lexbuf -> lexbuf.Lexing.lex_eof_reached <- true);
@@ -49,6 +49,7 @@ let of_string ?(start_pos=Position.zero) ?(start_offset=0) string =
     lex_curr_p = start_pos;
   }
   in
+  Option.iter (Lexing.set_filename lexbuf) filename;
   Approx_lexer.init ();
   let rec loop last =
     let open Lexing in
@@ -82,7 +83,7 @@ let of_string ?(start_pos=Position.zero) ?(start_offset=0) string =
   in
   lazy (loop init_region)
 
-let of_channel ?(start_pos=Position.zero) ic =
+let of_channel ?filename ?(start_pos=Position.zero) ic =
   (* add some caching to the reader function, so that
      we can get back the original strings *)
   let buf = Buffer.create 511 in
@@ -95,6 +96,7 @@ let of_channel ?(start_pos=Position.zero) ic =
   let lexbuf = { lexbuf with Lexing.lex_start_p = start_pos;
                              Lexing.lex_curr_p = start_pos; }
   in
+  Option.iter (Lexing.set_filename lexbuf) filename;
   Approx_lexer.init ();
   let rec loop last =
     let open Lexing in

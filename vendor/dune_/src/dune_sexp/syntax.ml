@@ -1,4 +1,4 @@
-open Stdune
+open! Stdune
 
 module Version = struct
   module T = struct
@@ -41,10 +41,7 @@ module Version = struct
            ; Pp.textf "This version is parsed as just %d.%d." a b
            ];
          v
-       | Error () ->
-         User_error.raise
-           ~loc
-           [ Pp.text "Invalid version. Version must be two numbers separated by a dot." ])
+       | Error () -> User_error.raise ~loc [ Pp.text "Atom of the form NNN.NNN expected" ])
     | sexp -> User_error.raise ~loc:(Ast.loc sexp) [ Pp.text "Atom expected" ]
   ;;
 

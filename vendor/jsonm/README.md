@@ -1,6 +1,6 @@
 Jsonm — Non-blocking streaming JSON codec for OCaml
 -------------------------------------------------------------------------------
-%%VERSION%%
+v1.0.2+dune
 
 Jsonm is a non-blocking streaming codec to decode and encode the JSON
 data format. It can process JSON text without blocking on IO and

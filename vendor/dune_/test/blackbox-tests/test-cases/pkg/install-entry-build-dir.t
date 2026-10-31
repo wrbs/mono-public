@@ -3,7 +3,8 @@ Use build paths in the install entries of a package
   $ . ./helpers.sh
 
   $ make_lockdir
-  $ make_lockpkg test <<EOF
+
+  $ cat >dune.lock/test.pkg <<EOF
   > (version 0.0.1)
   > (build
   >  (system "\| cat >test.install <<EOF

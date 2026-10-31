@@ -27,7 +27,7 @@ specify it in the context.
 
 Specifying the directory to the lock command should work:
 
-  $ dune_pkg_lock_normalized foo.lock
+  $ dune pkg lock foo.lock
   Solution for foo.lock:
   - a.0.0.1
   - b.0.0.1

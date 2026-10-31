@@ -2,7 +2,6 @@
 
 open Odoc_model
 open Odoc_model.Paths
-open Odoc_utils
 
 type lookup_unit_result = Forward_reference | Found of Lang.Compilation_unit.t
 
@@ -65,7 +64,8 @@ val add_module_type :
 
 val add_value : Identifier.Value.t -> Component.Value.t -> t -> t
 
-val add_label : Identifier.Label.t -> Component.Label.t -> t -> unboxed:bool -> t
+val add_label :
+  Identifier.Label.t -> Component.Label.t -> t -> unboxed:bool -> t
 
 val add_class : Identifier.Class.t -> Component.Class.t -> t -> t
 
@@ -116,7 +116,7 @@ type 'a scope constraint 'a = [< Component.Element.any ]
 (** Target of a lookup *)
 
 type 'a maybe_ambiguous =
-  ('a, [ `Ambiguous of 'a * 'a list | `Not_found ]) Result.t
+  ('a, [ `Ambiguous of 'a * 'a list | `Not_found ]) result
 
 val lookup_by_name : 'a scope -> string -> t -> 'a maybe_ambiguous
 (** Lookup an element in Env depending on the given [scope]. Return
@@ -165,6 +165,8 @@ val s_fragment_type_parent : Component.Element.fragment_type_parent scope
    Paths_types.Identifier.signature -> Component.Signature.t -> t -> t *)
 
 val add_functor_parameter : Lang.FunctorParameter.t -> t -> t
+
+val add_module_arg : Lang.TypeExpr.Module.t -> t -> t
 
 val open_class_signature : Lang.ClassSignature.t -> t -> t
 

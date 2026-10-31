@@ -3,7 +3,7 @@ Setting environment variables in actions
   $ . ./helpers.sh
 
   $ make_lockdir
-  $ make_lockpkg test <<'EOF'
+  $ cat >dune.lock/test.pkg <<'EOF'
   > (version 0.0.1)
   > (build
   >  (withenv

@@ -1,3 +1,4 @@
+open! Stdune
 include Dune_lang.Package_version
 
 let of_opam_package_version opam_version =

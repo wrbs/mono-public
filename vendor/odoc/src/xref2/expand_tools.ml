@@ -25,7 +25,7 @@ let handle_expansion env id expansion =
         (env', Subst.module_type_expr subst expr)
   in
   let rec expand id env expansion :
-      (Env.t * Component.ModuleType.simple_expansion, _) Result.result =
+      (Env.t * Component.ModuleType.simple_expansion, _) result =
     match expansion with
     | Tools.Signature sg ->
         Ok
@@ -50,21 +50,28 @@ let rec type_expr map t =
   match t with
   | Var v -> (
       try List.assoc v map
-      with _ ->
-        Format.eprintf "Failed to list assoc %s\n%!" v;
-        failwith "bah")
+      with Not_found ->
+        Format.eprintf "Type variable '%s' not found in map [%s]@." v
+          (String.concat ", " (List.map fst map));
+        assert false)
   | Any -> Any
   | Alias (t, s) ->
       if List.mem_assoc s map then raise Clash else Alias (type_expr map t, s)
   | Arrow (l, t1, t2) -> Arrow (l, type_expr map t1, type_expr map t2)
-  | Tuple ts -> Tuple (List.map (fun (l, t) -> l, type_expr map t) ts)
-  | Unboxed_tuple ts -> Unboxed_tuple (List.map (fun (l, t) -> l, type_expr map t) ts)
+  | Tuple ts -> Tuple (List.map (fun (l, ty) -> (l, type_expr map ty)) ts)
+  | Unboxed_tuple ts ->
+      Unboxed_tuple (List.map (fun (l, t) -> (l, type_expr map t)) ts)
   | Constr (p, ts) -> Constr (p, List.map (type_expr map) ts)
   | Polymorphic_variant pv -> Polymorphic_variant (polymorphic_variant map pv)
   | Object o -> Object (object_ map o)
   | Class (path, ts) -> Class (path, List.map (type_expr map) ts)
   | Poly (s, t) -> Poly (s, type_expr map t)
   | Package p -> Package (package map p)
+  | Quote t -> Quote (type_expr map t)
+  | Splice t -> Splice (type_expr map t)
+  | Arrow_functor (l, m_arg, t) ->
+      let m_arg = module_arg map m_arg in
+      Arrow_functor (l, m_arg, type_expr map t)
 
 and polymorphic_variant map pv =
   let open Lang.TypeExpr.Polymorphic_variant in
@@ -93,6 +100,10 @@ and package map p =
   let open Lang.TypeExpr.Package in
   let subst (frag, t) = (frag, type_expr map t) in
   { p with substitutions = List.map subst p.substitutions }
+
+and module_arg map m =
+  let open Lang.TypeExpr.Module in
+  { m with package = package map m.package }
 
 let collapse_eqns eqn1 eqn2 params =
   let open Lang.TypeDecl in

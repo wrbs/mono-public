@@ -3,23 +3,24 @@ Package resolution creating a cycle
   $ . ./helpers.sh
 
   $ make_lockdir
-  $ make_lockpkg a <<EOF
+
+  $ cat >dune.lock/a.pkg <<EOF
   > (version 0.0.1)
   > (depends b)
   > EOF
-  $ make_lockpkg b <<EOF
+  $ cat >dune.lock/b.pkg <<EOF
   > (version 0.0.1)
   > (depends c)
   > EOF
-  $ make_lockpkg c <<EOF
+  $ cat >dune.lock/c.pkg <<EOF
   > (version 0.0.1)
   > (depends a)
   > EOF
 
   $ build_pkg a
-  Error: Dependency cycle between packages:
-     a.0.0.1
-  -> b.0.0.1
-  -> c.0.0.1
-  -> a.0.0.1
+  Error: Dependency cycle between:
+     - package a
+  -> - package c
+  -> - package b
+  -> - package a
   [1]

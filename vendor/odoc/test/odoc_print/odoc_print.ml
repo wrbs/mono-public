@@ -1,7 +1,8 @@
 (** Print .odocl files. *)
 
+open Odoc_utils
+open ResultMonad
 open Odoc_odoc
-open Odoc_odoc.Or_error
 open Odoc_model_desc
 
 let print_json_desc desc x =
@@ -36,7 +37,8 @@ and signature_of_module_type_expr = function
   | TypeOf _ -> None
   | With { w_expansion = Some e; _ } -> Some (signature_of_simple_expansion e)
   | With _ -> None
-  | Strengthen { s_expansion = Some e; _ } -> Some (signature_of_simple_expansion e)
+  | Strengthen { s_expansion = Some e; _ } ->
+      Some (signature_of_simple_expansion e)
   | Strengthen _ -> None
 
 and signature_of_module :

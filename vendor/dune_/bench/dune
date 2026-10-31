@@ -2,14 +2,14 @@
  (name bench)
  (modules bench metrics)
  (libraries
-  dune_trace
+  dune_stats
   dune_console
+  chrome_trace
   stdune
   fiber
   dune_lang
   dune_engine
-  dune_util
-  unix))
+  dune_util))
 
 (rule
  (alias bench)

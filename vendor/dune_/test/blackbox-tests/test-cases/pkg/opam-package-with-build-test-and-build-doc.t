@@ -20,8 +20,8 @@ action.
 
 This is currently not the case. 
 
-  $ cat ${default_lock_dir}/with-build-test-doc.0.0.1.pkg 
+  $ cat dune.lock/with-build-test-doc.pkg 
   (version 0.0.1)
   
   (build
-   (all_platforms ((action (run echo Building)))))
+   (run echo Building))

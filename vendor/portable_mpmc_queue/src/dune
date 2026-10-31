@@ -1,0 +1,6 @@
+(library
+ (name portable_mpmc_queue)
+ (public_name portable_mpmc_queue)
+ (libraries base portable.adaptive_backoff portable.common portable.kernel)
+ (preprocess
+  (pps ppx_jane -compare-require-explicit-locality)))

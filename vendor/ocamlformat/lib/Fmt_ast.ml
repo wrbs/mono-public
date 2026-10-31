@@ -1,13 +1,13 @@
-(**************************************************************************)
-(*                                                                        *)
-(*                              OCamlFormat                               *)
-(*                                                                        *)
-(*            Copyright (c) Facebook, Inc. and its affiliates.            *)
-(*                                                                        *)
-(*      This source code is licensed under the MIT license found in       *)
-(*      the LICENSE file in the root directory of this source tree.       *)
-(*                                                                        *)
-(**************************************************************************)
+(**************************************************************************
+ *                                                                        *
+ *                              OCamlFormat                               *
+ *                                                                        *
+ *            Copyright (c) Facebook, Inc. and its affiliates.            *
+ *                                                                        *
+ *      This source code is licensed under the MIT license found in       *
+ *      the LICENSE file in the root directory of this source tree.       *
+ *                                                                        *
+ **************************************************************************)
 
 (** Format OCaml Ast *)
 
@@ -424,13 +424,15 @@ let fmt_parsed_docstring c ~loc ?pro ~epi input parsed =
     pos.pos_cnum - pos.pos_bol + 3
   and fmt_code = c.fmt_code in
   let doc =
-    if
-      c.conf.fmt_opts.parse_docstrings.v
-      && String.for_all ~f:Char.is_whitespace input
-    then noop
-    else
-      Fmt_odoc.fmt_parsed c.conf ~actually_a_doc_comment:true ~fmt_code
-        ~offset ~input parsed
+    match input with
+    | "/*" ->
+        (* Special-case the form that toggles odoc: [(**/**)] *) str input
+    | _ ->
+        if
+          c.conf.fmt_opts.parse_docstrings.v
+          && String.for_all ~f:Char.is_whitespace input
+        then noop
+        else Fmt_odoc.fmt_parsed c.conf ~fmt_code ~offset ~input parsed
   in
   let closing_space =
     match parsed with
@@ -1280,6 +1282,11 @@ and fmt_core_type c ?(box = true) ?pro ?(pro_space = true) ?constraint_ctx
            ( fmt "type"
            $ fmt_jkind_constr ~ctx:(Typ typ) c {txt= jk; loc= typ.ptyp_loc}
            ) )
+  | Ptyp_quote t ->
+      wrap_fits_breaks c.conf "<[" "]>" (fmt_core_type c (sub_typ ~ctx t))
+  | Ptyp_splice t ->
+      fmt "$"
+      $ wrap_fits_breaks c.conf "(" ")" (fmt_core_type c (sub_typ ~ctx t))
 
 and fmt_labeled_tuple_type c lbl xtyp =
   match lbl with
@@ -1369,6 +1376,8 @@ and fmt_pattern ?ext c ?pro ?parens ?(box = false)
                      (Std_longident.String_id.is_symbol txt)
                      "( " " )" (str txt) ) ) ) )
   | Ppat_constant const -> fmt_constant c const
+  | Ppat_unboxed_unit -> str "#()"
+  | Ppat_unboxed_bool b -> str (if b then "#true" else "#false")
   | Ppat_interval (l, u) -> fmt_constant c l $ str " .. " $ fmt_constant c u
   | Ppat_tuple (pats, oc) | Ppat_unboxed_tuple (pats, oc) ->
       let unboxed =
@@ -2185,6 +2194,38 @@ and fmt_match c ?pro ~parens ?ext ctx xexp cs e0 keyword =
              $ fmt "@ with" )
          $ fmt "@ " $ fmt_cases c ctx cs ) )
 
+and fmt_block_access c ctx ba =
+  match ba with
+  | Baccess_field lid -> str "." $ fmt_longident_loc c lid
+  | Baccess_array (mut, idx, expr) ->
+      let dot =
+        match mut with Mutable _ -> str "." | Immutable -> str ".:"
+      in
+      let suff =
+        match idx with
+        | Index_int -> noop
+        | Index_unboxed_int64 -> str "L"
+        | Index_unboxed_int32 -> str "l"
+        | Index_unboxed_int16 -> str "S"
+        | Index_unboxed_int8 -> str "s"
+        | Index_unboxed_nativeint -> str "n"
+      in
+      hvbox 0
+        ( dot $ suff
+        $ Params.parens c.conf
+            (fmt "@;<0 0>" $ fmt_expression c (sub_exp ~ctx expr)) )
+  | Baccess_block (mut, expr) ->
+      let dot =
+        match mut with
+        | Mutable _ -> str ".idx_mut"
+        | Immutable -> str ".idx_imm"
+      in
+      dot $ Params.parens c.conf (fmt_expression c (sub_exp ~ctx expr))
+
+and fmt_unboxed_access c ua =
+  match ua with
+  | Uaccess_unboxed_field lid -> str ".#" $ fmt_longident_loc c lid
+
 and fmt_expression c ?(box = true) ?(pro = noop) ?eol ?parens
     ?(indent_wrap = 0) ?ext ({ast= exp; ctx= ctx0} as xexp) =
   protect c (Exp exp)
@@ -2482,6 +2523,13 @@ and fmt_expression c ?(box = true) ?(pro = noop) ?eol ?parens
              ( Params.Exp.wrap c.conf ~parens:has_attr
                  (fmt "stack_@ " $ fmt_expression c ~box (sub_exp ~ctx e))
              $ fmt_atrs ) )
+  | Pexp_borrow e ->
+      pro
+      $ hvbox 2
+          (Params.Exp.wrap c.conf ~parens
+             ( Params.Exp.wrap c.conf ~parens:has_attr
+                 (fmt "borrow_@ " $ fmt_expression c ~box (sub_exp ~ctx e))
+             $ fmt_atrs ) )
   | Pexp_apply (e0, e1N1) -> (
       let wrap =
         if c.conf.fmt_opts.wrap_fun_args.v then Fn.id else hvbox 2
@@ -2647,6 +2695,15 @@ and fmt_expression c ?(box = true) ?(pro = noop) ?eol ?parens
                     (sub_exp ~ctx >> fmt_expression c)
                     p pexp_loc )
              $ fmt_atrs ) )
+  | Pexp_idx (ba, uas) ->
+      pro
+      $ hvbox_if has_attr 2
+          ( Params.parens c.conf
+              (hvbox 0
+                 ( fmt_block_access c (Exp exp) ba
+                 $ fmt_if (not (List.is_empty uas)) "@;<0 0>"
+                 $ list uas "@;<0 0>" (fmt_unboxed_access c) ) )
+          $ fmt_atrs )
   | Pexp_list e1N ->
       let p = Params.get_list_expr c.conf in
       let offset =
@@ -2686,7 +2743,28 @@ and fmt_expression c ?(box = true) ?(pro = noop) ?eol ?parens
           (parens || not (List.is_empty pexp_attributes))
           c.conf
           (fmt_constant c const $ fmt_atrs)
-  | Pexp_constraint (_, None, _) -> assert false
+  | Pexp_unboxed_unit ->
+      pro
+      $ Params.parens_if
+          (parens || not (List.is_empty pexp_attributes))
+          c.conf
+          (str "#()" $ fmt_atrs)
+  | Pexp_unboxed_bool b ->
+      pro
+      $ Params.parens_if
+          (parens || not (List.is_empty pexp_attributes))
+          c.conf
+          (str (if b then "#true" else "#false") $ fmt_atrs)
+  | Pexp_constraint (e, None, modes) ->
+      pro
+      $ hvbox
+          (Params.Indent.exp_constraint c.conf)
+          (Params.parens_if (parens && has_attr) c.conf
+             ( wrap_fits_breaks ~space:false c.conf "(" ")"
+                 ( fmt_expression c (sub_exp ~ctx e)
+                 $ fmt "@ :"
+                 $ fmt_modals c (Modes modes) )
+             $ fmt_atrs ) )
   | Pexp_constraint (e, Some t, modes) ->
       pro
       $ hvbox
@@ -3346,6 +3424,23 @@ and fmt_expression c ?(box = true) ?(pro = noop) ?eol ?parens
       pro $ fmt_indexop_access c ctx ~fmt_atrs ~has_attr ~parens x
   | Pexp_poly _ ->
       impossible "only used for methods, handled during method formatting"
+  | Pexp_quote expr ->
+      pro
+      $ hvbox 0
+          (Params.Exp.wrap c.conf ~parens
+             ( wrap_fits_breaks ~space:true c.conf "<[" "]>"
+                 (fmt_expression c ~box ?eol ~parens:false ~indent_wrap ?ext
+                    (sub_exp ~ctx expr) )
+             $ fmt_atrs ) )
+  | Pexp_splice expr ->
+      pro
+      $ hvbox 0
+          ( Params.Exp.wrap c.conf ~parens
+              ( Cmts.fmt c pexp_loc
+              @@ hvbox 2
+                   ( str "$"
+                   $ fmt_expression ~parens:true c (sub_exp ~ctx expr) ) )
+          $ fmt_atrs )
   | Pexp_hole -> pro $ hvbox 0 (fmt_hole () $ fmt_atrs)
   | Pexp_beginend e ->
       let wrap_beginend k =
@@ -5413,10 +5508,22 @@ let fmt_toplevel_directive c ~semisemi dir =
   in
   Cmts.fmt c pdir_loc (box_semisemi c ~parent_ctx:Top semisemi (name $ args))
 
+let fmt_lexer_directive c ~semisemi l =
+  let toggle_to_string = function true -> "on" | false -> "off" in
+  let fmt_lexer_arg l =
+    match l.plex_desc with
+    | Plex_syntax {psyn_mode; psyn_toggle} ->
+        str
+          (Printf.sprintf "#syntax %s %s" psyn_mode.txt
+             (toggle_to_string psyn_toggle) )
+  in
+  box_semisemi c ~parent_ctx:Top semisemi (fmt_lexer_arg l)
+
 let flatten_ptop =
   List.concat_map ~f:(function
     | Ptop_def items -> List.map items ~f:(fun i -> `Item i)
-    | Ptop_dir d -> [`Directive d] )
+    | Ptop_dir d -> [`Directive d]
+    | Ptop_lex l -> [`Lexer l] )
 
 let fmt_toplevel ?(force_semisemi = false) c ctx itms =
   let itms = flatten_ptop itms in
@@ -5436,6 +5543,7 @@ let fmt_toplevel ?(force_semisemi = false) c ctx itms =
     match itm with
     | `Item i -> fmt_structure_item c ~last ~semisemi (sub_str ~ctx i)
     | `Directive d -> fmt_toplevel_directive c ~semisemi d
+    | `Lexer l -> fmt_lexer_directive c ~semisemi l
   in
   let ast x = Tli x in
   fmt_item_list c ctx update_config ast fmt_item itms

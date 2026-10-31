@@ -1,0 +1,7 @@
+(library
+ (name ppx_sexp_digest)
+ (public_name ppx_sexp_digest)
+ (kind ppx_rewriter)
+ (libraries base ppx_sexp_digest_expander ppxlib)
+ (preprocess
+  (pps ppx_jane -compare-require-explicit-locality)))

@@ -202,6 +202,8 @@ and core_type_desc =
          *)
   | Ptyp_package of package_type  (** [(module S)]. *)
   | Ptyp_open of Longident.t loc * core_type (** [M.(T)] *)
+  | Ptyp_quote of core_type (** [<[T]>] *)
+  | Ptyp_splice of core_type (** [$T] *)
   | Ptyp_of_kind of jkind_annotation (** [(type : k)] *)
   | Ptyp_extension of extension  (** [[%id]]. *)
 
@@ -282,6 +284,8 @@ and pattern_desc =
           - If Closed, [n >= 2].
           - If Open, [n >= 1].
         *)
+  | Ppat_unboxed_unit  (** [#()] *)
+  | Ppat_unboxed_bool of bool  (** [#false] or [#true] *)
   | Ppat_unboxed_tuple of (string option * pattern) list * Asttypes.closed_flag
       (** Unboxed tuple patterns: [#(l1:P1, ..., ln:Pn)] is [([(Some
           l1,P1);...;(Some l2,Pn)], Closed)], and the labels are optional.  An
@@ -417,6 +421,8 @@ and expression_desc =
 
            Invariant: [n >= 2]
         *)
+  | Pexp_unboxed_unit  (** [#()] *)
+  | Pexp_unboxed_bool of bool  (** [#false] or [#true] *)
   | Pexp_unboxed_tuple of (string option * expression) list
       (** Unboxed tuple expressions: [Pexp_unboxed_tuple([(Some l1,P1);...;(Some
           l2,Pn)])] represents [#(l1:E1, ..., ln:En)], and the labels are
@@ -455,6 +461,9 @@ and expression_desc =
       (** [E1.l <- E2] *)
   | Pexp_array of mutable_flag * expression list
       (** [[| E1; ...; En |]] or [[: E1; ...; En :]] *)
+  | Pexp_idx of block_access * unboxed_access list
+      (** [(BA1 UA1 UA2 ...)] e.g. [(.foo.#bar.#baz)]
+          Above, BA1=.foo, UA1=.#bar, and UA2=#.baz *)
   | Pexp_ifthenelse of expression * expression * expression option
       (** [if E1 then E2 else E3] *)
   | Pexp_sequence of expression * expression  (** [E1; E2] *)
@@ -515,6 +524,7 @@ and expression_desc =
   | Pexp_extension of extension  (** [[%id]] *)
   | Pexp_unreachable  (** [.] *)
   | Pexp_stack of expression (** stack_ exp *)
+  | Pexp_borrow of expression (** borrow_ exp *)
   | Pexp_comprehension of comprehension_expression
     (** [[? BODY ...CLAUSES... ?]], where:
           - [?] is either [""] (list), [:] (immutable array), or [|] (array).
@@ -523,6 +533,8 @@ and expression_desc =
     *)
   | Pexp_overwrite of expression * expression (** overwrite_ exp with exp *)
   | Pexp_hole (** _ *)
+  | Pexp_quote of expression (** runtime metaprogramming quotations <[E]> *)
+  | Pexp_splice of expression (** runtime metaprogramming splicing $(E) *)
 
 and case =
     {
@@ -628,6 +640,24 @@ and function_constraint =
     (** The type constraint placed on a function's body. *)
   }
 (** See the comment on {{!expression_desc.Pexp_function}[Pexp_function]}. *)
+
+and block_access =
+  | Baccess_field of Longident.t loc
+      (** [.foo] *)
+  | Baccess_array of mutable_flag * index_kind * expression
+      (** Mutable array accesses: [.(E)], [.L(E)], [.l(E)], [.n(E)]
+          Immutable array accesses: [.:(E)], [.:L(E)], [.:l(E)], [.:n(E)]
+
+          Indexed by [int], [int64#], [int32#], or [nativeint#], respectively.
+      *)
+  | Baccess_block of mutable_flag * expression
+      (** Access using another block index: [.idx_imm(E)], [.idx_mut(E)]
+          (usually followed by unboxed accesses, to deepen the index).
+      *)
+
+and unboxed_access =
+  | Uaccess_unboxed_field of Longident.t loc
+      (** [.#foo] *)
 
 and comprehension_iterator =
   | Pcomp_range of
@@ -1223,7 +1253,7 @@ and module_expr_desc =
       (** [Foo(Param1)(Arg1(Param2)(Arg2)) [@jane.non_erasable.instances]]
 
           The name of an instance module. Gets converted to [Global.Name.t] in
-          the flambda-backend compiler. *)
+          the OxCaml compiler. *)
   | Pmod_hole (** [_] *)
 
 and module_instance =

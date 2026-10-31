@@ -60,9 +60,13 @@ module Var : sig
 
   val get_name : t -> string option
 
-  val set_name : t -> string -> unit
+  val set_name : t -> ?generated:bool -> string -> unit
+
+  val generated_name : t -> bool
 
   val propagate_name : t -> t -> unit
+
+  val forget_generated_name : t -> unit
 
   val reset : unit -> unit
 

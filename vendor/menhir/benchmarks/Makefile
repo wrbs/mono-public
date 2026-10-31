@@ -1,9 +1,9 @@
 .PHONY: all
 all: prepare
 # These preparations can be performed in parallel.
-	dune build --profile=release @executables @sentences
+	dune build @executables @sentences
 # The benchmark itself must be run sequentially.
-	dune build --profile=release @benchmark --force -j 1
+	dune build @benchmark --force -j 1
 
 .PHONY: prepare
 prepare:

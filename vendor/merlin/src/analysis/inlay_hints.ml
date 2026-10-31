@@ -13,7 +13,7 @@ let pattern_has_constraint (type a) (pattern : a Typedtree.general_pattern) =
       | Typedtree.Tpat_constraint _ -> true
       | Typedtree.Tpat_type (_, _)
       | Typedtree.Tpat_open (_, _, _)
-      | Typedtree.Tpat_unpack -> false)
+      | Typedtree.Tpat_unpack | Typedtree.Tpat_inspected_type _ -> false)
     pattern.pat_extra
 
 let structure_iterator hint_let_binding hint_pattern_binding
@@ -137,7 +137,7 @@ type hint = Lexing.position * string
 let create_hint env typ loc =
   let label =
     Printtyp.wrap_printing_env env (fun () ->
-        Format.asprintf "%a" Printtyp.type_scheme typ)
+        Format_doc.asprintf "%a" Printtyp.type_scheme typ)
   in
   let position = loc.Location.loc_end in
   (position, label)
@@ -161,7 +161,7 @@ let of_structure ~hint_let_binding ~hint_pattern_binding ~avoid_ghost_location
           log ~title:"hint" "Find hint %a" Logger.fmt (fun fmt ->
               Format.fprintf fmt "%s - %a"
                 (Location_aux.print () loc)
-                Printtyp.type_expr typ)
+                Printtyp.Compat.type_expr typ)
         in
         let hint = create_hint env typ loc in
         hints := hint :: !hints)

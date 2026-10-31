@@ -1,0 +1,26 @@
+(library
+ (name browser_extra)
+ (public_name browser.extra)
+ (libraries browser_js_types browser_types js_of_ocaml)
+ (preprocess
+  (pps js_of_ocaml-ppx)))
+
+(rule
+ (deps
+  (:first_dep event_type.ml)
+  %{workspace_root}/bin/apply-style
+  %{workspace_root}/lib/browser/bin/main.exe)
+ (action
+  (bash
+    "%{workspace_root}/lib/browser/bin/main.exe gen-event-types -file-type ml -filtered -file-path %{first_dep}"))
+ (alias runtest))
+
+(rule
+ (deps
+  (:first_dep event_type.mli)
+  %{workspace_root}/bin/apply-style
+  %{workspace_root}/lib/browser/bin/main.exe)
+ (action
+  (bash
+    "%{workspace_root}/lib/browser/bin/main.exe gen-event-types -file-type mli -filtered -file-path %{first_dep}"))
+ (alias runtest))

@@ -1,0 +1,7 @@
+(library
+ (name hardcaml_lws)
+ (public_name hardcaml_lws)
+ (preprocess
+  (pps ppx_jane))
+ (libraries core handled_effect hardcaml hardcaml_event_driven_sim
+   hardcaml_verilator hardcaml_waveterm hardcaml_waveterm.kernel unique vec))

@@ -50,6 +50,28 @@
   (pps ppx_expect)))
 
 (library
+ (name jsoo_testsuite_ugeint)
+ (modules test_ugeint)
+ (libraries unix compiler-libs.common js_of_ocaml-compiler)
+ (enabled_if %{oxcaml_supported})
+ (inline_tests
+  (modes js wasm best))
+ (preprocess
+  (pps ppx_expect)))
+
+(rule
+ ; Guard against future OxCaml changes peepholing UGEINT away the same
+ ; way vanilla ocamlc does. If this rule fails, [test_ugeint] still
+ ; passes its assertions but no longer exercises the UGEINT code path
+ ; in [parse_bytecode.ml], and the regression coverage is gone.
+ (alias runtest)
+ (enabled_if %{oxcaml_supported})
+ (deps ugeint_bytecode_probe.ml)
+ (action
+  (bash
+   "ocamlc %{deps} -o probe.bc && dumpobj probe.bc | grep -qE '^[[:space:]]*[0-9]+[[:space:]]+UGEINT'")))
+
+(library
  (name jsoo_testsuite_float32)
  (modules test_marshal_float32)
  (libraries unix compiler-libs.common js_of_ocaml-compiler)
@@ -68,10 +90,19 @@
    test_floats
    test_float16
    test_bigarray
+   test_list_of_js_array
    test_marshal_compressed
    test_marshal_float32
    test_marshal_float32_js
    test_parsing
+   test_ugeint
+   ugeint_bytecode_probe
+   test_runtime_value
+   test_custom_name
+   test_text_codec_fallback
+   test_unix
+   test_promise
+   test_lwt_promise
    calc_parser
    calc_lexer))
  (libraries unix compiler-libs.common js_of_ocaml-compiler)
@@ -83,12 +114,87 @@
  (preprocess
   (pps ppx_expect)))
 
+; test_unix exercises [Unix.access] / [Unix.chmod] semantics that the
+; QuickJS shim only approximates, so it lives in its own library that's
+; disabled under the quickjs profile.
+
+(library
+ (name jsoo_testsuite_unix)
+ (enabled_if
+  (<> %{profile} quickjs))
+ (modules test_unix)
+ (libraries unix compiler-libs.common js_of_ocaml-compiler)
+ (inline_tests
+  (modes js wasm best))
+ (preprocess
+  (pps ppx_expect)))
+
 (test
  (name test_float16)
  (build_if
   (>= %{ocaml_version} 5.2))
  (modules test_float16 test_bigarray)
  (modes js wasm native))
+
+(test
+ (name test_runtime_value)
+ (modules test_runtime_value)
+ (libraries js_of_ocaml)
+ (js_of_ocaml
+  (javascript_files custom.js))
+ (wasm_of_ocaml
+  (javascript_files custom.js custom.wat))
+ (modes js wasm))
+
+(test
+ (name test_promise)
+ (modules test_promise)
+ (libraries js_of_ocaml)
+ (modes js wasm)
+ (preprocess
+  (pps ppx_js_internal)))
+
+(test
+ (name test_lwt_promise)
+ (package js_of_ocaml-lwt)
+ (modules test_lwt_promise)
+ (libraries js_of_ocaml js_of_ocaml-lwt lwt)
+ (modes js wasm)
+ (preprocess
+  (pps ppx_js_internal)))
+
+(library
+ (name test_custom_name)
+ (modules test_custom_name)
+ (inline_tests
+  (modes js wasm))
+ (libraries js_of_ocaml)
+ (preprocess
+  (pps ppx_expect)))
+
+; The TextEncoder/TextDecoder fallbacks in [runtime/js/mlBytes.js] are
+; cross-checked against the host Web Encoding API. That only works on
+; hosts that provide TextEncoder/TextDecoder, so skip under quickjs.
+
+(library
+ (name test_text_codec_fallback)
+ (enabled_if
+  (<> %{profile} quickjs))
+ (modules test_text_codec_fallback)
+ (inline_tests
+  (modes js))
+ (libraries js_of_ocaml)
+ (preprocess
+  (pps js_of_ocaml-ppx ppx_expect)))
+
+(library
+ (name test_list_of_js_array)
+ (modules test_list_of_js_array)
+ (inline_tests
+  (modes js wasm))
+ (libraries js_of_ocaml)
+ (preprocess
+  (pps ppx_expect)))
 
 (ocamlyacc calc_parser)
 

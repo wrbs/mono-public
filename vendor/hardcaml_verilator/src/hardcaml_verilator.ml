@@ -8,7 +8,6 @@ module Unix = Core_unix
 module Optimization_level = Optimization_level
 module Threads = Threads
 module Output_split = Output_split
-module Verilator_version = Verilator_version
 module Config = Config
 
 module Cache = struct
@@ -109,9 +108,11 @@ let eval_name ~circuit_name = sprintf "hardcaml_verilator_%s_eval" circuit_name
 
 (* This is obtained based on an empirical observation of verilator generated outputs. *)
 let sanitize_port_name port_name =
-  port_name
-  |> String.substr_replace_all ~pattern:"__" ~with_:"___05F"
-  |> String.substr_replace_all ~pattern:"$" ~with_:"__024"
+  let port_name = String.substr_replace_all port_name ~pattern:"__" ~with_:"___05F" in
+  String.concat_map port_name ~f:(fun c ->
+    if Char.is_alphanum c || Char.equal c '_'
+    then String.of_char c
+    else sprintf "__%03X" (Char.to_int c))
 ;;
 
 let input_addr_fn_name ~circuit_name ~port_name =
@@ -126,11 +127,7 @@ let internal_addr_fn_name ~circuit_name =
   sprintf "hardcaml_verilator_%s_internal_variable_lookup_addr" circuit_name
 ;;
 
-let internal_signals
-  ?(verilog_name_by_id : Rtl.Ast.Signals_name_map.t option)
-  circuit
-  (config : Cyclesim.Config.t)
-  =
+let internal_signals circuit (config : Cyclesim.Config.t) =
   match config.is_internal_port with
   | None -> []
   | Some f ->
@@ -144,17 +141,23 @@ let internal_signals
     |> List.filter_map ~f:(fun signal ->
       match Signal.names signal with
       | [] -> None (* only use named internal signals *)
-      | names ->
-        let uid = Signal.uid signal in
-        let names =
-          match verilog_name_by_id with
-          | None -> names
-          | Some verilog_name_by_id ->
-            List.mapi names ~f:(fun idx _ ->
-              let lookup = uid, idx in
-              Map.find_exn verilog_name_by_id lookup)
-        in
-        Some (signal, names))
+      | names -> Some (signal, names))
+;;
+
+let internal_signals_with_verilog_names
+  circuit
+  (config : Cyclesim.Config.t)
+  ~(verilog_name_by_id : Rtl.Ast.Signals_name_map.t)
+  =
+  internal_signals circuit config
+  |> List.map ~f:(fun (signal, names) ->
+    let uid = Signal.uid signal in
+    let names =
+      List.mapi names ~f:(fun idx _ ->
+        let lookup = uid, idx in
+        Map.find_exn verilog_name_by_id lookup)
+    in
+    signal, names)
 ;;
 
 let[@inline always] ceil_div a b = if a % b = 0 then a / b else (a / b) + 1
@@ -169,15 +172,11 @@ let with_tmp_stdout ~verbose ~f =
   Option.iter tmp_stdout ~f:Unix.unlink
 ;;
 
-let path_with_required_system_tools () =
-  let path = Sys.getenv "PATH" |> Option.value ~default:"" in
-  let tools =
-    [ "python3"; "ccache" ]
-    |> List.map ~f:(fun tool -> Filename.dirname tool)
-    |> String.concat ~sep:":"
-  in
-  [%string "%{path}:%{tools}"]
-;;
+(* [wrap_command_with_path_required_to_system_tools] is expected to be an identity
+   function in public release. The jane street internal version appends the $PATH variable
+   with path to some tools used in the verilator compilation.
+*)
+let wrap_command_with_path_required_to_system_tools command = command
 
 let run_command_exn ?(verbose = false) command =
   with_tmp_stdout ~verbose ~f:(fun tmp_stdout ->
@@ -187,8 +186,7 @@ let run_command_exn ?(verbose = false) command =
       | Some tmp_stdout -> [%string "%{command} &>%{tmp_stdout}"]
       | None -> command
     in
-    let path = path_with_required_system_tools () in
-    let command = [%string "PATH=\"%{path}\" %{command}"] in
+    let command = wrap_command_with_path_required_to_system_tools command in
     match Unix.system command with
     | Ok () -> ()
     | Error e ->
@@ -219,7 +217,9 @@ let generate_cpp_wrapper
       #include "V%{circuit_name}.h"
 
     |}];
-  let internal_signals = internal_signals circuit config ~verilog_name_by_id in
+  let internal_signals =
+    internal_signals_with_verilog_names circuit config ~verilog_name_by_id
+  in
   if List.length internal_signals > 0
   then
     add_string
@@ -288,7 +288,11 @@ let generate_cpp_wrapper
           char *%{internal_addr_fn_name ~circuit_name}(%{typ} *ptr, char *p) {
             V%{circuit_name}_%{circuit_name} *%{circuit_name} = ptr->%{circuit_name};
             V%{circuit_name}__Syms* vlSymsp = %{circuit_name}->vlSymsp;
+#if VERILATOR_VERSION_INTEGER >= 5044000
+            VerilatedVar *var = vlSymsp->__Vscopep_%{circuit_name}->varFind(p);
+#else
             VerilatedVar *var = vlSymsp->__Vscope_%{circuit_name}.varFind(p);
+#endif
 
             if (var != NULL) {
               return (char *)var->datap();
@@ -382,12 +386,10 @@ let copy_to_bytes_from_bigstring ~bit_width ~src =
         ~len:num_bytes)
 ;;
 
-let create_foreign_bindings
-  ?from
-  ~verbose
-  (circuit : Circuit.t)
-  (internal_signals : (Signal.t * string list) list)
-  =
+let backend_name name = Rtl.Name.For_backend.to_string name
+let backend_agnostic_name name = Rtl.Name.For_backend.backend_agnostic_string name
+
+let create_foreign_bindings ?from ~verbose (circuit : Circuit.t) internal_signals =
   let circuit_name = Circuit.name circuit in
   let verilator_ptr =
     foreign ?from (init_name ~circuit_name) (void @-> returning (ptr verilator_t)) ()
@@ -565,9 +567,10 @@ let create_foreign_bindings
     let signals_and_names = internal_signals in
     List.map signals_and_names ~f:(fun (signal, port_names) ->
       (* Only use the getter for the first alias *)
+      let port_names = List.map port_names ~f:backend_name in
       let port_name = List.hd_exn port_names in
       match signal with
-      | Multiport_mem { size; _ } ->
+      | Signal.Type.Multiport_mem { size; _ } ->
         memory_mutable_getters signal ~size ~port_name ~aliases:port_names
       | _ -> bits_mutable_getters signal ~port_name ~aliases:port_names)
   in
@@ -716,7 +719,7 @@ let compile_circuit_with_cache
          check_cached_and_compile ~raise_if_not_found:false file_name)
     , verilog_name_by_id )
   in
-  shared_lib, internal_signals ~verilog_name_by_id circuit config
+  shared_lib, internal_signals_with_verilog_names ~verilog_name_by_id circuit config
 ;;
 
 let compile_circuit_and_load_shared_object
@@ -746,11 +749,11 @@ type internal_memory =
   ; size : int
   }
 
-let find_internal_memories (internal_signals : (Signal.t * string list) list) =
+let find_internal_memories internal_signals =
   List.filter_map internal_signals ~f:(fun (s, names) ->
     match s with
-    | Multiport_mem { size; _ } ->
-      Some (List.map names ~f:(fun n -> { name = n; signal = s; size }))
+    | Signal.Type.Multiport_mem { size; _ } ->
+      Some (List.map names ~f:(fun n -> { name = backend_name n; signal = s; size }))
     | _ -> None)
   |> List.concat
 ;;
@@ -784,6 +787,13 @@ let make_read_memories (handle : t) ~ports_and_memories:{ internal_memories; _ }
     match getter with
     | Memory { unsafe_get64 } -> unsafe_get64
     | Signal _ -> raise_s [%message "BUG: expected memory"])
+;;
+
+let infer_clock_names circuit =
+  Signal_graph.resolve_clock_domains (Circuit.signal_graph circuit)
+  |> Map.data
+  |> List.concat_map ~f:(Option.value_map ~default:[] ~f:Signal.names)
+  |> List.dedup_and_sort ~compare:String.compare
 ;;
 
 let make_cycle_functions
@@ -860,6 +870,7 @@ let make_traced circuit internal_signals =
   ; output_ports = List.map (Circuit.outputs circuit) ~f:Cyclesim.Traced.to_io_port
   ; internal_signals =
       List.map internal_signals ~f:(fun (signal, names) ->
+        let names = List.map names ~f:backend_agnostic_name in
         { Cyclesim.Traced.signal; mangled_names = names })
   }
 ;;
@@ -959,10 +970,15 @@ let create
   ?build_dir
   ?(verilator_config = Config.from_env)
   ?(config = Cyclesim.Config.default)
-  ~clock_names
+  ?clock_names
   circuit
   =
-  let shared_object, (internal_signals : (Signal.t * string list) List.t) =
+  let clock_names =
+    match clock_names with
+    | Some clock_names -> clock_names
+    | None -> infer_clock_names circuit
+  in
+  let shared_object, internal_signals =
     compile_circuit_with_cache ?cache ?build_dir ~verilator_config ~config circuit
   in
   let ports_and_memories = make_ports_and_memories circuit internal_signals in
@@ -1026,7 +1042,7 @@ module With_interface (I : Hardcaml.Interface.S) (O : Hardcaml.Interface.S) = st
     shared_lib
   ;;
 
-  let create ?cache ?build_dir ?verilator_config ?config ~clock_names create_fn =
+  let create ?cache ?build_dir ?verilator_config ?config ?clock_names create_fn =
     let circuit = Circuit.create_exn ~name:"simulation" create_fn in
     let ignore_missing_fields t_list ~of_alist list =
       List.map t_list ~f:(fun (n, w) ->
@@ -1036,7 +1052,7 @@ module With_interface (I : Hardcaml.Interface.S) (O : Hardcaml.Interface.S) = st
       |> of_alist
     in
     Cyclesim.Private.coerce
-      (create ?cache ?build_dir ?verilator_config ?config ~clock_names circuit)
+      (create ?cache ?build_dir ?verilator_config ?config ?clock_names circuit)
       ~to_input:
         (ignore_missing_fields
            (I.to_list I.port_names_and_widths)

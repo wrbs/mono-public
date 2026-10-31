@@ -1,0 +1,7 @@
+(library
+ (name base_yojson)
+ (public_name base_yojson)
+ (libraries base yojson ppx_yojson_conv_lib)
+ (preprocess
+  (pps ppx_sexp_conv))
+ (library_flags -linkall))

@@ -2,7 +2,7 @@
  * curl.mli
  *
  * Copyright (c) 2003-2008, Lars Nilsson, <lars@quantumchamaeleon.com>
- * Copyright (c) 2009, ygrek, <ygrek@autistici.org>
+ * Copyright (c) 2009, <root@ygrek.org>
  *)
 
 (** libcurl wrapper *)
@@ -94,6 +94,26 @@ type curlCode =
   | CURLE_SSH
   | CURLE_SSL_SHUTDOWN_FAILED
   | CURLE_AGAIN
+  | CURLE_SSL_CRL_BADFILE
+  | CURLE_SSL_ISSUER_ERROR
+  | CURLE_FTP_PRET_FAILED
+  | CURLE_RTSP_CSEQ_ERROR
+  | CURLE_RTSP_SESSION_ERROR
+  | CURLE_FTP_BAD_FILE_LIST
+  | CURLE_CHUNK_FAILED
+  | CURLE_NO_CONNECTION_AVAILABLE
+  | CURLE_SSL_PINNEDPUBKEYNOTMATCH
+  | CURLE_SSL_INVALIDCERTSTATUS
+  | CURLE_HTTP2_STREAM
+  | CURLE_RECURSIVE_API_CALL
+  | CURLE_AUTH_ERROR
+  | CURLE_HTTP3
+  | CURLE_QUIC_CONNECT_ERROR
+  | CURLE_PROXY
+  | CURLE_SSL_CLIENTCERT
+  | CURLE_UNRECOVERABLE_POLL
+  | CURLE_TOO_LARGE
+  | CURLE_ECH_REQUIRED
 
 exception CurlException of (curlCode * int * string)
 
@@ -144,6 +164,10 @@ type curlSSLVersion =
   | SSLVERSION_TLSv1_1 (** Added in libcurl 7.34.0, will request TLSv1.x in previous versions *)
   | SSLVERSION_TLSv1_2 (** Added in libcurl 7.34.0, will request TLSv1.x in previous versions *)
   | SSLVERSION_TLSv1_3 (** Added in libcurl 7.52.0, will request TLSv1.x in previous versions *)
+  | SSLVERSION_MAX_TLSv1_0 (** Added in libcurl 7.54.0 *)
+  | SSLVERSION_MAX_TLSv1_1 (** Added in libcurl 7.54.0 *)
+  | SSLVERSION_MAX_TLSv1_2 (** Added in libcurl 7.54.0 *)
+  | SSLVERSION_MAX_TLSv1_3 (** Added in libcurl 7.54.0 *)
 
 type curlTimeCondition =
   | TIMECOND_NONE (** since 0.6.1 *)
@@ -248,12 +272,24 @@ type curlSeek =
   | SEEK_END
 
 type curlProxyType =
-  | CURLPROXY_HTTP
+  | CURLPROXY_HTTP (** since libcurl 7.10 *)
   | CURLPROXY_HTTP_1_0 (** since libcurl 7.19.4 *)
   | CURLPROXY_SOCKS4 (** since libcurl 7.15.2 *)
-  | CURLPROXY_SOCKS5
+  | CURLPROXY_SOCKS5 (** since libcurl 7.10 *)
   | CURLPROXY_SOCKS4A (** since libcurl 7.18.0 *)
   | CURLPROXY_SOCKS5_HOSTNAME (** since libcurl 7.18.0 *)
+  | CURLPROXY_HTTPS (** since libcurl 7.52.0 *)
+  | CURLPROXY_HTTPS2 (** since libcurl 8.1.0 *)
+
+type curlSockType =
+  | CURLSOCKTYPE_IPCXN
+
+type curlSockAddr = {
+  family: Unix.socket_domain;
+  socktype: Unix.socket_type;
+  protocol: int;
+  address: Unix.sockaddr;
+}
 
 type data_source =
   | String of string (** Equivalent to `CURLMIME_DATA` *)
@@ -479,6 +515,7 @@ type curlOption =
   | CURLOPT_SEEKFUNCTION of (int64 -> curlSeek -> curlSeekResult)
   | CURLOPT_AUTOREFERER of bool
   | CURLOPT_OPENSOCKETFUNCTION of (Unix.file_descr -> unit)
+  | CURLOPT_OPENSOCKETFUNCTION2 of (curlSockType -> curlSockAddr -> Unix.file_descr option)
   | CURLOPT_PROXYTYPE of curlProxyType
   | CURLOPT_PROTOCOLS of curlProto list
   | CURLOPT_REDIR_PROTOCOLS of curlProto list
@@ -513,6 +550,7 @@ type curlOption =
   | CURLOPT_TCP_KEEPIDLE of int
   | CURLOPT_TCP_KEEPINTVL of int
   | CURLOPT_NOPROXY of string
+  | CURLOPT_UNIX_SOCKET_PATH of string (* @since libcurl 7.40.0 *)
 
 type initOption =
   | CURLINIT_GLOBALALL
@@ -620,6 +658,26 @@ type headerOrigin =
     @since libcurl 7.83.0
 *)
 val get_headers : t -> headerOrigin list -> request:int -> (string * string) list
+
+(** {2 WebSocket support} *)
+
+(** WebSocket frame flags *)
+type curlWSFlag =
+  | CURLWS_TEXT    (** The buffer contains text data. Note that this makes a difference to WebSocket but libcurl itself will not make any verification of the content or precautions that you actually receive valid UTF-8 content. *)
+  | CURLWS_BINARY  (** This is binary data. *)
+  | CURLWS_CONT    (** This is not the final fragment of the message, it implies that there is another fragment coming as part of the same message. *)
+  | CURLWS_CLOSE   (** This is a close message. No more data follows. *)
+  | CURLWS_PING    (** This is a ping message. *)
+  | CURLWS_PONG    (** This is a pong message. *)
+  | CURLWS_OFFSET  (** The provided data is only a partial frame and there is more coming in a following call to ws_send. *)
+
+(** WebSocket frame information structure *)
+type curlWSFrame = {
+  age: int;              (** zero *)
+  flags: curlWSFlag list;(** options for the frame *)
+  offset: int;           (** the offset of this data into the frame *)
+  bytesleft: int;        (** number of pending bytes left of the payload *)
+}
 
 (** {2 MultiSSL mode } *)
 
@@ -830,6 +888,7 @@ val set_proxytransfermode : t -> bool -> unit
 val set_seekfunction : t -> (int64 -> curlSeek -> curlSeekResult) -> unit
 val set_autoreferer : t -> bool -> unit
 val set_opensocketfunction : t -> (Unix.file_descr -> unit) -> unit
+val set_opensocketfunction2 : t -> (curlSockType -> curlSockAddr -> Unix.file_descr option) -> unit
 val set_tcpkeepalive : t -> bool -> unit
 val set_tcpkeepidle : t -> int -> unit
 val set_tcpkeepintvl : t -> int -> unit
@@ -873,6 +932,7 @@ val set_mimepost : t -> curlMIMEPart list -> unit
 val set_sshknownhosts : t -> string -> unit
 val set_sshkeyfunction : t -> (curlKHMatch -> string -> curlKHStat) -> unit
 val set_noproxy : t -> string -> unit
+val set_unix_socket_path : t -> string -> unit
 
 (** {2 Get transfer properties} *)
 
@@ -923,6 +983,12 @@ val get_certinfo : t -> string list list
 
 val get_http_version : t -> curlHTTPVersion
 (** @since 0.9.2 *)
+
+val ws_meta : t -> curlWSFrame option
+(** Get WebSocket frame information. Returns None if no WebSocket frame info is available. Raises an exception if the operation not supported (libcurl version < 7.86.0). *)
+
+val ws_send : t -> string -> curlWSFlag list -> int
+(** Send WebSocket data. Returns the number of bytes sent. Raises an exception if the operation not supported (libcurl version < 7.86.0).  *)
 
 (** {2 Object interface} *)
 
@@ -1069,6 +1135,7 @@ class handle :
     method set_seekfunction : (int64 -> curlSeek -> curlSeekResult) -> unit
     method set_autoreferer : bool -> unit
     method set_opensocketfunction : (Unix.file_descr -> unit) -> unit
+    method set_opensocketfunction2 : (curlSockType -> curlSockAddr -> Unix.file_descr option) -> unit
     method set_proxytype : curlProxyType -> unit
     method set_resolve : (string * int * string) list -> (string * int) list -> unit
     method set_dns_servers : string list -> unit
@@ -1084,6 +1151,7 @@ class handle :
     method set_tcpkeepidle : int -> unit
     method set_tcpkeepintvl : int -> unit
     method set_noproxy : string -> unit
+    method set_unix_socket_path : string -> unit
 
     method get_effectiveurl : string
     method get_redirecturl : string
@@ -1124,6 +1192,8 @@ class handle :
     method get_conditionunmet : bool
     method get_certinfo : string list list
     method get_http_version : curlHTTPVersion
+    method ws_meta : curlWSFrame option
+    method ws_send : string -> curlWSFlag list -> int
   end
 
 (** {2 curl_multi API} *)
@@ -1235,9 +1305,19 @@ module Multi : sig
   val action_all : mt -> int
 
   (** inform libcurl that timeout occured
+      @return the number of handles still active
       @raise Error on errors
   *)
-  val action_timeout : mt -> unit
+  val action_timeout' : mt -> int
+
+  (** inform libcurl that timeout occured
+      @deprecated since 0.10.1.
+      This function may finish {!type:Curl.t} handles.
+      Therefore it should return the possibly changed number of still active
+      handles. Use {!val:action_timeout'} instead.
+      @raise Error on errors
+  *)
+  val action_timeout : mt -> unit [@@ocaml.deprecated "Use action_timeout' instead"]
 
   (** [action mt fd status] informs libcurl about event on the specified socket.
       [status] specifies socket status. Perform pending data transfers.

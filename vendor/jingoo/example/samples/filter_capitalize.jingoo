@@ -1,1 +1,0 @@
-{{ 'this phrase should be capitalized!' | capitalize }}

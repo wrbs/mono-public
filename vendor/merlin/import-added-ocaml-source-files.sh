@@ -3,6 +3,8 @@
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
+subtree_prefix="$(git rev-parse --show-prefix)"
+cd "$(git rev-parse --show-toplevel)"
 
 # Script arguments with their default values
 commitish=main
@@ -47,20 +49,23 @@ function sorted_files_at_committish() {
   git ls-tree -r --name-only "$1" "$2" | sed "s#^$2/##" | sort
 }
 
-git fetch "$repository" "$(cat upstream/ocaml_flambda/base-rev.txt)"
+git fetch "$repository" "$(cat "${subtree_prefix}upstream/ocaml_flambda/base-rev.txt")"
 git fetch "$repository" "$commitish"
 rev=$(git rev-parse FETCH_HEAD)
 
 function files_new_at_fetch_head() {
   comm -13 \
-    <(sorted_files_at_committish "$(cat upstream/ocaml_flambda/base-rev.txt)" "$old_subdirectory") \
+    <(sorted_files_at_committish "$(cat "${subtree_prefix}upstream/ocaml_flambda/base-rev.txt")" "$old_subdirectory") \
     <(sorted_files_at_committish FETCH_HEAD "$subdirectory")
 }
 
 function directories_from_previous_import() {
+  # We exclude the lambda/ because we almost never want to import new files from that
+  # directory.
   comm -12 \
-    <(cd src/ocaml; ls -d */) \
-    <(cd upstream/ocaml_flambda; ls -d */) \
+    <(cd "${subtree_prefix}src/ocaml"; ls -d */) \
+    <(cd "${subtree_prefix}upstream/ocaml_flambda"; ls -d */) \
+  | grep -v '^lambda/$' \
   | xargs -n 1 printf "^%s\n"
 }
 
@@ -74,9 +79,9 @@ for file in $files; do
   case ${answer} in
     y|Y|"" )
       echo "Importing $file"
-      ocaml_flambda_file=upstream/ocaml_flambda/"${file}"
+      ocaml_flambda_file="${subtree_prefix}upstream/ocaml_flambda/${file}"
       git show "FETCH_HEAD:$file" > "$ocaml_flambda_file"
-      cp "$ocaml_flambda_file" src/ocaml/$file
+      cp "$ocaml_flambda_file" "${subtree_prefix}src/ocaml/$file"
       ;;
     * )
       echo "Skipping $file; run '$0' again in order to make a different decision"

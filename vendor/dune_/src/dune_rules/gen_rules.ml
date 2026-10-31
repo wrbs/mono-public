@@ -192,6 +192,25 @@ end = struct
   ;;
 end
 
+let define_all_alias ~dir ~project ~js_targets =
+  let deps =
+    let predicate =
+      if Dune_project.explicit_js_mode project
+      then Predicate_lang.true_
+      else (
+        List.iter js_targets ~f:(fun js_target ->
+          assert (Path.Build.equal (Path.Build.parent_exn js_target) dir));
+        Predicate_lang.not
+          (Predicate_lang.Glob.of_string_set
+             (String.Set.of_list_map js_targets ~f:Path.Build.basename)))
+    in
+    let only_generated_files = Dune_project.dune_version project >= (3, 0) in
+    File_selector.of_predicate_lang ~dir:(Path.build dir) ~only_generated_files predicate
+    |> Action_builder.paths_matching_unit ~loc:Loc.none
+  in
+  Rules.Produce.Alias.add_deps (Alias.make Alias0.all ~dir) deps
+;;
+
 let gen_rules_for_stanzas sctx dir_contents cctxs expander ~dune_file ~dir:ctx_dir =
   let src_dir = Dune_file.dir dune_file in
   let* stanzas = Dune_file.stanzas dune_file
@@ -273,18 +292,10 @@ let gen_rules_for_stanzas sctx dir_contents cctxs expander ~dune_file ~dir:ctx_d
       | Coq_stanza.Extraction.T m ->
         Coq_rules.setup_extraction_rules ~sctx ~dir:ctx_dir ~dir_contents m
       | Coq_stanza.Coqpp.T m -> Coq_rules.setup_coqpp_rules ~sctx ~dir:ctx_dir m
-      | Rocq_stanza.Theory.T m ->
-        Expander.eval_blang expander m.enabled_if
-        >>= (function
-         | false -> Memo.return ()
-         | true -> Rocq_rules.setup_theory_rules ~sctx ~dir:ctx_dir ~dir_contents m)
-      | Rocq_stanza.Extraction.T m ->
-        Rocq_rules.setup_extraction_rules ~sctx ~dir:ctx_dir ~dir_contents m
-      | Rocq_stanza.Rocqpp.T m -> Rocq_rules.setup_rocqpp_rules ~sctx ~dir:ctx_dir m
       | _ -> Memo.return ())
   and+ () =
     let project = Dune_file.project dune_file in
-    Alias_builder.define_all_alias ~project ~js_targets ctx_dir
+    define_all_alias ~dir:ctx_dir ~project ~js_targets
   in
   cctxs
 ;;
@@ -300,10 +311,7 @@ let gen_rules_source_only sctx ~dir source_dir =
     let* sctx = sctx in
     let+ () = gen_format_and_cram_rules sctx ~dir source_dir
     and+ () =
-      Alias_builder.define_all_alias
-        ~js_targets:[]
-        ~project:(Source_tree.Dir.project source_dir)
-        dir
+      define_all_alias ~dir ~js_targets:[] ~project:(Source_tree.Dir.project source_dir)
     in
     ())
 ;;
@@ -321,7 +329,7 @@ let gen_rules_group_part_or_root sctx dir_contents cctxs ~source_dir ~dir
       >>= gen_rules_for_stanzas sctx dir_contents cctxs ~dune_file ~dir
     | None ->
       let project = Source_tree.Dir.project source_dir in
-      let+ () = Alias_builder.define_all_alias ~js_targets:[] ~project dir in
+      let+ () = define_all_alias ~dir ~js_targets:[] ~project in
       []
   in
   contexts
@@ -525,14 +533,7 @@ let gen_rules_regular_directory (sctx : Super_context.t Memo.t) ~src_dir ~compon
                 (* XXX sync this list with the pattern matches above. It's quite ugly
                    we need this, we should rewrite this code to avoid this. *)
                 Filename.Set.of_list
-                  [ ".js"
-                  ; "_doc"
-                  ; "_doc_new"
-                  ; ".ppx"
-                  ; ".dune"
-                  ; ".topmod"
-                  ; Dune_lang.Oxcaml.parameterised_dir
-                  ]
+                  [ ".js"; "_doc"; "_doc_new"; ".ppx"; ".dune"; ".topmod" ]
             in
             Filename.Set.union automatic toplevel
           in
@@ -620,10 +621,6 @@ let gen_rules ctx sctx ~dir components : Gen_rules.result Memo.t =
       ~dir
       (Subdir_set.of_set (Filename.Set.of_list [ "cc_vendor" ]))
       (fun () -> Configurator_rules.gen_rules ctx)
-  | parameterised_dir :: rest
-    when String.equal parameterised_dir Dune_lang.Oxcaml.parameterised_dir ->
-    let* sctx = sctx in
-    Parameterised_rules.gen_rules ~sctx ~dir rest
   | _ -> gen_rules_regular_directory sctx ~src_dir ~components ~dir
 ;;
 
@@ -651,10 +648,7 @@ let private_context ~dir components _ctx =
   analyze_private_context_path components
   >>= function
   | `Invalid_context -> Memo.return Gen_rules.unknown_context
-  | `Valid (ctx, components) ->
-    let+ lock_rules = Lock_rules.setup_rules ~dir ~components
-    and+ pkg_rules = Pkg_rules.setup_rules ctx ~dir ~components in
-    Gen_rules.combine lock_rules pkg_rules
+  | `Valid (ctx, components) -> Pkg_rules.setup_rules ctx ~dir ~components
   | `Root ->
     let+ contexts = Per_context.list () in
     let build_dir_only_sub_dirs =
@@ -683,9 +677,7 @@ let raise_on_lock_dir_out_of_sync =
         with
         | `Valid -> ()
         | `Invalid ->
-          let source_path = Dune_pkg.Lock_dir.in_source_tree path in
-          let loc_path = Path.source source_path in
-          let loc = Loc.in_file (Path.relative loc_path "lock.dune") in
+          let loc = Loc.in_file (Path.source (Path.Source.relative path "lock.dune")) in
           let hints = Pp.[ text "run dune pkg lock" ] in
           User_error.raise
             ~loc

@@ -188,6 +188,12 @@ let specialize_instr opt_count ~target info i =
           incr opt_count;
           Let (x, Prim (Extern "%direct_int_mod", [ y; z ]))
       | _ -> i)
+  | Let (x, Prim (Extern "caml_jsoo_runtime_value", [ nm ])), _ -> (
+      match the_string_of info nm with
+      | Some nm when Javascript.is_ident nm ->
+          incr opt_count;
+          Let (x, Prim (Extern "caml_jsoo_runtime_value", [ Pc (String nm) ]))
+      | _ -> i)
   | _, _ -> i
 
 let skip_event cont (Event _ :: l | l) = cont l
@@ -296,14 +302,20 @@ let indexing_primitives l =
 let getters =
   indexing_primitives
     [ "caml_array_get"
+    ; "caml_string_geti8"
+    ; "caml_string_geti16"
     ; "caml_string_get16"
     ; "caml_string_get32"
     ; "caml_string_get64"
     ; "caml_string_getf32"
+    ; "caml_bytes_geti8"
+    ; "caml_bytes_geti16"
     ; "caml_bytes_get16"
     ; "caml_bytes_get32"
     ; "caml_bytes_get64"
     ; "caml_bytes_getf32"
+    ; "caml_ba_uint8_geti8"
+    ; "caml_ba_uint8_geti16"
     ; "caml_ba_uint8_get16"
     ; "caml_ba_uint8_get32"
     ; "caml_ba_uint8_get64"
@@ -313,10 +325,12 @@ let getters =
 let setters =
   indexing_primitives
     [ "caml_array_set"
+    ; "caml_bytes_set8"
     ; "caml_bytes_set16"
     ; "caml_bytes_set32"
     ; "caml_bytes_set64"
     ; "caml_bytes_setf32"
+    ; "caml_ba_uint8_set8"
     ; "caml_ba_uint8_set16"
     ; "caml_ba_uint8_set32"
     ; "caml_ba_uint8_set64"
@@ -340,6 +354,7 @@ let specialize_instrs ~target opt_count info l =
            which allows to produce more compact code. *)
         match i with
         | Let (x, Prim (Extern prim, [ y; z ])) when String.Hashtbl.mem getters prim ->
+            incr opt_count;
             let conv, access = String.Hashtbl.find getters prim in
             let z' = Code.Var.fresh () in
             let r =
@@ -398,6 +413,7 @@ let specialize_instrs ~target opt_count info l =
               let acc = instr y' :: Let (y', Prim (Extern check, [ Pv y; z ])) :: acc in
               aux info ((y, idx) :: checks) r acc
         | Let (x, Prim (Extern prim, [ y; z; w ])) when String.Hashtbl.mem setters prim ->
+            incr opt_count;
             let conv, setter = String.Hashtbl.find setters prim in
             let z' = Code.Var.fresh () in
             let r =
@@ -456,12 +472,16 @@ let specialize_instrs ~target opt_count info l =
               incr opt_count;
               aux info ((y, idx) :: checks) r acc
         | Let (x, Prim (Extern "caml_make_unboxed_int32_vect_bytecode", [ y ])) ->
+            incr opt_count;
             aux info checks r (make_vect x y (Int32 0l) acc)
         | Let (x, Prim (Extern "caml_make_unboxed_int64_vect_bytecode", [ y ])) ->
+            incr opt_count;
             aux info checks r (make_vect x y (Int64 0L) acc)
         | Let (x, Prim (Extern "caml_make_unboxed_nativeint_vect_bytecode", [ y ])) ->
+            incr opt_count;
             aux info checks r (make_vect x y (NativeInt 0l) acc)
         | Let (x, Prim (Extern "caml_make_unboxed_float32_vect_bytecode", [ y ])) ->
+            incr opt_count;
             aux info checks r (make_vect x y (Float32 0L) acc)
         | _ ->
             let i = specialize_instr ~target opt_count info i in
@@ -541,7 +561,7 @@ let f_once_after p =
     match Config.target (), Config.effects () with
     | `JavaScript, `Disabled -> true
     | `JavaScript, (`Cps | `Double_translation) | `Wasm, _ -> false
-    | `JavaScript, `Jspi -> assert false
+    | `JavaScript, (`Jspi | `Native) -> assert false
   in
   let f = function
     | Let (x, Closure (l, (pc, []), _)) as i -> (

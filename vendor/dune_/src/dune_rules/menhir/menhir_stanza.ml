@@ -8,7 +8,7 @@ type t =
   { merge_into : string option
   ; flags : Ordered_set_lang.Unexpanded.t
   ; modules : string list
-  ; mode : Rule_mode.t
+  ; mode : Rule.Mode.t
   ; loc : Loc.t
   ; infer : bool
   ; enabled_if : Blang.t
@@ -48,7 +48,11 @@ include Stanza.Make (struct
 let () =
   Dune_project.Extension.register_simple
     syntax
-    (return [ "menhir", decode_stanza decode ])
+    (return
+       [ ( "menhir"
+         , let+ stanza = decode in
+           [ make_stanza stanza ] )
+       ])
 ;;
 
 let modules (stanza : t) : string list =

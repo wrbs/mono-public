@@ -1,39 +1,24 @@
-((chrome-trace 3.21.0+ox)
- (((dune subst) :if dev)
-  (rm -rf vendor/csexp)
-  (rm -rf vendor/pp)
-  (dune build -p (name) -j (jobs) @install (@doc :if with-doc))))
+((basement v0.18~preview.130.106+341)
+ (((sed -ib -e s/caml_state/Caml_state/ src/stubs.c) :if "os = \"macos\"")
+  (dune build -p (name) -j (jobs))))
 
-((dune 3.21.0+ox)
- ((ocaml boot/bootstrap.ml -j (jobs))
-  (./_boot/dune.exe
+((cmarkit 0.3.0+ox)
+ ((
+   ocaml
+   pkg/pkg.ml
    build
-   dune.install
-   --release
-   --profile
-   dune-bootstrap
-   -j
-   (jobs))))
+   --dev-pkg
+   %{dev}%
+   --with-cmdliner
+   %{cmdliner:installed}%)))
 
-((dune-build-info 3.21.0+ox)
+((dune-rpc 3.20.2+ox)
  (((dune subst) :if dev)
   (rm -rf vendor/csexp)
   (rm -rf vendor/pp)
   (dune build -p (name) -j (jobs) @install (@doc :if with-doc))))
 
-((dune-rpc 3.21.0+ox)
- (((dune subst) :if dev)
-  (rm -rf vendor/csexp)
-  (rm -rf vendor/pp)
-  (dune build -p (name) -j (jobs) @install (@doc :if with-doc))))
-
-((dyn 3.21.0+ox)
- (((dune subst) :if dev)
-  (rm -rf vendor/csexp)
-  (rm -rf vendor/pp)
-  (dune build -p (name) -j (jobs) @install (@doc :if with-doc))))
-
-((fs-io 3.21.0+ox)
+((dyn 3.20.2+ox)
  (((dune subst) :if dev)
   (rm -rf vendor/csexp)
   (rm -rf vendor/pp)
@@ -56,34 +41,40 @@
     (@runtest :if with-test)
     (@doc     :if with-doc))))
 
-((ocamlc-loc 3.21.0+ox)
+((merlin-lib 5.2.1-502+ox2)
+ ((
+   sh
+   -exc
+   "cd external/merlin && dune build -p %{name}% -j %{jobs}% @install && cp %{name}%.install ../.. && ln -sfn external/merlin/_build ../../_build")))
+
+((ocaml-index 1.1+ox2)
+ ((
+   sh
+   -exc
+   "cd external/merlin && dune build -p %{name}% -j %{jobs}% @install && cp %{name}%.install ../.. && ln -sfn external/merlin/_build ../../_build")))
+
+((ocamlc-loc 3.20.2+ox)
  (((dune subst) :if dev)
   (rm -rf vendor/csexp)
   (rm -rf vendor/pp)
   (dune build -p (name) -j (jobs) @install (@doc :if with-doc))))
 
-((ordering 3.21.0+ox)
+((ordering 3.20.2+ox)
  (((dune subst) :if dev)
   (rm -rf vendor/csexp)
   (rm -rf vendor/pp)
   (dune build -p (name) -j (jobs) @install (@doc :if with-doc))))
 
-((stdune 3.21.0+ox)
+((stdune 3.20.2+ox1)
  (((dune subst) :if dev)
   (rm -rf vendor/csexp)
   (rm -rf vendor/pp)
   (dune build -p (name) -j (jobs) @install (@doc :if with-doc))))
 
-((top-closure 3.21.0+ox)
- (((dune subst) :if dev)
-  (rm -rf vendor/csexp)
-  (rm -rf vendor/pp)
-  (dune build -p (name) -j (jobs) @install (@doc :if with-doc))))
-
-((topkg 1.0.8+ox)
+((topkg 1.1.1+ox)
  ((ocaml pkg/pkg.ml build --pkg-name (name) --dev-pkg %{dev}%)))
 
-((uutf 1.0.3+ox)
+((uutf 1.0.4+ox)
  ((
    ocaml
    pkg/pkg.ml
@@ -93,13 +84,7 @@
    --with-cmdliner
    %{cmdliner:installed}%)))
 
-((xdg 3.21.0+ox)
- (((dune subst) :if dev)
-  (rm -rf vendor/csexp)
-  (rm -rf vendor/pp)
-  (dune build -p (name) -j (jobs) @install (@doc :if with-doc))))
-
-((zarith 1.12+ox)
+((zarith 1.12+ox3)
  (((./configure)
    :if
    "os != \"openbsd\" & os != \"freebsd\" & os != \"macos\"")
@@ -125,7 +110,16 @@
    "os = \"macos\" & os-distribution = \"homebrew\" & arch = \"arm64\"")
   ((make))))
 
-((cmdliner 1.3.0) (((make) all PREFIX=%{prefix}%)))
+((dune 3.24.2)
+ ((ocaml boot/bootstrap.ml -j (jobs))
+  (./_boot/dune.exe
+   build
+   dune.install
+   --release
+   --profile
+   dune-bootstrap
+   -j
+   (jobs))))
 
 ((react 1.2.2) ((ocaml pkg/pkg.ml build --dev-pkg %{dev}%)))
 

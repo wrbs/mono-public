@@ -60,7 +60,8 @@ type error =
 
 exception Error of error
 
-val report_error: Format.formatter -> error -> unit
+val report_error: error Format_doc.format_printer
+val report_error_doc: error Format_doc.printer
 
 module Persistent_signature : sig
   type t =
@@ -95,7 +96,7 @@ type address =
   | Adot of address * Types.module_representation * int
 
 type 'a sig_reader =
-  Subst.Lazy.signature
+  Subst.Lazy.persistent_signature
   -> Global_module.Name.t
   -> Shape.Uid.t
   -> shape:Shape.t
@@ -104,7 +105,7 @@ type 'a sig_reader =
   -> 'a
 
 val read : 'a t -> Global_module.Name.t -> Unit_info.Artifact.t
-  -> Subst.Lazy.signature
+  -> Subst.Lazy.persistent_signature
 val find : allow_hidden:bool -> 'a t -> 'a sig_reader
   -> Global_module.Name.t -> allow_excess_args:bool -> 'a
 
@@ -153,7 +154,7 @@ val normalize_global_name : 'a t -> Global_module.Name.t -> Global_module.Name.t
 val make_cmi : 'a t
   -> Compilation_unit.Name.t
   -> Cmi_format.kind
-  -> Subst.Lazy.signature
+  -> Subst.Lazy.persistent_signature
   -> alerts
   -> Cmi_format.cmi_infos_lazy
 
@@ -172,12 +173,25 @@ val import_crcs : 'a t -> source:filepath ->
 (* Return the set of compilation units imported, with their CRC *)
 val imports : 'a t -> Import_info.Intf.t list
 
-(* Require that the specified compilation unit will be available at quotation
+(* Require that the provided interface will be available at quotation
    compile time. *)
-val require_global_for_quote : 'a t -> Compilation_unit.Name.t -> unit
+val require_intf_for_quote: 'a t -> Compilation_unit.Name.t -> unit
 
-(* Return the set of compilation units referenced by quotes *)
-val quoted_globals : 'a t -> Compilation_unit.Name.t list
+(* Return the set of interfaces referenced by quotes *)
+val quoted_intfs: 'a t -> Compilation_unit.Name.Set.t
+
+(* Compute the transitive closure of the dependencies of these interfaces that
+   have been loaded by typing. Always includes the input interfaces. *)
+val loaded_transitive_dependencies : 'a t
+  -> Compilation_unit.Name.Set.t
+  -> Compilation_unit.Name.Set.t
+
+(* Require that the provided implementation will be available at quotation
+   compile time. *)
+val require_impl_for_quote: 'a t -> Compilation_unit.t -> unit
+
+(* Return the set of implementations referenced by quotes *)
+val quoted_impls: 'a t -> Compilation_unit.Set.t
 
 (* Return the set of imports represented as runtime parameters. If this module is indeed
    parameterised (that is, [parameters] returns a non-empty list), it will be compiled as

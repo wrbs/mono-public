@@ -63,7 +63,6 @@ module rec Module : sig
 
   type t = {
     source_loc : Odoc_model.Paths.Identifier.SourceLocation.t option;
-    source_loc_jane : Odoc_model.Lang.Source_loc_jane.t option;
     doc : CComment.docs;
     type_ : decl;
     canonical : Odoc_model.Paths.Path.Module.t option;
@@ -111,6 +110,10 @@ and TypeExpr : sig
     type t = { path : Cpath.module_type; substitutions : substitution list }
   end
 
+  module Module : sig
+    type t = { package : Package.t; id : Ident.module_ }
+  end
+
   type label = Odoc_model.Lang.TypeExpr.label
 
   type t =
@@ -125,7 +128,10 @@ and TypeExpr : sig
     | Object of TypeExpr.Object.t
     | Class of Cpath.class_type * t list
     | Poly of string list * t
+    | Quote of t
+    | Splice of t
     | Package of TypeExpr.Package.t
+    | Arrow_functor of label option * Module.t * t
 end
 
 and Extension : sig
@@ -151,7 +157,6 @@ end
 and Exception : sig
   type t = {
     source_loc : Odoc_model.Paths.Identifier.SourceLocation.t option;
-    source_loc_jane : Odoc_model.Lang.Source_loc_jane.t option;
     doc : CComment.docs;
     args : TypeDecl.Constructor.argument;
     res : TypeExpr.t option;
@@ -211,7 +216,7 @@ and ModuleType : sig
     s_expansion : simple_expansion option;
     s_expr : U.expr;
     s_path : Cpath.module_;
-    s_aliasable : bool
+    s_aliasable : bool;
   }
 
   type expr =
@@ -224,7 +229,6 @@ and ModuleType : sig
 
   type t = {
     source_loc : Odoc_model.Paths.Identifier.SourceLocation.t option;
-    source_loc_jane : Odoc_model.Lang.Source_loc_jane.t option;
     doc : CComment.docs;
     canonical : Odoc_model.Paths.Path.ModuleType.t option;
     expr : expr option;
@@ -282,7 +286,6 @@ and TypeDecl : sig
 
   type t = {
     source_loc : Odoc_model.Paths.Identifier.SourceLocation.t option;
-    source_loc_jane : Odoc_model.Lang.Source_loc_jane.t option;
     doc : CComment.docs;
     canonical : Odoc_model.Paths.Path.Type.t option;
     equation : Equation.t;
@@ -348,7 +351,6 @@ and Value : sig
 
   type t = {
     source_loc : Odoc_model.Paths.Identifier.SourceLocation.t option;
-    source_loc_jane : Odoc_model.Lang.Source_loc_jane.t option;
     doc : CComment.docs;
     type_ : TypeExpr.t;
     value : value;
@@ -362,7 +364,6 @@ and Class : sig
 
   type t = {
     source_loc : Odoc_model.Paths.Identifier.SourceLocation.t option;
-    source_loc_jane : Odoc_model.Lang.Source_loc_jane.t option;
     doc : CComment.docs;
     virtual_ : bool;
     params : TypeDecl.param list;
@@ -378,7 +379,6 @@ and ClassType : sig
 
   type t = {
     source_loc : Odoc_model.Paths.Identifier.SourceLocation.t option;
-    source_loc_jane : Odoc_model.Lang.Source_loc_jane.t option;
     doc : CComment.docs;
     virtual_ : bool;
     params : TypeDecl.param list;

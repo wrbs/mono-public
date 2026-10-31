@@ -24,7 +24,7 @@ in any repository
   > (package (name foo))
   > EOF
 
-  $ dune_pkg_lock_normalized
+  $ dune pkg lock
   Solution for dune.lock:
   - foo.1.0.0
 
@@ -33,16 +33,15 @@ Now we verify the metadata we generated for the package. First we verify the
 build instructions and version are set correctly.
 
 We print the source separately for ease of post processing the output.
-  $ cat ${default_lock_dir}/foo.1.0.0.pkg | sed "/source/,//d"
+  $ cat dune.lock/foo.pkg | sed "/source/,//d"
   (version 1.0.0)
   
-  (build
-   (all_platforms ((dune))))
+  (dune)
   
   
   (dev)
 
 Now we make sure that the source is set correctly.
 
-  $ print_source "foo.1.0.0"
+  $ print_source "foo"
   (source (fetch (url file://PWD/_extra_source))) 

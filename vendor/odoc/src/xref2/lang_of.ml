@@ -489,7 +489,6 @@ and class_ map parent id c =
   {
     id = identifier;
     source_loc = c.source_loc;
-    source_loc_jane = c.source_loc_jane;
     doc = docs (parent :> Identifier.LabelParent.t) c.doc;
     virtual_ = c.virtual_;
     params = c.params;
@@ -528,7 +527,6 @@ and class_type map parent id c =
   {
     Odoc_model.Lang.ClassType.id = identifier;
     source_loc = c.source_loc;
-    source_loc_jane = c.source_loc_jane;
     doc = docs (parent :> Identifier.LabelParent.t) c.doc;
     virtual_ = c.virtual_;
     params = c.params;
@@ -651,7 +649,9 @@ and include_decl :
   (* Don't start shadowing within any signatures *)
   match d with
   | Alias p -> Alias (Path.module_ map p)
-  | ModuleType mty -> ModuleType (u_module_type_expr map identifier mty)
+  | ModuleType mty ->
+      let include_parent = Identifier.fresh_include_parent identifier in
+      ModuleType (u_module_type_expr map include_parent mty)
 
 and include_ parent map i =
   let open Component.Include in
@@ -689,7 +689,6 @@ and value_ map parent id v =
   {
     id = identifier;
     source_loc = v.source_loc;
-    source_loc_jane = v.source_loc_jane;
     doc = docs (parent :> Identifier.LabelParent.t) v.doc;
     type_ = type_expr map (parent :> Identifier.LabelParent.t) v.type_;
     value = v.value;
@@ -733,7 +732,6 @@ and module_ map parent id m =
     {
       Odoc_model.Lang.Module.id;
       source_loc = m.source_loc;
-      source_loc_jane = m.source_loc_jane;
       doc = docs (parent :> Identifier.LabelParent.t) m.doc;
       type_ = module_decl map identifier m.type_;
       canonical = m.canonical;
@@ -863,7 +861,7 @@ and module_type_expr map identifier = function
           s_expr = u_module_type_expr map identifier s_expr;
           s_path = Path.module_ map s_path;
           s_aliasable;
-          s_expansion = Opt.map (simple_expansion map identifier) s_expansion
+          s_expansion = Opt.map (simple_expansion map identifier) s_expansion;
         }
 
 and module_type :
@@ -880,7 +878,6 @@ and module_type :
   {
     Odoc_model.Lang.ModuleType.id = identifier;
     source_loc = mty.source_loc;
-    source_loc_jane = mty.source_loc_jane;
     doc = docs (parent :> Identifier.LabelParent.t) mty.doc;
     canonical = mty.canonical;
     expr = Opt.map (module_type_expr map sig_id) mty.expr;
@@ -935,7 +932,9 @@ and type_decl_unboxed_field :
     Component.TypeDecl.UnboxedField.t ->
     Odoc_model.Lang.TypeDecl.UnboxedField.t =
  fun map parent f ->
-  let identifier = Identifier.Mk.unboxed_field (parent, UnboxedFieldName.make_std f.name) in
+  let identifier =
+    Identifier.Mk.unboxed_field (parent, UnboxedFieldName.make_std f.name)
+  in
   {
     id = identifier;
     doc = docs (parent :> Identifier.LabelParent.t) f.doc;
@@ -963,7 +962,6 @@ and type_decl map parent id (t : Component.TypeDecl.t) :
   {
     id = identifier;
     source_loc = t.source_loc;
-    source_loc_jane = t.source_loc_jane;
     equation =
       type_decl_equation map (parent :> Identifier.FieldParent.t) t.equation;
     doc = docs (parent :> Identifier.LabelParent.t) t.doc;
@@ -1019,6 +1017,11 @@ and type_expr_package map (parent : Identifier.LabelParent.t) t =
         t.substitutions;
   }
 
+and type_expr_module_arg map (parent : Identifier.LabelParent.t)
+    (t : Component.TypeExpr.Module.t) =
+  let id = List.assoc t.id map.functor_parameter in
+  { Lang.TypeExpr.Module.id; package = type_expr_package map parent t.package }
+
 and type_expr map (parent : Identifier.LabelParent.t) (t : Component.TypeExpr.t)
     : Odoc_model.Lang.TypeExpr.t =
   try
@@ -1028,9 +1031,10 @@ and type_expr map (parent : Identifier.LabelParent.t) (t : Component.TypeExpr.t)
     | Alias (t, str) -> Alias (type_expr map parent t, str)
     | Arrow (lbl, t1, t2) ->
         Arrow (lbl, type_expr map parent t1, type_expr map parent t2)
-    | Tuple ts -> Tuple (List.map (fun (l, t) -> l, type_expr map parent t) ts)
+    | Tuple ts ->
+        Tuple (List.map (fun (lbl, ty) -> (lbl, type_expr map parent ty)) ts)
     | Unboxed_tuple ts ->
-      Unboxed_tuple (List.map (fun (l, t) -> l, type_expr map parent t) ts)
+        Unboxed_tuple (List.map (fun (l, t) -> (l, type_expr map parent t)) ts)
     | Constr (path, ts) ->
         Constr
           ( (Path.type_ map path :> Paths.Path.Type.t),
@@ -1041,7 +1045,24 @@ and type_expr map (parent : Identifier.LabelParent.t) (t : Component.TypeExpr.t)
     | Class (p, ts) ->
         Class (Path.class_type map p, List.map (type_expr map parent) ts)
     | Poly (strs, t) -> Poly (strs, type_expr map parent t)
+    | Quote t -> Quote (type_expr map parent t)
+    | Splice t -> Splice (type_expr map parent t)
     | Package p -> Package (type_expr_package map parent p)
+    | Arrow_functor (lbl, m_arg, t) ->
+        let arg_parent = Identifier.fresh_module_arg_parent () in
+        let name = Ident.Name.typed_module m_arg.id in
+        let param_identifier = Identifier.Mk.parameter (arg_parent, name) in
+        let map =
+          {
+            map with
+            functor_parameter =
+              (m_arg.id, param_identifier) :: map.functor_parameter;
+            module_ =
+              Component.ModuleMap.add m_arg.id param_identifier map.module_;
+          }
+        in
+        Arrow_functor
+          (lbl, type_expr_module_arg map parent m_arg, type_expr map parent t)
   with e ->
     let bt = Printexc.get_backtrace () in
     Format.fprintf Format.err_formatter
@@ -1100,7 +1121,6 @@ and exception_ map parent id (e : Component.Exception.t) :
   {
     id = identifier;
     source_loc = e.source_loc;
-    source_loc_jane = e.source_loc_jane;
     doc = docs (parent :> Identifier.LabelParent.t) e.doc;
     args =
       type_decl_constructor_argument map

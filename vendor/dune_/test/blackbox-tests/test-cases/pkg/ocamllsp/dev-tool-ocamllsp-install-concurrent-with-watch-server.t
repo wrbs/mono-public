@@ -17,7 +17,7 @@ Test that ocamllsp can be installed while dune is running in watch mode.
   > EOF
 
   $ make_lockdir
-  $ make_lockpkg ocaml <<EOF
+  $ cat > dune.lock/ocaml.pkg <<EOF
   > (version 5.2.0)
   > EOF
 

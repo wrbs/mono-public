@@ -26,7 +26,7 @@ let lock_ocamlformat () =
   else Fiber.return ()
 ;;
 
-let run_fmt_command ~common ~config ~preview builder =
+let run_fmt_command ~(common : Common.t) ~config =
   let open Fiber.O in
   let once () =
     let* () = lock_ocamlformat () in
@@ -40,42 +40,28 @@ let run_fmt_command ~common ~config ~preview builder =
     | Ok () -> ()
     | Error `Already_reported -> raise Dune_util.Report_error.Already_reported
   in
-  match Dune_util.Global_lock.lock ~timeout:None with
-  | Ok () -> Scheduler.go_with_rpc_server ~common ~config once
-  | Error lock_held_by ->
-    (* The --preview flag is being ignored by the RPC server, warn the user. *)
-    if preview then Rpc.Rpc_common.warn_ignore_arguments lock_held_by;
-    Scheduler.go_without_rpc_server ~common ~config (fun () ->
-      Rpc.Rpc_common.fire_request
-        ~name:"format"
-        ~wait:true
-        ~warn_forwarding:false
-        ~lock_held_by
-        builder
-        Dune_rpc.Procedures.Public.format
-        ())
+  Scheduler.go_with_rpc_server ~common ~config once
 ;;
 
 let command =
   let term =
     let+ builder = Common.Builder.term
-    and+ preview =
+    and+ no_promote =
       Arg.(
         value
         & flag
         & info
             [ "preview" ]
             ~doc:
-              (Some
-                 "Just print the changes that would be made without actually applying \
-                  them. This takes precedence over auto-promote as that flag is assumed \
-                  for this command."))
+              "Just print the changes that would be made without actually applying them. \
+               This takes precedence over auto-promote as that flag is assumed for this \
+               command.")
     in
     let builder =
-      Common.Builder.set_promote builder (if preview then Never else Automatically)
+      Common.Builder.set_promote builder (if no_promote then Never else Automatically)
     in
     let common, config = Common.init builder in
-    run_fmt_command ~common ~config ~preview builder
+    run_fmt_command ~common ~config
   in
   Cmd.v (Cmd.info "fmt" ~doc ~man ~envs:Common.envs) term
 ;;

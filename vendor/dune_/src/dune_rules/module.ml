@@ -56,7 +56,6 @@ module Kind = struct
     | Impl_vmodule
     | Wrapped_compat
     | Root
-    | Parameter
 
   let encode =
     let open Dune_lang.Encoder in
@@ -71,7 +70,6 @@ module Kind = struct
     | Impl_vmodule -> string "impl_vmodule"
     | Wrapped_compat -> string "wrapped_compat"
     | Root -> string "root"
-    | Parameter -> string "parameter"
   ;;
 
   let to_dyn t = Dune_sexp.to_dyn (encode t)
@@ -85,7 +83,6 @@ module Kind = struct
       ; "impl_vmodule", return Impl_vmodule
       ; "wrapped_compat", return Wrapped_compat
       ; "root", return Root
-      ; "parameter", return Parameter
       ; ( "alias"
         , let* next = peek in
           (* TODO remove this once everyone recompiles *)
@@ -99,7 +96,7 @@ module Kind = struct
 
   let has_impl = function
     | Alias _ | Impl_vmodule | Wrapped_compat | Root | Impl -> true
-    | Intf_only | Virtual | Parameter -> false
+    | Intf_only | Virtual -> false
   ;;
 end
 
@@ -140,7 +137,7 @@ module Source = struct
       ]
   ;;
 
-  let make ~impl ~intf path =
+  let make ?impl ?intf path =
     if path = [] then Code_error.raise "path cannot be empty" [];
     (match impl, intf with
      | None, None ->
@@ -210,11 +207,11 @@ let kind t = t.kind
 let pp_flags t = t.pp
 let install_as t = t.install_as
 
-let of_source ~install_as ~obj_name ~visibility ~(kind : Kind.t) (source : Source.t) =
+let of_source ?install_as ~obj_name ~visibility ~(kind : Kind.t) (source : Source.t) =
   (match kind, visibility with
    | (Alias _ | Impl_vmodule | Virtual | Wrapped_compat), Visibility.Public
-   | Root, Public
-   | (Impl | Intf_only | Parameter), _ -> ()
+   | Root, Private
+   | (Impl | Intf_only), _ -> ()
    | _, _ ->
      Code_error.raise
        "Module.of_source: invalid kind, visibility combination"
@@ -336,15 +333,6 @@ let sources_without_pp t =
     ~f:(Option.map ~f:(fun (x : File.t) -> x.original_path))
 ;;
 
-let source_without_pp ~ml_kind t =
-  let source =
-    match (ml_kind : Ml_kind.t) with
-    | Impl -> t.source.files.impl
-    | Intf -> t.source.files.intf
-  in
-  Option.map source ~f:(fun (x : File.t) -> x.original_path)
-;;
-
 module Obj_map = struct
   include Map.Make (struct
       type nonrec t = t
@@ -361,14 +349,8 @@ let encode ({ source; obj_name; pp = _; visibility; kind; install_as = _ } as t)
     match kind with
     | Kind.Impl when has_impl -> None
     | Intf_only when not has_impl -> None
-    | Root
-    | Wrapped_compat
-    | Impl_vmodule
-    | Alias _
-    | Impl
-    | Virtual
-    | Intf_only
-    | Parameter -> Some kind
+    | Root | Wrapped_compat | Impl_vmodule | Alias _ | Impl | Virtual | Intf_only ->
+      Some kind
   in
   record_fields
     [ field "obj_name" Module_name.Unique.encode obj_name
@@ -379,12 +361,11 @@ let encode ({ source; obj_name; pp = _; visibility; kind; install_as = _ } as t)
 ;;
 
 let decode ~src_dir =
-  let module K = Kind in
   let open Dune_lang.Decoder in
   fields
     (let+ obj_name = field "obj_name" Module_name.Unique.decode
      and+ visibility = field "visibility" Visibility.decode
-     and+ kind = field_o "kind" K.decode
+     and+ kind = field_o "kind" Kind.decode
      and+ source = field "source" (Source.decode ~dir:src_dir) in
      let kind =
        match kind with
@@ -427,26 +408,17 @@ let generated ?install_as ?obj_name ~(kind : Kind.t) ~src_dir (path : Module_nam
       let basename = Module_name.Unique.artifact_filename obj_name ~ext:ml_gen in
       Path.Build.relative src_dir basename |> Path.build |> File.make Dialect.ocaml
     in
-    Source.make ~impl:(Some impl) ~intf:None path
+    Source.make ~impl path
   in
   let visibility : Visibility.t =
-    Public
-    (* CR-someday rgrinberg: This used to be;:
-      {[
-        match kind with
-        | Root -> Private
-        | _ -> Public
-      ]}
-
-      But this currently triggers module hiding via [-I]. We need to fix that.
-    *)
+    match kind with
+    | Root -> Private
+    | _ -> Public
   in
-  of_source ~install_as ~visibility ~kind ~obj_name:(Some obj_name) source
+  of_source ?install_as ~visibility ~kind ~obj_name:(Some obj_name) source
 ;;
 
-let of_source ~visibility ~kind source =
-  of_source ~install_as:None ~obj_name:None ~visibility ~kind source
-;;
+let of_source ~visibility ~kind source = of_source ~obj_name:None ~visibility ~kind source
 
 module Name_map = struct
   type nonrec t = t Module_name.Map.t

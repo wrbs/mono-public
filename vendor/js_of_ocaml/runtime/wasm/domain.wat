@@ -213,6 +213,16 @@
    (func (export "caml_domain_dls_get") (param (ref eq)) (result (ref eq))
       (global.get $caml_domain_dls))
 
+   (global $caml_domain_tls (mut (ref eq))
+      (array.new_fixed $block 1 (ref.i31 (i32.const 0))))
+
+   (func (export "caml_domain_tls_set") (param $a (ref eq)) (result (ref eq))
+      (global.set $caml_domain_tls (local.get $a))
+      (ref.i31 (i32.const 0)))
+
+   (func (export "caml_domain_tls_get") (param (ref eq)) (result (ref eq))
+      (global.get $caml_domain_tls))
+
    (global $caml_ml_domain_unique_token (ref eq)
       (array.new_fixed $block 1 (ref.i31 (i32.const 0))))
 
@@ -225,6 +235,10 @@
       (ref.i31 (i32.const 0)))
 
    (func (export "caml_recommended_domain_count")
+      (param (ref eq)) (result (ref eq))
+      (ref.i31 (i32.const 1)))
+
+   (func (export "caml_max_domain_count")
       (param (ref eq)) (result (ref eq))
       (ref.i31 (i32.const 1)))
 
@@ -279,6 +293,10 @@
 
    (func (export "caml_ml_domain_cpu_relax") (param (ref eq)) (result (ref eq))
       (ref.i31 (i32.const 0)))
+
+   (func (export "caml_domain_count")
+      (param (ref eq)) (result (ref eq))
+      (ref.i31 (i32.const 1)))
 
    (func (export "caml_atomic_add_field")
       (param $ref (ref eq)) (param $field (ref eq)) (param $i (ref eq))

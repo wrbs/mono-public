@@ -1,7 +1,6 @@
 (*---------------------------------------------------------------------------
-   Copyright (c) 2012 Daniel C. Bünzli. All rights reserved.
+   Copyright (c) 2012 The jsonm programmers. All rights reserved.
    Distributed under the ISC license, see terms at the end of the file.
-   %%NAME%% %%VERSION%%
   ---------------------------------------------------------------------------*)
 
 (** Non-blocking streaming JSON codec.
@@ -18,8 +17,7 @@
     Consult the {{!datamodel}data model}, {{!limitations}limitations}
     and {{!examples}examples} of use.
 
-    {e %%VERSION%% - {{:%%PKG_HOMEPAGE%% }homepage}}
-    {3 References}
+    {b References}
     {ul
     {- T. Bray Ed.
     {e {{:http://tools.ietf.org/html/rfc7159}The JavaScript Object Notation
@@ -159,7 +157,7 @@ val encoder : ?minify:bool -> [< dst] -> encoder
 (** [encoder minify dst] is an encoder that outputs to [dst]. If
     [minify] is [true] (default) the output is made as compact as
     possible, otherwise the output is indented. If you want better
-    control on whitespace use [minify = true] and {!Uncut.encode}. *)
+    control on whitespace use [minify = true] and {!Uncut.val-encode}. *)
 
 val encode : encoder -> [< `Await | `End | `Lexeme of lexeme ] ->
   [`Ok | `Partial]
@@ -167,7 +165,7 @@ val encode : encoder -> [< `Await | `End | `Lexeme of lexeme ] ->
     {ul
     {- [`Partial] iff [e] has a [`Manual] destination and needs more
        output storage. The client must use {!Manual.dst} to provide
-       a new buffer and then call {!encode} with [`Await] until [`Ok]
+       a new buffer and then call {!val-encode} with [`Await] until [`Ok]
        is returned.}
     {- [`Ok] when the encoder is ready to encode a new [`Lexeme]
        or [`End].}}
@@ -195,19 +193,19 @@ module Manual : sig
 
   val src : decoder -> Bytes.t -> int -> int -> unit
   (** [src d s j l] provides [d] with [l] bytes to read, starting
-      at [j] in [s]. This byte range is read by calls to {!decode} until
+      at [j] in [s]. This byte range is read by calls to {!val-decode} until
       [`Await] is returned. To signal the end of input call the function
       with [l = 0]. *)
 
   val dst : encoder -> Bytes.t -> int -> int -> unit
   (** [dst e s j l] provides [e] with [l] bytes to write, starting
-      at [j] in [s]. This byte range is written by calls to {!encode} with [e]
-      until [`Partial] is returned. Use {!dst_rem} to know the remaining
-      number of non-written free bytes in [s]. *)
+      at [j] in [s]. This byte range is written by calls to {!val-encode}
+      with [e] until [`Partial] is returned. Use {!dst_rem} to know the
+      remaining number of non-written free bytes in [s]. *)
 
   val dst_rem : encoder -> int
   (** [dst_rem e] is the remaining number of non-written, free bytes
-      in the last buffer provided with {!dst}. *)
+      in the last buffer provided with {!val-dst}. *)
 end
 
 (** {1:uncut Uncut codec} *)
@@ -253,7 +251,7 @@ module Uncut : sig
       [/*] and the ending [*/]. The string [c] must not contain the
       sequence [*/]. }}
 
-      {b Warning.} {!Uncut.encode} does not check the above constraints on
+      {b Warning.} {!Uncut.val-encode} does not check the above constraints on
       [w] and [c]. *)
 
   (** {1 Decode} *)
@@ -262,7 +260,7 @@ module Uncut : sig
     [ `Await | `Lexeme of lexeme | `White of string
     | `Comment of [ `S | `M ] * string
     | `End | `Error of error ]
-  (** [decode d] is like {!Jsonm.decode} but for the
+  (** [decode d] is like {!Jsonm.val-decode} but for the
       {{!uncutdatamodel}uncut data model}. *)
 
   val pp_decode : Format.formatter ->
@@ -277,7 +275,7 @@ module Uncut : sig
   val encode : encoder ->
     [< `Await | `Lexeme of lexeme | `White of string
     | `Comment of [`S | `M] * string |  `End ] -> [`Ok | `Partial]
-  (** [encode] is like {!Jsonm.encode} but for the {{!uncutdatamodel}
+  (** [encode] is like {!Jsonm.val-encode} but for the {{!uncutdatamodel}
       uncut data model}.
 
       {b IMPORTANT.} Never encode [`Comment] for the web, it is
@@ -286,7 +284,7 @@ end
 
 (** {1:limitations Limitations}
 
-    {2 Decode}
+    {2:decoding_limitations Decode}
 
     Decoders parse valid JSON with the following limitations:
     {ul
@@ -295,13 +293,13 @@ end
        in the in the interval \[-2{^53};2{^53}\]. This is equivalent
        to the contraints JavaScript has.}
     {- A superset of JSON numbers is parsed. After having seen a minus
-       or a digit, including zero, {!Pervasives.float_of_string}, is
+       or a digit, including zero, {!Stdlib.float_of_string}, is
        used. In particular this parses number with leading zeros, which are
        specifically prohibited by the standard.}
     {- Strings returned by [`String], [`Name], [`White] and [`Comment]
        are limited by {!Sys.max_string_length}.  There is no built-in
        protection against the fact that the internal OCaml [Buffer.t]
-       value may raise [Failure] on {!Jsonm.decode}. This should
+       value may raise [Failure] on {!Jsonm.val-decode}. This should
        however only be a problem on 32-bits platforms if your
        strings are greater than 16Mo.}}
 
@@ -316,15 +314,15 @@ end
     a string will be reported as being [`Illegal_escape (`Not_esc_uchar
     0x000A)].
 
-    {2 Encode}
+    {2:encoding_limitations Encode}
 
     Encoders produce valid JSON provided the {e client} ensures that
     the following holds.
     {ul
     {- All the strings given to the encoder must be valid UTF-8 and immutable.
        Characters that need to be escaped are automatically escaped by [Jsonm].}
-    {- [`Float] lexemes must not be, {!Pervasives.nan},
-       {!Pervasives.infinity} or {!Pervasives.neg_infinity}. They
+    {- [`Float] lexemes must not be, {!Stdlib.nan},
+       {!Stdlib.infinity} or {!Stdlib.neg_infinity}. They
        are encoded with the format string ["%.16g"], this allows
        to roundtrip all the integers that can be precisely represented
        in OCaml [float] values, i.e. the integers in the interval
@@ -390,7 +388,7 @@ let trip_fd ?encoding ?minify
         if wc < l then unix_write fd s (j + wc) (l - wc) else ()
       in
       unix_write fd s 0 (Bytes.length s - Jsonm.Manual.dst_rem e);
-      Jsonm.Manual.dst e s 0 (String.length s);
+      Jsonm.Manual.dst e s 0 (Bytes.length s);
       encode fd s e `Await
   in
   let rec loop fdi fdo ds es d e = match Jsonm.decode d with
@@ -498,7 +496,7 @@ let json_to_dst ~minify
 *)
 
 (*---------------------------------------------------------------------------
-   Copyright (c) 2012 Daniel C. Bünzli
+   Copyright (c) 2012 The jsonm programmers
 
    Permission to use, copy, modify, and/or distribute this software for any
    purpose with or without fee is hereby granted, provided that the above

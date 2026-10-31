@@ -146,6 +146,7 @@ let classify_expression : Typedtree.expression -> sd =
   *)
   let rec classify_expression env e : sd =
     match e.exp_desc with
+    | Texp_apply_layout (exp, _) -> classify_expression env exp
     (* binding and variable cases *)
     | Texp_let (rec_flag, vb, e) ->
         let env = classify_value_bindings rec_flag env vb in
@@ -162,7 +163,7 @@ let classify_expression : Typedtree.expression -> sd =
         let size = classify_module_expression env mexp in
         let env = Ident.add mid size env in
         classify_expression env e
-    | Texp_ident (path, _, _, _, _) ->
+    | Texp_ident { path; _ } ->
         classify_path env path
 
     (* non-binding cases *)
@@ -197,6 +198,8 @@ let classify_expression : Typedtree.expression -> sd =
     | Texp_atomic_loc _
     | Texp_extension_constructor _
     | Texp_constant _
+    | Texp_unboxed_unit
+    | Texp_unboxed_bool _
     | Texp_src_pos ->
         Static
 
@@ -226,7 +229,8 @@ let classify_expression : Typedtree.expression -> sd =
         (* CR vlaviron: Dynamic would probably be a better choice *)
         Static
 
-    | Texp_apply ({exp_desc = Texp_ident (_, _, vd, Id_prim _, _)}, _, _, _, _)
+    | Texp_apply ({exp_desc = Texp_ident { desc = vd; kind = Id_prim _; _ }},
+        _, _, _, _)
       when is_ref vd ->
         Static
     | Texp_apply (_, args, _, _, _)
@@ -259,9 +263,6 @@ let classify_expression : Typedtree.expression -> sd =
           (* other cases compile to a lazy block holding a function *)
           Static
       end
-    | Texp_eval _ ->
-      (* CR metaprogramming mshinwell: Make sure this is correct *)
-      Static
 
     | Texp_new _
     | Texp_instvar _
@@ -297,7 +298,7 @@ let classify_expression : Typedtree.expression -> sd =
     let old_env = env in
     let add_value_binding env vb =
       match vb.vb_pat.pat_desc with
-      | Tpat_var (id, _loc, _uid, _sort, _mode) ->
+      | Tpat_var { id; _ } ->
           let size = classify_expression old_env vb.vb_expr in
           Ident.add id size env
       | _ ->
@@ -619,7 +620,8 @@ let (>>) : bind_judg -> term_judg -> term_judg =
   fun binder term mode -> binder mode (term mode)
 
 (* Compute the appropriate [mode] for an array expression *)
-let array_mode exp elt_sort = match Typeopt.array_kind exp elt_sort with
+let array_mode exp =
+  match Typeopt.array_kind exp with
   | Lambda.Pfloatarray ->
     (* (flat) float arrays unbox their elements *)
     Dereference
@@ -642,7 +644,8 @@ let array_mode exp elt_sort = match Typeopt.array_kind exp elt_sort with
 *)
 let rec expression : Typedtree.expression -> term_judg =
   fun exp -> match exp.exp_desc with
-    | Texp_ident (pth, _, _, _, _) ->
+    | Texp_apply_layout (exp, _) -> expression exp
+    | Texp_ident { path = pth; _ } ->
       path pth
     | Texp_let (rec_flag, bindings, body) ->
       (*
@@ -689,6 +692,10 @@ let rec expression : Typedtree.expression -> term_judg =
       ]
     | Texp_constant _ ->
       empty
+    | Texp_unboxed_unit ->
+      empty
+    | Texp_unboxed_bool _ ->
+      empty
     | Texp_new (pth, _, _, _) ->
       (*
         G |- c: m[Dereference]
@@ -701,8 +708,8 @@ let rec expression : Typedtree.expression -> term_judg =
     | Texp_mutvar id ->
         single id.txt << Dereference
     | Texp_apply
-        ({exp_desc = Texp_ident (_, _, vd, Id_prim _, _)}, [_, Arg (arg, _)], _,
-         _, _)
+        ({exp_desc = Texp_ident { desc = vd; kind = Id_prim _; _ }},
+         [_, Arg (arg, _)], _, _, _)
       when is_ref vd ->
       (*
         G |- e: m[Guard]
@@ -744,20 +751,11 @@ let rec expression : Typedtree.expression -> term_judg =
       list expression (List.map (fun (_, e, _) -> e) exprs) << Return
     | Texp_atomic_loc (expr, _, _, _, _) ->
       expression expr << Guard
-    | Texp_array (_, elt_sort, exprs, _) ->
-      let elt_sort = Jkind.Sort.default_for_transl_and_get elt_sort in
-      list expression exprs << array_mode exp elt_sort
+    | Texp_array (_, _, exprs, _) ->
+      list expression exprs << array_mode exp
     | Texp_idx (ba, _uas) ->
       let block_access = function
         | Baccess_field _ -> empty
-        | Baccess_array
-            { mut = _
-            ; index_kind = _
-            ; index
-            ; base_ty = _
-            ; elt_ty = _
-            ; elt_sort = _ } ->
-          expression index << Dereference
         | Baccess_block (_, idx) ->
           expression idx << Dereference
       in
@@ -768,9 +766,8 @@ let rec expression : Typedtree.expression -> term_judg =
     | Texp_list_comprehension { comp_body; comp_clauses } ->
       join ((expression comp_body << Guard) ::
             comprehension_clauses comp_clauses)
-    | Texp_array_comprehension (_, elt_sort, { comp_body; comp_clauses }) ->
-      let elt_sort = Jkind.Sort.default_for_transl_and_get elt_sort in
-      join ((expression comp_body << array_mode exp elt_sort) ::
+    | Texp_array_comprehension (_, _, { comp_body; comp_clauses }) ->
+      join ((expression comp_body << array_mode exp) ::
             comprehension_clauses comp_clauses)
     | Texp_construct (_, desc, exprs, _) ->
       let access_constructor =
@@ -787,7 +784,7 @@ let rec expression : Typedtree.expression -> term_judg =
             | Constructor_uniform_value -> Guard
             | Constructor_mixed mixed_shape ->
                 (match mixed_shape.(i) with
-                 | Value | Float_boxed -> Guard
+                 | Scannable _ | Float_boxed -> Guard
                  | Float64 | Float32 | Bits8 | Bits16 | Bits32 | Bits64
                  | Vec128 | Vec256 | Vec512 | Word | Untagged_immediate
                  | Void | Product _ ->
@@ -810,16 +807,18 @@ let rec expression : Typedtree.expression -> term_judg =
         let field_mode i = match rep with
           | Record_float | Record_ufloat -> Dereference
           | Record_unboxed | Record_inlined (_, _, Variant_unboxed) -> Return
-          | Record_boxed _ | Record_inlined (_, Constructor_uniform_value, _) ->
+          | Record_boxed | Record_inlined (_, Constructor_uniform_value, _) ->
               Guard
           | Record_inlined (_, Constructor_mixed mixed_shape, _)
           | Record_mixed mixed_shape ->
             (match mixed_shape.(i) with
-             | Value | Float_boxed -> Guard
+             | Scannable _ | Float_boxed -> Guard
              | Float64 | Float32 | Bits8 | Bits16 | Bits32 | Bits64
              | Vec128 | Vec256 | Vec512 | Word | Untagged_immediate
              | Void | Product _ ->
                Dereference)
+          | Record_dummy _ ->
+            Misc.fatal_error "value_rec_check: unexpected dummy representation"
         in
         let field (label, field_def) =
           let env =
@@ -1097,9 +1096,6 @@ let rec expression : Typedtree.expression -> term_judg =
         expression e << Dereference
     | Texp_antiquotation e ->
         expression e << Dereference
-    | Texp_eval _ ->
-      (* CR metaprogramming mshinwell: Make sure this is correct *)
-      empty
 
 (* Function bodies.
     G |-{body} b : m
@@ -1312,6 +1308,8 @@ and structure_item : Typedtree.structure_item -> bind_judg =
     | Tstr_include { incl_mod = mexp; incl_type = mty; _ } ->
       let included_ids = List.map Types.signature_item_id mty in
       Env.join (modexp mexp m) (Env.remove_list included_ids env)
+    | Tstr_jkind _ ->
+      env
 
 (* G |- module M = E : m -| G *)
 and module_binding : (Ident.t option * Typedtree.module_expr) -> bind_judg =
@@ -1522,9 +1520,12 @@ and pattern : type k . k general_pattern -> Env.t -> mode = fun pat env ->
 and is_destructuring_pattern : type k . k general_pattern -> bool =
   fun pat -> match pat.pat_desc with
     | Tpat_any -> false
-    | Tpat_var (_, _, _, _, _) -> false
-    | Tpat_alias (pat, _, _, _, _, _, _) -> is_destructuring_pattern pat
+    | Tpat_var _ -> false
+    | Tpat_fun_layout _ -> false
+    | Tpat_alias { pattern = pat; _ } -> is_destructuring_pattern pat
     | Tpat_constant _ -> true
+    | Tpat_unboxed_unit -> true
+    | Tpat_unboxed_bool _ -> true
     | Tpat_tuple _ -> true
     | Tpat_unboxed_tuple _ -> true
     | Tpat_construct _ -> true

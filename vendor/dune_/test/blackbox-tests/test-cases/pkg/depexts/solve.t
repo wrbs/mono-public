@@ -18,11 +18,10 @@ Make a project that uses the foo library:
   > EOF
 
 locking would add the opam 'depext' field to foo.pkg
-  $ dune_pkg_lock_normalized
+  $ dune pkg lock
   Solution for dune.lock:
   - foo.0.0.1
-  $ cat ${default_lock_dir}/foo.0.0.1.pkg
+  $ cat dune.lock/foo.pkg
   (version 0.0.1)
   
-  (depexts
-   (unzip gnupg))
+  (depexts unzip gnupg)

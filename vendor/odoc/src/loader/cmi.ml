@@ -46,7 +46,18 @@ module Compat = struct
        versions *)
   let repr x = Transient_expr.repr x
 
+#if OCAML_VERSION >= (5,6,0)
+  (** Since 5.6, abbreviation expansion happens in place in the type graph and
+      the original abbreviation is remembered in the [Texpand] edge that
+      replaced it. [Types.get_desc] walks past those edges and would hand us
+      the expanded type, so use the same accessor the compiler's own printer
+      uses ([Out_type.printer_get_desc]) to recover the abbreviation. *)
+  let get_desc ty = Btype.get_folded_desc ~keep_Tvar:true ty
+  let deep_occur = Btype.deep_occur
+#else
   let get_desc = Types.get_desc
+  let deep_occur = Ctype.deep_occur
+#endif
   let get_row_name = Types.row_name
   let row_field_repr = Types.row_field_repr
   let field_kind_repr = Types.field_kind_repr
@@ -60,11 +71,16 @@ module Compat = struct
   let concr_mem = Types.Meths.mem
   let csig_concr x = x.Types.csig_meths
   let eq_type = Types.eq_type
-  let invisible_wrap ty = newty2 ~level:Btype.generic_level (Ttuple [None, ty])
+#if OCAML_VERSION >= (5,4,0) || defined OXCAML
+  let invisible_wrap ty = newty2 ~level:Btype.generic_level (Ttuple [None,ty])
+#else
+  let invisible_wrap ty = newty2 ~level:Btype.generic_level (Ttuple [ty])
+#endif
 #else
   type repr_type_node = Types.type_expr
   let repr = Btype.repr
   let get_desc x = (repr x).Types.desc
+  let deep_occur = Ctype.deep_occur
   let get_row_name x = x.Types.row_name
   let row_field_repr = Btype.row_field_repr
   let field_kind_repr = Btype.field_kind_repr
@@ -78,11 +94,9 @@ module Compat = struct
   let concr_mem = Types.Concr.mem
   let csig_concr x = x.Types.csig_concr
   let eq_type x y = x == y || repr x == repr y
-
   (** Create a new node pointing to [ty] that is printed in the same way as
       [ty]*)
-  let invisible_wrap ty =
-    Btype.(newty2 generic_level (Ttuple [None, ty]))
+  let invisible_wrap ty = Btype.(newty2 generic_level (Ttuple [ty]))
 #endif
 end
 
@@ -107,12 +121,17 @@ let read_label lbl =
   else match String.get lbl 0 with
       | '?' -> Some (Optional (String.sub lbl 1 (String.length lbl - 1)))
       | _ -> Some (Label lbl)
-#else
+#elif defined OXCAML
   match lbl with
   | Types.Nolabel -> None
   | Types.Labelled s -> Some (Label s)
   | Types.Optional s -> Some (Optional s)
   | Types.Position s -> (* FIXME: do better? *) Some (Label s)
+#else
+  match lbl with
+  | Asttypes.Nolabel -> None
+  | Asttypes.Labelled s -> Some (Label s)
+  | Asttypes.Optional s -> Some (Optional s)
 #endif
 
 (* Handle type variable names *)
@@ -158,7 +177,11 @@ let name_of_type_repr (ty : Compat.repr_type_node) =
   with Not_found ->
     let base =
       match ty.desc with
+#if defined OXCAML
       | Tvar { name = Some name; _ } | Tunivar { name = Some name; _ } -> name
+#else
+      | Tvar (Some name) | Tunivar (Some name) -> name
+#endif
       | _ -> next_name ()
     in
     let name = fresh_name base in
@@ -188,7 +211,12 @@ let add_alias_proxy px =
   if not (List.memq px !aliased) then begin
     aliased := px :: !aliased;
     match px.desc with
-    | Tvar { name; _ } | Tunivar { name; _ } -> reserve_name name
+#if defined OXCAML
+    | Tvar { name; _ } | Tunivar { name; _ } ->
+#else
+    | Tvar name | Tunivar name ->
+#endif
+        reserve_name name
     | _ -> ()
   end
 
@@ -231,12 +259,23 @@ let mark_type ty =
     if List.memq px visited && aliasable ty then add_alias_proxy px else
       let visited = px :: visited in
       match Compat.get_desc ty with
-      | Tvar { name; _ } -> reserve_name name
+#if defined OXCAML
+      | Tvar { name; _ } | Tunivar { name; _ } ->
+#else
+      | Tvar name | Tunivar name ->
+#endif
+          reserve_name name
       | Tarrow(_, ty1, ty2, _) ->
           loop visited ty1;
           loop visited ty2
-      | Ttuple tyl -> List.iter (fun (_, ty) -> loop visited ty) tyl
+#if OCAML_VERSION >= (5,4,0) || defined OXCAML
+      | Ttuple tyl -> List.iter (fun (_lbl,x) -> loop visited x) tyl
+#else
+      | Ttuple tyl -> List.iter (loop visited) tyl
+#endif
+#if defined OXCAML
       | Tunboxed_tuple tyl -> List.iter (fun (_, ty) -> loop visited ty) tyl
+#endif
       | Tconstr(_, tyl, _) ->
           List.iter (loop visited) tyl
       | Tvariant row ->
@@ -273,8 +312,16 @@ let mark_type ty =
       | Tpoly (ty, tyl) ->
           List.iter (fun t -> add_alias t) tyl;
           loop visited ty
-      | Tunivar { name; _ } -> reserve_name name
-#if OCAML_VERSION>=(4,13,0)
+#if OCAML_VERSION>=(5,5,0)
+      | Tpackage p ->
+          List.iter (fun (_,x) -> loop visited x) p.pack_constraints
+      | Tfunctor (_lbl, _id, pkg, ret_type) ->
+          List.iter (fun (_,x) -> loop visited x) pkg.pack_constraints;
+          loop visited ret_type
+#elif OCAML_VERSION>=(5,4,0)
+      | Tpackage p ->
+          List.iter (fun (_,x) -> loop visited x) p.pack_cstrs
+#elif OCAML_VERSION>=(4,13,0)
       | Tpackage(_,tyl) ->
           List.iter (fun (_,x) -> loop visited x) tyl
 #else
@@ -287,7 +334,16 @@ let mark_type ty =
       | Tsubst (ty,_) -> loop visited ty
 #endif
       | Tlink _ -> assert false
+#if OCAML_VERSION >= (5,6,0)
+      (* [Compat.get_desc] walks past [Texpand] just as it does [Tlink]. *)
+      | Texpand _ -> assert false
+#endif
+#if defined OXCAML
+      | Tquote typ -> loop visited typ
+      | Tsplice typ -> loop visited typ
       | Tof_kind _ -> ()
+      | Trepr _ -> ()
+#endif
   in
   loop [] ty
 
@@ -314,9 +370,11 @@ let mark_type_parameter param =
 let tvar_none ty = ty.desc <- Tvar None
 #elif OCAML_VERSION < (4,14,0)
 let tvar_none ty = Types.Private_type_expr.set_desc ty (Tvar None)
-#else
+#elif defined OXCAML
 let tvar_none ty jkind =
   Types.Transient_expr.(set_desc (coerce ty) (Tvar { name = None; jkind }))
+#else
+let tvar_none ty = Types.Transient_expr.(set_desc (coerce ty) (Tvar None))
 #endif
 
 let wrap_constrained_params tyl =
@@ -339,8 +397,13 @@ let prepare_type_parameters params manifest =
         let vars = Ctype.free_variables ty in
           List.iter
             (fun ty -> match Compat.get_desc ty with
+#if defined OXCAML
               | Tvar { name = Some "_"; jkind } ->
                 if List.memq ty vars then tvar_none ty jkind
+#else
+              | Tvar (Some "_") ->
+                if List.memq ty vars then tvar_none ty
+#endif
               | _ -> ())
             params
     | None -> ()
@@ -353,7 +416,11 @@ let mark_constructor_args =
   List.iter mark_type
 #else
   function
+#if defined OXCAML
    | Cstr_tuple args -> List.iter (fun carg -> mark_type carg.ca_type) args
+#else
+   | Cstr_tuple args -> List.iter mark_type args
+#endif
    | Cstr_record lds -> List.iter (fun ld -> mark_type ld.ld_type) lds
 #endif
 
@@ -363,8 +430,10 @@ let mark_type_kind = function
 #else
   | Type_abstract -> ()
 #endif
-#if OCAML_VERSION >= (4,13,0)
+#if defined OXCAML
   | Type_variant (cds,_,_) ->
+#elif OCAML_VERSION >= (4,13,0)
+  | Type_variant (cds,_) ->
 #else
   | Type_variant cds ->
 #endif
@@ -373,11 +442,18 @@ let mark_type_kind = function
            mark_constructor_args cd.cd_args;
            opt_iter mark_type cd.cd_res)
         cds
-  | Type_record(lds, _, _) ->
-      List.iter (fun ld -> mark_type ld.ld_type) lds
+#if defined OXCAML
   | Type_record_unboxed_product(lds, _, _) ->
       List.iter (fun ld -> mark_type ld.ld_type) lds
+  | Type_record(lds, _, _) ->
+#else
+  | Type_record(lds, _) ->
+#endif
+      List.iter (fun ld -> mark_type ld.ld_type) lds
   | Type_open -> ()
+#if OCAML_VERSION >= (5,5,0)
+  | Type_external _ -> ()
+#endif
 
 let mark_type_declaration decl =
   let params = prepare_type_parameters decl.type_params decl.type_manifest in
@@ -412,7 +488,7 @@ let rec mark_class_type params = function
       let sty = Compat.self_type cty in
       if is_row_visited (proxy sty)
       || List.exists aliasable params
-      || List.exists (Ctype.deep_occur sty) tyl
+      || List.exists (Compat.deep_occur sty) tyl
       then mark_class_type params cty
       else List.iter mark_type tyl
   | Cty_signature sign ->
@@ -458,34 +534,37 @@ let rec read_type_expr env typ =
           let name = name_of_type typ in
             if name = "_" then Any
             else Var name
+#if defined OXCAML
       | Tarrow((lbl,_,_), arg, res, _) ->
+#else
+      | Tarrow(lbl, arg, res, _) ->
+#endif
           let lbl = read_label lbl in
           let lbl,arg =
             match lbl with
             | Some (Optional s) -> (
-              let read_as_wrapped () =
-               (Some (RawOptional s), read_type_expr env arg)
-              in
               match Compat.get_desc arg with
-              | Tpoly(arg, []) -> begin
-                  match Compat.get_desc arg with
-                  | Tconstr(_option, [arg], _) ->
-                    lbl, read_type_expr env arg (* Unwrap option if possible *)
-                  | _ -> read_as_wrapped ()
-                end
+              | Tconstr(_option, [arg], _) ->
+                lbl, read_type_expr env arg (* Unwrap option if possible *)
               | _ ->
-                read_as_wrapped ()) (* If not, mark is as wrapped *)
+                (Some (RawOptional s), read_type_expr env arg)) (* If not, mark is as wrapped *)
             | _ ->
               lbl, read_type_expr env arg
           in
           let res = read_type_expr env res in
             Arrow(lbl, arg, res)
       | Ttuple typs ->
-          let typs = List.map (fun (l,t) -> l, read_type_expr env t) typs in
-            Tuple typs
+#if OCAML_VERSION >= (5,4,0) || defined OXCAML
+          let typs = List.map (fun (lbl,x) -> lbl, read_type_expr env x) typs in
+#else
+          let typs = List.map (fun x -> None, read_type_expr env x) typs in
+#endif
+          Tuple typs
+#if defined OXCAML
       | Tunboxed_tuple typs ->
           let typs = List.map (fun (l,t) -> l, read_type_expr env t) typs in
             Unboxed_tuple typs
+#endif
       | Tconstr(p, params, _) ->
           let p = Env.Path.read_type env.ident_env p in
           let params = List.map (read_type_expr env) params in
@@ -501,36 +580,73 @@ let rec read_type_expr env typ =
             remove_names tyl;
             Poly(vars, typ)
       | Tunivar _ -> Var (name_of_type typ)
-#if OCAML_VERSION>=(4,13,0)
+#if OCAML_VERSION>=(5,5,0)
+      | Tpackage {pack_path=p; pack_constraints } ->
+        let eqs = List.filter_map (fun (l,ty) -> Option.map (fun x -> x, ty) (Longident.unflatten l)) pack_constraints in
+#elif OCAML_VERSION>=(5,4,0)
+      | Tpackage {pack_path=p; pack_cstrs } ->
+        let eqs = List.filter_map (fun (l,ty) -> Option.map (fun x -> x, ty) (Longident.unflatten l)) pack_cstrs in
+#elif OCAML_VERSION>=(4,13,0)
       | Tpackage(p,eqs) ->
 #else
       | Tpackage(p, frags, tyl) ->
         let eqs = List.combine frags tyl in
 #endif
-          let open TypeExpr.Package in
-          let path = Env.Path.read_module_type env.ident_env p in
-          let substitutions =
-            List.map
-              (fun (frag,typ) ->
-                 let frag = Env.Fragment.read_type frag in
-                 let typ = read_type_expr env typ in
-                   (frag, typ))
-              eqs
-          in
-
-          Package {path; substitutions}
+        let package = read_package env eqs p in
+        Package package
 #if OCAML_VERSION<(4,13,0)
       | Tsubst typ -> read_type_expr env typ
 #else
       | Tsubst (typ,_) -> read_type_expr env typ
 #endif
+#if OCAML_VERSION >= (5,5,0)
+  | Tfunctor (lbl, id, pkg, ret_type) ->
+    let lbl = read_label lbl in
+    let parent = Identifier.fresh_module_arg_parent () in
+    let id = Ocaml_ident.of_unscoped id in
+    let e', id =
+      Env.add_module_arg parent id (ModuleName.hidden_of_ident id)
+        env.ident_env
+    in
+    let env = {env with ident_env = e'} in
+    let ret = read_type_expr env ret_type in
+    let eqs =
+      List.filter_map (fun (l,ty) -> Option.map (fun x -> x, ty) (Longident.unflatten l)) pkg.pack_constraints
+    in
+    let package = read_package env eqs pkg.pack_path in
+    Arrow_functor(lbl, {id ; package}, ret)
+
+#endif
       | Tlink _ -> assert false
+#if OCAML_VERSION >= (5,6,0)
+      (* [Compat.get_desc] walks past [Texpand] just as it does [Tlink]. *)
+      | Texpand _ -> assert false
+#endif
+#if defined OXCAML
+      | Tquote typ -> Quote (read_type_expr env typ)
+      | Tsplice typ -> Splice (read_type_expr env typ)
       | Tof_kind _ -> assert false
+      | Trepr _ -> Any  (* oxcaml: representation annotations are ignored *)
+#endif
     in
       match alias with
       | None -> typ
       | Some name -> Alias(typ, name)
   end
+
+and read_package env eqs p =
+  let open TypeExpr in
+  let open TypeExpr.Package in
+  let path = Env.Path.read_module_type env.ident_env p in
+  let substitutions =
+    List.map
+      (fun (frag,typ) ->
+         let frag = Env.Fragment.read_type frag in
+         let typ = read_type_expr env typ in
+         (frag, typ))
+      eqs
+  in
+  {path; substitutions}
 
 and read_row env _px row =
   let open TypeExpr in
@@ -649,7 +765,11 @@ let read_value_description ({ident_env ; warnings_tag} as env) parent id vd =
   let type_ = read_type_expr env vd.val_type in
   let value =
     match vd.val_kind with
+#if defined OXCAML
+    | Val_reg _ -> Value.Abstract
+#else
     | Val_reg -> Value.Abstract
+#endif
     | Val_prim desc ->
         let primitives =
           let open Primitive in
@@ -659,9 +779,13 @@ let read_value_description ({ident_env ; warnings_tag} as env) parent id vd =
         External primitives
     | _ -> assert false
   in
-  (* Source location is not trustworthy since it's a cmi so left as None *)
-  let source_loc_jane = None in
-  Value { Value.id; source_loc; doc; type_; value ; source_loc_jane }
+  Value { Value.id; source_loc; doc; type_; value }
+
+#if defined OXCAML
+let is_mutable = Types.is_mutable
+#else
+let is_mutable ld = ld = Mutable
+#endif
 
 let read_label_declaration env parent ld =
   let open TypeDecl.Field in
@@ -684,7 +808,11 @@ let read_constructor_declaration_arguments env parent arg =
 #else
   let open TypeDecl.Constructor in
     match arg with
+#if defined OXCAML
     | Cstr_tuple args -> Tuple (List.map (fun arg -> read_type_expr env arg.ca_type) args)
+#else
+    | Cstr_tuple args -> Tuple (List.map (read_type_expr env) args)
+#endif
     | Cstr_record lds ->
         Record (List.map (read_label_declaration env parent) lds)
 #endif
@@ -709,8 +837,10 @@ let read_type_kind env parent =
   | Type_abstract ->
 #endif
     None
-#if OCAML_VERSION >= (4,13,0)
+#if defined OXCAML
   | Type_variant (cstrs,_,_) ->
+#elif OCAML_VERSION >= (4,13,0)
+  | Type_variant (cstrs,_) ->
 #else
   | Type_variant cstrs ->
 #endif
@@ -718,13 +848,7 @@ let read_type_kind env parent =
           List.map (read_constructor_declaration env parent) cstrs
         in
           Some (Variant cstrs)
-    | Type_record(lbls, _, _) ->
-        let lbls =
-          List.map
-            (read_label_declaration env (parent :> Identifier.FieldParent.t))
-            lbls
-        in
-          Some (Record lbls)
+#if defined OXCAML
     | Type_record_unboxed_product(lbls, _, _) ->
         let lbls =
           List.map
@@ -732,7 +856,20 @@ let read_type_kind env parent =
             lbls
         in
           Some (Record lbls)
+    | Type_record(lbls, _, _) ->
+#else
+    | Type_record(lbls, _) ->
+#endif
+        let lbls =
+          List.map
+            (read_label_declaration env (parent :> Identifier.FieldParent.t))
+            lbls
+        in
+          Some (Record lbls)
     | Type_open ->  Some Extensible
+#if OCAML_VERSION >= (5,5,0)
+    | Type_external _ -> None
+#endif
 
 let read_injectivity var =
 #if OCAML_VERSION < (5, 1, 0)
@@ -800,10 +937,14 @@ let read_type_declaration env parent id decl =
         decl.type_manifest = None || decl.type_private = Private
     | Type_record _ ->
         decl.type_private = Private
+#if defined OXCAML
     | Type_record_unboxed_product _ ->
         decl.type_private = Private
-#if OCAML_VERSION >= (4,13,0)
+#endif
+#if defined OXCAML
   | Type_variant (tll,_,_) ->
+#elif OCAML_VERSION >= (4,13,0)
+  | Type_variant (tll,_) ->
 #else
   | Type_variant tll ->
 #endif
@@ -811,15 +952,17 @@ let read_type_declaration env parent id decl =
         List.exists (fun cd -> cd.cd_res <> None) tll
     | Type_open ->
         decl.type_manifest = None
+#if OCAML_VERSION >= (5,5,0)
+    | Type_external _ ->
+        decl.type_manifest = None || decl.type_private = Private
+#endif
   in
   let params =
     List.map2 (read_type_parameter abstr) decl.type_variance params
   in
   let private_ = (decl.type_private = Private) in
   let equation = Equation.{params; manifest; constraints; private_} in
-  (* Source location is not trustworthy since it's a cmi so left as None *)
-  let source_loc_jane = None in
-  {id; source_loc; doc; canonical; equation; representation; source_loc_jane }
+  {id; source_loc; doc; canonical; equation; representation}
 
 let read_extension_constructor env parent id ext =
   let open Extension.Constructor in
@@ -866,9 +1009,7 @@ let read_exception env parent id ext =
         (parent : Identifier.Signature.t :> Identifier.FieldParent.t) ext.ext_args
     in
     let res = opt_map (read_type_expr env) ext.ext_ret_type in
-    (* Source location is not trustworthy since it's a cmi so left as None *)
-    let source_loc_jane = None in
-    {id; source_loc; doc; args; res; source_loc_jane}
+    {id; source_loc; doc; args; res}
 
 let read_method env parent concrete (name, kind, typ) =
   let open Method in
@@ -966,9 +1107,7 @@ let read_class_type_declaration env parent id cltd =
       read_class_signature env (id :> Identifier.ClassSignature.t) cltd.clty_params cltd.clty_type
     in
     let virtual_ = read_virtual cltd.clty_type in
-    (* Source location is not trustworthy since it's a cmi so left as None *)
-    let source_loc_jane = None in
-    { id; source_loc; doc; virtual_; params; expr; expansion = None ; source_loc_jane}
+    { id; source_loc; doc; virtual_; params; expr; expansion = None }
 
 let rec read_class_type env parent params =
   let open Class in function
@@ -1006,9 +1145,7 @@ let read_class_declaration env parent id cld =
       read_class_type env (id :> Identifier.ClassSignature.t) cld.cty_params cld.cty_type
     in
     let virtual_ = cld.cty_new = None in
-    (* Source location is not trustworthy since it's a cmi so left as None *)
-    let source_loc_jane = None in
-    { id; source_loc; doc; virtual_; params; type_; expansion = None ; source_loc_jane}
+    { id; source_loc; doc; virtual_; params; type_; expansion = None }
 
 let rec read_module_type env parent (mty : Odoc_model.Compat.module_type) =
   let open ModuleType in
@@ -1054,9 +1191,7 @@ and read_module_type_declaration env parent id (mtd : Odoc_model.Compat.modtype_
   let doc, canonical = Doc_attr.attached ~warnings_tag:env.warnings_tag Odoc_model.Semantics.Expect_canonical container mtd.mtd_attributes in
   let canonical = match canonical with | None -> None | Some s -> Doc_attr.conv_canonical_module_type s in
   let expr = opt_map (read_module_type env (id :> Identifier.Signature.t)) mtd.mtd_type in
-  (* Source location is not trustworthy since it's a cmi so left as None *)
-  let source_loc_jane = None in
-  {id; source_loc; doc; canonical; expr ; source_loc_jane}
+  {id; source_loc; doc; canonical; expr }
 
 and read_module_declaration env parent ident (md : Odoc_model.Compat.module_declaration) =
   let open Module in
@@ -1075,9 +1210,7 @@ and read_module_declaration env parent ident (md : Odoc_model.Compat.module_decl
     | Some _ -> false
     | None -> Odoc_model.Names.contains_double_underscore (Ident.name ident)
   in
-  (* Source location is not trustworthy since it's a cmi so left as None *)
-  let source_loc_jane = None in
-  {id; source_loc; doc; type_; canonical; hidden ; source_loc_jane}
+  {id; source_loc; doc; type_; canonical; hidden }
 
 and read_type_rec_status rec_status =
   let open Signature in

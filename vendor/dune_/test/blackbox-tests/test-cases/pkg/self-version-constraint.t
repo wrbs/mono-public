@@ -34,9 +34,8 @@ constraint on `foo` will fail:
   >  (name x)
   >  (depends (foo (= :version))))
   > EOF
-  Error:
-  Unable to solve dependencies while generating lock directory: dune.lock
-  
+  Error: Unable to solve dependencies for the following lock directories:
+  Lock directory dune.lock:
   Couldn't solve the package dependency formula.
   Selected candidates: x.dev
   - foo -> (problem)

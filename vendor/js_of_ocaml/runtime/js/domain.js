@@ -7,6 +7,7 @@ var caml_domain_dls = [0];
 //Version: >= 5
 function caml_domain_dls_set(a) {
   caml_domain_dls = a;
+  return 0;
 }
 
 //Provides: caml_domain_dls_compare_and_set
@@ -23,6 +24,28 @@ function caml_domain_dls_compare_and_set(old, n) {
 //Version: >= 5
 function caml_domain_dls_get(_unit) {
   return caml_domain_dls;
+}
+
+//Provides: caml_domain_tls
+//Version: >= 5.2, < 5.3
+//OxCaml
+var caml_domain_tls = [0];
+
+//Provides: caml_domain_tls_set
+//Requires: caml_domain_tls
+//Version: >= 5.2, < 5.3
+//OxCaml
+function caml_domain_tls_set(a) {
+  caml_domain_tls = a;
+  return 0;
+}
+
+//Provides: caml_domain_tls_get
+//Requires: caml_domain_tls
+//Version: >= 5.2, < 5.3
+//OxCaml
+function caml_domain_tls_get(_unit) {
+  return caml_domain_tls;
 }
 
 //Provides: caml_atomic_load
@@ -165,9 +188,23 @@ function caml_recommended_domain_count(_unit) {
   return 1;
 }
 
+//Provides: caml_max_domain_count
+//Version: >= 5
+function caml_max_domain_count(unit) {
+  return 1;
+}
+
 //Provides: caml_ml_domain_index
 //Requires: caml_domain_id
 //Version: >= 5.03
+function caml_ml_domain_index(_unit) {
+  return caml_domain_id;
+}
+
+//Provides: caml_ml_domain_index
+//Requires: caml_domain_id
+//Version: >= 5.2, < 5.3
+//OxCaml
 function caml_ml_domain_index(_unit) {
   return caml_domain_id;
 }
@@ -221,6 +258,12 @@ function caml_ml_domain_id(_unit) {
 //Version: >= 5
 function caml_ml_domain_cpu_relax(_unit) {
   return 0;
+}
+
+//Provides: caml_domain_count const
+//Version: >= 5.5
+function caml_domain_count(_unit) {
+  return 1;
 }
 
 //Provides: caml_atomic_load_field

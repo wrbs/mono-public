@@ -56,10 +56,10 @@ function caml_dynlink_lookup_symbol(idx, fun_name) {
 }
 
 //Provides: caml_dynlink_add_primitive
-//Requires: caml_global_data
+//Requires: caml_link_info
 function caml_dynlink_add_primitive(dll_addr) {
   globalThis.jsoo_runtime[dll_addr.name] = dll_addr.symbol;
-  return caml_global_data.prim_count++;
+  return caml_link_info.prim_count++;
 }
 
 //Provides: caml_dynlink_get_current_libs
@@ -70,4 +70,10 @@ function caml_dynlink_get_current_libs() {
   var a = new Array(len);
   for (var i = 0; i < len; i++) a[i] = i;
   return a;
+}
+
+//Provides: caml_dynlink_parse_ld_conf
+//Version: >= 5.5
+function caml_dynlink_parse_ld_conf(_stdlib) {
+  return 0;
 }

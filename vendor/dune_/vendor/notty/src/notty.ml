@@ -1,6 +1,8 @@
 (* Copyright (c) 2016-2017 David Kaloper Meršinjak. All rights reserved.
    See LICENSE.md. *)
 
+open Dune_uutf
+
 let invalid_arg fmt = Format.kasprintf invalid_arg fmt
 
 let (&.) f g x = f (g x)
@@ -641,7 +643,7 @@ module Unescape = struct
   | `Function of int
   ]
 
-  type button = [ `Left | `Middle | `Right | `Scroll of [ `Up | `Down | `Left | `Right ] ]
+  type button = [ `Left | `Middle | `Right | `Scroll of [ `Up | `Down ] ]
 
   type mods = [ `Meta | `Ctrl | `Shift ] list
 
@@ -725,9 +727,9 @@ module Unescape = struct
       | 0              -> `Left
       | 1 when bit 6 p -> `Scroll `Down
       | 1              -> `Middle
-      | 2 when bit 6 p -> `Scroll `Left
+      | 2 when bit 6 p -> `ALL (* `Scroll `Left *)
       | 2              -> `Right
-      | 3 when bit 6 p -> `Scroll `Right
+      | 3 when bit 6 p -> `ALL (* `Scroll `Right *)
       | _              -> `ALL
     and drag = bit 5 p
     and mods =

@@ -1,6 +1,6 @@
 (*---------------------------------------------------------------------------
    Copyright (c) 2012 The uutf programmers. All rights reserved.
-   Distributed under the ISC license, see terms at the end of the file.
+   SPDX-License-Identifier: ISC
   ---------------------------------------------------------------------------*)
 
 let str = Printf.sprintf
@@ -315,10 +315,10 @@ let nat =
   let parse s =
     try
       let v = int_of_string s in
-      if v > 0 then `Ok v else failwith (str "%s must be > 0" s)
-    with Failure e -> `Error e
+      if v > 0 then Ok v else failwith (str "%s must be > 0" s)
+    with Failure e -> Error e
   in
-  parse, Format.pp_print_int
+  Arg.conv' ~docv:"NAT" (parse, Format.pp_print_int)
 
 let rseed =
   let doc = "Random seed." in
@@ -382,26 +382,10 @@ let cmd =
         See http://erratique.ch/software/uutf for contact
         information."; ]
   in
-  Term.(pure do_cmd $ cmd $ file $ sin $ sout $ use_unix $ usize $
-        ienc $ oenc $ nln $ rseed $ rcount),
-  Term.info "utftrip" ~version:"v1.0.3" ~doc ~man
+  Cmd.v (Cmd.info "utftrip" ~version:"v1.0.4" ~doc ~man)
+    Term.(const do_cmd $ cmd $ file $ sin $ sout $ use_unix $ usize $
+          ienc $ oenc $ nln $ rseed $ rcount)
 
-let () = match Term.eval cmd with
-| `Error _ -> exit 1
+let () = match Cmd.eval_value cmd with
+| Error _ -> exit 1
 | _ -> if !input_malformed then exit 2 else exit 0
-
-(*---------------------------------------------------------------------------
-   Copyright (c) 2012 The uutf programmers
-
-   Permission to use, copy, modify, and/or distribute this software for any
-   purpose with or without fee is hereby granted, provided that the above
-   copyright notice and this permission notice appear in all copies.
-
-   THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-   WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-   MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-   ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-   WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-   ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-  ---------------------------------------------------------------------------*)

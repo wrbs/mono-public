@@ -4,7 +4,7 @@
   ---------------------------------------------------------------------------*)
 
 let topkg_manual = "Topkg manual"
-let version = "v1.0.8"
+let version = "v1.1.1"
 
 (* Help manuals *)
 

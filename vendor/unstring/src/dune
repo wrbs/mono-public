@@ -1,0 +1,6 @@
+(library
+ (name unstring)
+ (public_name unstring)
+ (libraries core heterogeneous_list unstring_engine)
+ (preprocess
+  (pps ppx_jane)))

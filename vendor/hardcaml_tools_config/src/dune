@@ -1,0 +1,6 @@
+(library
+ (name hardcaml_tools_config)
+ (public_name hardcaml_tools_config)
+ (libraries)
+ (preprocess
+  (pps ppx_jane -compare-require-explicit-locality)))

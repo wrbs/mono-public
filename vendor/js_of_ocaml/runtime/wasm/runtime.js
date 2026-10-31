@@ -16,7 +16,7 @@
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
 (js) => async (args) => {
-  // biome-ignore lint/suspicious/noRedundantUseStrict:
+  // biome-ignore lint/suspicious/noRedundantUseStrict: needed for non-module execution
   "use strict";
   const { link, src, generated, disable_effects } = args;
 
@@ -67,6 +67,32 @@
   ];
 
   const fs = isNode && require("node:fs");
+
+  // Virtual filesystem for embedded files (e.g. CMIs for toplevel)
+  const virtual_files = new Map(); // path -> Uint8Array
+  const virtual_dirs = new Set(); // directory paths
+  const virtual_fds = new Map(); // fd -> { data, offset }
+  let next_virtual_fd = 1000000;
+
+  function register_virtual_file(name, content) {
+    virtual_files.set(name, content);
+    let dir = name;
+    while (true) {
+      const i = dir.lastIndexOf("/");
+      if (i <= 0) break;
+      dir = dir.slice(0, i);
+      virtual_dirs.add(dir);
+    }
+  }
+
+  if (args.files) {
+    for (const [name, data] of Object.entries(args.files)) {
+      register_virtual_file(
+        name,
+        Uint8Array.from(atob(data), (c) => c.charCodeAt(0)),
+      );
+    }
+  }
 
   const fs_cst = fs?.constants;
 
@@ -193,6 +219,10 @@
   }
 
   const on_windows = isNode && globalThis.process.platform === "win32";
+  const on_arm64 = globalThis.process?.arch === "arm64";
+
+  // See https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error/stack
+  const isV8 = new Error().stack?.includes("\n    at ") ?? false;
 
   const call = Function.prototype.call;
   const DV = DataView.prototype;
@@ -209,10 +239,9 @@
     delete: (x, y) => delete x[y],
     instanceof: (x, y) => x instanceof y,
     typeof: (x) => typeof x,
-    // biome-ignore lint/suspicious/noDoubleEquals:
+    // biome-ignore lint/suspicious/noDoubleEquals: ..
     equals: (x, y) => x == y,
-    // biome-ignore lint/security/noGlobalEval:
-    eval: (x) => eval?.('"use strict";' + x),
+    eval: (x) => eval("("+x+")"),
     strict_equals: (x, y) => x === y,
     fun_call: (f, o, args) => f.apply(o, args),
     meth_call: (o, f, args) => o[f].apply(o, args),
@@ -260,17 +289,16 @@
     ta_copy: (ta, t, s, e) => ta.copyWithin(t, s, e),
     ta_bytes: (a) =>
       new Uint8Array(a.buffer, a.byteOffset, a.length * a.BYTES_PER_ELEMENT),
-    ta_blit_from_bytes: (s, p1, a, p2, l) => {
-      for (let i = 0; i < l; i++) a[p2 + i] = bytes_get(s, p1 + i);
-    },
-    ta_blit_to_bytes: (a, p1, s, p2, l) => {
-      for (let i = 0; i < l; i++) bytes_set(s, p2 + i, a[p1 + i]);
-    },
     dv_make: (a) => new DataView(a.buffer, a.byteOffset, a.byteLength),
     dv_get_f64: call.bind(DV.getFloat64),
     dv_get_f32: call.bind(DV.getFloat32),
     dv_get_i64: call.bind(DV.getBigInt64),
-    dv_get_i32: call.bind(DV.getInt32),
+    // 2026-03-16: using call.bind is faster in V8 which recognize the
+    // primitive and generate inlined call, but calling a JavaScript
+    // function is currently faster in other engines which does not
+    // have this optimization yet. Use benchmarks/bench_dv_getint32.js
+    // for performance comparisons.
+    dv_get_i32: isV8 ? call.bind(DV.getInt32) : (x, y, z) => x.getInt32(y, z),
     dv_get_i16: call.bind(DV.getInt16),
     dv_get_ui16: call.bind(DV.getUint16),
     dv_get_i8: call.bind(DV.getInt8),
@@ -387,7 +415,7 @@
       }
       return pad ? " " + s : s;
     },
-    gettimeofday: () => new Date().getTime() / 1000,
+    gettimeofday: () => Date.now() / 1000,
     times: () => {
       if (globalThis.process?.cpuUsage) {
         var t = globalThis.process.cpuUsage();
@@ -445,13 +473,25 @@
         p,
         access_flags.reduce((f, v, i) => (flags & (1 << i) ? f | v : f), 0),
       ),
-    open: (p, flags, perm) =>
-      fs.openSync(
+    open: (p, flags, perm) => {
+      if (virtual_files.has(p) && !(flags & 2)) {
+        const fd = next_virtual_fd++;
+        virtual_fds.set(fd, { data: virtual_files.get(p), offset: 0 });
+        return fd;
+      }
+      return fs.openSync(
         p,
         open_flags.reduce((f, v, i) => (flags & (1 << i) ? f | v : f), 0),
         perm,
-      ),
-    close: (fd) => fs.closeSync(fd),
+      );
+    },
+    close: (fd) => {
+      if (virtual_fds.has(fd)) {
+        virtual_fds.delete(fd);
+        return;
+      }
+      fs.closeSync(fd);
+    },
     write: (fd, b, o, l, p) =>
       fs
         ? fs.writeSync(fd, b, o, l, p === null ? p : Number(p))
@@ -459,15 +499,31 @@
             typeof b === "string" ? b : decoder.decode(b.slice(o, o + l)),
           ),
           l),
-    read: (fd, b, o, l, p) => fs.readSync(fd, b, o, l, p),
+    read: (fd, b, o, l, p) => {
+      const vf = virtual_fds.get(fd);
+      if (vf) {
+        const pos = p === null ? vf.offset : Number(p);
+        const n = Math.min(l, vf.data.length - pos);
+        if (n <= 0) return 0;
+        b.set(vf.data.subarray(pos, pos + n), o);
+        vf.offset = pos + n;
+        return n;
+      }
+      return fs.readSync(fd, b, o, l, p);
+    },
     fsync: (fd) => fs.fsyncSync(fd),
-    file_size: (fd) => fs.fstatSync(fd, { bigint: true }).size,
+    file_size: (fd) => {
+      const vf = virtual_fds.get(fd);
+      if (vf) return BigInt(vf.data.length);
+      return fs.fstatSync(fd, { bigint: true }).size;
+    },
     register_channel,
     unregister_channel,
     channel_list,
     exit: (n) => isNode && globalThis.process.exit(n),
     argv: () => (isNode ? globalThis.process.argv.slice(1) : ["a.out"]),
     on_windows: +on_windows,
+    on_arm64: +on_arm64,
     getenv,
     backtrace_status: () => record_backtrace_flag,
     record_backtrace: (b) => (record_backtrace_flag = b),
@@ -489,7 +545,25 @@
     symlink: (t, p, kind) => fs.symlinkSync(t, p, [null, "file", "dir"][kind]),
     readlink: (p) => fs.readlinkSync(p),
     unlink: (p) => fs.unlinkSync(p),
-    read_dir: (p) => fs.readdirSync(p),
+    read_dir: (p) => {
+      const prefix = p.endsWith("/") ? p : p + "/";
+      const entries = new Set();
+      for (const name of virtual_files.keys()) {
+        if (name.startsWith(prefix)) {
+          const rest = name.slice(prefix.length);
+          const slash = rest.indexOf("/");
+          entries.add(slash < 0 ? rest : rest.slice(0, slash));
+        }
+      }
+      if (fs) {
+        try {
+          for (const e of fs.readdirSync(p)) entries.add(e);
+        } catch (e) {
+          if (entries.size === 0) throw e;
+        }
+      }
+      return [...entries];
+    },
     opendir: (p) => fs.opendirSync(p),
     readdir: (d) => {
       var n = d.readSync()?.name;
@@ -501,9 +575,20 @@
     fstat: (fd, l) => alloc_stat(fs.fstatSync(fd), l),
     chmod: (p, perms) => fs.chmodSync(p, perms),
     fchmod: (p, perms) => fs.fchmodSync(p, perms),
-    file_exists: (p) => +fs.existsSync(p),
-    is_directory: (p) => +fs.lstatSync(p).isDirectory(),
-    is_file: (p) => +fs.lstatSync(p).isFile(),
+    file_exists: (p) => {
+      if (virtual_files.has(p) || virtual_dirs.has(p)) return 1;
+      return fs ? +fs.existsSync(p) : 0;
+    },
+    is_directory: (p) => {
+      if (virtual_dirs.has(p)) return 1;
+      if (virtual_files.has(p)) return 0;
+      return +fs.lstatSync(p).isDirectory();
+    },
+    is_file: (p) => {
+      if (virtual_files.has(p)) return 1;
+      if (virtual_dirs.has(p)) return 0;
+      return +fs.lstatSync(p).isFile();
+    },
     utimes: (p, a, m) => fs.utimesSync(p, a, m),
     truncate: (p, l) => fs.truncateSync(p, l),
     ftruncate: (fd, l) => fs.ftruncateSync(fd, l),
@@ -552,6 +637,62 @@
     map_delete: (m, x) => m.delete(x),
     hash_string,
     log: (x) => console.log(x),
+    register_fragments: (unitName, fragmentsSource) => {
+      // biome-ignore lint/security/noGlobalEval: ..
+      const frags = eval?.(fragmentsSource);
+      imports[unitName + ".fragments"] = frags;
+    },
+    load_module: (wasmBytes) => {
+      const module = new WebAssembly.Module(wasmBytes, options);
+      const inst = new WebAssembly.Instance(module, imports);
+      Object.assign(imports.OCaml, inst.exports);
+      return inst.exports["_dynlink.init"]();
+    },
+    load_wasmo: (zipBytes) => {
+      // Parse ZIP to extract code.wasm and link_order (uncompressed ZIP)
+      const dv = new DataView(
+        zipBytes.buffer,
+        zipBytes.byteOffset,
+        zipBytes.byteLength,
+      );
+      const len = zipBytes.byteLength;
+      // Find End of Central Directory record (search backwards)
+      let eocdOff = len - 22;
+      while (eocdOff >= 0 && dv.getUint32(eocdOff, true) !== 0x06054b50)
+        eocdOff--;
+      if (eocdOff < 0) throw new Error("Invalid ZIP: EOCD not found");
+      const cdOff = dv.getUint32(eocdOff + 16, true);
+      const cdEntries = dv.getUint16(eocdOff + 10, true);
+      // Scan central directory for code.wasm and link_order
+      const entries = {};
+      let off = cdOff;
+      for (let i = 0; i < cdEntries; i++) {
+        if (dv.getUint32(off, true) !== 0x02014b50)
+          throw new Error("Invalid ZIP: bad CD entry");
+        const nameLen = dv.getUint16(off + 28, true);
+        const extraLen = dv.getUint16(off + 30, true);
+        const commentLen = dv.getUint16(off + 32, true);
+        const localOff = dv.getUint32(off + 42, true);
+        const name = decoder.decode(
+          zipBytes.subarray(off + 46, off + 46 + nameLen),
+        );
+        const size = dv.getUint32(off + 24, true);
+        const localNameLen = dv.getUint16(localOff + 26, true);
+        const localExtraLen = dv.getUint16(localOff + 28, true);
+        const dataOff = localOff + 30 + localNameLen + localExtraLen;
+        entries[name] = zipBytes.subarray(dataOff, dataOff + size);
+        off += 46 + nameLen + extraLen + commentLen;
+      }
+      if (!entries["code.wasm"])
+        throw new Error("code.wasm not found in .wasmo");
+      const module = new WebAssembly.Module(entries["code.wasm"], options);
+      const inst = new WebAssembly.Instance(module, imports);
+      Object.assign(imports.OCaml, inst.exports);
+      const names = decoder.decode(entries.link_order).split("\x00");
+      for (const name of names) inst.exports[name + ".init"]();
+    },
+    register_file: (name, data) => register_virtual_file(name, data),
+    read_file: (name) => virtual_files.get(name) ?? null,
   };
   const string_ops = {
     test: (v) => +(typeof v === "string"),
@@ -559,6 +700,8 @@
     decodeStringFromUTF8Array: () => "",
     encodeStringToUTF8Array: () => 0,
     fromCharCodeArray: () => "",
+    length: (s) => s.length,
+    intoCharCodeArray: () => 0,
   };
   const imports = Object.assign(
     {
@@ -645,8 +788,6 @@
     caml_handle_uncaught_exception,
     caml_buffer,
     caml_extract_bytes,
-    bytes_get,
-    bytes_set,
     _initialize,
   } = wasmModule.instance.exports;
 

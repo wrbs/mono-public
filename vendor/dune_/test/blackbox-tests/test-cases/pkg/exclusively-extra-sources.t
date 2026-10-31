@@ -2,7 +2,8 @@ Test for packages with no source field but with extra_sources.
 
   $ . ./helpers.sh
   $ make_lockdir
-  $ make_lockpkg foo <<EOF
+
+  $ cat > dune.lock/foo.pkg <<EOF
   > (version 1)
   > (extra_sources
   >  (foo.txt

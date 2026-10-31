@@ -502,13 +502,10 @@ value fswatch_win_shutdown(value v_fsenv) {
   CloseHandle(fsenv->signal);
   CloseHandle(fsenv->afterAdd);
 
-  struct events *e = pop_events(fsenv);
-  while (e != NULL) {
+  for (struct events *e = pop_events(fsenv); e; e = e->next) {
     free(e->path);
     free(e->buffer);
-    struct events *next = e->next;
     free(e);
-    e = next;
   }
 
   caml_acquire_runtime_system();

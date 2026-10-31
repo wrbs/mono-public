@@ -3,7 +3,7 @@
 (*  Copyright 2011 Jun Furuse                                             *)
 (*  Copyright 2012,2015 OCamlPro                                          *)
 (*                                                                        *)
-(*  All rights reserved.This file is distributed under the terms of the   *)
+(*  All rights reserved. This file is distributed under the terms of the   *)
 (*  GNU Lesser General Public License version 2.1 with linking            *)
 (*  exception.                                                            *)
 (*                                                                        *)
@@ -30,6 +30,7 @@ module Node = struct
     | KBracket
     | KBracketBar
     | KLet
+    | KClass
     | KAnd of kind
     | KLetIn
     | KIn
@@ -72,6 +73,7 @@ module Node = struct
     | KWhen
     | KExternal
     | KCodeInComment
+    | KEffect
     | KExtendedExpr of string list * extension_kind
     | KExtendedItem of string list * extension_kind
     | KAttrId of string list * bool
@@ -89,6 +91,9 @@ module Node = struct
   let expr_atom = KExpr prio_max
   let expr_apply = KExpr 140
   let prio_lbracketat = 30
+  (* Special colon prio used to correctly indent labeled tuples *)
+  let prio_star = 100
+  let prio_colon_tuple = prio_star
   (* Special operators that should break arrow indentation have this prio
      (eg monad operators, >>=) *)
   let prio_flatop = 59
@@ -110,6 +115,7 @@ module Node = struct
     | KBracketBar -> "KBracketBar"
     (* | KField -> "KField" *)
     | KLet -> "KLet"
+    | KClass -> "KClass"
     | KIn -> "KIn"
     | KAnd k -> aux "KAnd" k
     | KLetIn -> "KLetIn"
@@ -143,6 +149,7 @@ module Node = struct
     | KWhen -> "KWhen"
     | KExternal -> "KExternal"
     | KCodeInComment -> "KCodeInComment"
+    | KEffect -> "KEffect"
     | KExtendedExpr (name, kind) ->
         Printf.sprintf "KExtendedExpr(%s,%s)"
           (String.concat "." (List.rev name))
@@ -360,6 +367,55 @@ let last_token t =
   in
   aux t.last
 
+(* Returns whether there's an arrow coming up. Used to correctly
+   indent labeled tuples VS labeled arguments.
+   We stop looking after a predefined distance as in some, presumably extremely
+   rare, corner case we could end up looking up quite far ahead.
+*)
+let in_arrow_type stream =
+  let max_distance = 30 in
+  let rec aux ~distance ~depth stream =
+    match next_token_full stream with
+    | None -> false
+    (* distance acts as a failsafe *)
+    | Some _ when distance >= max_distance -> false
+    | Some (tok, stream) ->
+        let distance = distance + 1 in
+        match tok, depth with
+        | {token = EOF}, _ -> false
+        | {token = MINUSGREATER; _}, 0 -> true
+        | {token =
+             (* End of phrase *)
+             ( SEMISEMI
+             (* Begining of next item *)
+             | LBRACKETATAT | LBRACKETPERCENTPERCENT | LINE_DIRECTIVE | MATCH
+             | METHOD | CLASS | AND | BEGIN | MODULE | VAL | LET | DO | WHILE
+             | FOR
+             (* End of current core type *)
+             | EQUAL | RPAREN | RBRACKET | RBRACE | GREATER | SEMI | COMMA | BAR
+             | IN | DONE | WHEN | ELSE | THEN
+             )
+          ; _}, 0 ->
+            false
+        | {token =
+             ( LBRACKET | LBRACKETLESS | LBRACKETGREATER
+             | LBRACKETAT | LBRACKETPERCENT
+             | LPAREN
+             | LESS
+             )
+          ; _}, depth ->
+            aux ~distance ~depth:(depth + 1) stream
+        | {token = RPAREN | GREATER | RBRACKET; _}, _ ->
+            (* Only reached when [depth > 0]. Does not track which is opened,
+               undefined behaviour on incorrect code. *)
+            aux ~distance ~depth:(depth - 1) stream
+        | _ -> aux ~distance ~depth stream
+  in
+  aux
+    ~distance:0
+    ~depth:0
+    stream
+
 (* a more efficient way to do this would be to store a
    "context-type" in the stack *)
 let rec is_inside_type path =
@@ -476,7 +532,7 @@ let op_prio_align_indent config =
   | LBRACKETAT -> prio_lbracketat,align,indent
   | COLONCOLON -> 80,align,indent
   | INFIXOP2 _ | PLUSDOT | PLUS | MINUSDOT | MINUS -> 90,align,indent
-  | INFIXOP3 _ | STAR -> 100,align,indent
+  | INFIXOP3 _ | STAR -> prio_star,align,indent
   | INFIXOP4 _ -> 110,align,indent
   (* apply: 140 *)
   | AS -> prio_apply,L,0
@@ -541,6 +597,7 @@ let ext_kind = function
   | LBRACKETPERCENT | LBRACKETPERCENTPERCENT -> ExtNode
   | LBRACKETAT | LBRACKETATAT | LBRACKETATATAT -> Attr
   | _ -> invalid_arg "ext_kind"
+
 
 (* Take a block, a token stream and a token.
    Return the new block stack. *)
@@ -787,6 +844,44 @@ let rec update_path config block stream tok =
     | {kind=KComment _|KVerbatim _|KUnknown}::path -> {block with path}
     | _ -> block
   in
+  (* Handles labels [:] in type expressions, trying to determine whether
+       the label belongs to a tuple or an upcoming arrow type. *)
+  let tuple_or_argument_label () =
+    let after_star =
+      match block.path with
+      | {kind = KExpr 200; _} :: {kind = KExpr 100; _} :: _ ->
+          (* Our [:] is after `* <label>` *)
+          true
+      | _ -> false
+    in
+    (* After a star, we know the label belongs to the tuple, no need for
+       the annoying and costly look ahead, *)
+    let in_arrow = not after_star && in_arrow_type stream in
+    (* If we're not in an arrow, we align with the beginning of the tuple
+       type *)
+    let unwind_prio = if in_arrow then prio_arrow else prio_star in
+    let target_prio = if in_arrow then prio_colon else prio_colon_tuple in
+    (match unwind_while (fun kind -> prio kind > unwind_prio) block.path
+     with
+     | Some path ->
+         (* This might be an function argument label or a tuple's label,
+            we need to look ahead to be sure. *)
+         let align =
+           if in_arrow && config.i_align_params = Never then L else T
+         in
+         extend (KExpr target_prio) align path
+     | None -> make_infix tok block.path)
+  in
+  (* Helper function for replacing [X] with [KBody(X)] when reaching [=]
+     or [+=]. *)
+  let replace_with_body ~kind ~indent hd tl =
+    if starts_line then
+      let hd' = {hd with indent = hd.indent + indent; pad = 0} in
+      replace (KBody kind) L ~pad:0 (hd'::tl)
+    else
+      let hd' = {hd with indent = hd.column} in
+      replace (KBody kind) T ~pad:indent (hd'::tl)
+  in
   let (>>!) opt f = match opt with Some x -> x | None -> f () in
   handle_dotted block tok >>! fun () ->
   match tok.token with
@@ -802,6 +897,25 @@ let rec update_path config block stream tok =
             | {kind=KWith KMatch|KBar KMatch}::_ ->
                 append expr_atom L block.path
             | _ -> append KException L (unwind_top block.path)))
+  | LIDENT "effect" ->
+      (* We need to determine whether we're post 5.3 and this is the effect
+         keyword or we're pre 5.3 and it's a regular identifier.
+         The effect syntax is fairly restrictive but it is allowed to wrap an
+         effect pattern in parens. This should be the only thing separating
+         the effect keyword from a [with] or [|]. *)
+      let p = unwind (function KParen -> false | _ -> true) block.path in
+      (match p with
+       | {kind=KWith (KTry|KMatch)|KBar (KTry|KMatch); _}::_ ->
+           (* Modulo the parens, the effect keyword can only appear next to
+              [with] or [|]. *)
+           (match next_token stream with
+            | Some (LIDENT _ | UIDENT _ | UNDERSCORE) ->
+                (* The effect keyword is directly followed by a pattern, no
+                   parens are allowed, which makes it easy to distinguish from
+                   a var pattern named [effect]. *)
+                append KEffect L block.path
+            | _ -> atom block.path)
+       | _ -> atom block.path)
   | BEGIN       -> open_paren KBegin block.path
   | OBJECT      -> append KObject L block.path
   | VAL         -> append KVal L (unwind_top block.path)
@@ -956,7 +1070,11 @@ let rec update_path config block stream tok =
   (*   append KLetIn L config.i_base (fold_expr block.path) *)
 
   | CLASS ->
-      append KLet L (unwind_top block.path)
+      (match last_token block with
+       | Some LET (* let class (type) c = *) ->
+           append KClass L block.path
+       | _ ->
+           append KClass L (unwind_top block.path))
 
   | METHOD ->
       append KLet L (unwind_top block.path)
@@ -974,7 +1092,7 @@ let rec update_path config block stream tok =
 
   | AND ->
       let unwind_to = function
-        | KLet | KLetIn | KType | KModule | KParen -> true
+        | KLet | KLetIn | KType | KModule | KParen | KClass -> true
         | _ -> false
       in let path = unwind (unwind_to @* follow) block.path in
       (match path with
@@ -1008,6 +1126,7 @@ let rec update_path config block stream tok =
   | TYPE ->
       (match last_token block with
        | Some (MODULE | CLASS) -> append KUnknown L block.path (* module type *)
+       | Some LET (* let type *)
        | Some (WITH|AND)
        | Some COLON (* 'type' inside type decl, for GADTs *)
          -> append KType L block.path
@@ -1191,7 +1310,7 @@ let rec update_path config block stream tok =
         | {kind=KFun} :: ({kind=KExpr i} as e) :: path when i = prio_flatop ->
             (* eg '>>= fun x ->': indent like the top of the expression *)
             {e with kind = KExpr 0} :: path
-        | {kind=KFun; line } :: {kind=KBody(KLet|KLetIn); line=letline} :: _
+        | {kind=KFun; line } :: {kind=KBody(KLet|KLetIn|KClass); line=letline} :: _
           when next_offset tok stream = None
             && line = current_line && line <> letline
           ->
@@ -1246,8 +1365,9 @@ let rec update_path config block stream tok =
         | KExternal | KModule | KType | KLet | KLetIn | KException | KVal
         | KBar KType
         | KStruct | KSig | KObject
-        | KAnd(KModule|KType|KLet|KLetIn)
+        | KAnd(KModule|KType|KLet|KLetIn|KClass)
         | KConstraint
+        | KClass
         | KExtendedItem _ | KExtendedExpr _ -> true
         | _ -> false
       in
@@ -1261,7 +1381,12 @@ let rec update_path config block stream tok =
               | {kind = KWith (KType|KModule)
                       | KAnd KWith (KType|KModule)}::_ ->
                   find_parent p
-              | _ -> replace (KBody KType) L ~pad:config.i_type path)
+              | _ ->
+                  match next_token stream with
+                  | Some BAR when config.i_strict_with = Always ->
+                      replace (KBody KType) L ~pad:config.i_with path
+                  | _ ->
+                      replace (KBody KType) L ~pad:config.i_type path)
          | {kind=KBrace}::_ ->
              (match
                 unwind_while (fun kind -> kind = KColon || prio kind > prio_semi)
@@ -1285,16 +1410,49 @@ let rec update_path config block stream tok =
                | _, (KType | KBody KType) -> config.i_type
                | _ -> config.i_base
              in
-             if starts_line then
-               let h = {h with indent = h.indent + indent; pad = 0} in
-               replace (KBody kind) L ~pad:0 (h :: p)
-             else
-               let h = {h with indent = h.column} in
-               replace (KBody kind) T ~pad:indent (h :: p))
+             let kind, h, p =
+               match kind, p with
+               | ( (KType | KExternal | KClass)
+                 , ({kind = (KLet | KLetIn) as k; _} as h')::p') ->
+                   (* for:
+                      - [let type t = ...]
+                      - [let external f = ...]
+                      - [let class c = ...]
+
+                      We treat anything after [=] as the body of the [let]
+                      rather than as the body of type/external/class to
+                      avoid unaesthetic over indentation while preserving
+                      decent indentation of what comes between [let] and [=]. *)
+                   k, h', p'
+               | _ ->
+                   kind, h, p
+             in
+             replace_with_body ~kind ~indent h p)
       in
       find_parent block.path
 
-  | COLONEQUAL | INFIXOP2 "+=" ->
+  | INFIXOP2 "+=" ->
+      (match
+         unwind_while (function KExpr _ | KType -> true | _ -> false) block.path
+       with
+       | Some ({kind=KType} as h::p) -> (* type t += *)
+           let indent =
+             match next_token stream with
+             | Some BAR when config.i_strict_with = Always -> config.i_with
+             | _ -> config.i_type
+           in
+           let kind, h, p =
+             match p with
+             | ({kind = (KLet | KLetIn) as k; _} as h')::p' ->
+                 (* [let type t += ...] is handled as [let type t =],
+                    we treat anything after [=] as the body of the [let]. *)
+                 k, h', p'
+             | _ -> KType, h, p
+           in
+           replace_with_body ~kind ~indent h p
+       | _ ->
+           make_infix tok block.path)
+  | COLONEQUAL ->
       (match
          unwind_while (function KExpr _ | KType -> true | _ -> false) block.path
        with
@@ -1307,21 +1465,15 @@ let rec update_path config block stream tok =
       let path = unwind (function
           | KParen | KBegin | KBrace | KBracket | KBracketBar | KBody _
           | KModule | KLet | KLetIn | KExternal | KVal | KColon
-          | KAnd(KModule|KLet|KLetIn) | KBar KType -> true
+          | KClass
+          | KAnd(KModule|KLet|KLetIn|KClass) | KBar KType -> true
           | _ -> false)
           block.path
       in
       (match path with
-       | {kind = KBody(KVal|KType|KExternal) | KColon} :: _ ->
-           (match unwind_while (fun kind -> prio kind > prio_arrow) block.path
-            with
-            | Some path ->
-                extend (KExpr prio_colon)
-                  (if config.i_align_params = Never then L else T)
-                  path
-            | None -> make_infix tok block.path)
-       | {kind = KModule|KLet|KLetIn
-                 | KAnd(KModule|KLet|KLetIn)} :: _ ->
+       | {kind = KBody(KVal|KType|KExternal) | KColon} :: _ -> tuple_or_argument_label ()
+       | {kind = KModule|KLet|KLetIn|KClass
+                 | KAnd(KModule|KLet|KLetIn|KClass)} :: _ ->
            append KColon L path
        | {kind = KExternal} :: _ as path ->
            append KColon L ~pad:(if starts_line then 0 else config.i_base) path
@@ -1345,6 +1497,7 @@ let rec update_path config block stream tok =
             | _ -> make_infix tok block.path)
        | {kind = KBar KType} :: _ ->
            make_infix {tok with token = OF} block.path
+       | {kind = KParen; _} :: p when is_inside_type p -> tuple_or_argument_label ()
        | _ -> make_infix tok block.path)
 
   | SEMI ->
@@ -1352,22 +1505,13 @@ let rec update_path config block stream tok =
        | {kind=KColon}::({kind=KBrace}::_ as p) -> p
        | _ -> make_infix tok block.path)
 
-  (* Some commom preprocessor directives *)
-  | UIDENT ("INCLUDE"|"IFDEF"|"THEN"|"ELSE"|"ENDIF"
-           |"TEST"|"TEST_UNIT"|"TEST_MODULE"
-           |"BENCH"|"BENCH_FUN"|"BENCH_MODULE"|"BENCH_INDEXED"
-           as s)
-    when starts_line ->
-      if
-        String.sub s 0 4 = "TEST"
-        || (String.length s > 4 && String.sub s 0 5 = "BENCH")
-      then
-        append KLet L ~pad:(2 * config.i_base) (unwind_top block.path)
-      else
-        replace KUnknown L (unwind_top block.path)
-
   | EXTERNAL ->
-      append KExternal L (unwind_top block.path)
+      (match block.path, last_token block with
+       | _, Some LET (* let external *)
+       | {kind = KBody (KType)} :: _, _ (* type t = external "x" *)
+         -> append KExternal L block.path
+       | _ ->
+           append KExternal L (unwind_top block.path))
 
   | DOT ->
       (match block.path with

@@ -62,22 +62,19 @@ let%expect_test "let rec" =
                 : runtime.caml_call_gen(f, [a0, a1]);
        }
        var
-        global_data = runtime.caml_get_global_data(),
-        Stdlib_Hashtbl = global_data.Stdlib__Hashtbl,
-        letrec_function_context = [],
-        c = [],
-        d = runtime.caml_array_make(5, 0),
-        default$ = 42;
+        Stdlib_Hashtbl = runtime.caml_get_global("Stdlib__Hashtbl"),
+        d = runtime.caml_array_make(5, 0);
        function a(x){return b(x);}
+       var letrec_function_context = [], c = [];
        function b(x){
         var _a_ = a(0);
         return [0, 84, [0, letrec_function_context[1], c, _a_]];
        }
        var tbl = caml_call2(Stdlib_Hashtbl[1], 0, 17);
        caml_update_dummy(letrec_function_context, [0, tbl]);
+       var default$ = 42;
        caml_update_dummy(c, [0, [0, d, default$]]);
-       var Test = [0, a, b, c, d, default$];
-       runtime.caml_register_global(1, Test, "Test");
+       runtime.caml_register_global([0, a, b, c, d, default$], "Test");
        return;
       }
       (globalThis));

@@ -1,0 +1,6 @@
+(library
+ (name ppx_unstring_tests)
+ (public_name unstring.ppx_tests)
+ (libraries core unstring)
+ (preprocess
+  (pps ppx_jane ppx_unstring)))

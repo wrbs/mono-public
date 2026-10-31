@@ -64,7 +64,7 @@ type header = {
     header_name : Compilation_unit.Name.t;
     header_kind : kind;
     header_globals : Global_module.With_precision.t array;
-    header_sign : Serialized.signature;
+    header_sign : Serialized.persistent_signature;
     header_params : Global_module.Parameter_name.t list;
 }
 
@@ -78,11 +78,12 @@ type 'sg cmi_infos_generic = {
     cmi_flags : flags;
 }
 
-type cmi_infos_lazy = Subst.Lazy.signature cmi_infos_generic
-type cmi_infos = Types.signature cmi_infos_generic
+type cmi_infos_lazy = Subst.Lazy.persistent_signature cmi_infos_generic
+type cmi_infos = Types.persistent_signature cmi_infos_generic
 
 let force_cmi_infos cmi =
-  { cmi with cmi_sign = Subst.Lazy.force_signature cmi.cmi_sign }
+  let sign, staticity = cmi.cmi_sign in
+  { cmi with cmi_sign = Subst.Lazy.force_signature sign, staticity }
 
 module Deserialize = Types.Map_wrapped(Serialized)(Subst.Lazy)
 
@@ -95,7 +96,31 @@ let deserialize data =
   let map_type_expr _ n =
     lazy(Marshal.from_bytes data n : Types.type_expr) |> Subst.Lazy.of_lazy
   in
-  Deserialize.signature {map_signature; map_type_expr}
+  let map_value_description _ (vd : Serialized.value_description) =
+    (* See comments in [serialize] about [vars] and [ty]. *)
+    let lpoly_type =
+      lazy (Marshal.from_bytes data vd.val_type :
+        Jkind_types.Sort.var list * Types.type_expr)
+    in
+    let val_lpoly =
+      lazy (Lazy.force lpoly_type |> fst |> Types.Lpoly.determined)
+      |> Subst.Lazy.of_lazy
+    in
+    let val_type =
+      lazy (Lazy.force lpoly_type |> snd) |> Subst.Lazy.of_lazy
+    in
+    Subst.Lazy.{
+      val_type;
+      val_lpoly;
+      val_modalities = vd.val_modalities;
+      val_kind = vd.val_kind;
+      val_zero_alloc = vd.val_zero_alloc;
+      val_attributes = vd.val_attributes;
+      val_loc = vd.val_loc;
+      val_uid = vd.val_uid;
+    }
+  in
+  Deserialize.signature {map_signature; map_type_expr; map_value_description}
 
 module Serialize = Types.Map_wrapped(Subst.Lazy)(Serialized)
 
@@ -113,7 +138,24 @@ let serialize oc base =
     |> marshal
   in
   let map_type_expr _ ty = Subst.Lazy.force_type_expr ty |> marshal in
-  Serialize.signature {map_signature; map_type_expr}
+  let map_value_description _ (vd : Subst.Lazy.value_description) =
+    (* [val_type] and [val_lpoly] are marshalled in one-go to preserve physical
+       identity of sort variables. The result is stored in [val_type], and
+       [val_lpoly] is set to [-1] (to be ignored upon unmarshalling) *)
+    let vars = Types.Lpoly.get_exn (Subst.Lazy.force_lpoly vd.val_lpoly) in
+    let ty = Subst.Lazy.force_type_expr vd.val_type in
+    Serialized.{
+      val_type = marshal (vars, ty);
+      val_lpoly = -1; (* invalid offset *)
+      val_modalities = vd.val_modalities;
+      val_kind = vd.val_kind;
+      val_zero_alloc = vd.val_zero_alloc;
+      val_attributes = vd.val_attributes;
+      val_loc = vd.val_loc;
+      val_uid = vd.val_uid;
+    }
+  in
+  Serialize.signature {map_signature; map_type_expr; map_value_description}
 
 let input_cmi_lazy ic =
   let read_bytes n =
@@ -128,7 +170,7 @@ let input_cmi_lazy ic =
       header_name = name;
       header_kind = kind;
       header_globals = globals;
-      header_sign = sign;
+      header_sign = (sign, staticity);
       header_params = params;
     } = (input_value ic : header) in
   let crcs = (input_value ic : crcs) in
@@ -138,7 +180,7 @@ let input_cmi_lazy ic =
       cmi_name = name;
       cmi_kind = kind;
       cmi_globals = globals;
-      cmi_sign = deserialize data sign;
+      cmi_sign = (deserialize data sign, staticity);
       cmi_params = params;
       cmi_crcs = crcs;
       cmi_flags = flags;
@@ -186,7 +228,8 @@ let output_cmi filename oc cmi =
   let len_pos = Out_channel.pos oc in
   output_int64 oc Int64.zero;
   let data_pos = Int64.add len_pos (Int64.of_int 8) in
-  let sign = serialize oc data_pos cmi.cmi_sign in
+  let sign, staticity = cmi.cmi_sign in
+  let sign = serialize oc data_pos sign in
   let val_pos = Out_channel.pos oc in
   Out_channel.seek oc len_pos;
   let len = Int64.sub val_pos data_pos in
@@ -197,7 +240,7 @@ let output_cmi filename oc cmi =
       header_name = cmi.cmi_name;
       header_kind = cmi.cmi_kind;
       header_globals = cmi.cmi_globals;
-      header_sign = sign;
+      header_sign = (sign, staticity);
       header_params = cmi.cmi_params;
     };
   flush oc;
@@ -220,25 +263,26 @@ let read_cmi filename = read_cmi_lazy filename |> force_cmi_infos
 
 (* Error report *)
 
-open Format
-module Style = Misc.Style
+open Format_doc
 
-let report_error ppf = function
+let report_error_doc ppf = function
   | Not_an_interface filename ->
       fprintf ppf "%a@ is not a compiled interface"
-        (Style.as_inline_code Location.print_filename) filename
+        Location.Doc.quoted_filename filename
   | Wrong_version_interface (filename, older_newer) ->
       fprintf ppf
         "%a@ is not a compiled interface for this version of OCaml.@.\
          It seems to be for %s version of OCaml."
-        (Style.as_inline_code  Location.print_filename) filename older_newer
+        Location.Doc.quoted_filename filename older_newer
   | Corrupted_interface filename ->
       fprintf ppf "Corrupted compiled interface@ %a"
-        (Style.as_inline_code Location.print_filename) filename
+        Location.Doc.quoted_filename filename
 
 let () =
   Location.register_error_of_exn
     (function
-      | Error err -> Some (Location.error_of_printer_file report_error err)
+      | Error err -> Some (Location.error_of_printer_file report_error_doc err)
       | _ -> None
     )
+
+let report_error = Format_doc.compat report_error_doc

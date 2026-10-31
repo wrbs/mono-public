@@ -82,7 +82,6 @@ Some aliases are defined and managed by Dune itself:
        aliases/runtest
        aliases/fmt
        aliases/lint
-       aliases/unused-libs
 
   .. grid-item::
 

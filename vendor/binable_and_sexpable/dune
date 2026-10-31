@@ -1,0 +1,6 @@
+(library
+ (name binable_and_sexpable)
+ (public_name binable_and_sexpable)
+ (libraries core)
+ (preprocess
+  (pps ppx_jane -compare-require-explicit-locality)))

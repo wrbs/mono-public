@@ -61,7 +61,7 @@ let cycle s k =
     s k
   done
 
-let[@inline] iter f seq = seq f
+let[@inline] iter f (seq : _ iter) = seq f
 
 let iteri f seq =
   let r = ref 0 in
@@ -887,7 +887,7 @@ let to_str seq =
 
 let concat_str seq =
   let b = Buffer.create 64 in
-  iter (Buffer.add_string b) seq;
+  iter (fun s -> Buffer.add_string b s) seq;
   Buffer.contents b
 
 exception OneShotSequence

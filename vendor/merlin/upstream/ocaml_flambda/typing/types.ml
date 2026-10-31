@@ -18,6 +18,79 @@
 open Allowance
 open Asttypes
 
+module Rigid_name = struct
+  type unknown_id = Shape.Uid.t
+
+  type t =
+    | Atom of
+        { constr : Path.t;
+          arg_index : int
+        }
+    | KAtom of Path.t
+    | Param of int
+    | Unknown of unknown_id
+
+  let compare a b =
+    if a == b
+    then 0
+    else
+      match a, b with
+      | Atom a1, Atom a2 ->
+        let h = Path.compare a1.constr a2.constr in
+        if h != 0 then h else Int.compare a1.arg_index a2.arg_index
+      | KAtom p1, KAtom p2 -> Path.compare p1 p2
+      | Param x, Param y -> Int.compare x y
+      | Atom _, _ -> -1
+      | _, Atom _ -> 1
+      | KAtom _, _ -> -1
+      | _, KAtom _ -> 1
+      | Unknown x, Unknown y -> Shape.Uid.compare x y
+      | Unknown _, _ -> 1
+      | _, Unknown _ -> -1
+
+  let to_string = function
+    | Atom { constr; arg_index } ->
+      let constr_s = Format_doc.asprintf "%a" Path.print constr in
+      Printf.sprintf "%s.%d" constr_s arg_index
+    | KAtom path ->
+      let path_s = Format_doc.asprintf "%a" Path.print path in
+      Printf.sprintf "katom[%s]" path_s
+    | Param i -> Printf.sprintf "param[%d]" i
+    | Unknown id ->
+      Format.asprintf "unknown[%a]" Shape.Uid.print id
+
+  let atomic constr arg_index = Atom { constr; arg_index }
+
+  let katom path = KAtom path
+
+  let param i = Param i
+
+  let unknown uid = Unknown uid
+end
+
+module Ldd = struct
+  module Name = Rigid_name
+
+  include (Ldd.Make (Rigid_name) :
+             Ldd_intf.S with module Name := Rigid_name)
+end
+
+type constructor_ikind =
+  { base : Ldd.node;
+    coeffs : Ldd.node array;
+  }
+
+type constructor_ikind_entry =
+  | Constructor_ikind of constructor_ikind
+  | No_constructor_ikind of string
+
+type type_ikind = constructor_ikind_entry
+
+let ikinds_todo (message : string) : type_ikind =
+  if !Clflags.ikinds_debug then
+    Format.eprintf "[ikinds-todo] %s@." message;
+  No_constructor_ikind message
+
 type atomic =
   | Nonatomic
   | Atomic
@@ -47,198 +120,16 @@ let mutable_mode m0 : _ Mode.Value.t =
 
 (* Type expressions for the core language *)
 
-module Jkind_mod_bounds = struct
-  module Crossing = Mode.Crossing
-  module Externality = Jkind_axis.Externality
-  module Nullability = Jkind_axis.Nullability
-  module Separability = Jkind_axis.Separability
-
-  type t = {
-    crossing : Crossing.t;
-    externality: Externality.t;
-    nullability: Nullability.t;
-    separability: Separability.t;
+type mod_bounds =
+  { crossing : Mode.Crossing.t;
+    externality: Jkind_axis.Externality.t;
   }
-
-  let crossing t = t.crossing
-
-  let[@inline] modal ax t = t |> crossing |> (Crossing.proj [@inlined hint]) ax
-  let areality = Crossing.Axis.Comonadic Areality
-  let linearity = Crossing.Axis.Comonadic Linearity
-  let uniqueness = Crossing.Axis.Monadic Uniqueness
-  let portability = Crossing.Axis.Comonadic Portability
-  let contention = Crossing.Axis.Monadic Contention
-  let forkable = Crossing.Axis.Comonadic Forkable
-  let yielding = Crossing.Axis.Comonadic Yielding
-  let statefulness = Crossing.Axis.Comonadic Statefulness
-  let visibility = Crossing.Axis.Monadic Visibility
-  let staticity = Crossing.Axis.Monadic Staticity
-  let[@inline] externality t = t.externality
-  let[@inline] nullability t = t.nullability
-  let[@inline] separability t = t.separability
-
-  let[@inline] create
-      crossing
-      ~externality
-      ~nullability
-      ~separability =
-    {
-      crossing;
-      externality;
-      nullability;
-      separability;
-    }
-
-  let[@inline] set_crossing crossing t = { t with crossing }
-  let[@inline] set_externality externality t = { t with externality }
-  let[@inline] set_nullability nullability t = { t with nullability }
-  let[@inline] set_separability separability t = { t with separability }
-
-  let[@inline] set_max_in_set t max_axes =
-    let open Jkind_axis.Axis_set in
-    let[@inline] modal ax =
-      if mem max_axes (Modal ax)
-      then (Crossing.Per_axis.max [@inlined hint]) ax
-      else modal ax t
-    in
-    (* a little optimization *)
-    if is_empty max_axes then t else
-    let regionality = modal areality in
-    let linearity = modal linearity in
-    let uniqueness = modal uniqueness in
-    let portability = modal portability in
-    let contention = modal contention in
-    let forkable = modal forkable in
-    let yielding = modal yielding in
-    let statefulness = modal statefulness in
-    let visibility = modal visibility in
-    let staticity = modal staticity in
-    let externality =
-      if mem max_axes (Nonmodal Externality)
-      then Externality.max
-      else t.externality
-    in
-    let nullability =
-      if mem max_axes (Nonmodal Nullability)
-      then Nullability.max
-      else t.nullability
-    in
-    let separability =
-      if mem max_axes (Nonmodal Separability)
-      then Separability.max
-      else t.separability
-    in
-    let monadic =
-      Crossing.Monadic.create ~uniqueness ~contention ~visibility ~staticity
-    in
-    let comonadic =
-      Crossing.Comonadic.create ~regionality ~linearity ~portability ~yielding
-        ~forkable ~statefulness
-    in
-    let crossing : Mode.Crossing.t = { monadic; comonadic } in
-    {
-      crossing;
-      externality;
-      nullability;
-      separability;
-    }
-
-  let[@inline] set_min_in_set t min_axes =
-    let open Jkind_axis.Axis_set in
-    let modal ax =
-      if mem min_axes (Modal ax)
-      then (Crossing.Per_axis.min [@inlined hint]) ax
-      else modal ax t
-    in
-    (* a little optimization *)
-    if is_empty min_axes then t else
-    let regionality = modal areality in
-    let linearity = modal linearity in
-    let uniqueness = modal uniqueness in
-    let portability = modal portability in
-    let contention = modal contention in
-    let forkable = modal forkable in
-    let yielding = modal yielding in
-    let statefulness = modal statefulness in
-    let visibility = modal visibility in
-    let staticity = modal staticity in
-    let externality =
-      if mem min_axes (Nonmodal Externality)
-      then Externality.min
-      else t.externality
-    in
-    let nullability =
-      if mem min_axes (Nonmodal Nullability)
-      then Nullability.min
-      else t.nullability
-    in
-    let separability =
-      if mem min_axes (Nonmodal Separability)
-      then Separability.min
-      else t.separability
-    in
-    let monadic =
-      Crossing.Monadic.create ~uniqueness ~contention ~visibility ~staticity
-    in
-    let comonadic =
-      Crossing.Comonadic.create ~regionality ~linearity ~portability ~yielding
-        ~forkable ~statefulness
-    in
-    let crossing : Mode.Crossing.t = { monadic; comonadic } in
-    {
-      crossing;
-      externality;
-      nullability;
-      separability;
-    }
-
-  let[@inline] is_max_within_set t axes =
-    let open Jkind_axis.Axis_set in
-    let modal ax =
-      not (mem axes (Modal ax)) ||
-      Crossing.Per_axis.((le [@inlined hint]) ax ((max [@inlined hint]) ax)
-        (modal ax t))
-    in
-    modal areality &&
-    modal linearity &&
-    modal uniqueness &&
-    modal portability &&
-    modal contention &&
-    modal forkable &&
-    modal yielding &&
-    modal statefulness &&
-    modal visibility &&
-    modal staticity &&
-    (not (mem axes (Nonmodal Externality)) ||
-     Externality.(le max (externality t))) &&
-    (not (mem axes (Nonmodal Nullability)) ||
-     Nullability.(le max (nullability t))) &&
-    (not (mem axes (Nonmodal Separability)) ||
-     Separability.(le max (separability t)))
-
-  let max =
-    { crossing = Mode.Crossing.max;
-      externality = Externality.max;
-      nullability = Nullability.max;
-      separability = Separability.max }
-
-  let[@inline] is_max m = m = max
-  let debug_print ppf
-        { crossing;
-          externality;
-          nullability;
-          separability } =
-    Format.fprintf ppf "@[{ crossing = %a;@ externality = %a;@ \
-      nullability = %a;@ separability = %a }@]"
-      Crossing.print crossing
-      Externality.print externality
-      Nullability.print nullability
-      Separability.print separability
-end
-
 
 module With_bounds_type_info = struct
   type t = {relevant_axes : Jkind_axis.Axis_set.t } [@@unboxed]
+
+  let join { relevant_axes = axes1 } { relevant_axes = axes2 } =
+    { relevant_axes = Jkind_axis.Axis_set.union axes1 axes2 }
 end
 
 type transient_expr =
@@ -263,12 +154,14 @@ and type_desc =
   | Tfield of string * field_kind * type_expr * type_expr
   | Tquote of type_expr
   | Tsplice of type_expr
+  | Tquote_eval of type_expr
   | Tnil
   | Tlink of type_expr
   | Tsubst of type_expr * type_expr option
   | Tvariant of row_desc
   | Tunivar of { name : string option; jkind : jkind_lr }
   | Tpoly of type_expr * type_expr list
+  | Trepr of type_expr * Jkind_types.Sort.univar list
   | Tpackage of Path.t * (Longident.t * type_expr) list
   | Tof_kind of jkind_lr
 
@@ -342,14 +235,22 @@ and 'd with_bounds =
   | No_with_bounds : ('l * 'r) with_bounds
   | With_bounds : with_bounds_types -> ('l * Allowance.disallowed) with_bounds
 
-and ('layout, 'd) layout_and_axes =
-  { layout : 'layout;
-    mod_bounds : Jkind_mod_bounds.t;
+and 'layout jkind_base =
+  | Layout of 'layout
+  | Kconstr of Path.t
+
+and ('layout, 'd) base_and_axes =
+  { base : 'layout jkind_base;
+    mod_bounds : mod_bounds;
     with_bounds : 'd with_bounds
   }
   constraint 'd = 'l * 'r
 
-and 'd jkind_desc = (Jkind_types.Sort.t Jkind_types.Layout.t, 'd) layout_and_axes
+and 'd jkind_const_desc = (Jkind_types.Layout.Const.t, 'd) base_and_axes
+  constraint 'd = 'l * 'r
+and jkind_const_desc_lr = (allowed * allowed) jkind_const_desc
+
+and 'd jkind_desc = (Jkind_types.Sort.t Jkind_types.Layout.t, 'd) base_and_axes
   constraint 'd = 'l * 'r
 
 and jkind_desc_packed = Pack_jkind_desc : ('l * 'r) jkind_desc -> jkind_desc_packed
@@ -372,6 +273,17 @@ and jkind_l = (allowed * disallowed) jkind
 and jkind_r = (disallowed * allowed) jkind
 and jkind_lr = (allowed * allowed) jkind
 and jkind_packed = Pack_jkind : ('l * 'r) jkind -> jkind_packed
+
+and jkind_declaration =
+  {
+    (* CR layouts: Though it's semantically correct to have a const jkind for
+       the manifest, it's not obvious if this is the right choice from a
+       performance perspective. See internal ticket 5719. *)
+    jkind_manifest : jkind_const_desc_lr option;
+    jkind_attributes : Parsetree.attributes;
+    jkind_uid : Shape.Uid.t;
+    jkind_loc : Location.t
+  }
 
 module TransientTypeOps = struct
   type t = type_expr
@@ -524,6 +436,7 @@ type type_declaration =
     type_arity: int;
     type_kind: type_decl_kind;
     type_jkind: jkind_l;
+    type_ikind: constructor_ikind_entry;
     type_private: private_flag;
     type_manifest: type_expr option;
     type_variance: Variance.t list;
@@ -566,7 +479,7 @@ and type_origin =
   | Existential of string
 
 and mixed_block_element =
-  | Value
+  | Scannable of Jkind_types.Scannable_axes.t
   | Float_boxed
   | Float64
   | Float32
@@ -589,10 +502,11 @@ and module_representation = Jkind_types.Sort.t array
 and record_representation =
   | Record_unboxed
   | Record_inlined of tag * constructor_representation * variant_representation
-  | Record_boxed of Jkind_types.Sort.Const.t array
+  | Record_boxed
   | Record_float
   | Record_ufloat
   | Record_mixed of mixed_product_shape
+  | Record_dummy of { represent_as_float_array : bool }
 
 and record_unboxed_product_representation =
   | Record_unboxed_product
@@ -727,6 +641,28 @@ module type Wrap = sig
   type 'a t
 end
 
+module Lpoly = struct
+  type state =
+    | Pending of Location.t
+    | Determined of Jkind_types.Sort.var list
+
+  type t = state ref
+
+  let get_exn t = match !t with
+    | Pending _ -> Misc.fatal_error "layout is pending generalization"
+    | Determined l -> l
+
+  let is_empty_exn t = List.is_empty @@ get_exn t
+
+  let determined l = ref (Determined l)
+  let pending ~loc = ref (Pending loc)
+
+  let generalize ~on_determined ~on_to_generalize t =
+    match !t with
+    | Pending loc -> t := Determined (on_to_generalize loc)
+    | Determined _ -> on_determined ()
+end
+
 module type Wrapped = sig
   type 'a wrapped
 
@@ -734,6 +670,7 @@ module type Wrapped = sig
     { val_type: type_expr wrapped;                (* Type of the value *)
       val_modalities : Mode.Modality.t;     (* Modalities on the value *)
       val_kind: value_kind;
+      val_lpoly: Lpoly.t wrapped;
       val_loc: Location.t;
       val_zero_alloc: Zero_alloc.t;
       val_attributes: Parsetree.attributes;
@@ -743,16 +680,18 @@ module type Wrapped = sig
   type module_type =
     Mty_ident of Path.t
   | Mty_signature of signature
-  | Mty_functor of functor_parameter * module_type
+  | Mty_functor of functor_parameter * module_type * Mode.Alloc.lr
   | Mty_alias of Path.t
   | Mty_strengthen of module_type * Path.t * Aliasability.t
       (* See comments about the aliasability of strengthening in mtype.ml *)
 
   and functor_parameter =
   | Unit
-  | Named of Ident.t option * module_type
+  | Named of Ident.t option * module_type * Mode.Alloc.lr
 
   and signature = signature_item list wrapped
+
+  and persistent_signature = signature * Mode.Staticity.Const.t
 
   and signature_item =
     Sig_value of Ident.t * value_description * visibility
@@ -763,6 +702,7 @@ module type Wrapped = sig
   | Sig_modtype of Ident.t * modtype_declaration * visibility
   | Sig_class of Ident.t * class_declaration * rec_status * visibility
   | Sig_class_type of Ident.t * class_type_declaration * rec_status * visibility
+  | Sig_jkind of Ident.t * jkind_declaration * visibility
 
   and module_declaration =
   {
@@ -812,7 +752,7 @@ module Make_wrapped(Wrap : Wrap) = struct
       end
     | Sig_class _ ->
         Some Jkind_types.Sort.(of_const Const.for_class)
-    | Sig_type _ | Sig_modtype _ | Sig_class_type _ -> None
+    | Sig_type _ | Sig_modtype _ | Sig_class_type _ | Sig_jkind _ -> None
 end
 
 module Map_wrapped(From : Wrapped)(To : Wrapped) = struct
@@ -820,7 +760,9 @@ module Map_wrapped(From : Wrapped)(To : Wrapped) = struct
   type mapper =
     {
       map_signature: mapper -> signature -> To.signature;
-      map_type_expr: mapper -> type_expr wrapped -> type_expr To.wrapped
+      map_type_expr: mapper -> type_expr wrapped -> type_expr To.wrapped;
+      map_value_description:
+        mapper -> value_description -> To.value_description;
     }
 
   let signature m = m.map_signature m
@@ -828,27 +770,17 @@ module Map_wrapped(From : Wrapped)(To : Wrapped) = struct
   let rec module_type m = function
     | Mty_ident p -> To.Mty_ident p
     | Mty_alias p -> To.Mty_alias p
-    | Mty_functor (parm,mty) ->
-        To.Mty_functor (functor_parameter m parm, module_type m mty)
+    | Mty_functor (parm,mty,mm) ->
+        To.Mty_functor (functor_parameter m parm, module_type m mty, mm)
     | Mty_signature sg -> To.Mty_signature (signature m sg)
     | Mty_strengthen (mty,p,aliasable) ->
         To.Mty_strengthen (module_type m mty, p, aliasable)
 
   and functor_parameter m = function
       | Unit -> To.Unit
-      | Named (id,mty) -> To.Named (id, module_type m mty)
+      | Named (id,mty,mm) -> To.Named (id, module_type m mty,mm)
 
-  let value_description m {val_type; val_modalities; val_kind; val_zero_alloc;
-                           val_attributes; val_loc; val_uid} =
-    To.{
-      val_type = m.map_type_expr m val_type;
-      val_modalities;
-      val_kind;
-      val_zero_alloc;
-      val_attributes;
-      val_loc;
-      val_uid
-    }
+  let value_description m vd = m.map_value_description m vd
 
   let module_declaration m {md_type; md_modalities; md_attributes;
     md_loc; md_uid} =
@@ -883,6 +815,8 @@ module Map_wrapped(From : Wrapped)(To : Wrapped) = struct
         To.Sig_class (id,cd,rs,vis)
     | Sig_class_type (id,ctd,rs,vis) ->
         To.Sig_class_type (id,ctd,rs,vis)
+    | Sig_jkind (id,jkd,vis) ->
+        To.Sig_jkind (id,jkd,vis)
 end
 
 include Make_wrapped(struct type 'a t = 'a end)
@@ -932,9 +866,10 @@ let compare_tag t1 t2 =
   | Extension _, Null -> -1
   | Null, Extension _ -> 1
 
-let rec equal_mixed_block_element e1 e2 =
+let rec equal_mixed_block_element_up_to_scannable_axes e1 e2 =
   match e1, e2 with
-  | Value, Value | Float64, Float64 | Float32, Float32 | Float_boxed, Float_boxed
+  | Scannable _, Scannable _
+  | Float64, Float64 | Float32, Float32 | Float_boxed, Float_boxed
   | Word, Word | Untagged_immediate, Untagged_immediate
   | Bits8, Bits8 | Bits16, Bits16
   | Bits32, Bits32 | Bits64, Bits64
@@ -942,15 +877,21 @@ let rec equal_mixed_block_element e1 e2 =
   | Void, Void
     -> true
   | Product es1, Product es2
-    -> Misc.Stdlib.Array.equal equal_mixed_block_element es1 es2
-  | ( Value | Float64 | Float32 | Float_boxed | Word | Untagged_immediate
+    -> Misc.Stdlib.Array.equal
+         equal_mixed_block_element_up_to_scannable_axes es1 es2
+  | ( Scannable _ | Float64 | Float32 | Float_boxed | Word | Untagged_immediate
     | Bits8 | Bits16 | Bits32 | Bits64 | Vec128 | Vec256 | Vec512
     | Product _ | Void ), _
     -> false
 
 let rec compare_mixed_block_element e1 e2 =
   match e1, e2 with
-  | Value, Value | Float_boxed, Float_boxed
+  | Scannable sa1, Scannable sa2 -> (
+    match Jkind_types.Scannable_axes.less_or_equal sa1 sa2 with
+    | Less -> -1
+    | Equal -> 0
+    | Not_le -> 1)
+  | Float_boxed, Float_boxed
   | Float64, Float64 | Float32, Float32
   | Word, Word | Untagged_immediate, Untagged_immediate
   | Bits8, Bits8 | Bits16, Bits16 | Bits32, Bits32 | Bits64, Bits64
@@ -959,8 +900,8 @@ let rec compare_mixed_block_element e1 e2 =
     -> 0
   | Product es1, Product es2
     -> Misc.Stdlib.Array.compare compare_mixed_block_element es1 es2
-  | Value, _ -> -1
-  | _, Value -> 1
+  | Scannable _, _ -> -1
+  | _, Scannable _ -> 1
   | Float_boxed, _ -> -1
   | _, Float_boxed -> 1
   | Float64, _ -> -1
@@ -988,21 +929,23 @@ let rec compare_mixed_block_element e1 e2 =
   | Void, _ -> -1
   | _, Void -> 1
 
-let equal_mixed_product_shape r1 r2 = r1 == r2 ||
-  Misc.Stdlib.Array.equal equal_mixed_block_element r1 r2
+let equal_mixed_product_shape_up_to_scannable_axes r1 r2 = r1 == r2 ||
+  Misc.Stdlib.Array.equal equal_mixed_block_element_up_to_scannable_axes r1 r2
 
-let equal_constructor_representation r1 r2 = r1 == r2 || match r1, r2 with
+let equal_constructor_representation_up_to_scannable_axes r1 r2 = r1 == r2 ||
+  match r1, r2 with
   | Constructor_uniform_value, Constructor_uniform_value -> true
   | Constructor_mixed mx1, Constructor_mixed mx2 ->
-      equal_mixed_product_shape mx1 mx2
+      equal_mixed_product_shape_up_to_scannable_axes mx1 mx2
   | (Constructor_mixed _ | Constructor_uniform_value), _ -> false
 
-let equal_variant_representation r1 r2 = r1 == r2 || match r1, r2 with
+let equal_variant_representation_up_to_scannable_axes r1 r2 = r1 == r2 ||
+  match r1, r2 with
   | Variant_unboxed, Variant_unboxed ->
       true
   | Variant_boxed cstrs_and_sorts1, Variant_boxed cstrs_and_sorts2 ->
       Misc.Stdlib.Array.equal (fun (cstr1, sorts1) (cstr2, sorts2) ->
-          equal_constructor_representation cstr1 cstr2
+          equal_constructor_representation_up_to_scannable_axes cstr1 cstr2
           && Misc.Stdlib.Array.equal Jkind_types.Sort.Const.equal
                sorts1 sorts2)
         cstrs_and_sorts1
@@ -1013,7 +956,7 @@ let equal_variant_representation r1 r2 = r1 == r2 || match r1, r2 with
   | (Variant_unboxed | Variant_boxed _ | Variant_extensible | Variant_with_null), _ ->
       false
 
-let equal_record_representation r1 r2 = match r1, r2 with
+let equal_record_representation_up_to_scannable_axes r1 r2 = match r1, r2 with
   | Record_unboxed, Record_unboxed ->
       true
   | Record_inlined (tag1, cr1, vr1), Record_inlined (tag2, cr2, vr2) ->
@@ -1021,19 +964,25 @@ let equal_record_representation r1 r2 = match r1, r2 with
          constructor representation. *)
       ignore (cr1 : constructor_representation);
       ignore (cr2 : constructor_representation);
-      equal_tag tag1 tag2 && equal_variant_representation vr1 vr2
-  | Record_boxed sorts1, Record_boxed sorts2 ->
-      Misc.Stdlib.Array.equal Jkind_types.Sort.Const.equal sorts1 sorts2
+      equal_tag tag1 tag2 &&
+        equal_variant_representation_up_to_scannable_axes vr1 vr2
+  | Record_boxed, Record_boxed ->
+      true
   | Record_float, Record_float ->
       true
   | Record_ufloat, Record_ufloat ->
       true
-  | Record_mixed mx1, Record_mixed mx2 -> equal_mixed_product_shape mx1 mx2
-  | (Record_unboxed | Record_inlined _ | Record_boxed _ | Record_float
-    | Record_ufloat | Record_mixed _), _ ->
+  | Record_mixed mx1, Record_mixed mx2 ->
+      equal_mixed_product_shape_up_to_scannable_axes mx1 mx2
+  | Record_dummy { represent_as_float_array = a },
+    Record_dummy { represent_as_float_array = b } ->
+      Bool.equal a b
+  | (Record_unboxed | Record_inlined _ | Record_boxed | Record_float
+    | Record_ufloat | Record_mixed _ | Record_dummy _), _ ->
       false
 
-let equal_record_unboxed_product_representation r1 r2 = match r1, r2 with
+let equal_record_unboxed_product_representation_up_to_scannable_axes r1 r2 =
+  match r1, r2 with
   | Record_unboxed_product, Record_unboxed_product -> true
 
 let may_equal_constr c1 c2 =
@@ -1078,9 +1027,14 @@ let record_form_to_string (type rep) (record_form : rep record_form) =
   | Legacy -> "record"
   | Unboxed_product -> "unboxed record"
 
+(* The scannable axes in the resulting [mixed_block_element] are always [max] *)
 let rec mixed_block_element_of_const_sort (sort : Jkind_types.Sort.Const.t) =
   match sort with
-  | Base Value -> Value
+  (* CR layouts-scannable: since sorts do not store scannable axis information,
+     we are forced to default to max. It would be good to store the scannable
+     axis information, but doing so takes a sizable refactor. See the comment
+     on [Sort] in [jkind_intf.ml] *)
+  | Base Scannable -> Scannable Jkind_types.Scannable_axes.max
   | Base Bits8 -> Bits8
   | Base Bits16 -> Bits16
   | Base Bits32 -> Bits32
@@ -1095,6 +1049,8 @@ let rec mixed_block_element_of_const_sort (sort : Jkind_types.Sort.Const.t) =
   | Product sorts ->
     Product (Array.map mixed_block_element_of_const_sort (Array.of_list sorts))
   | Base Void -> Void
+  | Univar _ -> Misc.fatal_error "mixed_block_element_of_const_sort: Univar"
+  | Genvar _ -> Misc.fatal_error "mixed_block_element_of_const_sort: Genvar"
 
 let find_unboxed_type decl =
   match decl.type_kind with
@@ -1107,8 +1063,8 @@ let find_unboxed_type decl =
   | Type_variant ([{cd_args = Cstr_record [{ld_type = arg; ld_modalities = ms; _}]; _}], Variant_unboxed, _) ->
     Some (arg, ms)
   | Type_record (_, ( Record_inlined _ | Record_unboxed
-                    | Record_boxed _ | Record_float | Record_ufloat
-                    | Record_mixed _), _)
+                    | Record_boxed | Record_float | Record_ufloat
+                    | Record_mixed _ | Record_dummy _), _)
   | Type_record_unboxed_product (_, Record_unboxed_product, _)
   | Type_variant (_, ( Variant_boxed _ | Variant_unboxed
                      | Variant_extensible | Variant_with_null), _)
@@ -1122,7 +1078,8 @@ let item_visibility = function
   | Sig_module (_, _, _, _, vis)
   | Sig_modtype (_, _, vis)
   | Sig_class (_, _, _, vis)
-  | Sig_class_type (_, _, _, vis) -> vis
+  | Sig_class_type (_, _, _, vis)
+  | Sig_jkind (_, _, vis) -> vis
 
 let rec bound_value_identifiers = function
     [] -> []
@@ -1142,6 +1099,7 @@ let signature_item_id = function
   | Sig_modtype (id, _, _)
   | Sig_class (id, _, _, _)
   | Sig_class_type (id, _, _, _)
+  | Sig_jkind (id, _, _)
     -> id
 
 let signature_item_representation sg =
@@ -1153,7 +1111,7 @@ let bound_value_identifiers_and_sorts sigs =
   List.filter_map signature_item_representation sigs
 
 let rec mixed_block_element_to_string = function
-  | Value -> "Value"
+  | Scannable _ -> "Scannable"
   | Float_boxed -> "Float_boxed"
   | Float32 -> "Float32"
   | Float64 -> "Float64"
@@ -1174,7 +1132,7 @@ let rec mixed_block_element_to_string = function
   | Void -> "Void"
 
 let mixed_block_element_to_lowercase_string = function
-  | Value -> "value"
+  | Scannable _ -> "scannable"
   | Float_boxed -> "float"
   | Float32 -> "float32"
   | Float64 -> "float64"
@@ -1421,6 +1379,7 @@ let best_effort_compare_type_expr te1 te2 =
         | Tarrow (_, _, _, _)
         | Tquote _
         | Tsplice _
+        | Tquote_eval _
         (* CR layouts v2.8: we can actually see Tsubst here in certain cases, eg during
            [Ctype.copy] when copying the types inside of with_bounds. We also can't
            compare Tsubst structurally, because the Tsubsts that are created in
@@ -1435,6 +1394,7 @@ let best_effort_compare_type_expr te1 te2 =
         | Tconstr (_, _, _) -> 5
         | Tpoly (_, _) -> 6
         | Tof_kind _ -> 7
+        | Trepr (_, _) -> 8
         (* Types we should never see *)
         | Tlink _ -> Misc.fatal_error "Tlink encountered in With_bounds_types"
       in
@@ -1457,6 +1417,14 @@ let best_effort_compare_type_expr te1 te2 =
         (* NOTE: this is mostly broken according to the semantics of type_expr, but probably
            fine for the particular "best-effort" comparison we want. *)
         List.compare (aux (depth + 1)) (t1 :: ts1) (t2 :: ts2)
+      | Trepr (t1, sort_vars1), Trepr (t2, sort_vars2) ->
+        (* Compare by establishing correspondence between univars and comparing
+           the inner types with that correspondence. *)
+        (match List.combine sort_vars1 sort_vars2 with
+         | exception Invalid_argument _ ->
+           Int.compare (List.length sort_vars1) (List.length sort_vars2)
+         | pairs ->
+           Jkind_types.Sort.enter_repr pairs (fun () -> aux (depth + 1) t1 t2))
       | _, _ -> rank te1 - rank te2
   in
   aux 0 te1 te2
@@ -1871,5 +1839,10 @@ let undo_compress (changes, _old) =
         | _ -> ())
         log
 
-let functor_param_mode = Mode.Alloc.legacy
-let functor_res_mode = Mode.Alloc.legacy
+let class_mode =
+  let hint : _ Mode.Hint.const = Legacy Class in
+  Mode.Value.(of_const ~hint_monadic:hint ~hint_comonadic:hint Const.legacy)
+
+let toplevel_mode =
+  let hint : _ Mode.Hint.const = Legacy Toplevel in
+  Mode.Value.(of_const ~hint_monadic:hint ~hint_comonadic:hint Const.legacy)

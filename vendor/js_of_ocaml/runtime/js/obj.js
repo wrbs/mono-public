@@ -124,6 +124,7 @@ function caml_obj_with_tag(tag, x) {
 
 //Provides: caml_obj_dup mutable (mutable)
 function caml_obj_dup(x) {
+  if (x === null) return null;
   return typeof x === "number" ? x : x.slice();
 }
 
@@ -173,7 +174,7 @@ var caml_method_cache = [];
 function caml_oo_cache_id() {
   var cacheid = caml_method_cache.length;
   caml_method_cache[cacheid] = 0;
-  cacheid;
+  return cacheid;
 }
 
 ///////////// CamlinternalOO
@@ -312,7 +313,7 @@ function caml_is_continuation_tag(t) {
 //Provides: caml_custom_identifier
 //Requires: caml_string_of_jsstring
 function caml_custom_identifier(o) {
-  return caml_string_of_jsstring(o.caml_custom);
+  return caml_string_of_jsstring(o.caml_custom || "");
 }
 
 //Provides: caml_ml_gc_ramp_up

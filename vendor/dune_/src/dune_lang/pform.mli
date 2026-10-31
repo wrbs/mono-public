@@ -91,7 +91,6 @@ module Var : sig
     | Toolchain
     | Pkg of Pkg.t
     | Oxcaml_supported
-    | Dune_warnings
 
   val compare : t -> t -> Ordering.t
   val to_dyn : t -> Dyn.t
@@ -102,13 +101,8 @@ module Var : sig
 end
 
 module Artifact : sig
-  type mod_ =
-    | Cm_kind of Ocaml.Cm_kind.t
-    | Cmt
-    | Cmti
-
   type t =
-    | Mod of mod_
+    | Mod of Ocaml.Cm_kind.t
     | Lib of Ocaml.Mode.t
 
   val compare : t -> t -> Ordering.t
@@ -138,12 +132,10 @@ module Macro : sig
     | Path_no_dep
     | Ocaml_config
     | Coq_config
-    | Rocq_config
     | Env
     | Artifact of Artifact.t
     | Pkg
     | Pkg_self
-    | Ppx
 
   val compare : t -> t -> Ordering.t
   val to_dyn : t -> Dyn.t

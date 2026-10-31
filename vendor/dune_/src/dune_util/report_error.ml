@@ -208,7 +208,7 @@ let gen_report exn backtrace =
       | User -> msg
       | Developer -> append msg (i_must_not_crash ())
     in
-    Dune_console.print_user_message msg
+    Console.print_user_message msg
 ;;
 
 let report { Exn_with_backtrace.exn; backtrace } = gen_report exn (Some backtrace)

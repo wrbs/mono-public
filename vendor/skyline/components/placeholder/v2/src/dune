@@ -1,0 +1,7 @@
+(library
+ (name skyline_placeholder_v2)
+ (public_name skyline.placeholder_v2)
+ (preprocess
+  (pps ppx_jane js_of_ocaml-ppx bonsai.ppx_bonsai ppx_css ppx_html))
+ (libraries bonsai_web bonsai_web_components.icon core
+   private_skyline_prelude skyline_intent skyline_size skyline_text_v2))

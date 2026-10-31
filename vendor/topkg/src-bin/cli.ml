@@ -121,7 +121,7 @@ let setup style_renderer log_level cwd =
   Topkg.Log.set_level (logs_to_topkg_log_level log_level);
   Logs.set_level log_level;
   Logs.set_reporter (Logs_fmt.reporter ~app:Fmt.stdout ());
-  Logs.info (fun m -> m "topkg v1.0.8 running");
+  Logs.info (fun m -> m "topkg v1.1.1 running");
   match cwd with
   | None -> `Ok ()
   | Some dir ->

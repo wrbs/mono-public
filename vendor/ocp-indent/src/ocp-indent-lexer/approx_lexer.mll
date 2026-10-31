@@ -19,7 +19,24 @@ open Lexing
 
 include Approx_tokens
 
+type error =
+  | Illegal_escape of string
+  | Keyword_as_label of string
+
+let error_msg = function
+  | Illegal_escape s -> Printf.sprintf "Illegal character escape: %s" s
+  | Keyword_as_label s -> Printf.sprintf "Invalid tuple or argument label: %s" s
+
+exception Error of
+    { error: error
+    ; start_pos: Lexing.position
+    ; end_pos : Lexing.position }
+
 let list_last l = List.hd (List.rev l)
+
+let strict = ref false
+
+let set_strict_mode bool = strict := bool
 
 let lines_starts = ref []
 
@@ -304,20 +321,26 @@ rule parse_token = parse
   | "~" lowercase identchar * ':'
       { let s = Lexing.lexeme lexbuf in
         let name = String.sub s 1 (String.length s - 2) in
-        (*
-           if Hashtbl.mem keyword_table name then
-           raise (Error(Keyword_as_label name, Location.curr lexbuf));
-        *)
+        if !strict && Hashtbl.mem keyword_table name then
+          raise
+            (Error
+               { error = Keyword_as_label name
+               ; start_pos = Lexing.lexeme_start_p lexbuf
+               ; end_pos = Lexing.lexeme_end_p lexbuf
+               });
         LABEL name }
   | "?"  { QUESTION }
   | "??" { QUESTIONQUESTION }
   | "?" lowercase identchar * ':'
       { let s = Lexing.lexeme lexbuf in
         let name = String.sub s 1 (String.length s - 2) in
-        (*
-           if Hashtbl.mem keyword_table name then
-           raise (Error(Keyword_as_label name, Location.curr lexbuf));
-        *)
+        if !strict && Hashtbl.mem keyword_table name then
+          raise
+            (Error
+               { error = Keyword_as_label name
+               ; start_pos = Lexing.lexeme_start_p lexbuf
+               ; end_pos = Lexing.lexeme_end_p lexbuf
+               });
         OPTLABEL name }
   | lowercase identchar * ( '%' identchar + ('.' identchar +) * ) ?
     { let s = Lexing.lexeme lexbuf in
@@ -725,10 +748,13 @@ and string = parse
     { if in_comment ()
       then string lexbuf
       else begin
-        (*  Should be an error, but we are very lax.
-            raise (Error (Illegal_escape (Lexing.lexeme lexbuf),
-              Location.curr lexbuf))
-        *)
+        if !strict then
+          raise
+            (Error
+               { error = Illegal_escape (Lexing.lexeme lexbuf)
+               ; start_pos = Lexing.lexeme_start_p lexbuf
+               ; end_pos = Lexing.lexeme_end_p lexbuf
+               });
         store_string_char (Lexing.lexeme_char lexbuf 0);
         store_string_char (Lexing.lexeme_char lexbuf 1);
         string lexbuf

@@ -8,7 +8,15 @@
 (*                                                                            *)
 (******************************************************************************)
 
-module Run () = struct
+module Run
+    (X : sig
+       val validate : bool
+       val verbose : bool
+     end)
+    () :
+  LRijkstra.REACHABILITY_RESULT
+=
+struct
   open Grammar
 
   (* ---------------------------------------------------------------------- *)
@@ -18,6 +26,14 @@ module Run () = struct
   (* The set of all real terminals, useful for encoding default reduction *)
   let all_terminals = TerminalSet.universe
 
+  (* Partition refinement algorithm for sets of terminals *)
+  let terminal_partition =
+    let module TerminalPartition = Refine.Make(TerminalSet) in
+    fun sets ->
+      (* Removing duplicates can speed up partitioning significantly *)
+      let sets = List.sort_uniq TerminalSet.compare sets in
+      TerminalPartition.partition sets
+
   (* Testing class inclusion *)
   let quick_subset = TerminalSet.quick_subset
 
@@ -26,21 +42,20 @@ module Run () = struct
 
   (* ---------------------------------------------------------------------- *)
 
-  (* Produce a warning if the grammar uses the special token [error]. *)
+  (* Produce a warning if the grammar uses the [error] pseudo-token. *)
 
   let () =
-    if grammar_uses_error_token() then
-      Report.Just.warning []
-        "The reachability analysis ignores all productions \
-         that involve the error token."
+    if grammar_uses_error_token then
+      Error.warning [] "The reachability analysis ignores all productions \
+                        that involve the error token."
 
   (* ---------------------------------------------------------------------- *)
 
   (* [Lr1C] represents Lr1 states as elements of a [Numbering.Typed] set *)
   module Lr1C = struct
     include (val const Lr1.n)
-    let of_g lr1 = Index.of_int n (Lr1.encode lr1)
-    let to_g lr1 = Lr1.decode (Index.to_int lr1)
+    let of_g lr1 = Index.of_int n (Lr1.number lr1)
+    let to_g lr1 = Lr1.of_number (Index.to_int lr1)
   end
 
   (* ---------------------------------------------------------------------- *)
@@ -89,7 +104,7 @@ module Run () = struct
     val symbol : any index -> Symbol.t
 
     (* Symbol that labels a goto transition *)
-    (* val goto_symbol : goto index -> Nonterminal.t *)
+    val goto_symbol : goto index -> Nonterminal.t
 
     (* Symbol that labels a shift transition *)
     val shift_symbol : shift index -> Terminal.t
@@ -106,9 +121,6 @@ module Run () = struct
 
     (* Pre-compute all information, such that functions of this module
        always operate in O(1) *)
-
-    let start_time =
-      Time.start()
 
     (* Create two fresh finite sets that will be populated with goto and shift
        transitions *)
@@ -154,8 +166,8 @@ module Run () = struct
     let sources = Vector.make' any (fun () -> Index.of_int Lr1C.n 0)
     let targets = Vector.make' any (fun () -> Index.of_int Lr1C.n 0)
 
-    let t_symbols = Vector.make' shift (fun () -> Terminal.decode 0)
-    let nt_symbols = Vector.make' goto (fun () -> Nonterminal.decode 0)
+    let t_symbols = Vector.make' shift (fun () -> Terminal.i2t 0)
+    let nt_symbols = Vector.make' goto (fun () -> Nonterminal.i2n 0)
 
     (* Hash tables to associate information to the pair of
        a transition and a symbol.
@@ -166,14 +178,14 @@ module Run () = struct
     let nt_pack lr1 goto =
       (* Custom function to key into nt_table: compute a unique integer from
          an lr1 state and a non-terminal. *)
-      Index.to_int lr1 * Nonterminal.n + Nonterminal.encode goto
+      Index.to_int lr1 * Nonterminal.n + Nonterminal.n2i goto
 
     let t_table = Hashtbl.create 7
 
     let t_pack lr1 t =
       (* Custom function to key into t_table: compute a unique integer from
          an lr1 state and a terminal. *)
-      Index.to_int lr1 * Terminal.n + Terminal.encode t
+      Index.to_int lr1 * Terminal.n + Terminal.t2i t
 
     (* A vector to store the predecessors of an lr1 state.
        We cannot compute them directly, we discover them by exploring the
@@ -190,8 +202,8 @@ module Run () = struct
       Vector.init Lr1C.n begin fun source ->
         SymbolMap.fold begin fun sym target acc ->
           match sym with
-            | Symbol.T t when Terminal.special t ->
-              (* Ignore special terminals *)
+            | Symbol.T t when not (Terminal.real t) ->
+              (* Ignore pseudo-terminals *)
               acc
             | _ ->
               let target = Lr1C.of_g target in
@@ -226,20 +238,18 @@ module Run () = struct
       | L i -> Symbol.N (Vector.get nt_symbols i)
       | R i -> Symbol.T (Vector.get t_symbols i)
 
-    (* let goto_symbol i = Vector.get nt_symbols i *)
+    let goto_symbol i = Vector.get nt_symbols i
     let shift_symbol i = Vector.get t_symbols i
 
     let target i = Vector.get targets i
 
-    let () =
-      Time.stop start_time "LRijkstraFast: populate transition table"
+    let () = Time.tick "LRijkstraFast: populate transition table"
 
     let () =
       if false then
         Printf.printf "%d terminals\n%d lr1 states\n%d transitions\n%!"
           Terminal.n Lr1.n (cardinal any)
-
-  end (* Transition *)
+  end
 
   (* ---------------------------------------------------------------------- *)
 
@@ -254,7 +264,7 @@ module Run () = struct
 
     type t = {
       (* The production that is being reduced *)
-      production: Production.t;
+      production: Production.index;
 
       (* The set of lookahead terminals that allow this reduction to happen *)
       lookahead: TerminalSet.t;
@@ -274,11 +284,8 @@ module Run () = struct
     val goto_transition: Transition.goto index -> t list
   end = struct
 
-    let start_time =
-      Time.start()
-
     type t = {
-      production: Production.t;
+      production: Production.index;
       lookahead: TerminalSet.t;
       steps: Transition.any index list;
       state: Lr1C.n index;
@@ -313,31 +320,29 @@ module Run () = struct
        sets that allow reducing them from state [lr1] *)
     let get_reductions lr1 =
       let lr1 = Lr1C.to_g lr1 in
-      match Lr1.test_default_reduction lr1 with
+      match Default.has_default_reduction lr1 with
       | Some (prod, _) ->
         (* State has a default reduction, the lookahead can be any terminal *)
         [prod, all_terminals]
       | None ->
         let raw =
           let add t ps acc =
-            if t <> Terminal.error then (t, List.hd ps) :: acc else acc
+            MList.cons_if (Terminal.non_error t) (t, List.hd ps) acc
           in
           TerminalMap.fold add (Lr1.reductions lr1) []
         in
         (* Regroup lookahead tokens by production *)
-        let compare (_, p1) (_, p2) =
-          Production.compare p1 p2
-        and group tps =
-          match tps with
-          | [] -> assert false (* group cannot be empty *)
-          | (t, p) :: tps ->
+        MList.group_by raw
+          ~compare:(fun (_, p1) (_, p2) ->
+              Int.compare (Production.p2i p1) (Production.p2i p2)
+            )
+          ~group:(fun (t, p) tps ->
               let set = List.fold_left
                   (fun set (t, _) -> TerminalSet.add t set)
                   (TerminalSet.singleton t) tps
               in
               (p, set)
-        in
-        MList.group compare raw |> List.map group
+            )
 
     let () =
       (* Populate [table] with the reductions of all state *)
@@ -346,10 +351,8 @@ module Run () = struct
 
     let goto_transition tr = Vector.get table tr
 
-    let () =
-      Time.stop start_time "LRijkstraFast: populate reduction table"
-
-  end (* Unreduce *)
+    let () = Time.tick "LRijkstraFast: populate reduction table"
+  end
 
   (* ---------------------------------------------------------------------- *)
 
@@ -364,9 +367,6 @@ module Run () = struct
   *)
 
   module Classes = struct
-
-    let start_time =
-      Time.start()
 
     (* A node of the graph is either an lr1 state or a goto transition *)
     module Node = (val sum Lr1C.n Transition.goto)
@@ -399,13 +399,9 @@ module Run () = struct
       let iter f = Index.iter Node.n f
     end
 
-    module Scc = Fix.SCC.Run(Gr)
+    module Scc = Tarjan.Run(Gr)
 
-    let () =
-      Time.stop start_time "LRijkstraFast: class graph SCC"
-
-    let start_time =
-      Time.start()
+    let () = Time.tick "LRijkstraFast: class graph SCC"
 
     (* Associate a class to each node *)
 
@@ -417,25 +413,27 @@ module Run () = struct
        [classes] vector is used to approximate recursive occurrences.
     *)
     let classes_of acc node =
-      MRef.with_state acc @@ fun acc ->
-      match Node.prj node with
-      | L lr1 ->
-        Gr.visit_lr1 (fun n -> acc := Vector.get classes n @ !acc) lr1
-      | R edge ->
-        List.iter (fun {Unreduce. lookahead; state; _} ->
-            let base = Vector.get classes (Node.inj_l state) in
-            let base =
-              if lookahead != all_terminals
-              then List.map (TerminalSet.inter lookahead) base
-              else base
-            in
-            acc := (lookahead :: base) @ !acc
-          ) (Unreduce.goto_transition edge)
+      let acc = ref acc in
+      begin match Node.prj node with
+        | L lr1 ->
+          Gr.visit_lr1 (fun n -> acc := Vector.get classes n @ !acc) lr1
+        | R edge ->
+          List.iter (fun {Unreduce. lookahead; state; _} ->
+              let base = Vector.get classes (Node.inj_l state) in
+              let base =
+                if lookahead != all_terminals
+                then List.map (TerminalSet.inter lookahead) base
+                else base
+              in
+              acc := (lookahead :: base) @ !acc
+            ) (Unreduce.goto_transition edge)
+      end;
+      !acc
 
     let visit_scc _ nodes =
       (* Compute approximation for an SCC, as described in section 6.2 *)
       let coarse_classes =
-        TerminalSet.partition (List.fold_left classes_of [] nodes)
+        terminal_partition (List.fold_left classes_of [] nodes)
       in
       match nodes with
       | [node] -> Vector.set classes node coarse_classes
@@ -452,7 +450,7 @@ module Run () = struct
             Vector.set classes node (
               coarse_classes
               |> List.map (TerminalSet.inter !coarse)
-              |> TerminalSet.partition
+              |> terminal_partition
             )
         end nodes;
         List.iter begin fun node ->
@@ -461,7 +459,7 @@ module Run () = struct
           | L lr1 ->
             let acc = ref [] in
             Gr.visit_lr1 (fun n -> acc := Vector.get classes n @ !acc) lr1;
-            Vector.set classes node (TerminalSet.partition !acc)
+            Vector.set classes node (terminal_partition !acc)
         end nodes
 
     let () = Scc.rev_topological_iter visit_scc
@@ -491,9 +489,9 @@ module Run () = struct
     let t_singletons =
       let table =
         Array.init Terminal.n
-          (fun t -> [|TerminalSet.singleton (Terminal.decode t)|])
+          (fun t -> [|TerminalSet.singleton (Terminal.i2t t)|])
       in
-      fun t -> table.(Terminal.encode t)
+      fun t -> table.(Terminal.t2i t)
 
     let all_terminals =
       [|all_terminals|]
@@ -518,10 +516,8 @@ module Run () = struct
       | L edge -> for_edge edge
       | R _ -> all_terminals
 
-    let () =
-      Time.stop start_time "LRijkstraFast: token classes for each transition"
-
-  end (* Classes *)
+    let () = Time.tick "LRijkstraFast: token classes for each transition"
+  end
 
   (* ---------------------------------------------------------------------- *)
 
@@ -610,10 +606,6 @@ module Run () = struct
 
   (* The hash-consed tree of all matrix equations (products and minimums). *)
   module Tree = struct
-
-    let start_time =
-      Time.start()
-
     include ConsedTree()
 
     let goto_equations =
@@ -642,18 +634,18 @@ module Run () = struct
       in
       (* Import the solution to a matrix-chain ordering problem as a sub-tree *)
       let rec import_mcop = function
-        | MCOP.Matrix l -> leaf l
-        | MCOP.Product (l, r) -> node (import_mcop l) (import_mcop r)
+        | Mcop.Matrix l -> leaf l
+        | Mcop.Product (l, r) -> node (import_mcop l) (import_mcop r)
       in
       (* Compute the nullable terminal set and non_nullable list for a single
          reduction, optimizing the matrix-product chain.  *)
       let solve_ccost_path {Unreduce. steps; lookahead; _} =
         let dimensions = first_dim :: List.map transition_size steps in
-        match MCOP.optimal (Array.of_list dimensions) with
-        | exception MCOP.Empty -> `L lookahead
+        match Mcop.dynamic_solution (Array.of_list dimensions) with
+        | exception Mcop.Empty -> `L lookahead
         | solution ->
           let steps = Array.of_list steps in
-          let solution = MCOP.map (fun i -> steps.(i)) solution in
+          let solution = Mcop.map_solution (fun i -> steps.(i)) solution in
           `R (import_mcop solution, lookahead)
       in
       let nullable, non_nullable =
@@ -683,11 +675,9 @@ module Run () = struct
       let l, r = define node in
       Vector.set table_pre node (pre_classes l);
       Vector.set table_post node (post_classes r)
+  end
 
-    let () =
-      Time.stop start_time "LRijkstraFast: built equation tree"
-
-  end (* Tree *)
+  let () = Time.tick "LRijkstraFast: built equation tree"
 
   (* ---------------------------------------------------------------------- *)
 
@@ -834,8 +824,7 @@ module Run () = struct
     let cost t =
       let node, offset = decode_offset t in
       (Vector.get table node).(offset)
-
-  end (* Cells *)
+  end
 
   (* ---------------------------------------------------------------------- *)
 
@@ -951,10 +940,6 @@ module Run () = struct
 
   (* Represent the data flow problem to solve *)
   module Solver = struct
-
-    let start_time =
-      Time.start()
-
     let min_cost a b : int =
       if a < b then a else b
 
@@ -1038,8 +1023,7 @@ module Run () = struct
       Vector.set_cons dependents l dep;
       Vector.set_cons dependents r dep
 
-    let () =
-      Time.stop start_time "LRijkstraFast: reverse dependencies"
+    let () = Time.tick "LRijkstraFast: reverse dependencies"
 
     (* A graph representation suitable for the DataFlow solver *)
     module Graph = struct
@@ -1125,8 +1109,7 @@ module Run () = struct
             )
         in
         List.iter update_dep (Vector.get dependents node)
-
-    end (* Solver *)
+    end
 
     module Property = struct
       type property = int
@@ -1170,15 +1153,10 @@ module Run () = struct
           (if value then '\x01' else '\x00')
     end
 
-    let start_time =
-      Time.start()
-
     (* Run the solver *)
     include Fix.DataFlow.ForCustomMaps(Property)(Graph)(CostMap)(MarkMap)
 
-    let () =
-      Time.stop start_time "LRijkstraFast: data flow solution"
-
+    let () = Time.tick "LRijkstraFast: data flow solution"
   end
 
   (* ---------------------------------------------------------------------- *)
@@ -1412,4 +1390,115 @@ module Run () = struct
         end
   end
 
+  (* ---------------------------------------------------------------------- *)
+
+  (* Optional code to validate the minimal costs.
+     It runs LRijkstraClassic and then check that for each class, the minimal
+     costs coincide. *)
+  module Validation = struct
+
+    (* Find the class missing in a partition.
+
+       In a partition, there is always one class that we can deduce from the
+       other ones by removing all other classes from T.
+       The algorithm is crafted such that this class contains all unreachable
+       configurations.
+       For instance, for a shift transition on a, the partition {{a}, T/{a}} is
+       simply represented as [TerminalSet.singleton a]. The
+
+       The missing function reconstructs this class (T/{a} in the example).
+    *)
+    let missing classes =
+      let diff a b = TerminalSet.fold TerminalSet.remove b a in
+      Array.fold_left diff TerminalSet.universe classes
+
+    let validate () =
+      (* A flag to remember if we found an error.
+         We could print the first error and exit immediately, but debugging was
+         much nicer when accumulating errors and failing afterwards.
+         This helped to find patterns in the errors that made fixing easier.
+      *)
+      let failed = ref false in
+      let module Classic = LRijkstraClassic.Run(X)() in
+      (* Iterate over all goto transitions *)
+      Index.iter Transition.goto begin fun tr ->
+        (* Find the symbol, the source lr1 state and the corresponding node
+           in the tree of matrix products. *)
+        let nt = Transition.goto_symbol tr in
+        let tr = Transition.of_goto tr in
+        let node = Tree.leaf tr in
+        let lr1 = Lr1C.to_g (Transition.source tr) in
+        (* Check that the classical algorithm agrees that the node is
+           unreachable when the pre-lookahead is in the missing class *)
+        let pre_missing = missing (Tree.pre_classes node) in
+        TerminalSet.iter begin fun t ->
+          Classic.query lr1 nt t (fun _ _ ->
+              Printf.eprintf "fast algorithm determined that state %d is \
+                              unreachable with lookahead %s, \
+                              classic algorithm disagrees"
+                (Lr1.number lr1)
+                (Terminal.print t);
+              failed := true;
+            )
+        end pre_missing;
+        (* Check that the classical algorithm agrees on the minimum cost, and
+           on the unreachable configurations after following the transition. *)
+        let post_missing = missing (Tree.post_classes node) in
+        Array.iteri begin fun i_pre c_pre ->
+          (* We can visit the pre-classes in order, but the post classes are
+             visited in an unpredictable order (determined by the Classic
+             algorithm).
+             We use a hash table to store temporary results, then visit the
+             hash table in an order convenient for comparing the post classes.
+          *)
+          let min_table = Hashtbl.create 7 in
+          TerminalSet.iter begin fun t ->
+            Classic.query lr1 nt t begin fun w t' ->
+              (* Check unreachability *)
+              if TerminalSet.mem t' post_missing then (
+                Printf.eprintf "not expecting %s in {%s}\n%!"
+                  (Terminal.print t')
+                  (TerminalSet.print post_missing);
+                failed := true;
+              );
+              let n = Classic.Word.length w in
+              (* Remember the word of minimal length for this
+                 post-transition lookahead symbol *)
+              let data =
+                try Some (Hashtbl.find min_table t') with Not_found -> None
+              in
+              match data with
+              | Some (_, n') when n' <= n -> ()
+              | _ -> Hashtbl.replace min_table t' (w, n)
+            end
+          end c_pre;
+          (* Now checks that both algorithms agree on the minimal length
+             for each post class *)
+          Array.iteri begin fun i_post c_post ->
+            let cell = Cells.encode node i_pre i_post in
+            let cost = Cells.cost cell in
+            TerminalSet.iter begin fun t ->
+              match Hashtbl.find min_table t with
+              | (w, n)->
+                let word ts = String.concat " " (List.map Terminal.print ts) in
+                if n <> cost then (
+                  Printf.eprintf "  lengths differ: %d <> %d\n" n cost;
+                  Printf.eprintf "    pre-class: {%s}\n"
+                    (TerminalSet.print c_pre);
+                  Printf.eprintf "    post-class: {%s}\n"
+                    (TerminalSet.print c_post);
+                  Printf.eprintf "    Classic: %s\n\
+                                 \    Fast: %s\n%!"
+                    (word (Classic.Word.elements w))
+                    (word (Graph.append_word cell []))
+                )
+              | exception Not_found -> ()
+            end c_post
+          end (Tree.post_classes node)
+        end (Tree.pre_classes node)
+      end;
+      if !failed then exit 1
+
+    let () = if X.validate then validate ()
+  end
 end

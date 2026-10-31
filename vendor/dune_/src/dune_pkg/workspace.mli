@@ -25,5 +25,3 @@ module Repository : sig
 
   val name : t -> Name.t
 end
-
-val dev_tool_path_to_source_dir : Path.External.t -> Path.Source.t

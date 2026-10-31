@@ -28,7 +28,7 @@ type optimized_result =
   ; variable_uses : Deadcode.variable_uses
   ; trampolined_calls : Effects.trampolined_calls
   ; in_cps : Effects.in_cps
-  ; deadcode_sentinal : Code.Var.t
+  ; deadcode_sentinel : Code.Var.t
   ; shapes : Shape.t StringMap.t
   }
 
@@ -63,9 +63,13 @@ let inline profile p =
 
 let specialize_1 (p, info) =
   if debug () then Format.eprintf "Specialize...@.";
-  let return_values = Code.Var.Map.empty in
+  let return_values = Code.return_values p in
+  let shape, set_shape =
+    Flow.the_shape_of ~return_values ~pure:Pure_fun.empty ~blocks:false info
+  in
   Specialize.f
-    ~shape:(fun f -> Flow.the_shape_of ~return_values ~pure:Pure_fun.empty info f)
+    ~shape
+    ~set_shape
     ~update_def:(fun x expr -> Flow.Info.update_def info x expr)
     p
 
@@ -109,19 +113,13 @@ let collects_shapes ~shapes (p : Code.program) =
       (fun _ block ->
         List.iter block.Code.body ~f:(fun i ->
             match i with
-            | Code.Let
-                ( _
-                , Prim
-                    ( Extern "caml_register_global"
-                    , [ _code; Pv block; Pc (NativeString name) ] ) ) ->
+            | Code.Let (_, Prim (Extern "caml_register_global", [ Pv block; Pc name ])) ->
                 let name =
                   match name with
-                  | Byte s -> s
-                  | Utf (Utf8 s) -> s
+                  | NativeString (Byte s) | NativeString (Utf (Utf8 s)) | String s -> s
+                  | _ -> assert false
                 in
                 shapes := StringMap.add name block !shapes
-            | Code.Let (_, Prim (Extern "caml_set_global", [ Pc (String name); Pv block ]))
-              -> shapes := StringMap.add name block !shapes
             | _ -> ()))
       p.blocks;
     let map =
@@ -131,11 +129,15 @@ let collects_shapes ~shapes (p : Code.program) =
         let _, info = Flow.f p in
         let pure = Pure_fun.f p in
         let return_values = Code.return_values p in
+        let shape, _set_shape =
+          Flow.the_shape_of ~return_values ~pure ~blocks:true info
+        in
         StringMap.filter_map
           (fun _ x ->
-            match Flow.the_shape_of ~return_values ~pure info x with
+            let s = shape x in
+            match s.desc with
             | Top -> None
-            | (Function _ | Block _) as s -> Some s)
+            | Function _ | Block _ -> Some s)
           !shapes
     in
     if times () then Format.eprintf "  shapes: %a@." Timer.print t;
@@ -144,7 +146,7 @@ let collects_shapes ~shapes (p : Code.program) =
 
 let effects_and_exact_calls
     ~keep_flow_data
-    ~deadcode_sentinal
+    ~deadcode_sentinel
     ~shapes
     (profile : Profile.t)
     p =
@@ -161,7 +163,7 @@ let effects_and_exact_calls
   let p, live_vars =
     if Config.Flag.globaldeadcode () && Config.Flag.deadcode ()
     then
-      let p = Global_deadcode.f pure_fun p ~deadcode_sentinal info in
+      let p = Global_deadcode.f pure_fun p ~deadcode_sentinel info in
       Deadcode.f pure_fun p
     else Deadcode.f pure_fun p
   in
@@ -176,13 +178,14 @@ let effects_and_exact_calls
         | `JavaScript -> Lambda_lifting.f p
       in
       p, trampolined_calls, in_cps, None, shapes
-  | `Disabled | `Jspi ->
+  | `Disabled | `Jspi | `Native ->
       let p =
         Specialize.f
           ~shape:(fun f ->
             match Global_flow.function_arity info f with
-            | None -> Shape.Top
-            | Some arity -> Shape.Function { arity; pure = false; res = Top })
+            | None -> Shape.top
+            | Some arity -> Shape.funct ~arity ~pure:false ~res:Shape.top)
+          ~set_shape:(fun _ _ -> ())
           ~update_def:(fun x expr -> Global_flow.update_def info x expr)
           p
       in
@@ -216,7 +219,6 @@ let rec loop max name round i (p : 'a) : 'a =
 let round profile : 'a -> 'a =
   print
   +> tailcall
-  +> Ref_unboxing.f
   +> (flow +> specialize +> eval +> fst)
   +> inline profile
   +> phi
@@ -239,7 +241,7 @@ let generate
     ~exported_runtime
     ~wrap_with_fun
     ~warn_on_unhandled_effect
-    { program; variable_uses; trampolined_calls; deadcode_sentinal; in_cps; shapes = _ } =
+    { program; variable_uses; trampolined_calls; deadcode_sentinel; in_cps; shapes = _ } =
   if times () then Format.eprintf "Start Generation...@.";
   let should_export = should_export wrap_with_fun in
   Generate.f
@@ -250,7 +252,7 @@ let generate
     ~in_cps
     ~should_export
     ~warn_on_unhandled_effect
-    ~deadcode_sentinal
+    ~deadcode_sentinel
 
 let debug_linker = Debug.find "linker"
 
@@ -551,6 +553,7 @@ let pack ~wrap_with_fun ~standalone { Linker.runtime_code = js; always_required_
       js)
     else js
   in
+  let js = if Config.Flag.constant_sinking () then Js_constant_sinking.f js else js in
   (* pack *)
   let wrap_in_iife ~use_strict js =
     let var ident e = J.variable_declaration [ J.ident ident, (e, J.N) ], J.N in
@@ -636,7 +639,7 @@ if (typeof module === 'object' && module.exports) {
               name
           in
           let lex = Parse_js.Lexer.of_string s in
-          Parse_js.parse lex
+          Parse_js.parse `Script lex
         in
         js @ export_node
     | `Anonymous, _ -> js
@@ -663,7 +666,7 @@ if (typeof module === 'object' && module.exports) {
 |}
           in
           let lex = Parse_js.Lexer.of_string s in
-          Parse_js.parse lex
+          Parse_js.parse `Script lex
         in
         e @ js
   in
@@ -673,6 +676,7 @@ if (typeof module === 'object' && module.exports) {
 let simplify_js js =
   (* post pack optim *)
   let t = Timer.make () in
+  let js = if Config.Flag.var_coalescing () then Js_variable_coalescing.f js else js in
   let t3 = Timer.make () in
   let js = (new Js_traverse.simpl)#program js in
   if times () then Format.eprintf "    simpl: %a@." Timer.print t3;
@@ -698,7 +702,7 @@ let link_and_pack ?(standalone = true) ?(wrap_with_fun = `Iife) ?(link = `No) p 
   |> check_js
 
 let optimize ~shapes ~profile ~keep_flow_data p =
-  let deadcode_sentinal =
+  let deadcode_sentinel =
     (* If deadcode is disabled, this field is just fresh variable *)
     Code.Var.fresh_n "dummy"
   in
@@ -710,13 +714,12 @@ let optimize ~shapes ~profile ~keep_flow_data p =
       | O2 -> o2
       | O3 -> o3)
     +> specialize_js_once_after
-    +> effects_and_exact_calls ~keep_flow_data ~deadcode_sentinal ~shapes profile
+    +> effects_and_exact_calls ~keep_flow_data ~deadcode_sentinel ~shapes profile
     +> map_fst5
          (match Config.target (), Config.effects () with
-         | `JavaScript, `Disabled -> Generate_closure.f
-         | `JavaScript, (`Cps | `Double_translation) | `Wasm, (`Disabled | `Jspi | `Cps)
-           -> Fun.id
-         | `JavaScript, `Jspi | `Wasm, `Double_translation -> assert false)
+         | `JavaScript, (`Disabled | `Double_translation) -> Generate_closure.f
+         | `JavaScript, `Cps | `Wasm, (`Disabled | `Jspi | `Cps | `Native) -> Fun.id
+         | `JavaScript, (`Jspi | `Native) | `Wasm, `Double_translation -> assert false)
     +> map_fst5 deadcode'
   in
   if times () then Format.eprintf "Start Optimizing...@.";
@@ -725,7 +728,7 @@ let optimize ~shapes ~profile ~keep_flow_data p =
     opt p
   in
   let () = if times () then Format.eprintf " optimizations : %a@." Timer.print t in
-  ( { program; variable_uses; trampolined_calls; in_cps; deadcode_sentinal; shapes }
+  ( { program; variable_uses; trampolined_calls; in_cps; deadcode_sentinel; shapes }
   , global_flow_info )
 
 let optimize_for_wasm ~shapes ~profile p =

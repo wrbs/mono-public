@@ -236,8 +236,7 @@ let decode =
        field "files" Predicate_lang.Glob.decode ~default:Predicate_lang.standard
      and+ enabled_if = Enabled_if.decode ~allowed_vars:Any ~since:(Some (2, 9)) ()
      and+ package =
-       Stanza_pkg.field_opt () ~check:(Dune_lang.Syntax.since Stanza.syntax (2, 9))
-       >>| Option.map ~f:snd
+       Stanza_common.Pkg.field_opt () ~check:(Dune_lang.Syntax.since Stanza.syntax (2, 9))
      and+ packages =
        field
          ~default:[]
@@ -272,7 +271,13 @@ let decode =
 let () =
   let open Dune_lang.Decoder in
   let decode = Dune_lang.Syntax.since Stanza.syntax (2, 4) >>> decode in
-  Dune_project.Extension.register_simple syntax (return [ "mdx", decode_stanza decode ])
+  Dune_project.Extension.register_simple
+    syntax
+    (return
+       [ ( "mdx"
+         , let+ stanza = decode in
+           [ make_stanza stanza ] )
+       ])
 ;;
 
 (** Returns the list of files (in _build) to be passed to mdx for the given
@@ -426,8 +431,7 @@ let mdx_prog_gen t ~sctx ~dir ~scope ~mdx_prog =
       let open Command.Args in
       S
         (Lib_flags.L.include_paths libs_to_include (Ocaml mode) lib_config
-         |> Lib_flags.L.include_only
-         |> List.map ~f:(fun p -> S [ A "--directory"; Path p ]))
+         |> Path.Set.to_list_map ~f:(fun p -> S [ A "--directory"; Path p ]))
     in
     let open Command.Args in
     let prelude_args = S (List.concat_map t.preludes ~f:(Prelude.to_args ~dir)) in
@@ -457,7 +461,6 @@ let mdx_prog_gen t ~sctx ~dir ~scope ~mdx_prog =
         ~allow_overlaps:false
         ~forbidden_libraries:[]
         (lib "mdx.test" :: lib "mdx.top" :: t.libraries)
-        ~allow_unused_libraries:[]
         ~pps:[]
         ~dune_version
     in
@@ -517,12 +520,12 @@ let gen_rules t ~sctx ~dir ~scope ~expander =
       files_to_mdx
       ~f:(gen_rules_for_single_file t ~sctx ~dir ~expander ~mdx_prog ~mdx_prog_gen)
   in
-  let* do_it =
-    match t.package with
-    | None -> Memo.return true
-    | Some package ->
-      let+ mask = Dune_load.mask () in
-      Only_packages.mem_all mask || Only_packages.mem mask (Package.name package)
+  let* only_packages = Dune_load.mask () in
+  let do_it =
+    match only_packages, t.package with
+    | None, _ | Some _, None -> true
+    | Some only, Some stanza_package ->
+      Package.Name.Map.mem only (Package.name stanza_package)
   in
   Memo.when_ do_it register_rules
 ;;

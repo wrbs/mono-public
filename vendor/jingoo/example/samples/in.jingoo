@@ -1,3 +1,0 @@
-{% if 1 in [1,2,3] -%}
-<p>Yes, it works! <code>1</code> is in <code>[1,2,3]</code></p>
-{%- endif %}

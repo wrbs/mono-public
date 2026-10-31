@@ -31,11 +31,13 @@ module TyVarEnv : sig
   (** Evaluate in a narrowed type-variable scope *)
 
   type poly_univars
-  val make_poly_univars : (string Location.loc * Env.stage) list -> poly_univars
+  val make_poly_univars :
+    Env.t -> (string Location.loc * Env.stage) list -> poly_univars
     (** A variant of [make_poly_univars_jkinds] that gets variables
         without jkind annotations *)
 
   val make_poly_univars_jkinds :
+    Env.t ->
     context:(string -> Jkind.History.annotation_context_lr) ->
     (string Location.loc * Parsetree.jkind_annotation option * Env.stage) list
     -> poly_univars
@@ -128,14 +130,19 @@ val transl_simple_type_delayed
            Returns the type, an instance of the corresponding type_expr, and a
            function that binds the type variable. *)
 val transl_type_scheme:
-        Env.t -> Parsetree.core_type -> Typedtree.core_type
+        Env.t -> Parsetree.core_type ->
+        Jkind_types.Sort.var list * Typedtree.core_type
 val transl_type_param:
   Env.t -> Path.t -> jkind_lr -> Parsetree.core_type -> Typedtree.core_type
 (* the Path.t above is of the type/class whose param we are processing;
    the level defaults to the current level. The jkind_lr is the jkind to
    use if no annotation is provided. *)
 
-val get_type_param_jkind: Path.t -> Parsetree.core_type -> jkind_lr
+val get_type_param_jkind: Env.t -> Path.t -> Parsetree.core_type -> jkind_lr
+(* [get_type_param_jkind] is only used in contexts where the jkind will be
+   translated again later, so it does not treat the kind it is passed as "used"
+   for the purpose of warnings. *)
+
 val get_type_param_name: Parsetree.core_type -> string option
 
 exception Already_bound
@@ -172,6 +179,7 @@ type error =
   | Method_mismatch of string * type_expr * type_expr
   | Opened_object of Path.t option
   | Not_an_object of type_expr
+  | Repeated_tuple_label of string
   | Unsupported_extension : _ Language_extension.t -> error
   | Polymorphic_optional_param
   | Non_value of
@@ -185,10 +193,14 @@ type error =
       {name : string;
        intro_stage : Env.stage;
        usage_stage : Env.stage}
+  | Mismatched_jkind_annotation of
+    { name : string; explicit_jkind : jkind_lr; implicit_jkind : jkind_lr }
+  | Lpoly_unsupported
 
 exception Error of Location.t * Env.t * error
 
-val report_error: Env.t -> Format.formatter -> error -> unit
+val report_error: Env.t -> error Format_doc.format_printer
+val report_error_doc: Env.t -> error Format_doc.printer
 
 (* Support for first-class modules. *)
 val transl_modtype_longident:  (* from Typemod *)

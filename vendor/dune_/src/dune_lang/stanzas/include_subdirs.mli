@@ -12,4 +12,4 @@ type stanza = Loc.t * t
 
 include Stanza.S with type t := stanza
 
-val decode : qualified:unit Decoder.t -> (Loc.t * t) Decoder.t
+val decode : enable_qualified:bool -> t Decoder.t

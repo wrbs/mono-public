@@ -34,10 +34,9 @@ by inspecting the returned mode. *)
 (* CR zqian: Remove [?expected_mode] once we have mode error chain. *)
 
 val type_module:
-        Env.t -> ?expected_mode:Mode.Value.r -> Parsetree.module_expr ->
-        Typedtree.module_expr * Shape.t
+  Env.t -> Parsetree.module_expr -> Typedtree.module_expr * Shape.t
 val type_structure:
-  Env.t -> ?expected_mode:Mode.Value.r -> Parsetree.structure ->
+  Env.t -> Parsetree.structure ->
   Typedtree.structure * Types.signature * Mode.Value.lr * Signature_names.t *
   Shape.t * Env.t
 val type_toplevel_phrase:
@@ -52,6 +51,14 @@ val type_interface:
   Parsetree.signature -> Typedtree.signature
 val transl_signature:
   Env.t -> Parsetree.signature -> Typedtree.signature
+
+(* If the [.mli] file has any file-level staticity modality (whether
+   [@@ static] or [@@ dynamic]), the module is [Static]; otherwise [Dynamic].
+   The presence of either annotation is treated as opt-in to staticity.
+
+   CR-soon zqian: all persistent modules should always be [Static]. *)
+val staticity_of_modalities:
+  Typedtree.modalities -> Mode.Staticity.Const.t
 val check_nongen_signature:
         Env.t -> Types.signature -> unit
         (*
@@ -92,6 +99,7 @@ module Sig_component_kind : sig
     | Extension_constructor
     | Class
     | Class_type
+    | Jkind
 
   val to_string : t -> string
 end
@@ -118,17 +126,6 @@ type functor_dependency_error =
     Functor_applied
   | Functor_included
 
-(** Modules that are required to be legacy mode *)
-type legacy_module =
-  | Compilation_unit
-  | Toplevel
-  | Functor_body
-
-(** Places where modes annotations are not supported *)
-type unsupported_modal_module =
-  | Functor_param
-  | Functor_res
-
 type error =
     Cannot_apply of module_type
   | Not_included of Includemod.explanation
@@ -153,8 +150,8 @@ type error =
       { vars : type_expr list; item : value_description; mty : module_type }
   | Implementation_is_required of string
   | Interface_not_compiled of string
-  | Not_allowed_in_functor_body
-  | Not_includable_in_functor_body
+  | Not_allowed_in_functor_body of Mtype.Contains_type_or_jkind.t
+  | Not_includable_in_functor_body of Mtype.Contains_type_or_jkind.t
   | Not_a_packed_module of type_expr
   | Incomplete_packed_module of type_expr
   | Scoping_pack of Longident.t * type_expr
@@ -180,10 +177,6 @@ type error =
       old_source_file: Misc.filepath;
     }
   | Duplicate_parameter_name of Global_module.Parameter_name.t
-  | Submode_failed of Mode.Value.error
-  | Item_weaker_than_structure of Mode.Value.error
-  | Unsupported_modal_module of unsupported_modal_module
-  | Legacy_module of legacy_module * Mode.Value.error
 
 exception Error of Location.t * Env.t * error
 exception Error_forward of Location.error

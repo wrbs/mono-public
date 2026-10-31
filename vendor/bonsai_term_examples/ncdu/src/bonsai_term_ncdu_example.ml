@@ -14,13 +14,13 @@ module Classification = struct
   ;;
 
   let catppuccin_color = function
-    | Kingdom _ -> Some Bonsai_tui_catppuccin.Blue
+    | Kingdom _ -> Some Bonsai_term_color_scheme.Blue
     | Family _ -> Some Lavender
     | Species _ -> None
   ;;
 end
 
-include Bonsai_tui_ncdu.Make (Classification) (Int)
+include Bonsai_term_ncdu.Make (Classification) (Int)
 
 let species name count =
   let name = Classification.Species name in
@@ -94,8 +94,8 @@ let app ~dimensions (local_ graph) =
       ~dimensions
       ~app_title:"Tree of life"
       ~tree_name:"South America"
-      ~nodes
-      ~total_size
+      ~nodes:(Bonsai.return nodes)
+      ~total_size:(Bonsai.return total_size)
       graph
   in
   ~view, ~handler
@@ -106,5 +106,5 @@ let command =
   Command.async_or_error
     ~summary:{|Bonsai_term ncdu demo!|}
     (let%map_open.Command () = return () in
-     fun () -> Bonsai_term.start ~target_frames_per_second:10 app)
+     fun () -> Bonsai_term.start ~target_frames_per_second:10.0 app)
 ;;

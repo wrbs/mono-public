@@ -65,7 +65,6 @@ let stop = function
 
 let compare = Poly.compare
 let equal = Poly.equal
-let hash = Poly.hash
 let none = No_loc
 
 let is_none = function

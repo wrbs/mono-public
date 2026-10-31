@@ -289,6 +289,10 @@ module Type = struct
                     ])
             })
 
+  let empty_closure_type () =
+    register_type "empty_closure" (fun () ->
+        return { supertype = None; final = true; typ = W.Struct [] })
+
   let make_env_type env_type =
     List.map
       ~f:(fun typ ->
@@ -299,7 +303,15 @@ module Type = struct
 
   let env_type ~cps ~arity ~no_code_pointer ~env_type_id ~env_type =
     register_type
-      (if cps
+      (if no_code_pointer
+       then
+         (* The struct has no fn pointer, so its layout doesn't depend on
+            [arity]. Omitting [arity] keeps the name space disjoint from
+            indirect closures (which always include it). *)
+         if cps
+         then Printf.sprintf "cps_env_%d" env_type_id
+         else Printf.sprintf "env_%d" env_type_id
+       else if cps
        then Printf.sprintf "cps_env_%d_%d" arity env_type_id
        else Printf.sprintf "env_%d_%d" arity env_type_id)
       (fun () ->
@@ -352,7 +364,12 @@ module Type = struct
   let rec_closure_type ~cps ~arity ~no_code_pointer ~function_count ~env_type_id ~env_type
       =
     register_type
-      (if cps
+      (if no_code_pointer
+       then
+         if cps
+         then Printf.sprintf "cps_closure_rec_%d_%d" function_count env_type_id
+         else Printf.sprintf "closure_rec_%d_%d" function_count env_type_id
+       else if cps
        then Printf.sprintf "cps_closure_rec_%d_%d_%d" arity function_count env_type_id
        else Printf.sprintf "closure_rec_%d_%d_%d" arity function_count env_type_id)
       (fun () ->
@@ -692,11 +709,11 @@ module Memory = struct
     let* e' = e' in
     instr (W.StructSet (ty, i, e, e'))
 
-  let wasm_array_get ?(ty = Type.block_type) e e' =
+  let wasm_array_get ?signage ?(ty = Type.block_type) e e' =
     let* ty = ty in
     let* e = wasm_cast ty e in
     let* e' = e' in
-    return (W.ArrayGet (None, ty, e, e'))
+    return (W.ArrayGet (signage, ty, e, e'))
 
   let wasm_array_set ?(ty = Type.block_type) e e' e'' =
     let* ty = ty in
@@ -714,16 +731,63 @@ module Memory = struct
     let* ty = Type.float_type in
     wasm_struct_get ty (wasm_cast ty e) 0
 
-  let allocate ~tag l =
+  let allocation_threshold = 100
+
+  let allocate ?(safepoint_friendly_array_init = false) ~tag l =
     assert (tag <> 254);
     let* l = l in
     let* ty = Type.block_type in
-    return (W.ArrayNewFixed (ty, RefI31 (Const (I32 (Int32.of_int tag))) :: l))
+    let len = List.length l + 1 in
+    if safepoint_friendly_array_init && len >= allocation_threshold
+    then
+      let tag_val = W.RefI31 (Const (I32 (Int32.of_int tag))) in
+      let arr = Code.Var.fresh_n "arr" in
+      seq
+        (let* () =
+           store arr (return (W.ArrayNew (ty, tag_val, Const (I32 (Int32.of_int len)))))
+         in
+         let rec loop i l =
+           match l with
+           | [] -> return ()
+           | h :: t ->
+               let* () =
+                 wasm_array_set (load arr) (Arith.const (Int32.of_int i)) (return h)
+               in
+               loop (i + 1) t
+         in
+         loop 1 l)
+        (load arr)
+    else return (W.ArrayNewFixed (ty, RefI31 (Const (I32 (Int32.of_int tag))) :: l))
 
-  let allocate_float_array l =
+  let allocate_float_array ?(safepoint_friendly_array_init = false) l =
     let* l = l in
     let* ty = Type.float_array_type in
-    return (W.ArrayNewFixed (ty, l))
+    let len = List.length l in
+    if safepoint_friendly_array_init && len >= allocation_threshold
+    then
+      let arr = Code.Var.fresh_n "arr" in
+      seq
+        (let* () =
+           store
+             arr
+             (return (W.ArrayNew (ty, Const (F64 0.), Const (I32 (Int32.of_int len)))))
+         in
+         let rec loop i l =
+           match l with
+           | [] -> return ()
+           | h :: t ->
+               let* () =
+                 wasm_array_set
+                   ~ty:Type.float_array_type
+                   (load arr)
+                   (Arith.const (Int32.of_int i))
+                   (return h)
+               in
+               loop (i + 1) t
+         in
+         loop 0 l)
+        (load arr)
+    else return (W.ArrayNewFixed (ty, l))
 
   let tag e = wasm_array_get e (Arith.const 0l)
 
@@ -839,7 +903,7 @@ module Memory = struct
     let* e = wasm_cast ty e in
     return (W.ArrayLen e)
 
-  let bytes_get e e' = wasm_array_get ~ty:Type.string_type e e'
+  let bytes_get e e' = wasm_array_get ~signage:U ~ty:Type.string_type e e'
 
   let bytes_set e e' e'' = wasm_array_set ~ty:Type.string_type e e' e''
 
@@ -1152,29 +1216,32 @@ module Closure = struct
            ~f:(fun x -> Code.Var.Set.mem x context.globalized_variables)
            free_variables));
     let _, arity = List.find ~f:(fun (f', _) -> Code.Var.equal f f') info.functions in
-    let arity = if no_code_pointer then 0 else if cps then arity - 1 else arity in
-    let* curry_fun = if arity > 1 then need_curry_fun ~cps ~arity else return f in
+    let arity = if cps then arity - 1 else arity in
+    let* curry_fun =
+      if arity > 1 && not no_code_pointer then need_curry_fun ~cps ~arity else return f
+    in
     if List.is_empty free_variables
     then
-      if no_code_pointer
-      then Value.unit
-      else
-        let* typ = Type.closure_type ~usage:`Alloc ~cps arity in
-        let name = Code.Var.fork f in
-        let* () =
-          register_global
-            name
-            { mut = false; typ = Type.value }
-            (W.StructNew
-               ( typ
-               , if no_code_pointer
-                 then []
-                 else
-                   match arity with
-                   | 0 | 1 -> [ W.RefFunc f ]
-                   | _ -> [ RefFunc curry_fun; RefFunc f ] ))
-        in
-        return (W.GlobalGet name)
+      let* typ =
+        if no_code_pointer
+        then Type.empty_closure_type ()
+        else Type.closure_type ~usage:`Alloc ~cps arity
+      in
+      let name = Code.Var.fork f in
+      let* () =
+        register_global
+          name
+          { mut = false; typ = Type.value }
+          (W.StructNew
+             ( typ
+             , if no_code_pointer
+               then []
+               else
+                 match arity with
+                 | 0 | 1 -> [ W.RefFunc f ]
+                 | _ -> [ RefFunc curry_fun; RefFunc f ] ))
+      in
+      return (W.GlobalGet name)
     else
       let* env_type = expression_list variable_type free_variables in
       let env_type_id =
@@ -1274,7 +1341,7 @@ module Closure = struct
     else
       let env_type_id = Option.value ~default:(-1) info.id in
       let _, arity = List.find ~f:(fun (f', _) -> Code.Var.equal f f') info.functions in
-      let arity = if no_code_pointer then 0 else if cps then arity - 1 else arity in
+      let arity = if cps then arity - 1 else arity in
       let offset = Memory.env_start ~no_code_pointer arity in
       match info.Closure_conversion.functions with
       | [ _ ] ->
@@ -1722,7 +1789,7 @@ let internal_primitives =
     let* args = expression_list Fun.id args in
     return (W.Call (f, args))
   in
-  let register_js_expr (prim_name, kind) =
+  let register_js_code ~expr (prim_name, kind) =
     register prim_name ~kind (fun transl_prim_arg l ->
         match l with
         | Code.[ Pc (String str) ] -> (
@@ -1745,20 +1812,26 @@ let internal_primitives =
                    pi.Parse_info.line
                    pi.Parse_info.col))
         | [ Pv _ ] ->
-            let* () =
-              register_fragment "eval" (fun () ->
-                  let lex = Parse_js.Lexer.of_string {|(x)=>eval("("+x+")")|} in
-                  Parse_js.parse_expr lex)
+            let eval name code =
+              let* () =
+                register_fragment name (fun () ->
+                    let lex = Parse_js.Lexer.of_string code in
+                    Parse_js.parse_expr lex)
+              in
+              JavaScript.invoke_fragment
+                name
+                [ call_prim ~transl_prim_arg "caml_jsstring_of_string" l ]
             in
-            JavaScript.invoke_fragment
-              "eval"
-              [ call_prim ~transl_prim_arg "caml_jsstring_of_string" l ]
+            if expr
+            then eval "eval_expr" {|(x)=>eval?.('"use strict";('+x+')')|}
+            else eval "eval_statement" {|(x)=>eval?.('"use strict";'+x)|}
         | [] | _ :: _ ->
             failwith (Printf.sprintf "Wrong number argument to primitive %s" prim_name))
   in
   List.iter
-    ~f:register_js_expr
+    ~f:(register_js_code ~expr:true)
     [ "caml_js_expr", `Mutator; "caml_pure_js_expr", `Pure; "caml_js_var", `Mutable ];
+  register_js_code ~expr:false ("caml_js_eval_string", `Mutator);
   register "%caml_js_opt_call" (fun transl_prim_arg l ->
       let arity = List.length l - 2 in
       let name = Printf.sprintf "call_%d" arity in
@@ -1976,6 +2049,22 @@ let internal_primitives =
       in
       let l = List.map ~f:transl_prim_arg vl in
       JavaScript.invoke_fragment name l);
+  register "caml_jsoo_runtime_value" (fun _ l ->
+      match l with
+      | [ Pc (String name) ] when J.is_ident name ->
+          let* x =
+            register_import
+              ~import_module:"js"
+              ~name
+              (Global { mut = false; typ = JavaScript.anyref })
+          in
+          let* wrap =
+            register_import
+              ~name:"wrap"
+              (Fun { params = [ JavaScript.anyref ]; result = [ Type.value ] })
+          in
+          return (W.Call (wrap, [ GlobalGet x ]))
+      | _ -> failwith "Jsoo_runtime.Js.runtime_value expects a string literal.");
   !l
 
 let externref = W.Ref { nullable = true; typ = Extern }

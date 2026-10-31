@@ -1,2 +1,0 @@
-- strlen("hogehoge"): {{ strlen("hogehoge") }}
-- strlen("日本語"): {{ strlen("日本語") }}

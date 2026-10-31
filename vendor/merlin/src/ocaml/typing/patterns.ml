@@ -53,6 +53,8 @@ module Simple = struct
   type view = [
     | `Any
     | `Constant of constant
+    | `Unboxed_unit
+    | `Unboxed_bool of bool
     | `Tuple of (string option * pattern) list
     | `Unboxed_tuple of (string option * pattern * Jkind.sort) list
     | `Construct of
@@ -85,6 +87,9 @@ module General = struct
   type view = [
     | Half_simple.view
     | `Var of Ident.t * string loc * Uid.t * Jkind.Sort.t * Mode.Value.l
+    | `Fun_layout of Ident.t * string loc * Uid.t
+                   * Jkind.Sort.t * Mode.Value.l * Types.Lpoly.t
+                   * alloc_mode
     | `Alias of pattern * Ident.t * string loc
                 * Uid.t * Jkind.Sort.t * Mode.Value.l * Types.type_expr
   ]
@@ -93,12 +98,20 @@ module General = struct
   let view_desc = function
     | Tpat_any ->
        `Any
-    | Tpat_var (id, str, uid, sort, mode) ->
+    | Tpat_var { id; name = str; uid; sort; mode } ->
        `Var (id, str, uid, sort, mode)
-    | Tpat_alias (p, id, str, uid, sort, mode, ty) ->
+    | Tpat_fun_layout { id; name = str; uid; sort; mode; lpoly;
+                        env_alloc_mode } ->
+       `Fun_layout (id, str, uid, sort, mode, lpoly, env_alloc_mode)
+    | Tpat_alias { pattern = p; id; name = str; uid; sort; mode;
+                   type_expr = ty } ->
        `Alias (p, id, str, uid, sort, mode, ty)
     | Tpat_constant cst ->
        `Constant cst
+    | Tpat_unboxed_unit ->
+       `Unboxed_unit
+    | Tpat_unboxed_bool b ->
+       `Unboxed_bool b
     | Tpat_tuple ps ->
        `Tuple ps
     | Tpat_unboxed_tuple ps ->
@@ -120,10 +133,17 @@ module General = struct
 
   let erase_desc = function
     | `Any -> Tpat_any
-    | `Var (id, str, uid, sort, mode) -> Tpat_var (id, str, uid, sort, mode)
+    | `Var (id, str, uid, sort, mode) ->
+       Tpat_var { id; name = str; uid; sort; mode }
+    | `Fun_layout (id, str, uid, sort, mode, lpoly, env_alloc_mode) ->
+       Tpat_fun_layout { id; name = str; uid; sort; mode; lpoly;
+                         env_alloc_mode }
     | `Alias (p, id, str, uid, sort, mode, ty) ->
-       Tpat_alias (p, id, str, uid, sort, mode, ty)
+       Tpat_alias { pattern = p; id; name = str; uid; sort; mode;
+                    type_expr = ty }
     | `Constant cst -> Tpat_constant cst
+    | `Unboxed_unit -> Tpat_unboxed_unit
+    | `Unboxed_bool b -> Tpat_unboxed_bool b
     | `Tuple ps -> Tpat_tuple ps
     | `Unboxed_tuple ps -> Tpat_unboxed_tuple ps
     | `Construct (cstr, cst_descr, args) ->
@@ -144,7 +164,7 @@ module General = struct
   let rec strip_vars (p : pattern) : Half_simple.pattern =
     match p.pat_desc with
     | `Alias (p, _, _, _, _, _, _) -> strip_vars (view p)
-    | `Var _ -> { p with pat_desc = `Any }
+    | `Var _ | `Fun_layout _ -> { p with pat_desc = `Any }
     | #Half_simple.view as view -> { p with pat_desc = view }
 end
 
@@ -155,6 +175,8 @@ module Head : sig
     | Any
     | Construct of constructor_description
     | Constant of constant
+    | Unboxed_unit
+    | Unboxed_bool of bool
     | Tuple of string option list
     | Unboxed_tuple of (string option * Jkind.sort) list
     | Record of label_description list
@@ -182,6 +204,8 @@ end = struct
     | Any
     | Construct of constructor_description
     | Constant of constant
+    | Unboxed_unit
+    | Unboxed_bool of bool
     | Tuple of string option list
     | Unboxed_tuple of (string option * Jkind.sort) list
     | Record of label_description list
@@ -201,6 +225,8 @@ end = struct
     let deconstruct_desc = function
       | `Any -> Any, []
       | `Constant c -> Constant c, []
+      | `Unboxed_unit -> Unboxed_unit, []
+      | `Unboxed_bool b -> Unboxed_bool b, []
       | `Tuple args ->
           Tuple (List.map fst args), (List.map snd args)
       | `Unboxed_tuple args ->
@@ -242,6 +268,8 @@ end = struct
       | Any -> 0
       | Constant _ -> 0
       | Construct c -> c.cstr_arity
+      | Unboxed_unit -> 0
+      | Unboxed_bool _ -> 0
       | Tuple l -> List.length l
       | Unboxed_tuple l -> List.length l
       | Array (_, _, n) -> n
@@ -257,6 +285,8 @@ end = struct
       | Any -> Tpat_any
       | Lazy -> Tpat_lazy omega
       | Constant c -> Tpat_constant c
+      | Unboxed_unit -> Tpat_unboxed_unit
+      | Unboxed_bool b -> Tpat_unboxed_bool b
       | Tuple lbls ->
           Tpat_tuple (List.map (fun lbl -> lbl, omega) lbls)
       | Unboxed_tuple lbls_and_sorts ->

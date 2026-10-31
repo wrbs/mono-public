@@ -109,7 +109,7 @@ module type T = sig
   (** A nullary element is an element that doesn't have any children. *)
   type ('a, 'b) nullary = ?a:('a attrib list) -> unit -> 'b elt
 
-  (** A unary element is an element that have exactly one children. *)
+  (** A unary element is an element that has exactly one child. *)
   type ('a, 'b, 'c) unary = ?a:('a attrib list) -> 'b elt wrap -> 'c elt
 
   (** A star element is an element that has any number of children, including zero. *)
@@ -176,11 +176,20 @@ module type T = sig
   val a_onafterprint : Xml.event_handler -> [> | `OnAfterPrint] attrib
   val a_onbeforeprint : Xml.event_handler -> [> | `OnBeforePrint] attrib
   val a_onbeforeunload : Xml.event_handler -> [> | `OnBeforeUnload] attrib
+  val a_onbeforeinput : Xml.event_handler -> [> | `OnBeforeInput] attrib
+  val a_onbeforematch : Xml.event_handler -> [> | `OnBeforeMatch] attrib
+  val a_onbeforetoggle : Xml.event_handler -> [> | `OnBeforeToggle] attrib
   val a_onblur : Xml.event_handler -> [> | `OnBlur] attrib
+  val a_oncancel : Xml.event_handler -> [> | `OnCancel] attrib
   val a_oncanplay : Xml.event_handler -> [> | `OnCanPlay] attrib
   val a_oncanplaythrough : Xml.event_handler -> [> | `OnCanPlayThrough] attrib
   val a_onchange : Xml.event_handler -> [> | `OnChange] attrib
   val a_onclose : Xml.event_handler -> [> | `OnClose] attrib
+  val a_oncontextlost : Xml.event_handler -> [> | `OnContextLost] attrib
+  val a_oncontextrestored : Xml.event_handler -> [> | `OnContextRestored] attrib
+  val a_oncopy : Xml.event_handler -> [> | `OnCopy] attrib
+  val a_oncut : Xml.event_handler -> [> | `OnCut] attrib
+  val a_oncuechange : Xml.event_handler -> [> | `OnCueChange] attrib
   val a_ondurationchange : Xml.event_handler -> [> | `OnDurationChange] attrib
   val a_onemptied : Xml.event_handler -> [> | `OnEmptied] attrib
   val a_onended : Xml.event_handler -> [> | `OnEnded] attrib
@@ -189,11 +198,13 @@ module type T = sig
   val a_onformchange : Xml.event_handler -> [> | `OnFormChange] attrib
   val a_onforminput : Xml.event_handler -> [> | `OnFormInput] attrib
   val a_onhashchange : Xml.event_handler -> [> | `OnHashChange] attrib
+  val a_onlanguagechange : Xml.event_handler -> [> | `OnLanguageChange] attrib
   val a_oninput : Xml.event_handler -> [> | `OnInput] attrib
   val a_oninvalid : Xml.event_handler -> [> | `OnInvalid] attrib
   val a_onmousewheel : Xml.event_handler -> [> | `OnMouseWheel] attrib
   val a_onoffline : Xml.event_handler -> [> | `OnOffLine] attrib
   val a_ononline : Xml.event_handler -> [> | `OnOnLine] attrib
+  val a_onpaste : Xml.event_handler -> [> | `OnPaste] attrib
   val a_onpause : Xml.event_handler -> [> | `OnPause] attrib
   val a_onplay : Xml.event_handler -> [> | `OnPlay] attrib
   val a_onplaying : Xml.event_handler -> [> | `OnPlaying] attrib
@@ -204,17 +215,26 @@ module type T = sig
   val a_onratechange : Xml.event_handler -> [> | `OnRateChange] attrib
   val a_onreadystatechange : Xml.event_handler -> [> | `OnReadyStateChange] attrib
   val a_onredo : Xml.event_handler -> [> | `OnRedo] attrib
+  val a_onrejectionhandled :
+    Xml.event_handler -> [> | `OnRejectionHandled] attrib
+  val a_onunhandledrejection :
+    Xml.event_handler -> [> | `OnUnhandledRejection] attrib
   val a_onresize : Xml.event_handler -> [> | `OnResize] attrib
   val a_onscroll : Xml.event_handler -> [> | `OnScroll] attrib
+  val a_onscrollend : Xml.event_handler -> [> | `OnScrollEnd] attrib
+  val a_onsecuritypolicyviolation :
+    Xml.event_handler -> [> | `OnSecurityPolicyViolation] attrib
   val a_onseeked : Xml.event_handler -> [> | `OnSeeked] attrib
   val a_onseeking : Xml.event_handler -> [> | `OnSeeking] attrib
   val a_onselect : Xml.event_handler -> [> | `OnSelect] attrib
   val a_onshow : Xml.event_handler -> [> | `OnShow] attrib
+  val a_onslotchange : Xml.event_handler -> [> | `OnSlotChange] attrib
   val a_onstalled : Xml.event_handler -> [> | `OnStalled] attrib
   val a_onstorage : Xml.event_handler -> [> | `OnStorage] attrib
   val a_onsubmit : Xml.event_handler -> [> | `OnSubmit] attrib
   val a_onsuspend : Xml.event_handler -> [> | `OnSuspend] attrib
   val a_ontimeupdate : Xml.event_handler -> [> | `OnTimeUpdate] attrib
+  val a_ontoggle : Xml.event_handler -> [> | `OnToggle] attrib
   val a_onundo : Xml.event_handler -> [> | `OnUndo] attrib
   val a_onunload : Xml.event_handler -> [> | `OnUnload] attrib
   val a_onvolumechange : Xml.event_handler -> [> | `OnVolumeChange] attrib
@@ -227,6 +247,7 @@ module type T = sig
 
   (** {4 Mouse events} *)
 
+  val a_onauxclick : Xml.mouse_event_handler -> [> | `OnAuxClick] attrib
   val a_onclick : Xml.mouse_event_handler -> [> | `OnClick] attrib
   val a_oncontextmenu : Xml.mouse_event_handler -> [> | `OnContextMenu] attrib
   val a_ondblclick : Xml.mouse_event_handler -> [> | `OnDblClick] attrib
@@ -242,6 +263,25 @@ module type T = sig
   val a_onmouseover : Xml.mouse_event_handler -> [> | `OnMouseOver] attrib
   val a_onmousemove : Xml.mouse_event_handler -> [> | `OnMouseMove] attrib
   val a_onmouseout : Xml.mouse_event_handler -> [> | `OnMouseOut] attrib
+  val a_onwheel : Xml.mouse_event_handler -> [> | `OnWheel] attrib
+
+  (** {4 Pointer events}
+
+      In the DOM, pointer events inherit from mouse events, so the
+      handlers use {!Xml.mouse_event_handler}. *)
+
+  val a_onpointercancel : Xml.mouse_event_handler -> [> | `OnPointerCancel] attrib
+  val a_onpointerdown : Xml.mouse_event_handler -> [> | `OnPointerDown] attrib
+  val a_onpointerenter : Xml.mouse_event_handler -> [> | `OnPointerEnter] attrib
+  val a_onpointerleave : Xml.mouse_event_handler -> [> | `OnPointerLeave] attrib
+  val a_onpointermove : Xml.mouse_event_handler -> [> | `OnPointerMove] attrib
+  val a_onpointerout : Xml.mouse_event_handler -> [> | `OnPointerOut] attrib
+  val a_onpointerover : Xml.mouse_event_handler -> [> | `OnPointerOver] attrib
+  val a_onpointerup : Xml.mouse_event_handler -> [> | `OnPointerUp] attrib
+  val a_ongotpointercapture :
+    Xml.mouse_event_handler -> [> | `OnGotPointerCapture] attrib
+  val a_onlostpointercapture :
+    Xml.mouse_event_handler -> [> | `OnLostPointerCapture] attrib
 
   (** {4 Touch events} *)
   val a_ontouchstart : Xml.touch_event_handler -> [> | `OnTouchStart] attrib
@@ -257,12 +297,38 @@ module type T = sig
 
   (** {3 Other attributes} *)
 
+  val a_abbr : text wrap -> [> | `Abbr] attrib
+  (** Alternative label of a header cell, for reference in other
+      cells.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/th#abbr> abbr attribute documentation. *)
+
+  val a_allow : text wrap -> [> | `Allow] attrib
+  (** Permissions policy of an iframe.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/iframe#allow> allow documentation. *)
+
   val a_allowfullscreen : unit -> [> | `Allowfullscreen] attrib
 
   val a_allowpaymentrequest : unit -> [> | `Allowpaymentrequest] attrib
 
   val a_autocomplete : autocomplete_option wrap -> [> | `Autocomplete] attrib
   (** @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/autocomplete> autocomplete documentation. *)
+
+  val a_autocapitalize :
+    [< | `Off | `None | `On | `Sentences | `Words | `Characters ] wrap ->
+    [> | `Autocapitalize] attrib
+  (** @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/autocapitalize> autocapitalize documentation. *)
+
+  val a_autocorrect : (bool[@onoff]) wrap -> [> | `Autocorrect] attrib
+  (** @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/autocorrect> autocorrect documentation. *)
+
+  val a_as :
+    [< | `Audio | `Document | `Embed | `Fetch | `Font | `Image | `Object
+    | `Script | `Style | `Track | `Video | `Worker ] wrap ->
+    [> | `As] attrib
+  (** Destination of a preload link. This covers the destinations
+      listed by MDN; other spec destinations can be produced with
+      {!Unsafe.string_attrib}.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/link#as> as documentation. *)
 
   val a_async : unit -> [> | `Async] attrib
 
@@ -282,15 +348,41 @@ module type T = sig
 
   val a_challenge : text wrap -> [> | `Challenge] attrib
 
-  val a_contenteditable : bool wrap -> [> | `Contenteditable] attrib
+  val a_closedby :
+    [< | `Any | `Closerequest | `None ] wrap -> [> | `Closedby] attrib
+  (** User actions that can close a dialog.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/dialog#closedby> closedby documentation. *)
+
+  val a_capture : [< | `User | `Environment ] wrap -> [> | `Capture] attrib
+  (** Preferred camera for file inputs capturing media. Defined by
+      the W3C HTML Media Capture specification. The bare form of the
+      attribute is not supported by the PPX; use an explicit value.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/capture> capture documentation. *)
+
+  val a_contenteditable :
+    contenteditable_value wrap -> [> | `Contenteditable] attrib
+  (** A bare [contenteditable] attribute is equivalent to
+      [contenteditable="true"].
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/contenteditable>
+      contenteditable attribute documentation on MDN *)
 
   val a_contextmenu : idref wrap -> [> | `Contextmenu] attrib
 
   val a_controls : unit -> [> | `Controls] attrib
 
-  val a_dir : [< | `Rtl | `Ltr] wrap -> [> | `Dir] attrib
+  val a_dir : [< | `Rtl | `Ltr | `Auto] wrap -> [> | `Dir] attrib
+
+  val a_dirname : text wrap -> [> | `Dirname] attrib
+  (** Name of the form control field used to submit the element's
+      text directionality.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/dirname> dirname documentation. *)
 
   val a_draggable : bool wrap -> [> | `Draggable] attrib
+
+  val a_enterkeyhint :
+    [< | `Enter | `Done | `Go | `Next | `Previous | `Search | `Send ] wrap ->
+    [> | `Enterkeyhint] attrib
+  (** @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/enterkeyhint> enterkeyhint documentation. *)
 
   val a_form : idref wrap -> [> | `Form] attrib
 
@@ -302,11 +394,43 @@ module type T = sig
 
   val a_formtarget : text wrap -> [> | `Formtarget] attrib
 
-  val a_hidden : unit -> [> | `Hidden] attrib
+  val a_hidden : hidden_value wrap -> [> | `Hidden] attrib
+  (** A bare [hidden] attribute is equivalent to [hidden="hidden"];
+      use [`Until_found] for the hidden-until-found state.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/hidden>
+      hidden attribute documentation on MDN *)
 
   val a_high : float_number wrap -> [> | `High] attrib
 
   val a_icon : Xml.uri wrap -> [> | `Icon] attrib
+
+  val a_inert : unit -> [> | `Inert] attrib
+  (** @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/inert> inert documentation. *)
+
+  val a_is : text wrap -> [> | `Is] attrib
+  (** Name of a customized built-in element.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/is> is documentation. *)
+
+  val a_itemscope : unit -> [> | `Itemscope] attrib
+  (** Microdata: creates a new item.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/itemscope> itemscope documentation. *)
+
+  val a_itemtype : Xml.uri list wrap -> [> | `Itemtype] attrib
+  (** Microdata: space-separated list of vocabulary URLs for the item.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/itemtype> itemtype documentation. *)
+
+  val a_itemid : Xml.uri wrap -> [> | `Itemid] attrib
+  (** Microdata: global identifier of the item.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/itemid> itemid documentation. *)
+
+  val a_itemprop : string list wrap -> [> | `Itemprop] attrib
+  (** Microdata: space-separated list of names of the property.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/itemprop> itemprop documentation. *)
+
+  val a_itemref : idrefs wrap -> [> | `Itemref] attrib
+  (** Microdata: additional elements to crawl to find the
+      name-value pairs of the item.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/itemref> itemref documentation. *)
 
   val a_ismap : unit -> [> | `Ismap] attrib
 
@@ -314,9 +438,18 @@ module type T = sig
 
   val a_list : idref wrap -> [> | `List] attrib
 
+  val a_loading : [< | `Lazy | `Eager ] wrap -> [> | `Loading] attrib
+  (** @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/img#loading> loading documentation. *)
+
+  val a_decoding : [< | `Sync | `Async | `Auto ] wrap -> [> | `Decoding] attrib
+  (** @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/img#decoding> decoding documentation. *)
+
+  val a_fetchpriority : [< | `High | `Low | `Auto ] wrap -> [> | `Fetchpriority] attrib
+  (** @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/fetchpriority> fetchpriority documentation. *)
+
   val a_loop : unit -> [> | `Loop] attrib
 
-  val a_low : float_number wrap -> [> | `High] attrib
+  val a_low : float_number wrap -> [> | `Low] attrib
 
   val a_max : float_number wrap -> [> | `Max] attrib
 
@@ -333,6 +466,15 @@ module type T = sig
     [> `Inputmode] attrib
   (** @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/inputmode> inputmode documentation. *)
 
+  val a_nomodule : unit -> [> | `Nomodule] attrib
+  (** Indicates that a classic script must not run in browsers that
+      support module scripts.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/script#nomodule> nomodule documentation. *)
+
+  val a_nonce : text wrap -> [> | `Nonce] attrib
+  (** Cryptographic nonce used by Content Security Policy.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/nonce> nonce documentation. *)
+
   val a_novalidate : unit -> [> | `Novalidate] attrib
 
   val a_open : unit -> [> | `Open] attrib
@@ -341,7 +483,60 @@ module type T = sig
 
   val a_pattern : text wrap -> [> | `Pattern] attrib
 
+  val a_ping : Xml.uri list wrap -> [> | `Ping] attrib
+  (** Space-separated list of URLs to ping when following the
+      hyperlink.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/a#ping> ping documentation. *)
+
   val a_placeholder : text wrap -> [> | `Placeholder] attrib
+
+  val a_playsinline : unit -> [> | `Playsinline] attrib
+  (** Indicates that a video is to be played inline, within the
+      element's playback area.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/video#playsinline> playsinline documentation. *)
+
+  val a_disablepictureinpicture : unit -> [> | `Disablepictureinpicture] attrib
+  (** Defined by the W3C Picture-in-Picture specification.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/video#disablepictureinpicture> disablepictureinpicture documentation. *)
+
+  val a_disableremoteplayback : unit -> [> | `Disableremoteplayback] attrib
+  (** Defined by the W3C Remote Playback specification.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/video#disableremoteplayback> disableremoteplayback documentation. *)
+
+  val a_part : string list wrap -> [> | `Part] attrib
+  (** Space-separated list of part names of the element, exposed to
+      shadow-tree styling. Defined by the CSS Shadow Parts
+      specification, not by the HTML standard.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/part> part documentation. *)
+
+  val a_exportparts : text list wrap -> [> | `Exportparts] attrib
+  (** Comma-separated list of part mappings ([name] or
+      [name:exposed-name]) forwarded from a nested shadow tree.
+      Defined by the CSS Shadow Parts specification, not by the HTML
+      standard.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/exportparts> exportparts documentation. *)
+
+  val a_popover : [< | popover_value] wrap -> [> | `Popover] attrib
+  (** In HTML, a bare [popover] attribute is equivalent to
+      [popover="auto"].
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/popover> popover documentation. *)
+
+  val a_popovertarget : idref wrap -> [> | `Popovertarget] attrib
+  (** Id of the popover element to control with a button.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/button#popovertarget> popovertarget documentation. *)
+
+  val a_popovertargetaction :
+    [< | `Show | `Hide | `Toggle ] wrap -> [> | `Popovertargetaction] attrib
+  (** @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/button#popovertargetaction> popovertargetaction documentation. *)
+
+  val a_command : [< | command_value] wrap -> [> | `Command] attrib
+  (** Action to perform on the element targeted by a button
+      (Invoker Commands API).
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/button#command> command documentation. *)
+
+  val a_commandfor : idref wrap -> [> | `Commandfor] attrib
+  (** Id of the element a button command targets.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/button#commandfor> commandfor documentation. *)
 
   val a_poster : Xml.uri wrap -> [> | `Poster] attrib
 
@@ -359,21 +554,68 @@ module type T = sig
 
   val a_reversed : unit -> [> | `Reversed] attrib
 
+  val a_blocking : [< | blocking_token ] list wrap -> [> | `Blocking] attrib
+  (** Space-separated list of operations blocked on the fetching of
+      a script, style sheet or style-relevant link.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/script#blocking> blocking documentation. *)
+
   val a_sandbox : [< | sandbox_token ] list wrap -> [> | `Sandbox] attrib
 
   val a_spellcheck : bool wrap -> [> | `Spellcheck] attrib
+
+  val a_writingsuggestions : bool wrap -> [> | `Writingsuggestions] attrib
+  (** @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/writingsuggestions> writingsuggestions documentation. *)
 
   val a_scoped : unit -> [> | `Scoped] attrib
 
   val a_seamless : unit -> [> | `Seamless] attrib
 
+  val a_shadowrootmode : [< | `Open | `Closed ] wrap -> [> | `Shadowrootmode] attrib
+  (** Declarative shadow root mode, for template elements.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/template#shadowrootmode> shadowrootmode documentation. *)
+
+  val a_shadowrootdelegatesfocus : unit -> [> | `Shadowrootdelegatesfocus] attrib
+  (** @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/template#shadowrootdelegatesfocus> shadowrootdelegatesfocus documentation. *)
+
+  val a_shadowrootclonable : unit -> [> | `Shadowrootclonable] attrib
+  (** @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/template#shadowrootclonable> shadowrootclonable documentation. *)
+
+  val a_shadowrootserializable : unit -> [> | `Shadowrootserializable] attrib
+  (** @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/template#shadowrootserializable> shadowrootserializable documentation. *)
+
   val a_sizes : (number * number) list option wrap -> [> | `Sizes] attrib
 
+  val a_slot : text wrap -> [> | `Slot] attrib
+  (** Name of the shadow tree slot the element is assigned to.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/slot> slot documentation. *)
+
   val a_span : number wrap -> [> | `Span] attrib
+
+  val a_srcdoc : text wrap -> [> | `Srcdoc] attrib
+  (** Inline HTML document of an iframe, given as escaped text.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/iframe#srcdoc> srcdoc documentation. *)
 
   (** @deprecated Use {!a_xml_lang} instead. *)
   val a_srclang : nmtoken wrap -> [> | `XML_lang] attrib
   [@@ocaml.deprecated "Use a_xml_lang instead."]
+
+  val a_kind :
+    [< | `Subtitles | `Captions | `Descriptions | `Chapters | `Metadata]
+      wrap -> [> | `Kind] attrib
+  (** How a text track is meant to be used, for [track] elements.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/track#kind>
+      kind attribute documentation on MDN *)
+
+  val a_track_srclang : languagecode wrap -> [> | `Srclang] attrib
+  [@@reflect.attribute "srclang" ["track"]]
+  (** Language of the text track data, for [track] elements. *)
+
+  val a_default : unit -> [> | `Default] attrib
+  (** Indicates that a text track is to be enabled if the user's
+      preferences do not indicate that another track would be more
+      appropriate.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/track#default>
+      default attribute documentation on MDN *)
 
   type image_candidate =
     [ `Url of uri
@@ -382,10 +624,23 @@ module type T = sig
 
   val a_srcset : image_candidate list wrap -> [> | `Srcset] attrib
 
+  val a_imagesrcset : image_candidate list wrap -> [> | `Imagesrcset] attrib
+  (** Images to preload, for link elements with [rel=preload] and
+      [as=image].
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/link#imagesrcset> imagesrcset documentation. *)
+
+  val a_imagesizes : text list wrap -> [> | `Imagesizes] attrib
+  (** @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/link#imagesizes> imagesizes documentation. *)
+
   val a_img_sizes : text list wrap -> [> | `Img_sizes] attrib
   [@@reflect.attribute "sizes" ["img"]]
 
   val a_start : number wrap -> [> | `Start] attrib
+
+  val a_ol_type : [< | ol_type] wrap -> [> | `Ol_Type] attrib
+  [@@reflect.attribute "type" ["ol"]]
+  (** Numbering type of an ordered list.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/ol#type> type attribute documentation. *)
 
   val a_step : float_number option wrap -> [> | `Step] attrib
 
@@ -395,6 +650,9 @@ module type T = sig
   val a_wrap : [< | `Soft | `Hard] wrap -> [> | `Wrap] attrib
 
   val a_version : cdata wrap -> [> | `Version] attrib
+  [@@ocaml.deprecated "Removed in HTML5, and no element accepts it"]
+  (** @deprecated Removed in HTML5, and no element accepts it: the
+      [`Version] tag is in no attribute category. *)
 
   val a_xmlns : [< | `W3_org_1999_xhtml] wrap -> [> | `XMLns] attrib
 
@@ -403,6 +661,9 @@ module type T = sig
   val a_cite : Xml.uri wrap -> [> | `Cite] attrib
 
   val a_xml_space : [< | `Default | `Preserve] wrap -> [> | `XML_space] attrib
+  [@@ocaml.deprecated "XHTML only, and no element accepts it"]
+  (** @deprecated XHTML only, and no element accepts it: the
+      [`XML_space] tag is in no attribute category. *)
 
   val a_accesskey : character wrap -> [> | `Accesskey] attrib
   (** This attribute assigns an access key to an element. An access key
@@ -500,10 +761,10 @@ module type T = sig
   val a_minlength : number wrap -> [> | `Minlength] attrib
 
   val a_method :
-    [< | `Get | `Post] wrap -> [> | `Method] attrib
+    [< | `Get | `Post | `Dialog] wrap -> [> | `Method] attrib
 
   val a_formmethod :
-    [< | `Get | `Post] wrap -> [> | `Formmethod] attrib
+    [< | `Get | `Post | `Dialog] wrap -> [> | `Formmethod] attrib
 
   val a_multiple : unit -> [> | `Multiple] attrib
 
@@ -602,8 +863,9 @@ module type T = sig
 
   val a_scope :
     [< | `Row | `Col | `Rowgroup | `Colgroup] wrap -> [> | `Scope] attrib
-  [@@ocaml.deprecated "Not supported in HTML5"]
-  (** @deprecated Not supported in HTML5 *)
+  (** Specifies the cells that a header cell applies to.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/th#scope>
+      scope attribute documentation on MDN *)
 
   val a_summary : text wrap -> [> | `Summary] attrib
   [@@ocaml.deprecated "Move content elsewhere or to a <caption> child"]
@@ -655,6 +917,9 @@ module type T = sig
   (** @deprecated Use CSS *)
 
   val a_scrolling : [< | `Yes | `No | `Auto] wrap -> [> | `Scrolling] attrib
+  [@@ocaml.deprecated "Use CSS overflow, and no element accepts it"]
+  (** @deprecated Removed in HTML5, use CSS overflow. No element
+      accepts it: the [`Scrolling] tag is in no attribute category. *)
 
   val a_target : frametarget wrap -> [> | `Target] attrib
 
@@ -759,6 +1024,11 @@ module type T = sig
   val main :
     ([< | main_attrib], [< | main_content_fun], [> | main]) star
 
+  val search :
+    ([< | search_attrib], [< | search_content_fun], [> | search]) star
+  (** @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/search>
+      search element documentation on MDN *)
+
   (** {3 Grouping content} *)
 
   val p : ([< | p_attrib], [< | p_content_fun], [> | p]) star
@@ -807,6 +1077,10 @@ module type T = sig
 
   val u : ([< | u_attrib], [< | u_content_fun], [> | u]) star
 
+  val s : ([< | s_attrib], [< | s_content_fun], [> | s]) star
+  (** @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/s>
+      s element documentation on MDN *)
+
   val small :
     ([< | small_attrib], [< | small_content_fun], [> | small]) star
 
@@ -821,6 +1095,10 @@ module type T = sig
   val bdo :
     dir: [< | `Ltr | `Rtl] wrap ->
     ([< | bdo_attrib], [< | bdo_content_fun], [> | bdo]) star
+
+  val bdi : ([< | bdi_attrib], [< | bdi_content_fun], [> | bdi]) star
+  (** @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/bdi>
+      bdi element documentation on MDN *)
 
   val abbr : ([< | abbr_attrib], [< | abbr_content_fun], [> | abbr]) star
 
@@ -846,6 +1124,14 @@ module type T = sig
     ([< | strong_attrib], [< | strong_content_fun], [> | strong]) star
 
   val time : ([< | time_attrib], [< | time_content_fun], [> | time]) star
+
+  val data :
+    value: text wrap ->
+    ([< | data_attrib], [< | data_content_fun], [> | data]) star
+  (** [data ~value content] represents [content] together with its
+      machine-readable [value] attribute.
+      @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/data>
+      data element documentation on MDN *)
 
   val var : ([< | var_attrib], [< | var_content_fun], [> | var]) star
 
@@ -886,12 +1172,14 @@ module type T = sig
   val audio :
     ?src:Xml.uri wrap ->
     ?srcs:(([< | source] elt) list_wrap) ->
+    ?tracks:(([< | track] elt) list_wrap) ->
     ([< | audio_attrib], 'a, [> 'a audio ]) star
   [@@reflect.element "audio_video"]
 
   val video :
     ?src:Xml.uri wrap ->
     ?srcs: (([< | source] elt) list_wrap) ->
+    ?tracks:(([< | track] elt) list_wrap) ->
     ([< | video_attrib], 'a, [> 'a video]) star
   [@@reflect.element "audio_video"]
 
@@ -899,19 +1187,13 @@ module type T = sig
 
   val source : ([< | source_attrib], [> | source]) nullary
 
-  val area :
-    alt: text wrap ->
-    ([<
-      | common
-      | `Alt
-      | `Coords
-      | `Shape
-      | `Target
-      | `Rel
-      | `Media
-      | `Hreflang
-      | `Mime_type
-    ], [> | area]) nullary
+  val track :
+    src: Xml.uri wrap ->
+    ([< | track_attrib], [> | track]) nullary
+  (** @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/track>
+      track element documentation on MDN *)
+
+  val area : alt: text wrap -> ([< | area_attrib], [> | area]) nullary
 
   val map : ([< | map_attrib], 'a, [> | 'a map]) star
 
@@ -1007,6 +1289,7 @@ module type T = sig
 
   val option :
     ([< | option_attrib], [< | option_content_fun], [> | selectoption]) unary
+  [@@reflect.element "selectoption"]
 
   val textarea :
     ([< | textarea_attrib], [< | textarea_content_fun], [> | textarea]) unary
@@ -1057,7 +1340,7 @@ module type T = sig
   val menu :
     ?children:(
       [<
-        | `Lis of ([< | `Li of [< | common]] elt) list_wrap
+        | `Lis of ([< | script_supporting | `Li of [< | li_attrib]] elt) list_wrap
         | `Flows of ([< | flow5] elt) list_wrap
       ]) ->
     ([< | menu_attrib], [> | menu]) nullary
@@ -1077,7 +1360,20 @@ module type T = sig
   (** @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/template>
       Template element documentation on MDN *)
 
+  val slot : ([< | slot_attrib], 'a, [> | 'a slot]) star
+  (** @see <https://developer.mozilla.org/en-US/docs/Web/HTML/Element/slot>
+      slot element documentation on MDN *)
+
   val meta : ([< | meta_attrib], [> | meta]) nullary
+
+  val meta_itemprop :
+    itemprop: string list wrap ->
+    ([< | meta_attrib], [> | meta_with_itemprop]) nullary
+  (** [meta_itemprop ~itemprop ()] is a [meta] element annotating the
+      surrounding microdata item. Unlike {!meta}, it is phrasing content, so it
+      is allowed in the body and not only in the head.
+      @see <https://html.spec.whatwg.org/multipage/semantics.html#the-meta-element>
+      meta element specification *)
 
   (** {3 Style Sheets} *)
 
@@ -1169,10 +1465,13 @@ module type T = sig
     (** Same, for URI attribute *)
     val uri_attrib : string -> uri wrap -> 'a attrib
 
-    (** Same, for a space separated list of values *)
+    (** Same, for a space-separated list of URIs *)
+    val uris_attrib : string -> uri list wrap -> 'a attrib
+
+    (** Same, for a space-separated list of values *)
     val space_sep_attrib : string -> string list wrap -> 'a attrib
 
-    (** Same, for a comma separated list of values *)
+    (** Same, for a comma-separated list of values *)
     val comma_sep_attrib : string -> string list wrap -> 'a attrib
 
   end
@@ -1184,7 +1483,7 @@ module type NoWrap = T with module Xml.W = Xml_wrap.NoWrap
 
 
 (** {2 Signature functors}
-    {% See <<a_manual chapter="functors"|the manual of the functorial interface>>. %} *)
+    See {{!page-"functors"}the manual of the functorial interface}. *)
 
 (** Signature functor for {!Html_f.Make}. *)
 module Make
@@ -1240,6 +1539,11 @@ module type Wrapped_functions = sig
     ([< Html_types.referrerpolicy], string) Xml.W.ft
 
   val string_of_numbers : (Html_types.numbers, string) Xml.W.ft
+
+  val string_of_blocking :
+    ([< Html_types.blocking_token] list, string) Xml.W.ft
+
+  val string_of_ol_type : ([< Html_types.ol_type], string) Xml.W.ft
 
   val string_of_sandbox :
     ([< Html_types.sandbox_token] list, string) Xml.W.ft

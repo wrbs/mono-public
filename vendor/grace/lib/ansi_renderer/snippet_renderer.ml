@@ -8,21 +8,29 @@ let pp_label_styled ~(config : Config.t) ~severity ~priority pp =
   Fmt.styled_multi (Style_sheet.label config.styles priority severity) pp
 ;;
 
-let pp_label_styled_string ~config ~severity ~priority =
-  pp_label_styled ~config ~severity ~priority Fmt.string
+(** print a string as if it is length 1.
+    Useful for our unicode characters which are still visually length 1 *)
+let pp_single_char ppf = Format.pp_print_as ppf 1
+
+let pp_label_styled_char ~config ~severity ~priority =
+  pp_label_styled ~config ~severity ~priority pp_single_char
 ;;
 
 module Chars = struct
   let pp_source_border_left ~(config : Config.t) ppf () =
     Fmt.(
-      styled_multi config.styles.source_border string ppf config.chars.source_border_left)
+      styled_multi
+        config.styles.source_border
+        pp_single_char
+        ppf
+        config.chars.source_border_left)
   ;;
 
   let pp_source_border_left_break ~(config : Config.t) ppf () =
     Fmt.(
       styled_multi
         config.styles.source_border
-        string
+        pp_single_char
         ppf
         config.chars.source_border_left_break)
   ;;
@@ -33,19 +41,19 @@ module Chars = struct
       | Priority.Primary -> config.chars.single_primary_caret
       | Secondary -> config.chars.single_secondary_caret
     in
-    pp_label_styled_string ~config ~severity ~priority ppf caret
+    pp_label_styled_char ~config ~severity ~priority ppf caret
   ;;
 
   let pp_pointer_left ~(config : Config.t) ~severity ~priority ppf () =
-    pp_label_styled_string ~config ~severity ~priority ppf config.chars.pointer_left
+    pp_label_styled_char ~config ~severity ~priority ppf config.chars.pointer_left
   ;;
 
   let pp_multi_top ~(config : Config.t) ~severity ~priority ppf () =
-    pp_label_styled_string ~config ~severity ~priority ppf config.chars.multi_top
+    pp_label_styled_char ~config ~severity ~priority ppf config.chars.multi_top
   ;;
 
   let pp_multi_bottom ~(config : Config.t) ~severity ~priority ppf () =
-    pp_label_styled_string ~config ~severity ~priority ppf config.chars.multi_bottom
+    pp_label_styled_char ~config ~severity ~priority ppf config.chars.multi_bottom
   ;;
 
   let pp_multi_caret_start ~(config : Config.t) ~severity ~priority ppf () =
@@ -54,7 +62,7 @@ module Chars = struct
       | Priority.Primary -> config.chars.multi_primary_caret_start
       | Secondary -> config.chars.multi_secondary_caret_start
     in
-    pp_label_styled_string ~config ~severity ~priority ppf caret_start
+    pp_label_styled_char ~config ~severity ~priority ppf caret_start
   ;;
 
   let pp_multi_caret_end ~(config : Config.t) ~severity ~priority ppf () =
@@ -63,7 +71,7 @@ module Chars = struct
       | Priority.Primary -> config.chars.multi_primary_caret_end
       | Secondary -> config.chars.multi_secondary_caret_end
     in
-    pp_label_styled_string ~config ~severity ~priority ppf caret_end
+    pp_label_styled_char ~config ~severity ~priority ppf caret_end
   ;;
 
   let pp_snippet_start ~(config : Config.t) ppf () =
@@ -71,7 +79,7 @@ module Chars = struct
   ;;
 
   let pp_note_bullet ~(config : Config.t) ppf () =
-    Fmt.styled_multi config.styles.note_bullet Fmt.string ppf config.chars.note_bullet
+    Fmt.styled_multi config.styles.note_bullet pp_single_char ppf config.chars.note_bullet
   ;;
 end
 
@@ -119,9 +127,10 @@ module Multi_context = struct
     (* Set gutter to `Top *)
     t.gutters.(gutter) <- Some (priority, `Top top_kind);
     (* Execute 'prologue' for multi-line label *)
-    prologue ();
+    let r = prologue () in
     (* Set gutter to `Vertical *)
-    t.gutters.(gutter) <- Some (priority, `Vertical)
+    t.gutters.(gutter) <- Some (priority, `Vertical);
+    r
   ;;
 
   let free t ~multi_id epilogue =
@@ -130,10 +139,11 @@ module Multi_context = struct
     (* Set gutter to `Bottom *)
     t.gutters.(gutter) <- Some (priority, `Bottom);
     (* Execute 'epilogue' for multi-line label *)
-    epilogue ();
+    let r = epilogue () in
     (* Remove bindings for multi-line label *)
     t.gutters.(gutter) <- None;
-    Hashtbl.remove t.bindings multi_id
+    Hashtbl.remove t.bindings multi_id;
+    r
   ;;
 end
 
@@ -144,7 +154,7 @@ let pp_multi_vertline ~(config : Config.t) ~severity ~priority ppf kind =
     | `Vertical -> config.chars.multi_left
     | `Bottom -> config.chars.multi_bottom_left
   in
-  pp_label_styled_string ~config ~severity ~priority ppf gutter
+  pp_label_styled_char ~config ~severity ~priority ppf gutter
 ;;
 
 let pp_multi_underline ~(config : Config.t) ~severity ~priority ppf kind =
@@ -200,7 +210,7 @@ let pp_source_line ~config ~severity ~ctxt ~lnum ppf (line : Line.t) =
     match segment.stag with
     | Some { priority = Primary; _ } ->
       (* If primary, style the content *)
-      pp_label_styled_string ~config ~severity ~priority:Primary ppf content
+      pp_label_styled ~config ~severity ~priority:Primary Fmt.string ppf content
     | _ ->
       (* Otherwise, simply print the content *)
       Fmt.string ppf content
@@ -231,45 +241,57 @@ let pp_line_break ~config ~severity ~ctxt ppf () =
     ctxt.multi_context
 ;;
 
-let split_lines_nonempty s = if String.is_empty s then [ "" ] else String.split_lines s
-
-(* prefixed box *)
-let pbox ~prefix pp ppf x =
-  let s = Fmt.str_like ppf "%a" pp x in
-  let lines = split_lines_nonempty s in
-  let nlines = List.length lines in
-  List.iteri lines ~f:(fun i line ->
-    Fmt.pf ppf "@[<h>%s%s@]" prefix line;
-    if i <> nlines - 1 then Fmt.newline ppf ())
+let pp_line_prefix ~config ~severity ~ctxt ppf () =
+  Fmt.pf
+    ppf
+    "%*s %a %a"
+    ctxt.line_num_width
+    ""
+    (Chars.pp_source_border_left ~config)
+    ()
+    (pp_multi_lines ~config ~severity)
+    ctxt.multi_context
 ;;
 
-(* prefixed-with-indent box *)
-let pwibox ~prefix pp ppf x =
-  let s = Fmt.str_like ppf "%a" pp x in
-  let lines = split_lines_nonempty s in
-  let nlines = List.length lines in
-  let nprefix = String.length prefix in
-  List.iteri lines ~f:(fun i line ->
-    if i = 0
-    then Fmt.pf ppf "@[<h>%s%s@]" prefix line
-    else Fmt.pf ppf "@[<h>%*s%s@]" nprefix "" line;
-    if i <> nlines - 1 then Fmt.newline ppf ())
+let split_lines_nonempty s = if String.is_empty s then [ "" ] else String.split_lines s
+
+(* Grace defines a series of custom boxes that enforce prefixes at newlines. *)
+
+(* prefixed box *)
+let pbox ?(margin = 78) ~prefix pp ppf x =
+  let s =
+    let margin =
+      if margin = Format.pp_infinity - 1
+      then margin
+      else (
+        let prefix_length = Utf8.length (Fmt.str "%a" prefix ()) in
+        Int.max 25 (margin - prefix_length))
+    in
+    Fmt.str_like ~margin ppf "%a" pp x
+  in
+  match split_lines_nonempty s with
+  | [] -> assert false
+  | first_line :: rest ->
+    Fmt.pf ppf "@[<h>%s@]" first_line;
+    List.iter rest ~f:(fun line ->
+      Fmt.newline ppf ();
+      Fmt.pf ppf "@[<h>%a%s@]" prefix () line)
+;;
+
+let prefixed_pbox ~prefix pp ppf x = Fmt.pf ppf "%a%a" prefix () (pbox ~prefix pp) x
+
+let prefixed_vbox ~prefix ~indent pp ppf x =
+  Fmt.pf ppf "%s%a" prefix Fmt.(vbox ~indent pp) x
 ;;
 
 (* line box *)
 let lbox ~config ~severity ~ctxt pp ppf x =
-  let prefix =
-    Fmt.str_like
-      ppf
-      "%*s %a %a"
-      ctxt.line_num_width
-      ""
-      (Chars.pp_source_border_left ~config)
-      ()
-      (pp_multi_lines ~config ~severity)
-      ctxt.multi_context
-  in
-  pbox ~prefix pp ppf x
+  pbox
+    ~margin:(Format.pp_infinity - 1)
+    ~prefix:(pp_line_prefix ~config ~severity ~ctxt)
+    pp
+    ppf
+    x
 ;;
 
 module Multi_line_label = struct
@@ -277,22 +299,19 @@ module Multi_line_label = struct
     Fmt.repeat ~width (pp_multi_underline ~config ~severity ~priority)
   ;;
 
-  let pp_top ~config ~severity ppf (width, priority) =
+  let pp_top_underlines ~config ~severity ~priority ~width ppf () =
     pp_underlines ~config ~severity ~priority ~width ppf (`Top `Non_unique);
     Chars.pp_multi_caret_start ~config ~severity ~priority ppf ()
   ;;
 
-  let pp_bottom ~config ~severity ppf (width, priority, label) =
-    let prefix =
-      Fmt.str_like
-        ppf
-        "%a%a "
-        (pp_underlines ~config ~severity ~priority ~width)
-        `Bottom
-        (Chars.pp_multi_caret_end ~config ~severity ~priority)
-        ()
-    in
-    pwibox ~prefix (pp_message ~config ~severity ~priority) ppf label
+  let pp_bottom_underlines ~config ~severity ~priority ~width ppf () =
+    Fmt.pf
+      ppf
+      "%a%a"
+      (pp_underlines ~config ~severity ~priority ~width)
+      `Bottom
+      (Chars.pp_multi_caret_end ~config ~severity ~priority)
+      ()
   ;;
 
   let pp_content_top ~ctxt ~(top : Multi_line_label.t option) pp ppf x =
@@ -309,21 +328,32 @@ module Multi_line_label = struct
   let pp ~config ~severity ~ctxt ppf (multi_line_label : Multi_line_label.t) =
     match multi_line_label with
     | Bottom { id; stop; priority; label } ->
-      Multi_context.free ctxt.multi_context ~multi_id:id
-      @@ fun () ->
-      pp_multi_lines ~config ~severity ppf ctxt.multi_context;
-      pp_bottom
-        ~config
-        ~severity
-        ppf
-        (* [-2] since we want a [-1] offset and [stop] is a column number (starting at 1) *)
-        ((stop :> int) - 2, priority, label)
+      (* [-2] since we want a [-1] offset and [stop] is a column number (starting at 1) *)
+      let width = (stop :> int) - 2 in
+      (* print leading underline prefix *)
+      (Multi_context.free ctxt.multi_context ~multi_id:id
+       @@ fun () -> pp_multi_lines ~config ~severity ppf ctxt.multi_context);
+      let pp_bottom ppf () =
+        Fmt.pf
+          ppf
+          "%a @[<v>%a@]"
+          (pp_bottom_underlines ~config ~severity ~priority ~width)
+          ()
+          (pp_message ~config ~severity ~priority)
+          label
+      in
+      (* lbox the underlines and message. The underlines are necessary 
+         since the lbox prints the prefix *upto* the underlines. 
+         In particular, it is responsible for printing any multi-line 
+         prefix. *)
+      lbox ~config ~severity ~ctxt pp_bottom ppf ()
     | Top { id; start; priority } ->
-      Multi_context.def ctxt.multi_context ~multi_id:id ~top_kind:`Non_unique ~priority
-      @@ fun () ->
-      pp_multi_lines ~config ~severity ppf ctxt.multi_context;
       (* [-1] since [start] is a column number (starting at 1) *)
-      pp_top ~config ~severity ppf ((start :> int) - 1, priority)
+      let width = (start :> int) - 1 in
+      (* print leading underline prefix *)
+      (Multi_context.def ctxt.multi_context ~multi_id:id ~top_kind:`Non_unique ~priority
+       @@ fun () -> pp_multi_lines ~config ~severity ppf ctxt.multi_context);
+      pp_top_underlines ~config ~severity ~priority ~width ppf ()
   ;;
 end
 
@@ -354,11 +384,13 @@ module Inline_labels = struct
     List.is_empty hanging_segments && Option.is_none trailing_segment
   ;;
 
-  let pp_trailing_label ~config ~severity =
-    Fmt.(
-      option ~none:nop
-      @@ fun ppf ({ message; priority; _ } : trailing_segment) ->
-      Fmt.pf ppf " %a" (pp_message ~config ~severity ~priority) message)
+  let pp_trailing_label
+        ~config
+        ~severity
+        ppf
+        ({ message; priority; _ } : trailing_segment)
+    =
+    pp_message ~config ~severity ~priority ppf message
   ;;
 
   let pp_carets ~config ~severity ppf { hanging_segments; trailing_segment } =
@@ -386,18 +418,10 @@ module Inline_labels = struct
       pr_segment (offset, length, priority))
   ;;
 
-  let pp_hanging_segments ~config ~severity ppf segments =
-    let str_pointer_left priority =
-      Fmt.str_like ppf "%a" (Chars.pp_pointer_left ~config ~severity ~priority) ()
-    in
-    let pp_messages ~priority =
-      let open Fmt in
-      vbox @@ list ~sep:newline @@ hbox @@ pp_message ~config ~severity ~priority
-    in
-    let rec loop cursor pointers = function
-      | [] ->
-        (* Print the initial hanging pointers *)
-        Fmt.pf ppf "%s" pointers
+  let fold_hanging_segments_with_cursor_and_pointers ~pointer_left ~nil ~cons segments =
+    let rec loop cursor pointers segments =
+      match segments with
+      | [] -> nil ~cursor ~pointers
       | { offset; length; priority = _; messages = [] } :: segments ->
         assert (Column_number.(cursor <= offset));
         (* In the case of an empty hanging segment, simply print the spaces and move the cursor *)
@@ -411,19 +435,115 @@ module Inline_labels = struct
         let pointers = pointers ^ String.make Column_number.(diff offset cursor) ' ' in
         (* Print the pointers & messages above this message adding a pointer for this set of messages
            Invariant: offset + length >= offset + 1 <=> length > 0 *)
-        loop Column_number.(add offset 1) (pointers ^ str_pointer_left priority) segments;
-        Fmt.newline ppf ();
-        (* Print the messages *)
-        pbox ~prefix:pointers (pp_messages ~priority) ppf messages
+        let result =
+          loop Column_number.(add offset 1) (pointers ^ pointer_left priority) segments
+        in
+        cons ~cursor ~pointers (priority, messages) result
     in
     loop Column_number.initial "" segments
+  ;;
+
+  let str_pointer_left ~config ~severity ppf priority =
+    Fmt.str_like ppf "%a" (Chars.pp_pointer_left ~config ~severity ~priority) ()
+  ;;
+
+  let hanging_segments_pointers ~config ~severity ppf segments =
+    fold_hanging_segments_with_cursor_and_pointers
+      ~pointer_left:(str_pointer_left ~config ~severity ppf)
+      ~nil:(fun ~cursor ~pointers -> cursor, pointers)
+      ~cons:(fun ~cursor:_ ~pointers:_ _msg tl_cursor_and_pointers ->
+        tl_cursor_and_pointers)
+      segments
+  ;;
+
+  let pp_hanging_segments ~config ~severity ppf segments =
+    let pp_messages ~priority =
+      let open Fmt in
+      vbox @@ list ~sep:newline @@ hbox @@ pp_message ~config ~severity ~priority
+    in
+    fold_hanging_segments_with_cursor_and_pointers
+      ~pointer_left:(str_pointer_left ~config ~severity ppf)
+      ~nil:(fun ~cursor:_ ~pointers -> Fmt.pf ppf "%s" pointers)
+      ~cons:(fun ~cursor:_ ~pointers (priority, messages) _tl ->
+        Fmt.newline ppf ();
+        (* Print the messages *)
+        prefixed_pbox
+          ~prefix:Fmt.(const string pointers)
+          (pp_messages ~priority)
+          ppf
+          messages)
+      segments
   ;;
 
   let pp ~config ~severity ppf t =
     (* Print carets *)
     pp_carets ~config ~severity ppf t;
     (* Print trailing label *)
-    pp_trailing_label ~config ~severity ppf t.trailing_segment;
+    (match t.trailing_segment with
+     | None -> ()
+     | Some trailing_segment ->
+       (* If the trailing label has line breaks, we need to compute the 
+          hanging segment pointers along with a space prefix up until the 
+          trailing label.
+       *)
+       let str_prefix =
+         lazy
+           ((* The [hanging_pointers_last_cursor] here is the end cursor of computing the 
+               hanging pointers. *)
+            let hanging_pointers_last_cursor, hanging_pointers =
+              hanging_segments_pointers ~config ~severity ppf t.hanging_segments
+            in
+            (* Consider:
+                error: test multiple labels alignment
+                    ┌─ unknown:1:5
+                  1 │      foo(bar, baz
+                    │      ^^^ ---  --- arg2:
+                    │      │   │~~~~~~~~   also wrong
+                    │      │   │~~~~~~~~ check here
+                    │      │   │
+                    │      │   arg1:
+                    │      │     wrong type
+                    │      │    see docs
+                    │      fn name:
+                    │        should be different
+                    │       extra note
+
+
+                               ^
+                               This is where the end of [hanging_segments_pointers] would be (32)
+                                ^
+                                This is the column position of [hanging_pointers_last_cursor] (33)
+                                    ^
+                                    This is the start of the [trailing_segment] (37)
+                                        ^  
+                                        This is the end of the trailing segment + 1 (for the space) (41)
+
+                                ~~~~~~~~
+                                ^^^^^^^^
+                                This is the spacing we need to add in the prefix (8)
+
+               To compute the spaces we need:
+
+                  trailing_segment.offset + trailing_segment.length + 1 - hanging_pointers_last_cursor 
+                  = 41 - 33 
+                  = 8
+            *)
+            let trailing_sps =
+              String.make
+                Column_number.(
+                  diff
+                    (add trailing_segment.offset (trailing_segment.length + 1))
+                    hanging_pointers_last_cursor)
+                ' '
+            in
+            hanging_pointers ^ trailing_sps)
+       in
+       Fmt.sp ppf ();
+       pbox
+         ~prefix:(fun ppf () -> Fmt.pf ppf "%s" (Lazy.force str_prefix))
+         (pp_trailing_label ~config ~severity)
+         ppf
+         trailing_segment);
     (* If non-empty, print the hanging segments *)
     if not (List.is_empty t.hanging_segments)
     then Fmt.pf ppf "@.%a" (pp_hanging_segments ~config ~severity) t.hanging_segments
@@ -476,6 +596,8 @@ module Inline_labels = struct
 end
 
 let pp_multi_line_label ~config ~severity ~ctxt ppf multi_line_label =
+  (* We omit printing the multi lines (which would occur if using [pp_line_prefix]) 
+     since this is done in [Multi_line_label.pp]. *)
   Fmt.pf
     ppf
     "@[<h>%*s %a %a@]"
@@ -485,6 +607,16 @@ let pp_multi_line_label ~config ~severity ~ctxt ppf multi_line_label =
     ()
     (Multi_line_label.pp ~config ~severity ~ctxt)
     multi_line_label
+;;
+
+let pp_inline_labels ~config ~severity ~ctxt ppf inline_labels =
+  Fmt.pf
+    ppf
+    "@[<h>%a%a@]"
+    (pp_line_prefix ~config ~severity ~ctxt)
+    ()
+    (lbox ~config ~severity ~ctxt (Inline_labels.pp ~config ~severity))
+    inline_labels
 ;;
 
 let pp_line ~config ~severity ~ctxt ~lnum ppf (line : Line.t) =
@@ -523,7 +655,7 @@ let pp_line ~config ~severity ~ctxt ~lnum ppf (line : Line.t) =
   if not (Inline_labels.is_empty inline_labels)
   then (
     Fmt.newline ppf ();
-    lbox ~config ~severity ~ctxt (Inline_labels.pp ~config ~severity) ppf inline_labels);
+    pp_inline_labels ~config ~severity ~ctxt ppf inline_labels);
   (* Print multi-line labels (if any) *)
   List.iter multi_line_labels ~f:(fun multi_line_label ->
     Fmt.newline ppf ();
@@ -608,11 +740,15 @@ let pp_header ~config ~code_to_string ~severity ~code ppf message =
 ;;
 
 let pp_note ~config ~line_num_width ppf note =
-  pwibox
-    ~prefix:
-      (Fmt.str_like ppf "%*s %a " line_num_width "" (Chars.pp_note_bullet ~config) ())
-    Message.pp
+  let note_prefix ppf () = Fmt.pf ppf "%*s" (line_num_width + 3) "" in
+  Fmt.pf
     ppf
+    "@[<h>%*s %a %a@]"
+    line_num_width
+    ""
+    (Chars.pp_note_bullet ~config)
+    ()
+    (pbox ~prefix:note_prefix Message.pp)
     note
 ;;
 

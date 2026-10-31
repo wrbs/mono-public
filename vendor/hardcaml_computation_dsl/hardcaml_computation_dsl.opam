@@ -1,0 +1,43 @@
+opam-version: "2.0"
+maintainer: "Jane Street developers"
+authors: ["Jane Street Group, LLC"]
+homepage: "https://github.com/janestreet/hardcaml_computation_dsl"
+bug-reports: "https://github.com/janestreet/hardcaml_computation_dsl/issues"
+dev-repo: "git+https://github.com/janestreet/hardcaml_computation_dsl.git"
+doc: "https://ocaml.janestreet.com/ocaml-core/latest/doc/hardcaml_computation_dsl/index.html"
+license: "MIT"
+x-maintenance-intent: ["(latest)"]
+build: [
+  ["dune" "build" "-p" name "-j" jobs]
+]
+depends: [
+  "ocaml" {>= "5.1.0"}
+  "bignum"
+  "core"
+  "expect_test_helpers_base"
+  "expect_test_helpers_core"
+  "hardcaml"
+  "hardcaml_axi"
+  "hardcaml_circuits"
+  "hardcaml_fixed_point"
+  "hardcaml_step_testbench"
+  "hardcaml_test_harness"
+  "hardcaml_waveterm"
+  "n_ary"
+  "ppx_hardcaml"
+  "ppx_jane"
+  "re2"
+  "dune"                     {>= "3.17.0"}
+  "zarith"                   {>= "1.11"}
+]
+available: arch != "x86_32"
+conflicts: [
+  "oxcaml-compiler" {< "5.2.0minus39"}
+]
+synopsis: "Hardcaml computation DSL."
+description: "
+The Hardcaml computation DSL, which allows for describing a graph of fixed-precision
+   arithmetic computations using built-in helper functions. It automatically aligns
+   pipelines for functional correctness and tracks any overflows or other computational
+   errors.
+"

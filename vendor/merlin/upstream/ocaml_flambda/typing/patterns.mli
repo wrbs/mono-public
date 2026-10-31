@@ -40,6 +40,8 @@ module Simple : sig
   type view = [
     | `Any
     | `Constant of constant
+    | `Unboxed_unit
+    | `Unboxed_bool of bool
     | `Tuple of (string option * pattern) list
     | `Unboxed_tuple of (string option * pattern * Jkind.sort) list
     | `Construct of
@@ -69,6 +71,9 @@ module General : sig
   type view = [
     | Half_simple.view
     | `Var of Ident.t * string loc * Uid.t * Jkind.Sort.t * Mode.Value.l
+    | `Fun_layout of Ident.t * string loc * Uid.t
+                   * Jkind.Sort.t * Mode.Value.l * Types.Lpoly.t
+                   * alloc_mode
     | `Alias of pattern * Ident.t * string loc * Uid.t
                 * Jkind.Sort.t * Mode.Value.l * Types.type_expr
   ]
@@ -85,6 +90,8 @@ module Head : sig
     | Any
     | Construct of constructor_description
     | Constant of constant
+    | Unboxed_unit
+    | Unboxed_bool of bool
     | Tuple of string option list
     | Unboxed_tuple of (string option * Jkind.sort) list
     | Record of label_description list

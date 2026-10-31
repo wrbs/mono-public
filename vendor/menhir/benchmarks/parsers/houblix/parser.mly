@@ -94,6 +94,7 @@
 
 main:
 | definitions = list(located(definition)) EOF { definitions }
+| e=located(error)                            { Error.error "parsing" e.position "Syntax error." }
 
 definition:
 | val_def = value_definition          { val_def              }

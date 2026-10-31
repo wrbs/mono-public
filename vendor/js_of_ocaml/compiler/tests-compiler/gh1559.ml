@@ -68,7 +68,9 @@ let () = my_ref := 2
     {|
     (function(globalThis){
        "use strict";
-       var runtime = globalThis.jsoo_runtime;
+       var
+        runtime = globalThis.jsoo_runtime,
+        caml_get_global = runtime.caml_get_global;
        function caml_call1(f, a0){
         return (f.l >= 0 ? f.l : f.l = f.length) === 1
                 ? f(a0)
@@ -80,38 +82,36 @@ let () = my_ref := 2
                 : runtime.caml_call_gen(f, [a0, a1]);
        }
        var
-        global_data = runtime.caml_get_global_data(),
-        t = [0, 0],
-        init = [0, 1],
-        Stdlib_Int = global_data.Stdlib__Int,
-        Stdlib = global_data.Stdlib,
-        my_ref = [0, 1],
-        nesting = 1;
+        Stdlib_Int = caml_get_global("Stdlib__Int"),
+        Stdlib = caml_get_global("Stdlib"),
+        t = [0, 0];
        function handle_state(t$1){
         var t$0 = t$1;
         for(;;){
          let t$1 = t$0;
          var
           this_will_be_undefined =
-            function(param){
+            function(_a_){
              a:
-             {if(t$1 && 1 === t$1[1]){var _b_ = 1; break a;} var _b_ = 0;}
-             return _b_ ? 1 : 2;
+             {if(t$1 && 1 === t$1[1]){_a_ = 1; break a;} _a_ = 0;}
+             return _a_ ? 1 : 2;
             };
-         if(t$0) var i = t$0[1], match = i; else var match = - 1;
+         if(t$0) var i = t$0[1], match = i; else match = - 1;
          if(0 === match) return this_will_be_undefined(0);
-         if(1 === match)
+         if(1 === match){
+          var nesting = 1;
           return caml_call2(Stdlib_Int[8], nesting, 0)
                   ? nesting
                   : this_will_be_undefined(0);
+         }
          t$0 = t;
         }
        }
-       var _a_ = handle_state(init), _b_ = caml_call1(Stdlib_Int[12], _a_);
-       caml_call1(Stdlib[46], _b_);
+       var _a_ = handle_state([0, 1]), _a_ = caml_call1(Stdlib_Int[12], _a_);
+       caml_call1(Stdlib[46], _a_);
+       var my_ref = [0, 1];
        my_ref[1] = 2;
-       var Test = [0, my_ref];
-       runtime.caml_register_global(4, Test, "Test");
+       runtime.caml_register_global([0, my_ref], "Test");
        return;
       }
       (globalThis));
@@ -174,7 +174,9 @@ let () = my_ref := 2
     {|
     (function(globalThis){
        "use strict";
-       var runtime = globalThis.jsoo_runtime;
+       var
+        runtime = globalThis.jsoo_runtime,
+        caml_get_global = runtime.caml_get_global;
        function caml_call1(f, a0){
         return (f.l >= 0 ? f.l : f.l = f.length) === 1
                 ? f(a0)
@@ -186,14 +188,10 @@ let () = my_ref := 2
                 : runtime.caml_call_gen(f, [a0, a1]);
        }
        var
-        global_data = runtime.caml_get_global_data(),
-        t = [0, 0],
-        init = [0, 1],
-        Stdlib_Random = global_data.Stdlib__Random,
-        Stdlib_Int = global_data.Stdlib__Int,
-        Stdlib = global_data.Stdlib,
-        my_ref = [0, 1],
-        nesting = 1;
+        Stdlib_Random = caml_get_global("Stdlib__Random"),
+        Stdlib_Int = caml_get_global("Stdlib__Int"),
+        Stdlib = caml_get_global("Stdlib"),
+        t = [0, 0];
        function handle_state(t$1){
         a:
         {
@@ -202,35 +200,36 @@ let () = my_ref := 2
           let t$1 = t$0;
           var
            this_will_be_undefined =
-             function(param){
+             function(_a_){
               a:
-              {if(t$1 && 1 === t$1[1]){var _c_ = 1; break a;} var _c_ = 0;}
-              return _c_ ? 1 : 2;
+              {if(t$1 && 1 === t$1[1]){_a_ = 1; break a;} _a_ = 0;}
+              return _a_ ? 1 : 2;
              };
-          if(t$0) var i = t$0[1], match = i; else var match = - 1;
-          if(0 === match) break;
-          if(1 === match) break a;
+          if(t$0) var i = t$0[1], _a_ = i; else _a_ = - 1;
+          if(0 === _a_) break;
+          if(1 === _a_) break a;
           t$0 = t;
          }
          var
           g = function(param){return 2 + this_will_be_undefined(0) | 0;},
-          _b_ = g(0);
-         return g(0) + _b_ | 0;
+          _a_ = g(0);
+         return g(0) + _a_ | 0;
         }
+        var nesting = 1;
         if(caml_call2(Stdlib_Int[8], nesting, 0)) return nesting;
         function g$0(param){
          return 1 < caml_call1(Stdlib_Random[5], 3)
                  ? 2 + this_will_be_undefined(0) | 0
                  : 1;
         }
-        var _c_ = g$0(0);
-        return g$0(0) + _c_ | 0;
+        var _a_ = g$0(0);
+        return g$0(0) + _a_ | 0;
        }
-       var _a_ = handle_state(init), _b_ = caml_call1(Stdlib_Int[12], _a_);
-       caml_call1(Stdlib[46], _b_);
+       var _a_ = handle_state([0, 1]), _a_ = caml_call1(Stdlib_Int[12], _a_);
+       caml_call1(Stdlib[46], _a_);
+       var my_ref = [0, 1];
        my_ref[1] = 2;
-       var Test = [0, my_ref];
-       runtime.caml_register_global(5, Test, "Test");
+       runtime.caml_register_global([0, my_ref], "Test");
        return;
       }
       (globalThis));

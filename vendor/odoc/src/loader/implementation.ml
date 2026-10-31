@@ -1,23 +1,14 @@
 #if OCAML_VERSION >= (4, 14, 0)
 
 let rec is_persistent : Path.t -> bool = function
-  | Path.Pident id -> Ident.is_global_or_predef id
+  | Path.Pident id -> Ident_env.ident_is_global_or_predef id
   | Path.Pdot(p, _) -> is_persistent p
   | Path.Papply(p, _) -> is_persistent p
 #if OCAML_VERSION >= (5,1,0)
   | Path.Pextra_ty (p, _) -> is_persistent p
 #endif
 
-let pos_of_loc (loc : Warnings.loc) = {
-  Odoc_model.Lang.Source_info.loc_start = {
-    pos_cnum = loc.loc_start.pos_cnum ;
-    pos_lnum = loc.loc_start.pos_lnum
-  } ;
-  loc_end = {
-    pos_cnum = loc.loc_start.pos_cnum ;
-    pos_lnum = loc.loc_start.pos_lnum
-  }
-}
+let pos_of_loc loc = (loc.Location.loc_start.pos_cnum, loc.loc_end.pos_cnum)
 
 let counter =
   let c = ref 0 in
@@ -47,6 +38,12 @@ module Env = struct
     | Tsig_exception _ | Tsig_modsubst _ | Tsig_open _ | Tsig_include _
     | Tsig_class _ | Tsig_class_type _ | Tsig_attribute _ ->
         ()
+#if OCAML_VERSION >= (5,6,0)
+    | Tsig_primitive _ -> ()
+#endif
+#if defined OXCAML
+    | Tsig_jkind _ -> ()
+#endif
 
   and module_declaration env _parent md =
     match md.md_id with
@@ -73,13 +70,20 @@ module Env = struct
     | Tstr_class_type _ | Tstr_include _ | Tstr_attribute _ | Tstr_primitive _
     | Tstr_type _ | Tstr_typext _ | Tstr_exception _ ->
         ()
+#if defined OXCAML
+    | Tstr_jkind _ -> ()
+#endif
 
   and module_type env (parent : Identifier.Signature.t) mty =
     match mty.mty_desc with
     | Tmty_signature sg -> signature env (parent : Identifier.Signature.t) sg
     | Tmty_with (mty, _) -> module_type env parent mty
-    | Tmty_functor (_, t) -> module_type env parent t
+#if defined OXCAML
+    | Tmty_functor (_, t, _) -> module_type env parent t
     | Tmty_strengthen (t, _, _) -> module_type env parent t
+#else
+    | Tmty_functor (_, t) -> module_type env parent t
+#endif
     | Tmty_ident _ | Tmty_alias _ | Tmty_typeof _ -> ()
 
   and module_bindings env parent mbs = List.iter (module_binding env parent) mbs
@@ -108,7 +112,11 @@ module Env = struct
         let env =
           match parameter with
           | Unit -> env
+#if defined OXCAML
+          | Named (id_opt, _, arg, _) -> (
+#else
           | Named (id_opt, _, arg) -> (
+#endif
               match id_opt with
               | Some id ->
                   let env =
@@ -125,7 +133,11 @@ module Env = struct
         let () =
           match constr with
           | Tmodtype_implicit -> ()
+#if defined OXCAML
+          | Tmodtype_explicit (mt, _) -> module_type env parent mt
+#else
           | Tmodtype_explicit mt -> module_type env parent mt
+#endif
         in
         module_expr env parent me
     | _ -> ()

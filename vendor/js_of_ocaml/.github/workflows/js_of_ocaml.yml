@@ -11,6 +11,9 @@ on:
 
 jobs:
   build:
+    env:
+      OXCAML_OPAM_REPO_REF: d89747aa6e7b9f44d6cc844dca5b5e7c8a90716f
+
     strategy:
       fail-fast: false
       matrix:
@@ -60,7 +63,7 @@ jobs:
             skip-doc: true
           - os: ubuntu-latest
             os-name: Ubuntu
-            ocaml-compiler: "5.4"
+            ocaml-compiler: "5.4.0"
             skip-effects: false
             skip-test: false
             skip-doc: false
@@ -80,13 +83,13 @@ jobs:
             skip-doc: true
           - os: macos-latest
             os-name: MacOS
-            ocaml-compiler: "5.4"
+            ocaml-compiler: "5.4.0"
             skip-effects: true
             skip-test: false
             skip-doc: true
           - os: windows-latest
             os-name: Windows
-            ocaml-compiler: "5.4"
+            ocaml-compiler: "5.4.0"
             skip-effects: false
             skip-test: false
             skip-doc: true
@@ -110,7 +113,7 @@ jobs:
         run: sudo apt-get update
 
       - name: Checkout tree
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
         # EJGA: Note that I tried to fix this upstream as depext is
         # getting much better, but no luck yet, c.f:
@@ -134,7 +137,7 @@ jobs:
         uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
-        if: matrix.ocaml-compiler != 'ocaml-variants.5.2.0+ox'
+        if: ${{ ! endsWith(matrix.ocaml-compiler, '+ox') }}
 
       - name: Set-up OxCaml ${{ matrix.ocaml-compiler }}
         uses: ocaml/setup-ocaml@v3
@@ -142,8 +145,8 @@ jobs:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
           opam-repositories: |
             default: https://github.com/ocaml/opam-repository.git
-            ox: https://github.com/oxcaml/opam-repository.git
-        if: matrix.ocaml-compiler == 'ocaml-variants.5.2.0+ox'
+            ox: https://github.com/oxcaml/opam-repository.git#${{ env.OXCAML_OPAM_REPO_REF }}
+        if: ${{ endsWith(matrix.ocaml-compiler, '+ox') }}
 
       # Work-around a race between reinstalling mingw-w64-shims
       # (because of conf-pkg-config optional dep) and installing other
@@ -156,17 +159,27 @@ jobs:
         with:
           token: ${{ github.token }}
 
-      - name: Install faked binaryen-bin package
-        # It's faster to use a cached version
-        run: opam install --fake binaryen-bin
-
       - run: opam install . --best-effort --solver builtin-mccs+glpk
         if: ${{ matrix.skip-test }}
 
-      - name: Pin qcheck
+      - name: Pin specific packages for OxCaml
         # With OxCaml fixes
-        run: opam pin add -n https://github.com/c-cube/qcheck.git
-        if: matrix.ocaml-compiler == 'ocaml-variants.5.2.0+ox'
+        run: |
+          opam pin add opam-core -n 2.5.1+ox
+        if: ${{ endsWith(matrix.ocaml-compiler, '+ox') }}
+
+      # oxcaml-dune-patches pins dune <= 3.21, but the project requires
+      # dune >= 3.23. Re-pin the package with the dune version constraint
+      # stripped — opam re-checks dependency constraints on every install,
+      # so a one-shot --ignore-constraints-on flag isn't enough.
+      - name: Drop dune version constraint from oxcaml-dune-patches (OxCaml)
+        if: ${{ endsWith(matrix.ocaml-compiler, '+ox') }}
+        run: |
+          DIR=$(mktemp -d)
+          opam show --raw oxcaml-dune-patches \
+            | perl -0777 -pe 's/"dune"\s+\{build & \([^)]+\)\}/"dune" {build}/' \
+            > "$DIR/oxcaml-dune-patches.opam"
+          opam pin add oxcaml-dune-patches "$DIR" -k path -n -y
 
       - run: opam install . --deps-only --with-test
         # Install the test dependencies
@@ -185,6 +198,12 @@ jobs:
 
       - run: opam exec -- make tests
         if: ${{ !matrix.skip-test }}
+
+      - name: Run Babel downleveling test
+        if: ${{ !matrix.skip-test && runner.os == 'Linux' }}
+        run: |
+          npm install
+          opam exec -- make test-babel-downlevel
 
       - run: opam exec -- dune build @all @runtest @runtest-js --profile with-effects
         if: ${{ !matrix.skip-effects }}

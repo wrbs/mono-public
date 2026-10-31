@@ -34,11 +34,11 @@ let z bytes =
     | `Await -> assert false
     | `Flush ->
       let len = io_buffer_size - Inf.dst_rem decoder in
-      let res = Bigstringaf.substring o ~off:0 ~len in
+      let res = Bstr.sub_string o ~off:0 ~len in
       Buffer.add_string buf res ; Inf.flush decoder ; go ()
     | `End ->
       let len = io_buffer_size - Inf.dst_rem decoder in
-      let res = Bigstringaf.substring o ~off:0 ~len in
+      let res = Bstr.sub_string o ~off:0 ~len in
       Buffer.add_string buf res ; Inf.flush decoder ; Buffer.contents buf
     | `Malformed err -> Crowbar.fail err in
   go ()
@@ -46,8 +46,7 @@ let z bytes =
 let pp_chr =
   Fmt.using (function '\032' .. '\126' as x -> x | _ -> '.') Fmt.char
 
-let pp_scalar :
-    type buffer.
+let pp_scalar : type buffer.
     get:(buffer -> int -> char) -> length:(buffer -> int) -> buffer Fmt.t =
  fun ~get ~length ppf b ->
   let l = length b in
@@ -211,9 +210,7 @@ let reconstruct lst =
   let len =
     List.fold_left
       (fun a -> function
-        | `Literal _ -> 1 + a
-        | `Copy (_, len) -> len + a
-        | `End -> a)
+        | `Literal _ -> 1 + a | `Copy (_, len) -> len + a | `End -> a)
       0 lst in
   let res = Bytes.create len in
   let pos = ref 0 in
@@ -255,11 +252,11 @@ let () =
       | `Await -> (
         match inputs with
         | [] ->
-          Lz77.src state Bigstringaf.empty 0 0
+          Lz77.src state Bstr.empty 0 0
           ; go []
         | x :: r ->
-          let x = Bigstringaf.of_string x ~off:0 ~len:(String.length x) in
-          Lz77.src state x 0 (Bigstringaf.length x)
+          let x = Bstr.string x ~off:0 ~len:(String.length x) in
+          Lz77.src state x 0 (Bstr.length x)
           ; go r) in
     let res = go inputs in
     let res = List.concat res in

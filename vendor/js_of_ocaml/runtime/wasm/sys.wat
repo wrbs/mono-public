@@ -37,6 +37,7 @@
          (param (ref eq)) (param (ref eq)) (param (ref eq)) (result (ref eq))))
    (import "bindings" "argv" (func $argv (result (ref extern))))
    (import "bindings" "on_windows" (global $on_windows i32))
+   (import "bindings" "on_arm64" (global $on_arm64 i32))
    (import "bindings" "isatty"
       (func $isatty (param (ref eq)) (result (ref eq))))
    (import "bindings" "system" (func $system (param anyref) (result (ref eq))))
@@ -94,6 +95,10 @@
       (array.get $block
          (ref.cast (ref $block) (call $caml_js_to_string_array (call $argv)))
          (i32.const 1)))
+
+   (func (export "caml_sys_proc_self_exe")
+      (param (ref eq)) (result (ref eq))
+      (ref.i31 (i32.const 0)))
 
    (func (export "caml_sys_time") (export "caml_sys_time_include_children")
       (param (ref eq)) (result (ref eq))
@@ -159,6 +164,28 @@
       (param (ref eq)) (result (ref eq))
       (ref.i31 (i32.const 0)))
 
+   (func (export "caml_sys_const_arch_amd64")
+      (param (ref eq)) (result (ref eq))
+      (ref.i31 (i32.eqz (global.get $on_arm64))))
+
+   (func (export "caml_sys_const_arch_arm64")
+      (param (ref eq)) (result (ref eq))
+      (ref.i31 (global.get $on_arm64)))
+
+   (func (export "caml_is_boot_compiler") (param (ref eq)) (result (ref eq))
+      (ref.i31 (i32.const 0)))
+
+   (func (export "caml_sys_const_standard_library_default")
+      (param (ref eq)) (result (ref eq))
+      (@string "/static/cmis"))
+
+   (func (export "caml_sys_get_stdlib_dirs")
+      (param $stdlib (ref eq)) (result (ref eq))
+      (array.new_fixed $block 3 (ref.i31 (i32.const 0))
+        (local.get $stdlib)
+        (ref.i31 (i32.const 0)))
+   )
+
    (@string $Unix "Unix")
    (@string $Win32 "Win32")
 
@@ -207,6 +234,10 @@
    (func (export "caml_ml_runtime_warnings_enabled")
       (param (ref eq)) (result (ref eq))
       (ref.i31 (global.get $caml_runtime_warnings)))
+
+   (func (export "caml_xdg_defaults") (param (ref eq)) (result (ref eq))
+      ;; empty list
+      (ref.i31 (i32.const 0)))
 
    (@string $toString "toString")
 

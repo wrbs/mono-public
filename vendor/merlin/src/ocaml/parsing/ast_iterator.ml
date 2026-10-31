@@ -48,7 +48,8 @@ type iterator = {
   extension_constructor: iterator -> extension_constructor -> unit;
   include_declaration: iterator -> include_declaration -> unit;
   include_description: iterator -> include_description -> unit;
-  jkind_annotation:iterator -> jkind_annotation -> unit;
+  jkind_annotation: iterator -> jkind_annotation -> unit;
+  jkind_declaration: iterator -> jkind_declaration -> unit;
   label_declaration: iterator -> label_declaration -> unit;
   location: iterator -> Location.t -> unit;
   module_binding: iterator -> module_binding -> unit;
@@ -159,6 +160,8 @@ module T = struct
     | Ptyp_splice t -> sub.typ sub t
     | Ptyp_of_kind jkind ->
         sub.jkind_annotation sub jkind
+    | Ptyp_repr (_, t) -> sub.typ sub t
+    | Ptyp_newlayout (_, t) -> sub.typ sub t
     | Ptyp_extension x -> sub.extension sub x
 
   let iter_type_declaration sub
@@ -167,6 +170,7 @@ module T = struct
        ptype_private = _;
        ptype_manifest;
        ptype_attributes;
+       ptype_jkind_annotation;
        ptype_loc} =
     iter_loc sub ptype_name;
     List.iter (iter_fst (sub.typ sub)) ptype_params;
@@ -176,7 +180,8 @@ module T = struct
     sub.type_kind sub ptype_kind;
     iter_opt (sub.typ sub) ptype_manifest;
     sub.location sub ptype_loc;
-    sub.attributes sub ptype_attributes
+    sub.attributes sub ptype_attributes;
+    Option.iter (sub.jkind_annotation sub) ptype_jkind_annotation
 
   let iter_type_kind sub = function
     | Ptype_abstract -> ()
@@ -305,12 +310,16 @@ module MT = struct
         iter_loc sub lid; iter_loc sub lid2
     | Pwith_modtype (lid, mty) ->
         iter_loc sub lid; sub.module_type sub mty
+    | Pwith_jkind (lid, d) ->
+        iter_loc sub lid; sub.jkind_declaration sub d
     | Pwith_typesubst (lid, d) ->
         iter_loc sub lid; sub.type_declaration sub d
     | Pwith_modsubst (s, lid) ->
         iter_loc sub s; iter_loc sub lid
     | Pwith_modtypesubst (lid, mty) ->
         iter_loc sub lid; sub.module_type sub mty
+    | Pwith_jkindsubst (lid, d) ->
+        iter_loc sub lid; sub.jkind_declaration sub d
 
   let iter_signature_item sub {psig_desc = desc; psig_loc = loc} =
     sub.location sub loc;
@@ -337,9 +346,7 @@ module MT = struct
         sub.attributes sub attrs;
         sub.extension sub x
     | Psig_attribute x -> sub.attribute sub x
-    | Psig_kind_abbrev (name, jkind) ->
-        iter_loc sub name;
-        sub.jkind_annotation sub jkind
+    | Psig_jkind x -> sub.jkind_declaration sub x
 end
 
 
@@ -390,9 +397,7 @@ module M = struct
     | Pstr_extension (x, attrs) ->
         sub.attributes sub attrs; sub.extension sub x
     | Pstr_attribute x -> sub.attribute sub x
-    | Pstr_kind_abbrev (name, jkind) ->
-        iter_loc sub name;
-        sub.jkind_annotation sub jkind
+    | Pstr_jkind x -> sub.jkind_declaration sub x
 end
 
 module E = struct
@@ -460,7 +465,6 @@ module E = struct
 
   let iter_block_access sub = function
     | Baccess_field lid -> iter_loc sub lid
-    | Baccess_array (_, _, index) -> sub.expr sub index
     | Baccess_block (_, idx) -> sub.expr sub idx
 
   let iter_unboxed_access sub = function
@@ -484,6 +488,8 @@ module E = struct
     | Pexp_match (e, pel) ->
         sub.expr sub e; sub.cases sub pel
     | Pexp_try (e, pel) -> sub.expr sub e; sub.cases sub pel
+    | Pexp_unboxed_unit -> ()
+    | Pexp_unboxed_bool _ -> ()
     | Pexp_tuple el -> iter_labeled_tuple sub el
     | Pexp_unboxed_tuple el -> iter_labeled_tuple sub el
     | Pexp_construct (lid, arg) ->
@@ -557,6 +563,7 @@ module E = struct
     | Pexp_quote e -> sub.expr sub e
     | Pexp_splice e -> sub.expr sub e
     | Pexp_hole -> ()
+    | Pexp_borrow e -> sub.expr sub e
 
   let iter_binding_op sub {pbop_op; pbop_pat; pbop_exp; pbop_loc} =
     iter_loc sub pbop_op;
@@ -580,6 +587,8 @@ module P = struct
     | Ppat_alias (p, s) -> sub.pat sub p; iter_loc sub s
     | Ppat_constant _ -> ()
     | Ppat_interval _ -> ()
+    | Ppat_unboxed_unit -> ()
+    | Ppat_unboxed_bool _ -> ()
     | Ppat_tuple (pl, _) -> iter_labeled_tuple sub pl
     | Ppat_unboxed_tuple (pl, _) -> iter_labeled_tuple sub pl
     | Ppat_construct (l, p) ->
@@ -708,8 +717,8 @@ let default_iterator =
     type_exception = T.iter_type_exception;
     extension_constructor = T.iter_extension_constructor;
     value_description =
-      (fun this {pval_name; pval_type; pval_modalities; pval_prim = _; pval_loc;
-                 pval_attributes} ->
+      (fun this {pval_name; pval_type; pval_modalities; pval_prim = _;
+                 pval_poly=_; pval_loc; pval_attributes} ->
         iter_loc this pval_name;
         this.typ this pval_type;
         this.location this pval_loc;
@@ -783,7 +792,8 @@ let default_iterator =
 
 
     value_binding =
-      (fun this {pvb_pat; pvb_expr; pvb_attributes; pvb_loc; pvb_constraint; pvb_modes} ->
+      (fun this {pvb_pat; pvb_expr; pvb_attributes; pvb_loc; pvb_constraint;
+                 pvb_is_poly=_; pvb_modes} ->
          this.modes this pvb_modes;
          this.pat this pvb_pat;
          this.expr this pvb_expr;
@@ -855,11 +865,13 @@ let default_iterator =
       );
 
     jkind_annotation =
-      (fun this { pjkind_loc; pjkind_desc } ->
-         this.location this pjkind_loc;
-         match pjkind_desc with
+      (fun this { pjka_loc; pjka_desc } ->
+         this.location this pjka_loc;
+         match pjka_desc with
          | Pjk_default -> ()
-         | Pjk_abbreviation (_ : string) -> ()
+         | Pjk_abbreviation (lid, sa_annot) ->
+           iter_loc this lid;
+           List.iter (iter_loc this) sa_annot
          | Pjk_mod (t, mode_list) ->
              this.jkind_annotation this t;
              this.modes this mode_list
@@ -869,6 +881,15 @@ let default_iterator =
              this.modalities this modalities
          | Pjk_kind_of ty -> this.typ this ty
          | Pjk_product ts -> List.iter (this.jkind_annotation this) ts);
+
+    jkind_declaration =
+      (fun this { pjkind_name; pjkind_manifest; pjkind_attributes;
+                  pjkind_loc } ->
+         iter_loc this pjkind_name;
+         Option.iter (this.jkind_annotation this) pjkind_manifest;
+         this.attributes this pjkind_attributes;
+         this.location this pjkind_loc
+      );
 
     directive_argument =
       (fun this a ->

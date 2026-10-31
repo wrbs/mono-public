@@ -225,6 +225,8 @@ and core_type_desc =
   (* Jane Street extension *)
   | Ptyp_of_kind of jkind_annotation (** [(type : k)] *)
   | Ptyp_constr_unboxed of Longident.t loc * core_type list
+  | Ptyp_quote of core_type (** [<[T]>] *)
+  | Ptyp_splice of core_type (** [$T] *)
   (* End Jane Street extension *)
 
 and package_type =
@@ -300,6 +302,8 @@ and pattern_desc =
             - If Closed, [n >= 2].
             - If Open, [n >= 1].
       *)
+  | Ppat_unboxed_unit  (** [#()] *)
+  | Ppat_unboxed_bool of bool  (** [#false] or [#true] *)
   | Ppat_unboxed_tuple of (string loc option * pattern) list * Asttypes.closed_flag
       (** Unboxed tuple patterns: [#(l1:P1, ..., ln:Pn)] is [([(Some
           l1,P1);...;(Some l2,Pn)], Closed)], and the labels are optional.  An
@@ -427,6 +431,8 @@ and expression_desc =
 
           Invariant: [n >= 2].
       *)
+  | Pexp_unboxed_unit  (** [#()] *)
+  | Pexp_unboxed_bool of bool  (** [#false] or [#true] *)
   | Pexp_unboxed_tuple of (string loc option * expression) list
       (** Unboxed tuple expressions: [Pexp_unboxed_tuple([(Some l1,P1);...;(Some
           l2,Pn)])] represents [#(l1:E1, ..., ln:En)], and the labels are
@@ -476,6 +482,9 @@ and expression_desc =
   | Pexp_array of mutable_flag * expression list
       (** [[| E1; ...; En |]] (flag = Mutable)
           [[: E1; ...; En :]] (flag = Immutable) *)
+  | Pexp_idx of block_access * unboxed_access list
+      (** [(BA1 UA1 UA2 ...)] e.g. [(.foo.#bar.#baz)]
+          Above, BA1=.foo, UA1=.#bar, and UA2=#.baz *)
   | Pexp_list of expression list  (** [[ E1; ...; En ]] *)
   | Pexp_ifthenelse of if_branch list * expression option
       (** [if E1 then E2 else E3] *)
@@ -530,6 +539,7 @@ and expression_desc =
   | Pexp_extension of extension  (** [[%id]] *)
   | Pexp_unreachable  (** [.] *)
   | Pexp_stack of expression (** stack_ exp *)
+  | Pexp_borrow of expression (** borrow_ exp *)
   | Pexp_hole  (** [_] *)
   | Pexp_beginend of expression  (** [begin E end] *)
   | Pexp_parens of expression  (** [(E)] *)
@@ -543,6 +553,26 @@ and expression_desc =
       (** [[|BODY ...CLAUSES...|]] (flag = Mutable)
           [[:BODY ...CLAUSES...:]] (flag = Immutable)
           (only allowed with [-extension immutable_arrays]) *)
+  | Pexp_quote of expression (** runtime metaprogramming quotations <[E]> *)
+  | Pexp_splice of expression (** runtime metaprogramming splicing $(E) *)
+
+and block_access =
+  | Baccess_field of Longident.t loc
+      (** [.foo] *)
+  | Baccess_array of mutable_flag * index_kind * expression
+      (** Mutable array accesses: [.(E)], [.L(E)], [.l(E)], [.n(E)]
+          Immutable array accesses: [.:(E)], [.:L(E)], [.:l(E)], [.:n(E)]
+
+          Indexed by [int], [int64#], [int32#], or [nativeint#], respectively.
+      *)
+  | Baccess_block of mutable_flag * expression
+      (** Access using another block index: [.idx_imm(E)], [.idx_mut(E)]
+          (usually followed by unboxed accesses, to deepen the index).
+      *)
+
+and unboxed_access =
+  | Uaccess_unboxed_field of Longident.t loc
+      (** [.#foo] *)
 
 and iterator =
   | Range of { start     : expression
@@ -1320,6 +1350,7 @@ and kind_abbreviation = string loc * jkind_annotation loc
 type toplevel_phrase =
   | Ptop_def of structure
   | Ptop_dir of toplevel_directive  (** [#use], [#load] ... *)
+  | Ptop_lex of lexer_directive
 
 and toplevel_directive =
   {
@@ -1339,6 +1370,22 @@ and directive_argument_desc =
   | Pdir_int of string * char option
   | Pdir_ident of Longident.t
   | Pdir_bool of bool
+
+(** Lexer directives: ugly hack to avoid their deletion *)
+and syntax_directive =
+  {
+    psyn_mode: string loc; (* which syntax feature e.g. quotations *)
+    psyn_toggle: bool; (* on/off *)
+  }
+
+and lexer_directive_desc =
+  | Plex_syntax of syntax_directive
+
+and lexer_directive =
+  {
+    plex_desc: lexer_directive_desc;
+    plex_loc: Location.t
+  }
 
 type repl_phrase =
   {

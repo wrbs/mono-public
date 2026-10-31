@@ -29,10 +29,9 @@ Local conflict class defined in a local package:
   > (lang dune 3.11)
   > EOF
 
-  $ dune_pkg_lock_normalized
-  Error:
-  Unable to solve dependencies while generating lock directory: dune.lock
-  
+  $ dune pkg lock
+  Error: Unable to solve dependencies for the following lock directories:
+  Lock directory dune.lock:
   Couldn't solve the package dependency formula.
   Selected candidates: foo.dev x.dev foo&x
   - bar -> (problem)
@@ -49,10 +48,9 @@ Now the conflict class comes from the opam repository
 
   $ rm foo.opam
 
-  $ dune_pkg_lock_normalized
-  Error:
-  Unable to solve dependencies while generating lock directory: dune.lock
-  
+  $ dune pkg lock
+  Error: Unable to solve dependencies for the following lock directories:
+  Lock directory dune.lock:
   Couldn't solve the package dependency formula.
   Selected candidates: foo.0.0.1 x.dev
   - bar -> (problem)

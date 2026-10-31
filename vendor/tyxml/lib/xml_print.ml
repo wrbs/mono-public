@@ -49,8 +49,8 @@ let encode_unsafe_char_and_at s =
 
 let compose_decl ?(version = "1.0") ?(encoding = "UTF-8") () =
   Format.sprintf
-    {|<?xml version="%s" encoding="%s"?>\n|}
-    version encoding
+    {|<?xml version="%s" encoding="%s"?>%c|}
+    version encoding '\n'
 
 let compose_doctype dt args =
   let pp_args fmt = function
@@ -338,7 +338,8 @@ struct
 
   let pp ?(encode = encode_unsafe_char) ?(indent=false) ?advert () fmt doc =
     Format.pp_open_vbox fmt 0 ;
-    Format.fprintf fmt "%s@," Typed_xml.Info.doctype ;
+    if Typed_xml.Info.doctype <> "" then
+      Format.fprintf fmt "%s@," Typed_xml.Info.doctype ;
 
     begin match advert with
       | Some s -> Format.fprintf fmt "<!-- %s -->@," s

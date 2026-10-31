@@ -1,0 +1,9 @@
+(library
+ (name hardcaml_paper_demo_test)
+ (public_name hardcaml_paper_demo.test)
+ (libraries textutils.ascii_table core hardcaml hardcaml_axi
+   hardcaml_computation_dsl hardcaml_lws hardcaml_paper_demo_driver
+   hardcaml_paper_demo_rtl hardcaml_test_harness hardcaml_waveterm unboxed
+   vec)
+ (preprocess
+  (pps ppx_hardcaml ppx_jane)))

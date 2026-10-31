@@ -3,19 +3,19 @@ private plugin B and the public package C will pick up.
 
 B will pick up the private one:
   $ dune build B
-  Warning: Dune's Coq Build Language is deprecated, and will be removed in Dune
-  3.24. Please upgrade to the new Rocq Build Language.
+  Warning: Coq Language Versions lower than 0.8 have been deprecated in Dune
+  3.8 and will be removed in an upcoming Dune version.
   Hint: To disable this warning, add the following to your dune-project file:
-  (warnings (deprecated_coq_lang disabled))
-  message = "I am the private A "
+  (warnings (deprecated_coq_lang_lt_08 disabled))
+  message = "I am the the private A "
        : string
 
 C picks up the private one too:
   $ dune build C
-  Warning: Dune's Coq Build Language is deprecated, and will be removed in Dune
-  3.24. Please upgrade to the new Rocq Build Language.
+  Warning: Coq Language Versions lower than 0.8 have been deprecated in Dune
+  3.8 and will be removed in an upcoming Dune version.
   Hint: To disable this warning, add the following to your dune-project file:
-  (warnings (deprecated_coq_lang disabled))
+  (warnings (deprecated_coq_lang_lt_08 disabled))
   File "C/dune", line 4, characters 11-12:
   4 |  (theories A))
                  ^

@@ -1,13 +1,13 @@
-(**************************************************************************)
-(*                                                                        *)
-(*                              OCamlFormat                               *)
-(*                                                                        *)
-(*            Copyright (c) Facebook, Inc. and its affiliates.            *)
-(*                                                                        *)
-(*      This source code is licensed under the MIT license found in       *)
-(*      the LICENSE file in the root directory of this source tree.       *)
-(*                                                                        *)
-(**************************************************************************)
+(**************************************************************************
+ *                                                                        *
+ *                              OCamlFormat                               *
+ *                                                                        *
+ *            Copyright (c) Facebook, Inc. and its affiliates.            *
+ *                                                                        *
+ *      This source code is licensed under the MIT license found in       *
+ *      the LICENSE file in the root directory of this source tree.       *
+ *                                                                        *
+ **************************************************************************)
 
 open Extended_ast
 
@@ -57,7 +57,8 @@ let last_loc (type a) (fg : a list item) (l : a list) =
       List.last l
       >>= function
       | Ptop_def x -> List.last x >>| fun x -> x.pstr_loc
-      | Ptop_dir x -> Some x.pdir_loc )
+      | Ptop_dir x -> Some x.pdir_loc
+      | Ptop_lex x -> Some x.plex_loc )
 
 let mk ~attr_loc ~chunk_loc state items = {attr_loc; chunk_loc; state; items}
 

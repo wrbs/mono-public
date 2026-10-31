@@ -52,14 +52,13 @@ let src = bigstring_create io_buffer_size
 let dst = bigstring_create io_buffer_size
 let q = Queue.create 4096
 let wrkmem = Lzo.make_wrkmem ()
-let unsafe_get_uint8 b i = Char.code (Bigstringaf.get b i)
-let unsafe_get_uint32_be b i = Bigstringaf.get_int32_be b i
+let unsafe_get_uint8 b i = Char.code (Bstr.get b i)
+let unsafe_get_uint32_be b i = Bstr.get_int32_be b i
 
 let pp_chr =
   Fmt.using (function '\032' .. '\126' as x -> x | _ -> '.') Fmt.char
 
-let pp_scalar :
-    type buffer.
+let pp_scalar : type buffer.
     get:(buffer -> int -> char) -> length:(buffer -> int) -> buffer Fmt.t =
  fun ~get ~length ppf b ->
   let l = length b in
@@ -263,7 +262,7 @@ let fixed () =
     res
   ; Alcotest.(check string)
       "empty" expected
-      (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+      (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let stored () =
   Alcotest.test_case "stored" `Quick @@ fun () ->
@@ -276,7 +275,7 @@ let stored () =
     res
   ; Alcotest.(check string)
       "0x00" expected
-      (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+      (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let length_extra () =
   Alcotest.test_case "length extra" `Quick @@ fun () ->
@@ -291,7 +290,7 @@ let length_extra () =
     res
   ; Alcotest.(check string)
       "0x00 * 516" expected
-      (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+      (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let long_distance_and_extra () =
   Alcotest.test_case "long distance and extra" `Quick @@ fun () ->
@@ -307,7 +306,7 @@ let long_distance_and_extra () =
     res
   ; Alcotest.(check string)
       "0x00 * 518" expected
-      (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+      (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let window_end () =
   Alcotest.test_case "window end" `Quick @@ fun () ->
@@ -323,7 +322,7 @@ let window_end () =
     res
   ; Alcotest.(check string)
       "0x00 * 33025" expected
-      (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+      (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let flat_of_string () =
   Alcotest.test_case "flat of string" `Quick @@ fun () ->
@@ -336,7 +335,7 @@ let flat_of_string () =
     res
   ; Alcotest.(check string)
       "empty" expected
-      (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+      (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let flat_block () =
   Alcotest.test_case "flat block" `Quick @@ fun () ->
@@ -349,7 +348,7 @@ let flat_block () =
     res
   ; Alcotest.(check string)
       "deadbeef" expected
-      (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+      (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let huffman_length_extra () =
   Alcotest.test_case "huffman length extra" `Quick @@ fun () ->
@@ -380,7 +379,7 @@ let huffman_length_extra () =
           res
         ; Alcotest.(check str)
             "result" expected
-            (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+            (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let ( <.> ) f g x = f (g x)
 
@@ -422,7 +421,7 @@ let dynamic_and_fixed () =
         res
       ; Alcotest.(check str)
           "result" expected
-          (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+          (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let fixed_and_dynamic () =
   Alcotest.test_case "fixed+dynamic" `Quick @@ fun () ->
@@ -462,7 +461,7 @@ let fixed_and_dynamic () =
         res
       ; Alcotest.(check str)
           "result" expected
-          (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+          (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let dynamic_and_dynamic () =
   Alcotest.test_case "dynamic+dynamic" `Quick @@ fun () ->
@@ -512,7 +511,7 @@ let dynamic_and_dynamic () =
           res
         ; Alcotest.(check str)
             "result" expected
-            (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+            (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let max_flat () =
   Alcotest.test_case "biggest flat block" `Quick @@ fun () ->
@@ -531,7 +530,7 @@ let max_flat () =
       res
     ; Alcotest.(check string)
         "0xffff * \x00" expected
-        (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+        (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let flat () =
   Alcotest.test_case "encode flat" `Quick @@ fun () ->
@@ -556,7 +555,7 @@ let flat () =
       res
     ; Alcotest.(check string)
         "deadbeef" expected
-        (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+        (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let fixed_and_flat () =
   Alcotest.test_case "fixed+flat" `Quick @@ fun () ->
@@ -584,7 +583,7 @@ let fixed_and_flat () =
     res
   ; Alcotest.(check string)
       "aaaadeadbeef" expected
-      (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+      (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let flat_and_fixed () =
   Alcotest.test_case "flat+fixed" `Quick @@ fun () ->
@@ -620,7 +619,7 @@ let flat_and_fixed () =
     res
   ; Alcotest.(check string)
       "deadbeefaaaa" expected
-      (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+      (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let fuzz0 () =
   Alcotest.test_case "fuzz0" `Quick @@ fun () ->
@@ -635,7 +634,7 @@ let fuzz0 () =
   Alcotest.(check check_decode) "fuzz0" (Ok (4, String.length expected)) res
   ; Alcotest.(check string)
       "0x00 * 33025" expected
-      (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+      (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let fuzz1 () =
   Alcotest.test_case "fuzz1" `Quick @@ fun () ->
@@ -648,7 +647,7 @@ let fuzz1 () =
     res
   ; Alcotest.(check string)
       "fuzz1" expected
-      (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+      (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let fuzz2 () =
   Alcotest.test_case "fuzz2" `Quick @@ fun () ->
@@ -673,7 +672,7 @@ let fuzz2 () =
     res
   ; Alcotest.(check string)
       "fuzz2" expected
-      (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+      (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let fuzz3 () =
   Alcotest.test_case "fuzz3" `Quick @@ fun () ->
@@ -729,7 +728,7 @@ let fuzz3 () =
     res
   ; Alcotest.(check string)
       "fuzz3" expected
-      (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+      (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let fuzz4 () =
   Alcotest.test_case "fuzz4" `Quick @@ fun () ->
@@ -753,7 +752,7 @@ let fuzz4 () =
     res
   ; Alcotest.(check string)
       "fuzz4" expected
-      (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+      (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let fuzz5 () =
   Alcotest.test_case "fuzz5" `Quick @@ fun () ->
@@ -778,7 +777,7 @@ let fuzz5 () =
     res
   ; Alcotest.(check string)
       "fuzz5" expected
-      (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+      (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let fuzz6 () =
   Alcotest.test_case "fuzz6" `Quick @@ fun () ->
@@ -798,7 +797,7 @@ let fuzz6 () =
     res
   ; Alcotest.(check string)
       "fuzz6" expected
-      (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+      (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let fuzz7 () =
   Alcotest.test_case "fuzz7" `Quick @@ fun () ->
@@ -813,7 +812,7 @@ let fuzz7 () =
     res
   ; Alcotest.(check string)
       "fuzz7" expected
-      (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+      (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let fuzz8 () =
   Alcotest.test_case "fuzz8" `Quick @@ fun () ->
@@ -860,7 +859,7 @@ let fuzz11 () =
     res
   ; Alcotest.(check string)
       "fuzz11" expected
-      (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+      (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let fuzz12 () =
   Alcotest.test_case "fuzz12" `Quick @@ fun () ->
@@ -912,7 +911,7 @@ let fuzz12 () =
     res
   ; Alcotest.(check string)
       "fuzz12" expected
-      (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+      (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let fuzz13 () =
   Alcotest.test_case "fuzz13" `Quick @@ fun () ->
@@ -926,7 +925,7 @@ let fuzz13 () =
     res
   ; Alcotest.(check string)
       "fuzz13" expected
-      (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+      (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let fuzz14 () =
   Alcotest.test_case "fuzz14" `Quick @@ fun () ->
@@ -989,7 +988,7 @@ let fuzz14 () =
     res
   ; Alcotest.(check string)
       "fuzz14" expected
-      (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+      (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let fuzz15 () =
   Alcotest.test_case "fuzz15" `Quick @@ fun () ->
@@ -1012,7 +1011,7 @@ let fuzz15 () =
   Alcotest.(check check_decode) "fuzz15" (Ok (39, String.length expected)) res
   ; Alcotest.(check string)
       "fuzz15" expected
-      (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+      (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let fuzz16 () =
   Alcotest.test_case "fuzz16" `Quick @@ fun () ->
@@ -1030,7 +1029,7 @@ let fuzz16 () =
     res
   ; Alcotest.(check string)
       "fuzz16" expected
-      (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+      (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let fuzz17 () =
   Alcotest.test_case "fuzz17" `Quick @@ fun () ->
@@ -1054,7 +1053,7 @@ let fuzz17 () =
     res
   ; Alcotest.(check string)
       "fuzz17" expected
-      (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+      (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let fuzz18 () =
   Alcotest.test_case "fuzz18" `Quick @@ fun () ->
@@ -1085,7 +1084,7 @@ let fuzz18 () =
   Alcotest.(check check_decode) "fuzz18" (Ok (59, String.length expected)) res
   ; Alcotest.(check string)
       "fuzz18" expected
-      (Bigstringaf.substring dst ~off:0 ~len:(check_decode_o res))
+      (Bstr.sub_string dst ~off:0 ~len:(check_decode_o res))
 
 let w0 = make_window ~bits:15
 let w1 = make_window ~bits:15
@@ -1178,12 +1177,12 @@ let zlib_compress_and_uncompress ic =
 
 let test_corpus filename =
   Alcotest.test_case filename `Slow @@ fun () ->
-  let ic = open_in Filename.(concat "corpus" filename) in
+  let ic = open_in_bin Filename.(concat "corpus" filename) in
   compress_and_uncompress ic ; close_in ic
 
 let test_corpus_with_zlib filename =
   Alcotest.test_case filename `Slow @@ fun () ->
-  let ic = open_in Filename.(concat "corpus" filename) in
+  let ic = open_in_bin Filename.(concat "corpus" filename) in
   zlib_compress_and_uncompress ic
   ; close_in ic
 
@@ -1198,7 +1197,7 @@ let encoder_0 () =
     res
   ; Alcotest.(check string)
       "0x00" expected
-      (Bigstringaf.substring dst ~off:0 ~len:(check_encode res))
+      (Bstr.sub_string dst ~off:0 ~len:(check_encode res))
 
 let encoder_1 () =
   Alcotest.test_case "encoder 1" `Quick @@ fun () ->
@@ -1220,7 +1219,7 @@ let encoder_1 () =
     res
   ; Alcotest.(check string)
       "0x00" expected
-      (Bigstringaf.substring dst ~off:0 ~len:(check_encode res))
+      (Bstr.sub_string dst ~off:0 ~len:(check_encode res))
 
 let tests =
   [

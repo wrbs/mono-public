@@ -12,7 +12,7 @@ DEV_DEPS := \
 core_bench \
 patdiff
 
-TEST_OCAMLVERSION := 5.4.0
+TEST_OCAMLVERSION := 5.3.0
 # When updating this version, don't forget to also bump the number in the docs.
 
 -include Makefile.dev
@@ -23,17 +23,11 @@ help:
 
 .PHONY: bootstrap
 bootstrap:
-	rm -rf _boot
 	$(MAKE) -B $(BIN)
 
 .PHONY: test-bootstrap
 test-bootstrap:
-	rm -rf _test_boot
 	@ocaml boot/bootstrap.ml --boot-dir _test_boot
-
-.PHONY: test-bootstrap-script
-test-bootstrap-script:
-	@ocamlc -i boot/bootstrap.ml
 
 .PHONY: release
 release: $(BIN)
@@ -100,26 +94,17 @@ test-js: $(BIN)
 test-wasm: $(BIN)
 	DUNE_WASM_TEST=enable $(BIN) build @runtest-wasm
 
-.PHONY: test-coq
 test-coq: $(BIN)
 	DUNE_COQ_TEST=enable $(BIN) build @runtest-coq
-
-.PHONY: test-rocq
-test-rocq: $(BIN)
-	DUNE_ROCQ_TEST=enable $(BIN) build @runtest-rocq
-
-.PHONY: test-rocq-native
-test-rocq-native: $(BIN)
-	DUNE_ROCQ_NATIVE_TEST=enable $(BIN) build @runtest-rocq-native
 
 test-melange: $(BIN)
 	$(BIN) build @runtest-melange
 
 test-all: $(BIN)
-	$(BIN) build @runtest @runtest-js @runtest-coq @runtest-rocq @runtest-melange
+	$(BIN) build @runtest @runtest-js @runtest-coq @runtest-melange
 
-test-ox: $(BIN)
-	$(BIN) runtest test/blackbox-tests/test-cases/oxcaml
+test-all-sans-melange: $(BIN)
+	$(BIN) build @runtest @runtest-js @runtest-coq
 
 .PHONY: check
 check: $(BIN)

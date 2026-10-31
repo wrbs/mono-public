@@ -201,6 +201,16 @@ function caml_array_make(len, init) {
   return b;
 }
 
+// Provides: caml_iarray_of_array const
+function caml_iarray_of_array(a) {
+  return a;
+}
+
+// Provides: caml_array_of_iarray const
+function caml_array_of_iarray(a) {
+  return a;
+}
+
 //Provides: caml_make_vect const (const, mutable)
 //Requires: caml_array_make
 function caml_make_vect(len, init) {
@@ -229,6 +239,20 @@ function caml_array_create_float(len) {
   for (var i = 1; i < len; i++) b[i] = 0;
   return b;
 }
+
+//Provides: caml_array_create_float const (const)
+//Requires: caml_array_bound_error
+//Version: >= 5.2, < 5.3
+//OxCaml
+function caml_array_create_float(len) {
+  if (len >>> 0 >= ((0x7fffffff / 8) | 0)) caml_array_bound_error();
+  var len = (len + 1) | 0;
+  var b = new Array(len);
+  b[0] = 254;
+  for (var i = 1; i < len; i++) b[i] = 0;
+  return b;
+}
+
 //Provides: caml_floatarray_create const (const)
 //Requires: caml_array_bound_error
 //Alias: caml_floatarray_create_local

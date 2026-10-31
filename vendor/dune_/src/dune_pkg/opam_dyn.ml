@@ -1,3 +1,5 @@
+open! Import
+
 let rec formula atom_to_dyn (formula_ : _ OpamFormula.formula) =
   match formula_ with
   | Empty -> Dyn.variant "Empty" []

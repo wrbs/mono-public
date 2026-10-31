@@ -72,6 +72,13 @@ val newgenstub: scope:int -> jkind_lr -> type_expr
         (* Return a fresh generic node, to be instantiated
            by [Transient_expr.set_stub_desc] *)
 
+val new_quote_ty: type_expr -> type_expr
+        (* Quote a type expression *)
+val new_splice_ty: type_expr -> type_expr
+        (* Splice a type expression *)
+val new_quote_eval_ty: type_expr -> type_expr
+        (* Quote-eval a type expression *)
+
 (**** Types ****)
 
 val is_Tvar: type_expr -> bool
@@ -167,6 +174,7 @@ type 'a type_iterators =
     it_class_declaration: 'a type_iterators -> class_declaration -> unit;
     it_class_type_declaration:
         'a type_iterators -> class_type_declaration -> unit;
+    it_jkind_declaration: 'a type_iterators -> jkind_declaration -> unit;
     it_functor_param: 'a type_iterators -> functor_parameter -> unit;
     it_module_type: 'a type_iterators -> module_type -> unit;
     it_class_type: 'a type_iterators -> class_type -> unit;
@@ -315,3 +323,408 @@ val print_raw: (Format.formatter -> type_expr -> unit) ref
 (**** Type information getter ****)
 
 val cstr_type_path : constructor_description -> Path.t
+
+(* These modules exists here to resolve a dependency cycle: [Subst], [Predef],
+   [Datarepr], and [Env] must not depend on [Jkind].  The portions intended for
+   use outside of those modules are re-exported as [Jkind.With_bounds] and
+   documented in [jkind.mli]. *)
+module Jkind0 : sig
+  open Allowance
+
+  module Mod_bounds : sig
+    module Crossing = Mode.Crossing
+    module Externality = Jkind_axis.Externality
+
+    type t = mod_bounds =
+      { crossing : Mode.Crossing.t;
+        externality: Jkind_axis.Externality.t;
+      }
+
+    val create : Crossing.t -> externality:Externality.t -> t
+
+    val crossing : t -> Crossing.t
+    val externality : t -> Externality.t
+
+    val set_crossing : Crossing.t -> t -> t
+    val set_externality : Externality.t -> t -> t
+
+    (** [set_max_in_set bounds axes] sets all the axes in [axes] to their [max]
+        within [bounds] *)
+    val set_max_in_set : t -> Jkind_axis.Axis_set.t -> t
+
+    (** [set_min_in_set bounds axes] sets all the axes in [axes] to their [min]
+        within [bounds] *)
+    val set_min_in_set : t -> Jkind_axis.Axis_set.t -> t
+
+    (** [is_max_within_set bounds axes] returns whether or not all the axes in
+        [axes] are [max] within [bounds] *)
+    val is_max_within_set : t -> Jkind_axis.Axis_set.t -> bool
+    val is_max : t -> bool
+
+    val min : t
+    val max : t
+    val for_arrow : t
+
+    val equal : t -> t -> bool
+    val join : t -> t -> t
+    val to_axis_lattice : t -> Axis_lattice.t
+    val of_axis_lattice : Axis_lattice.t -> t
+    val meet : t -> t -> t
+
+    val relevant_axes_of_modality :
+      modality:Mode.Modality.Const.t -> Jkind_axis.Axis_set.t
+
+    val debug_print : Format.formatter -> t -> unit
+  end
+
+  module With_bounds : sig
+    type 'd t = 'd with_bounds constraint 'd = 'l * 'r
+
+    include Allow_disallow with type (_, _, 'd) sided = 'd t
+
+    val add_modality :
+      modality:Mode.Modality.Const.t ->
+      type_expr:type_expr ->
+      (allowed * disallowed) t ->
+      (allowed * disallowed) t
+
+    val add_bound :
+      type_expr -> With_bounds_type_info.t -> with_bounds_types ->
+      with_bounds_types
+
+    val map_type_expr :
+      (type_expr -> type_expr) -> ('l * 'r) with_bounds -> ('l * 'r) with_bounds
+
+    val is_empty : ('l * 'r) with_bounds -> bool
+  end
+
+  module Base_and_axes : sig
+    include Allowance.Allow_disallow
+      with type (_, 'layout, 'd) sided = ('layout, 'd) base_and_axes
+
+    val map_layout :
+      ('a -> 'b) -> ('a, 'd) base_and_axes -> ('b, 'd) base_and_axes
+
+    val map_layout_option :
+      ('a -> 'b option) -> ('a, 'd) base_and_axes ->
+      ('b, 'd) base_and_axes option
+
+    val try_allow_l :
+      ('layout, 'l * 'r) base_and_axes ->
+      ('layout, allowed * 'r) base_and_axes option
+
+    val try_allow_r :
+      ('layout, 'l * 'r) base_and_axes ->
+      ('layout, 'l * allowed) base_and_axes option
+  end
+
+  module Const : sig
+    type 'd t = 'd jkind_const_desc
+
+    val of_path : Path.t -> jkind_const_desc_lr
+
+    (** This returns [true] iff both kinds have no with-bounds and they are
+        shallowly equal. Normally, we want an equality check to happen only on
+        values that are allowed on both the left and the right. But a type with
+        no with-bounds is allowed on the left and the right, so we test for that
+        condition first before doing the proper equality check.
+
+        Note that this function IS NOT SEMANTIC EQUALITY - in particular it does
+        not expand kind aliases, so it may return false for semantically equal
+        kinds.  That's fine for the places where it is used (printing and a memo
+        table), but be aware of this if adding new uses.
+    *)
+    val shallow_no_with_bounds_and_equal : 'd1 t -> 'd2 t -> bool
+
+    include Allowance.Allow_disallow with type (_, _, 'd) sided = 'd t
+
+    module Builtin : sig
+      type nonrec t =
+        { jkind : (allowed * allowed) t;
+          name : string
+        }
+
+      (** This jkind is the top of the jkind lattice. All types have jkind
+          [any].  But we cannot compile run-time manipulations of values of
+          types with jkind [any]. *)
+      val any : t
+
+      (** Value of types of this jkind are not retained at all at runtime *)
+      val void : t
+
+      (** Value of types of this jkind can be scanned by the GC, but no other
+          scannable axis information about them is known. *)
+      val scannable : t
+
+      (** This is the jkind of normal ocaml values or null pointers *)
+      val value_or_null : t
+
+      (** Same kind mod everything. *)
+      val value_or_null_mod_everything : t
+
+      (** This is the jkind of normal ocaml values *)
+      val value : t
+
+      (** Immutable non-float values that don't contain functions. *)
+      val immutable_data : t
+
+      (** Exceptions; crossing portability, contention, statelessness and
+          visibility. *)
+      val exn : t
+
+      (** Atomically mutable non-float values that don't contain functions. *)
+      val sync_data : t
+
+      (** Mutable non-float values that don't contain functions. *)
+      val mutable_data : t
+
+      (** Values of types of this jkind are immediate on 64-bit platforms; on
+          other platforms, we know nothing other than that it's a value. *)
+      val immediate64 : t
+
+      (** Values of types of this jkind are either immediate64 or null pointers
+          *)
+      val immediate64_or_null : t
+
+      (** We know for sure that values of types of this jkind are always
+          immediate *)
+      val immediate : t
+
+      (** Values of types of this jkind are either immediate or null pointers *)
+      val immediate_or_null : t
+
+      (** The jkind of unboxed 64-bit floats with no mode crossing. *)
+      val float64 : t
+
+      (** The jkind of unboxed 64-bit floats with mode crossing. *)
+      val kind_of_unboxed_float : t
+
+      (** The jkind of unboxed units with mode crossing. *)
+      val kind_of_unboxed_unit : t
+
+      (** The jkind of unboxed bools with mode crossing. *)
+      val kind_of_unboxed_bool : t
+
+      (** The jkind of unboxed 32-bit floats with no mode crossing. *)
+      val float32 : t
+
+      (** The jkind of unboxed 32-bit floats with mode crossing. *)
+      val kind_of_unboxed_float32 : t
+
+      (** The jkind of unboxed native-sized integers with no mode crossing. *)
+      val word : t
+
+      (** The jkind of unboxed native-sized integers with mode crossing. *)
+      val kind_of_unboxed_nativeint : t
+
+      (** The jkind of untagged immediates ([int#]) with no mode crossing. *)
+      val untagged_immediate : t
+
+      (** The jkind of untagged immediates ([int#]) with mode crossing. *)
+      val kind_of_untagged_int : t
+
+      (** The jkind of unboxed 8-bit integers with no mode crossing. *)
+      val bits8 : t
+
+      (** The jkind of unboxed 8-bit integers with mode crossing. *)
+      val kind_of_unboxed_int8 : t
+
+      (** The jkind of unboxed 16-bit integers with no mode crossing. *)
+      val bits16 : t
+
+      (** The jkind of unboxed 16-bit integers with mode crossing. *)
+      val kind_of_unboxed_int16 : t
+
+      (** The jkind of unboxed 32-bit integers with no mode crossing. *)
+      val bits32 : t
+
+      (** The jkind of unboxed 32-bit integers with mode crossing. *)
+      val kind_of_unboxed_int32 : t
+
+      (** The jkind of unboxed 64-bit integers with no mode crossing. *)
+      val bits64 : t
+
+      (** The jkind of unboxed 64-bit integers with mode crossing. *)
+      val kind_of_unboxed_int64 : t
+
+      (** The jkind of block indices with mode crossing. *)
+      val kind_of_idx : t
+
+      (** The jkind of unboxed 128-bit vectors with no mode crossing. *)
+      val vec128 : t
+
+      (** The jkind of unboxed 256-bit vectors with no mode crossing. *)
+      val vec256 : t
+
+      (** The jkind of unboxed 256-bit vectors with no mode crossing. *)
+      val vec512 : t
+
+      (** The jkind of unboxed 128-bit vectors with mode crossing. *)
+      val kind_of_unboxed_128bit_vectors : t
+
+      (** The jkind of unboxed 256-bit vectors with mode crossing. *)
+      val kind_of_unboxed_256bit_vectors : t
+
+      (** The jkind of unboxed 512-bit vectors with mode crossing. *)
+      val kind_of_unboxed_512bit_vectors : t
+
+      (** A list of the core builtin jkinds exposed by predef. *)
+      val builtins : t list
+
+      (** A superset of [builtins], which also includes common kinds like
+          [float64 mod everything] (the kind of [float#]). Used in printing and
+          for memoization in subst. *)
+      val common_jkinds : t list
+
+      val of_attribute : Builtin_attributes.jkind_attribute -> t
+    end
+  end
+
+  module Violation : sig
+    module Sub_failure_reason : sig
+      type t =
+        | Axis_disagreement of Jkind_axis.Axis.packed
+        | Layout_disagreement
+        | With_bounds_on_left
+        | Constrain_ran_out_of_fuel
+    end
+
+    type violation =
+      | Not_a_subjkind :
+          (allowed * 'r1) jkind * ('l * 'r2) jkind * Sub_failure_reason.t list
+          -> violation
+      | No_intersection : 'd jkind * ('l * allowed) jkind -> violation
+
+    type nonrec t =
+      { violation : violation;
+        missing_cmi : Path.t option
+      }
+    (* [missing_cmi]: is this error a result of a missing cmi file?
+       This is stored separately from the [violation] because it's
+       used to change the behavior of [value_kind], and we don't
+       want that function to inspect something that is purely about
+       the choice of error message. (Though the [Path.t] payload *is*
+       indeed just about the payload.) *)
+  end
+
+  module Jkind : sig
+    include Allowance.Allow_disallow with type (_, _, 'd) sided = 'd jkind
+
+    val try_allow_r : ('l * 'r) jkind -> ('l * allowed) jkind option
+
+    (** Construct a jkind from a constant jkind, at quality [Not_best] *)
+    val of_const :
+      annotation:Parsetree.jkind_annotation option ->
+      why:Jkind_intf.History.creation_reason ->
+      quality:'d jkind_quality ->
+      ran_out_of_fuel_during_normalize:bool ->
+      'd Const.t ->
+      'd jkind
+
+    (** [get_const] returns a [Const.t] if the layout has no sort variables,
+        returning [None] otherwise *)
+    val get_const : 'd jkind -> 'd Const.t option
+
+    (** Construct a jkind from a builtin kind, at quality [Best]. *)
+    val of_builtin :
+      why:Jkind_intf.History.creation_reason ->
+      Const.Builtin.t -> ('a * disallowed) jkind
+
+    val fresh_jkind :
+      (allowed * allowed) jkind_desc ->
+      annotation:Parsetree.jkind_annotation option ->
+      why:Jkind_intf.History.creation_reason ->
+      ('a * 'b) jkind
+
+    val fresh_jkind_poly :
+      ('a * 'b) jkind_desc ->
+      annotation:Parsetree.jkind_annotation option ->
+      why:Jkind_intf.History.creation_reason ->
+      ('a * 'b) jkind
+
+    val mk_annot : string -> Parsetree.jkind_annotation option
+
+    val mark_best : ('l * 'r) jkind -> ('l * disallowed) jkind
+
+    val map_type_expr :
+      (type_expr -> type_expr) -> ('l * 'r) jkind -> ('l * 'r) jkind
+
+    val instance : jkind_lr -> jkind_lr
+
+    val has_with_bounds : jkind_l -> bool
+
+    module Builtin : sig
+      val any : why:Jkind_intf.History.any_creation_reason -> 'd jkind
+      val void :
+        why:Jkind_intf.History.void_creation_reason -> ('l * disallowed) jkind
+      val scannable :
+        why:Jkind_intf.History.scannable_creation_reason -> 'd Types.jkind
+      val value_or_null :
+        why:Jkind_intf.History.value_or_null_creation_reason -> 'd jkind
+      val value : why:Jkind_intf.History.value_creation_reason -> 'd jkind
+      val immutable_data :
+        why:Jkind_intf.History.value_creation_reason -> 'd jkind
+      val sync_data : why:Jkind_intf.History.value_creation_reason -> 'd jkind
+      val mutable_data :
+        why:Jkind_intf.History.value_creation_reason -> 'd jkind
+      val immediate :
+        why:Jkind_intf.History.immediate_creation_reason ->
+        ('l * disallowed) jkind
+      val immediate_or_null :
+        why:Jkind_intf.History.immediate_or_null_creation_reason -> 'd jkind
+      val product :
+        why:Jkind_intf.History.product_creation_reason ->
+        (type_expr * Mode.Modality.Const.t) list ->
+        Jkind_types.Sort.t Jkind_types.Layout.t list ->
+        jkind_l
+      val product_of_sorts :
+        why:Jkind_intf.History.product_creation_reason -> level:int -> int ->
+        jkind_l
+    end
+
+    val add_with_bounds :
+      modality:Mode.Modality.Const.t ->
+      type_expr:type_expr ->
+      jkind_l ->
+      jkind_l
+
+    val for_non_float : why:Jkind_intf.History.value_creation_reason -> 'd jkind
+
+    val for_boxed_record : label_declaration list -> jkind_l
+    (* Shared type-level implementation of Steps B1-B4 from
+       Note [With-bounds for GADTs].  Callers choose the projection target via
+       [projected_params]: declaration parameters for boxed GADTs, or the
+       already-instantiated head arguments for unboxed GADTs. *)
+    val gadt_payload_subst :
+      projected_params:Types.type_expr list ->
+      res_args:Types.type_expr list ->
+      payload_tys:Types.type_expr list ->
+      get_free_vars:(Types.type_expr list -> TypeSet.t) ->
+      (Types.type_expr * Types.type_expr) list
+    val for_boxed_variant :
+      loc:Location.t ->
+      decl_params:Types.type_expr list ->
+      type_apply:
+        (Types.type_expr list ->
+        Types.type_expr ->
+        Types.type_expr list ->
+        Types.type_expr) ->
+      get_free_vars:(Types.type_expr list -> TypeSet.t) ->
+      Types.constructor_declaration list ->
+      Types.jkind_l
+
+    val for_or_null_argument : Ident.t -> 'd jkind
+    val for_variant_with_null_result : Path.t -> type_expr -> jkind_l
+
+    (** The jkind of a float. *)
+    val for_float : Ident.t -> jkind_l
+
+    (** The jkind of a quoted expression, [_ expr]. *)
+    val for_expr : Types.jkind_l
+
+    (** The jkind for [array] type arguments. *)
+    val for_array_argument : jkind_lr
+  end
+
+  include module type of Jkind
+end

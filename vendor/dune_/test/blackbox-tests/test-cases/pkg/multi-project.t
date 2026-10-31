@@ -19,7 +19,7 @@ Multiple projects support
   >  (depends a))
   > EOF
 
-  $ dune_pkg_lock_normalized
+  $ dune pkg lock
   Solution for dune.lock:
   (no dependencies to lock)
 
@@ -27,6 +27,6 @@ This should work without any toplevel projects as well:
 
   $ mkdir b
   $ mv dune-project b
-  $ dune_pkg_lock_normalized
+  $ dune pkg lock
   Solution for dune.lock:
   (no dependencies to lock)

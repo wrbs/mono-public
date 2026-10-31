@@ -1,5 +1,3 @@
-let arg = ref false
-
 let answer_elem ~attrib s =
   Printf.printf "Original name: \t%s\nOCaml name: \t%s\nPoly variant: \t%s\n" s
     ( if attrib then Tyxml_syntax.Name_convention.attrib s
@@ -17,7 +15,7 @@ let spec =
   ]
 
 let usage =
-  "Accepts HTML attributes and elements and returns their tyxml names.Names \
+  "Accepts HTML attributes and elements and returns their tyxml names. Names \
    without option are treated as elements."
 
 let () = Arg.parse spec (answer_elem ~attrib:false) usage

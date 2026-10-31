@@ -12,20 +12,18 @@ Make a package with a substs field
   $ solve with-substs
   Solution for dune.lock:
   - with-substs.0.0.1
-  $ append_to_lockpkg with-substs.0.0.1 <<EOF
+  $ cat >>dune.lock/with-substs.pkg <<EOF
   > (source (copy $PWD/source))
   > EOF
 
 The lockfile should contain the substitute action.
-  $ cat ${default_lock_dir}/with-substs.0.0.1.pkg
+  $ cat dune.lock/with-substs.pkg
   (version 0.0.1)
   
   (build
-   (all_platforms
-    ((action
-      (progn
-       (substitute foo.ml.in foo.ml)
-       (run sh -c "[ -e foo.ml ] && cat foo.ml"))))))
+   (progn
+    (substitute foo.ml.in foo.ml)
+    (run sh -c "[ -e foo.ml ] && cat foo.ml")))
   (source (copy $TESTCASE_ROOT/source))
 
   $ mkdir source

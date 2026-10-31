@@ -65,7 +65,6 @@ module rec Module : sig
 
   type t = {
     source_loc : Odoc_model.Paths.Identifier.SourceLocation.t option;
-    source_loc_jane : Odoc_model.Lang.Source_loc_jane.t option;
     doc : CComment.docs;
     type_ : decl;
     canonical : Odoc_model.Paths.Path.Module.t option;
@@ -116,6 +115,10 @@ and TypeExpr : sig
     type t = { path : Cpath.module_type; substitutions : substitution list }
   end
 
+  module Module : sig
+    type t = { package : Package.t; id : Ident.module_ }
+  end
+
   type label = Odoc_model.Lang.TypeExpr.label
 
   type t =
@@ -130,7 +133,10 @@ and TypeExpr : sig
     | Object of TypeExpr.Object.t
     | Class of Cpath.class_type * t list
     | Poly of string list * t
+    | Quote of t
+    | Splice of t
     | Package of TypeExpr.Package.t
+    | Arrow_functor of label option * Module.t * t
 end =
   TypeExpr
 
@@ -158,7 +164,6 @@ end =
 and Exception : sig
   type t = {
     source_loc : Odoc_model.Paths.Identifier.SourceLocation.t option;
-    source_loc_jane : Odoc_model.Lang.Source_loc_jane.t option;
     doc : CComment.docs;
     args : TypeDecl.Constructor.argument;
     res : TypeExpr.t option;
@@ -220,7 +225,7 @@ and ModuleType : sig
     s_expansion : simple_expansion option;
     s_expr : U.expr;
     s_path : Cpath.module_;
-    s_aliasable : bool
+    s_aliasable : bool;
   }
 
   type expr =
@@ -233,7 +238,6 @@ and ModuleType : sig
 
   type t = {
     source_loc : Odoc_model.Paths.Identifier.SourceLocation.t option;
-    source_loc_jane : Odoc_model.Lang.Source_loc_jane.t option;
     doc : CComment.docs;
     canonical : Odoc_model.Paths.Path.ModuleType.t option;
     expr : expr option;
@@ -292,7 +296,6 @@ and TypeDecl : sig
 
   type t = {
     source_loc : Odoc_model.Paths.Identifier.SourceLocation.t option;
-    source_loc_jane : Odoc_model.Lang.Source_loc_jane.t option;
     doc : CComment.docs;
     canonical : Odoc_model.Paths.Path.Type.t option;
     equation : Equation.t;
@@ -306,7 +309,6 @@ and Value : sig
 
   type t = {
     source_loc : Odoc_model.Paths.Identifier.SourceLocation.t option;
-    source_loc_jane : Odoc_model.Lang.Source_loc_jane.t option;
     doc : CComment.docs;
     type_ : TypeExpr.t;
     value : value;
@@ -378,7 +380,6 @@ and Class : sig
 
   type t = {
     source_loc : Odoc_model.Paths.Identifier.SourceLocation.t option;
-    source_loc_jane : Odoc_model.Lang.Source_loc_jane.t option;
     doc : CComment.docs;
     virtual_ : bool;
     params : TypeDecl.param list;
@@ -395,7 +396,6 @@ and ClassType : sig
 
   type t = {
     source_loc : Odoc_model.Paths.Identifier.SourceLocation.t option;
-    source_loc_jane : Odoc_model.Lang.Source_loc_jane.t option;
     doc : CComment.docs;
     virtual_ : bool;
     params : TypeDecl.param list;
@@ -980,7 +980,8 @@ module Fmt = struct
           (substitution_list c) subs
     | TypeOf (t_desc, _) -> module_type_type_of_desc c ppf t_desc
     | Strengthen (e, p, _) ->
-        Format.fprintf ppf "%a with %a" (u_module_type_expr c) e (module_path c) p
+        Format.fprintf ppf "%a with %a" (u_module_type_expr c) e (module_path c)
+          p
 
   and module_type_expr c ppf mt =
     let open ModuleType in
@@ -1052,7 +1053,7 @@ module Fmt = struct
   and type_decl_constructor_arg c ppf =
     let open TypeDecl.Constructor in
     function
-    | Tuple ts -> type_tuple c ppf ts
+    | Tuple ts -> type_constructor_params c ppf ts
     | Record fs -> type_decl_fields c ppf fs
 
   and type_decl_field c ppf t =
@@ -1071,13 +1072,18 @@ module Fmt = struct
   and type_decl_unboxed_fields c ppf fs =
     fpf ppf "#{ %a }" (fpp_list "; " "%a" (type_decl_unboxed_field c)) fs
 
-  and type_tuple c ppf ts = fpp_list " * " "%a" (type_expr c) ppf ts
+  and type_constructor_params c ppf ts =
+    fpp_list " * " "%a" (type_expr c) ppf ts
 
   and type_param ppf t =
     let desc =
       match t.Odoc_model.Lang.TypeDecl.desc with Any -> "_" | Var n -> n
     and variance =
-      match t.variance with Some Pos -> "+" | Some Neg -> "-" | None -> ""
+      match t.variance with
+      | Some Pos -> "+"
+      | Some Neg -> "-"
+      | Some Bivariant -> "+-"
+      | None -> ""
     and injectivity = if t.injectivity then "!" else "" in
     Format.fprintf ppf "%s%s%s" variance injectivity desc
 
@@ -1085,10 +1091,19 @@ module Fmt = struct
     let pp_sep ppf () = Format.fprintf ppf ", " in
     Format.fprintf ppf "(%a)" (Format.pp_print_list ~pp_sep type_param) ts
 
-  and type_equation c ppf t =
+  and type_equation_manifest c ppf t =
     match t.TypeDecl.Equation.manifest with
     | None -> ()
     | Some m -> Format.fprintf ppf " = %a" (type_expr c) m
+
+  and type_equation_params _c ppf t =
+    match t.TypeDecl.Equation.params with
+    | [] -> ()
+    | ps -> Format.fprintf ppf "%a" type_params ps
+
+  and type_equation c ppf t =
+    Format.fprintf ppf "(params %a)%a" (type_equation_params c) t
+      (type_equation_manifest c) t
 
   and exception_ _c _ppf _e = ()
 
@@ -1136,18 +1151,17 @@ module Fmt = struct
         Format.fprintf ppf "%a * %a" (type_expr c) t (type_expr_list c) ts
     | [] -> ()
 
-  and labeled_type_expr_list c ppf l =
-    let label ppf lbl =
-      match lbl with
-        None -> ()
-      | Some lbl -> Format.fprintf ppf "%s:" lbl
-    in
+  and type_labeled_tuple c ppf l =
     match l with
-    | [ lbl, t ] -> Format.fprintf ppf "%a%a" label lbl (type_expr c) t
-    | (lbl, t) :: ts ->
-      Format.fprintf ppf "%a%a * %a"
-        label lbl (type_expr c) t (labeled_type_expr_list c) ts
+    | [ t ] -> with_label c ppf t
+    | t :: ts ->
+        Format.fprintf ppf "%a * %a" (with_label c) t (type_labeled_tuple c) ts
     | [] -> ()
+
+  and with_label c ppf (l, ty) =
+    match l with
+    | None -> type_expr c ppf ty
+    | Some lbl -> Format.fprintf ppf "%s:%a" lbl (type_expr c) ty
 
   and type_object _c ppf _o = Format.fprintf ppf "(object)"
 
@@ -1184,8 +1198,8 @@ module Fmt = struct
     | Arrow (l, t1, t2) ->
         Format.fprintf ppf "%a(%a) -> %a" type_expr_label l (type_expr c) t1
           (type_expr c) t2
-    | Tuple ts -> Format.fprintf ppf "(%a)" (labeled_type_expr_list c) ts
-    | Unboxed_tuple ts -> Format.fprintf ppf "#(%a)" (labeled_type_expr_list c) ts
+    | Tuple ts -> Format.fprintf ppf "(%a)" (type_labeled_tuple c) ts
+    | Unboxed_tuple ts -> Format.fprintf ppf "#(%a)" (type_labeled_tuple c) ts
     | Constr (p, args) -> (
         match args with
         | [] -> Format.fprintf ppf "%a" (type_path c) p
@@ -1199,7 +1213,14 @@ module Fmt = struct
     | Object x -> type_object c ppf x
     | Class (x, y) -> type_class c ppf (x, y)
     | Poly (_ss, _t) -> Format.fprintf ppf "(poly)"
+    | Quote t -> Format.fprintf ppf "(quote %a)" (type_expr c) t
+    | Splice t -> Format.fprintf ppf "(splice %a)" (type_expr c) t
     | Package x -> type_package c ppf x
+    | Arrow_functor (l, m_arg, t) ->
+        Format.fprintf ppf "%a(%a) -> %a" type_expr_label l (type_module_arg c)
+          m_arg (type_expr c) t
+
+  and type_module_arg _c ppf _m = Format.fprintf ppf "(module_arg)"
 
   and resolved_module_path :
       config -> Format.formatter -> Cpath.Resolved.module_ -> unit =
@@ -2205,7 +2226,6 @@ module Of_Lang = struct
     let open Odoc_model.Lang.TypeDecl in
     {
       TypeDecl.source_loc = ty.source_loc;
-      source_loc_jane = ty.source_loc_jane;
       doc = docs ident_map ty.doc;
       canonical = ty.canonical;
       equation = type_equation ident_map ty.equation;
@@ -2221,7 +2241,7 @@ module Of_Lang = struct
           (List.map (type_decl_constructor ident_map) cs)
     | Record fs -> Record (List.map (type_decl_field ident_map) fs)
     | Record_unboxed_product fs ->
-      Record_unboxed_product (List.map (type_decl_unboxed_field ident_map) fs)
+        Record_unboxed_product (List.map (type_decl_unboxed_field ident_map) fs)
     | Extensible -> Extensible
 
   and type_decl_constructor ident_map t =
@@ -2329,9 +2349,12 @@ module Of_Lang = struct
         Constr (type_path ident_map p, List.map (type_expression ident_map) xs)
     | Arrow (lbl, t1, t2) ->
         Arrow (lbl, type_expression ident_map t1, type_expression ident_map t2)
-    | Tuple ts -> Tuple (List.map (fun (l, t) -> l, type_expression ident_map t) ts)
+    | Tuple ts ->
+        Tuple
+          (List.map (fun (lbl, ty) -> (lbl, type_expression ident_map ty)) ts)
     | Unboxed_tuple ts ->
-        Unboxed_tuple (List.map (fun (l, t) -> l, type_expression ident_map t) ts)
+        Unboxed_tuple
+          (List.map (fun (l, t) -> (l, type_expression ident_map t)) ts)
     | Polymorphic_variant v ->
         Polymorphic_variant (type_expr_polyvar ident_map v)
     | Poly (s, ts) -> Poly (s, type_expression ident_map ts)
@@ -2340,7 +2363,26 @@ module Of_Lang = struct
         Class
           (class_type_path ident_map p, List.map (type_expression ident_map) ts)
     | Object o -> Object (type_object ident_map o)
+    | Quote t -> Quote (type_expression ident_map t)
+    | Splice t -> Splice (type_expression ident_map t)
     | Package p -> Package (type_package ident_map p)
+    | Arrow_functor (lbl, m_arg, t) ->
+        let m_arg' = type_module_arg ident_map m_arg in
+        let ident_map =
+          {
+            ident_map with
+            functor_parameters =
+              Maps.FunctorParameter.add m_arg.Lang.TypeExpr.Module.id
+                m_arg'.TypeExpr.Module.id ident_map.functor_parameters;
+          }
+        in
+        Arrow_functor (lbl, m_arg', type_expression ident_map t)
+
+  and type_module_arg ident_map (m_arg : Lang.TypeExpr.Module.t) :
+      TypeExpr.Module.t =
+    let id = Ident.Of_Identifier.functor_parameter m_arg.id in
+    let package = type_package ident_map m_arg.package in
+    { package; id }
 
   and module_decl ident_map m =
     match m with
@@ -2385,7 +2427,6 @@ module Of_Lang = struct
     let canonical = m.Odoc_model.Lang.Module.canonical in
     {
       Module.source_loc = m.source_loc;
-      source_loc_jane = m.source_loc_jane;
       doc = docs ident_map m.doc;
       type_;
       canonical;
@@ -2452,7 +2493,6 @@ module Of_Lang = struct
     let res = Opt.map (type_expression ident_map) e.res in
     {
       Exception.source_loc = e.source_loc;
-      source_loc_jane = e.source_loc_jane;
       doc = docs ident_map e.doc;
       args;
       res;
@@ -2546,10 +2586,11 @@ module Of_Lang = struct
     | Lang.ModuleType.Strengthen s ->
         let s' =
           ModuleType.
-            { s_expr = u_module_type_expr ident_map s.s_expr;
+            {
+              s_expr = u_module_type_expr ident_map s.s_expr;
               s_path = module_path ident_map s.s_path;
               s_aliasable = s.s_aliasable;
-              s_expansion = option simple_expansion ident_map s.s_expansion
+              s_expansion = option simple_expansion ident_map s.s_expansion;
             }
         in
         ModuleType.Strengthen s'
@@ -2560,7 +2601,6 @@ module Of_Lang = struct
     in
     {
       ModuleType.source_loc = m.source_loc;
-      source_loc_jane = m.source_loc_jane;
       doc = docs ident_map m.doc;
       canonical = m.canonical;
       expr;
@@ -2573,7 +2613,6 @@ module Of_Lang = struct
       doc = docs ident_map v.doc;
       value = v.value;
       source_loc = v.source_loc;
-      source_loc_jane = v.source_loc_jane
     }
 
   and include_ ident_map i =
@@ -2595,7 +2634,6 @@ module Of_Lang = struct
     let expansion = Opt.map (class_signature ident_map) c.expansion in
     {
       Class.source_loc = c.source_loc;
-      source_loc_jane = c.source_loc_jane;
       doc = docs ident_map c.doc;
       virtual_ = c.virtual_;
       params = c.params;
@@ -2623,7 +2661,6 @@ module Of_Lang = struct
     let expansion = Opt.map (class_signature ident_map) t.expansion in
     {
       ClassType.source_loc = t.source_loc;
-      source_loc_jane = t.source_loc_jane;
       doc = docs ident_map t.doc;
       virtual_ = t.virtual_;
       params = t.params;
@@ -2703,7 +2740,6 @@ module Of_Lang = struct
     let manifest = module_path ident_map t.manifest in
     {
       Module.source_loc = None;
-      source_loc_jane = None;
       doc = docs ident_map t.doc;
       type_ = Alias (manifest, None);
       canonical = None;
@@ -2825,7 +2861,6 @@ end
 let module_of_functor_argument (arg : FunctorParameter.parameter) =
   {
     Module.source_loc = None;
-    source_loc_jane = None;
     doc = { elements = []; warnings_tag = None };
     type_ = ModuleType arg.expr;
     canonical = None;

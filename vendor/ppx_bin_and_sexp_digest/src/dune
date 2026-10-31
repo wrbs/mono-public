@@ -1,0 +1,8 @@
+(library
+ (name ppx_bin_and_sexp_digest)
+ (public_name ppx_bin_and_sexp_digest)
+ (kind ppx_rewriter)
+ (libraries ppx_bin_prot.shape-expander ppx_sexp_digest.expander ppxlib)
+ (ppx_runtime_libraries base.md5)
+ (preprocess
+  (pps ppxlib.metaquot)))

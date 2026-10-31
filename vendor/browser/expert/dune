@@ -1,0 +1,7 @@
+(library
+ (name browser_expert)
+ (public_name browser.expert)
+ (libraries browser_js_types browser_manually_written_bindings browser_types
+   js_of_ocaml private_browser_bindings_shared)
+ (preprocess
+  (pps js_of_ocaml-ppx)))

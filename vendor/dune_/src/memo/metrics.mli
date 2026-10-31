@@ -1,5 +1,7 @@
 (** Various performance metrics. *)
 
+open! Stdune
+
 module Counter : sig
   type t
 

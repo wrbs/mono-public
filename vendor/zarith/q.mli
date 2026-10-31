@@ -23,8 +23,8 @@
 (** {1 Types} *)
 
 type t : immutable_data = {
-    global_ num: Z.t; (** Numerator. *)
-    global_ den: Z.t; (** Denominator, >= 0 *)
+    num: Z.t @@ global; (** Numerator. *)
+    den: Z.t @@ global; (** Denominator, >= 0 *)
   }
 (** A rational is represented as a pair numerator/denominator, reduced to
     have a non-negative denominator and no common factor.
@@ -100,7 +100,7 @@ type kind =
     whether the numerator and/or denominator is null.
  *)
 
-val classify: local_ t -> kind
+val classify: t @ local -> kind
 (** Determines the kind of a rational. *)
 
 val is_real: t -> bool
@@ -111,9 +111,7 @@ val sign: t -> int
     negative (including -inf), and 0 if it is null or undefined.
  *)
 
-val compare__local : local_ t -> local_ t -> int
-
-val compare: t -> t -> int
+val compare: t @ local -> t @ local -> int
 (** [compare x y] compares [x] to [y] and returns 1 if [x] is strictly
     greater that [y], -1 if it is strictly smaller, and 0 if they are
     equal.
@@ -127,9 +125,7 @@ val compare: t -> t -> int
     the ordering of rationals.
  *)
 
-val equal__local : local_ t -> local_ t -> bool
-
-val equal: t -> t -> bool
+val equal: t @ local -> t @ local -> bool
 (** Equality testing.
     Unlike [compare], this follows IEEE semantics: [undef] <> [undef].
  *)
@@ -140,16 +136,16 @@ val min: t -> t -> t
 val max: t -> t -> t
 (** Returns the largest of its arguments. *)
 
-val leq: t -> t -> bool
+val leq: t @ local -> t @ local -> bool
 (** Less than or equal. [leq undef undef] resturns false. *)
 
-val geq: t -> t -> bool
+val geq: t @ local -> t @ local -> bool
 (** Greater than or equal. [leq undef undef] resturns false. *)
 
-val lt: t -> t -> bool
+val lt: t @ local -> t @ local -> bool
 (** Less than (not equal). *)
 
-val gt: t -> t -> bool
+val gt: t @ local -> t @ local -> bool
 (** Greater than (not equal). *)
 
 
@@ -278,20 +274,20 @@ val (~$$): Z.t -> t
 val (///): Z.t -> Z.t -> t
 (** Creates a rational from two [Z.t]. *)
 
-val (=): t -> t -> bool
+val (=): t @ local -> t @ local -> bool
 (** Same as [equal]. *)
 
-val (<): t -> t -> bool
+val (<): t @ local -> t @ local -> bool
 (** Same as [lt]. *)
 
-val (>): t -> t -> bool
+val (>): t @ local -> t @ local -> bool
 (** Same as [gt]. *)
 
-val (<=): t -> t -> bool
+val (<=): t @ local -> t @ local -> bool
 (** Same as [leq]. *)
 
-val (>=): t -> t -> bool
+val (>=): t @ local -> t @ local -> bool
 (** Same as [geq]. *)
 
-val (<>): t -> t -> bool
+val (<>): t @ local -> t @ local -> bool
 (** [a <> b] is equivalent to [not (equal a b)]. *)

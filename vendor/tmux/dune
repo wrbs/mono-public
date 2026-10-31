@@ -1,0 +1,6 @@
+(library
+ (name tmux)
+ (public_name tmux)
+ (libraries async core core_unix jane_term_types core_unix.time_float_unix)
+ (preprocess
+  (pps ppx_jane)))

@@ -9,6 +9,8 @@
 (*                                                                        *)
 (**************************************************************************)
 
+module Re = Dune_re
+
 module type SET = sig
   include Set.S
   val map: (elt -> elt) -> t -> t

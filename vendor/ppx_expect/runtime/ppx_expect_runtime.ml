@@ -8,6 +8,10 @@ let () =
     Stdlib.Sys.chdir (force Current_file.initial_dir);
     Test_node.Global_results_table.process_each_file
       ~f:(fun ~filename ~test_nodes ~postprocess ->
+        (* Under dune, [-source-tree-root] is the workspace root (from
+           ppx_inline_test's backend flags) while [filename] is relative to the
+           runner's cwd (the library dir), so joining them gives a path that doesn't
+           exist. Use [filename] as is, as previous releases did. *)
         Write_corrected_file.f
           test_nodes
           ~use_color:(Ppx_inline_test_lib.use_color ())

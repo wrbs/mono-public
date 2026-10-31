@@ -33,25 +33,24 @@ open Typedtree
 let tail_operator = function
   | { exp_desc =
         Texp_ident
-          ( _,
-            _,
-            { Types.val_kind =
-                Types.Val_prim
-                  { Primitive.prim_name = "%sequand" | "%sequor"; _ };
-              _
-            },
-            _,
-            _ );
+          { desc =
+              { Types.val_kind =
+                  Types.Val_prim
+                    { Primitive.prim_name = "%sequand" | "%sequor"; _ };
+                _
+              };
+            _
+          };
       _
     } -> true
   | _ -> false
 
 let expr_tail_positions = function
-  | Texp_apply (callee, args, _, _, _) when tail_operator callee -> begin
-    match List.last args with
+  | Texp_apply (callee, args, _, _, _) when tail_operator callee ->
+    begin match List.last args with
     | None | Some (_, Omitted _) -> []
     | Some (_, Arg (expr, _)) -> [ Expression expr ]
-  end
+    end
   | Texp_instvar _
   | Texp_setinstvar _
   | Texp_override _
@@ -94,7 +93,8 @@ let expr_tail_positions = function
   | Texp_hole _
   | Texp_quotation _
   | Texp_antiquotation _
-  | Texp_eval _ -> []
+  | Texp_unboxed_unit
+  | Texp_unboxed_bool _ -> []
   | Texp_match (_, _, cs, _) -> List.map cs ~f:(fun c -> Case c)
   | Texp_try (_, cs) -> List.map cs ~f:(fun c -> Case c)
   | Texp_letmodule (_, _, _, _, e)
@@ -106,6 +106,7 @@ let expr_tail_positions = function
   | Texp_open (_, e) -> [ Expression e ]
   | Texp_ifthenelse (_, e1, Some e2) -> [ Expression e1; Expression e2 ]
   | Texp_exclave e -> [ Expression e ]
+  | Texp_apply_layout (e, _) -> [ Expression e ]
 
 let tail_positions = function
   | Expression expr -> expr_tail_positions expr.exp_desc

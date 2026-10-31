@@ -1,17 +1,16 @@
 (library
  (name dune_rpc_impl)
  (libraries
+  stdune
+  promote
+  unix
+  fiber
   csexp_rpc
-  dune_console
-  dune_engine
-  dune_lang
+  dune_stats
   dune_rpc_client
+  dune_console
+  dune_util
   dune_rpc_private
   dune_rpc_server
-  dune_trace
-  dune_util
-  fiber
-  promote
-  stdune
-  unix)
+  dune_engine)
  (synopsis "Dune's rpc server + a usable client"))

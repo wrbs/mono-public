@@ -77,10 +77,22 @@ val from_channel :
 val from_string :
   prims:string array -> debug:Instruct.debug_event list array -> string -> Code.program
 
+val normalize_bytecode : string -> string
+
 val predefined_exceptions : unit -> Code.program * Unit_info.t
+
+type bytesections =
+  { symb : Ocaml_compiler.Symtable.GlobalMap.t
+  ; crcs : Ocaml_compiler.Import_info.table
+  ; prim : string list
+  ; dlpt : string list
+  }
+
+val read_crcs : in_channel -> Ocaml_compiler.Import_info.t list
 
 val link_info :
      symbols:Ocaml_compiler.Symtable.GlobalMap.t
   -> primitives:StringSet.t
   -> crcs:Ocaml_compiler.Import_info.t list
+  -> num_globals:int
   -> Code.program

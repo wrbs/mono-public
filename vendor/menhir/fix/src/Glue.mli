@@ -99,11 +99,6 @@ module ArraysAsImperativeMaps
   : IMPERATIVE_MAPS with type key = int
                      and type 'data t = 'data option array
 
-module ArraysAsImperativeMapsWithNumbering
-  (K : NUMBERING)
-     : IMPERATIVE_MAPS with type key = K.t
-                        and type 'data t = 'data option array
-
 (**An implementation of imperative maps as a hash table. *)
 module HashTablesAsImperativeMaps
   (H : HashedType)

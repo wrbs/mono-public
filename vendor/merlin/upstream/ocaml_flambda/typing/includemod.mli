@@ -59,6 +59,7 @@ module Error: sig
     | Class_declarations of
         (Types.class_declaration, class_declaration_symptom) mdiff
     | Modalities of Mode.Modality.error
+    | Jkind_declarations of (jkind_declaration, Includecore.jkind_mismatch) diff
 
   type core_module_type_symptom =
     | Not_an_alias
@@ -89,8 +90,17 @@ module Error: sig
   and arg_functor_param_symptom =
     (Types.functor_parameter, Ident.t) functor_param_symptom
 
+  and functor_params_symptom =
+    | Param of (functor_parameter, unit) functor_param_symptom
+    (** One of the parameters is mismatched *)
+    | Incompatible
+    (** One side is a functor but the other side is not *)
+
   and functor_params_diff =
-    (Types.functor_parameter list * Types.module_type) core_diff
+    (Types.functor_parameter list * Types.module_type,
+     functor_params_symptom) diff
+    (** the return mode of the functor is intentionally omitted, since the diff
+        is only about parameters. *)
 
   and signature_symptom = {
     env: Env.t;
@@ -123,6 +133,7 @@ module Error: sig
     | In_Module_type_substitution of
         Ident.t * (Types.module_type,module_type_declaration_symptom) diff
     | In_Type_declaration of Ident.t * core_sigitem_symptom
+    | In_Jkind_declaration of Ident.t * core_sigitem_symptom
     | In_Expansion of core_module_type_symptom
 end
 type explanation = Env.t * Error.all
@@ -137,6 +148,7 @@ type field_kind =
   | Field_modtype
   | Field_class
   | Field_classtype
+  | Field_jkind
 
 type field_desc = { name: string; kind: field_kind }
 
@@ -153,19 +165,9 @@ val is_runtime_component: Types.signature_item -> bool
 
 type modes = Includecore.mmodes
 
-(** The modes used for compilation unit inclusion check *)
-val modes_unit : modes
-
 (** The modes used for top-level inclusion check, where top-level is similiar to
   a structure *)
 val modes_toplevel : modes
-
-(** Takes the mode of functor argument, returns the [modes] suitable for
-  modal inclusion check against the parameter. *)
-val modes_functor_param : Typedtree.mode_with_locks -> modes
-
-(** The modes used for functor result inclusion check *)
-val modes_functor_res : modes
 
 (* Typechecking *)
 
@@ -207,21 +209,26 @@ val signatures: Env.t -> mark:bool -> modes:modes ->
   signature -> signature -> module_coercion
 
 val include_functor_signatures : Env.t -> mark:bool ->
-  signature -> signature -> (Ident.t * module_coercion) list
+  signature -> signature -> modes:modes -> (Ident.t * module_coercion) list
 
 val check_implementation: Env.t -> modes:modes -> signature -> signature -> unit
 (** Check an implementation against an interface *)
 
 val compunit:
-      Env.t -> mark:bool -> string -> signature ->
-      string -> signature -> Shape.t -> module_coercion * Shape.t
+      Env.t -> mark:bool -> string -> modes:modes ->
+      signature -> string -> signature -> Shape.t -> module_coercion * Shape.t
 
 val compunit_as_argument:
-      Env.t -> string -> signature -> string -> signature -> module_coercion
+      Env.t -> string -> modes:modes -> signature ->
+      string -> signature -> module_coercion
 
 val type_declarations:
   loc:Location.t -> Env.t -> mark:bool ->
   Ident.t -> type_declaration -> type_declaration -> unit
+
+val jkind_declarations:
+  loc:Location.t -> Env.t -> mark:bool ->
+  Ident.t -> jkind_declaration -> jkind_declaration -> unit
 
 val print_coercion: Format.formatter -> module_coercion -> unit
 

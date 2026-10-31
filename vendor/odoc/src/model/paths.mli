@@ -358,6 +358,17 @@ module Identifier : sig
       SourcePage.t * LocalName.t ->
       [> `SourceLocationInternal of SourcePage.t * LocalName.t ] id
   end
+
+  val fresh_include_parent : Signature.t -> Signature.t
+  (** Create a synthetic parent identifier for items inside an include's module
+      type expression. Uses a lowercase module name (illegal in normal OCaml) to
+      ensure no clashes with real identifiers. Each call returns a fresh
+      identifier. *)
+
+  val fresh_module_arg_parent : unit -> Signature.t
+  (** Create a synthetic parent identifier for module arguments, which can't
+      have unique identifier, as they can be introduced multiple times with the
+      same name in a single type expression . *)
 end
 
 (** Normal OCaml paths (i.e. the ones present in types) *)
@@ -463,7 +474,7 @@ module Fragment : sig
 
     type t = Paths_types.Resolved_fragment.any
 
-    val identifier : t -> Identifier.t
+    val identifier : t -> Identifier.t option
 
     val is_hidden : t -> bool
   end
@@ -588,7 +599,7 @@ module rec Reference : sig
 
     type t = Paths_types.Resolved_reference.any
 
-    val identifier : t -> Identifier.t
+    val identifier : t -> Identifier.t option
   end
 
   module Signature : sig

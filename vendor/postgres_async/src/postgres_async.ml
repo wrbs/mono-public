@@ -691,6 +691,14 @@ module Expert_with_command_complete = struct
 
   let login t ~startup_message ~password ~gss_krb_token =
     let user = Protocol.Frontend.StartupMessage.user startup_message in
+    let scram = ref None in
+    let no_password_error mechanism =
+      Stop
+        (Or_pgasync_error.error_string
+           ~error_code:Pgasync_error.Sqlstate.invalid_password
+           [%string
+             "Server requested %{mechanism} password auth, but no password was provided"])
+    in
     catch_write_errors t ~flush_message:Not_required ~f:(fun writer ->
       Protocol.Frontend.Writer.startup_message writer startup_message);
     read_messages t ~handle_message:(fun msg_type iobuf ->
@@ -710,12 +718,58 @@ module Expert_with_command_complete = struct
                   writer
                   (Cleartext_or_md5_hex md5_hex));
               Continue
-            | None ->
-              let s = "Server requested (md5) password, but no password was provided" in
-              Stop
-                (Or_pgasync_error.error_string
-                   ~error_code:Pgasync_error.Sqlstate.invalid_password
-                   s))
+            | None -> no_password_error "md5")
+         | Ok (SASL { mechanisms }) ->
+           if not (Iarray.mem mechanisms Scram_sha256.mechanism ~equal:String.equal)
+           then (
+             let s =
+               sprintf
+                 !"Server offered no supported SASL auth mechanisms: %{sexp:string \
+                   iarray}"
+                 mechanisms
+             in
+             Stop
+               (Or_pgasync_error.error_string
+                  ~error_code:Pgasync_error.Sqlstate.invalid_authorization_specification
+                  s))
+           else (
+             match password with
+             | None -> no_password_error Scram_sha256.mechanism
+             | Some password ->
+               (match !scram with
+                | Some _ -> protocol_error_s [%message "SASLInitial already done"]
+                | None ->
+                  let scram_state = Scram_sha256.create ~password () in
+                  scram := Some scram_state;
+                  catch_write_errors t ~flush_message:Not_required ~f:(fun writer ->
+                    Protocol.Frontend.Writer.password_message
+                      writer
+                      (Sasl_initial_response
+                         { mechanism = Scram_sha256.mechanism
+                         ; initial_response = Scram_sha256.initial_response scram_state
+                         }));
+                  Continue))
+         | Ok (SASLContinue { data }) ->
+           (match !scram with
+            | None -> protocol_error_s [%message "SASLContinue before SASL"]
+            | Some scram ->
+              (match Scram_sha256.final_response scram ~server_first_message:data with
+               | Error err -> protocol_error_of_error err
+               | Ok response ->
+                 catch_write_errors t ~flush_message:Not_required ~f:(fun writer ->
+                   Protocol.Frontend.Writer.password_message
+                     writer
+                     (Sasl_response response));
+                 Continue))
+         | Ok (SASLFinal { data }) ->
+           (match !scram with
+            | None -> protocol_error_s [%message "SASLFinal before SASL"]
+            | Some scram ->
+              (match
+                 Scram_sha256.verify_server_final scram ~server_final_message:data
+               with
+               | Ok () -> Continue
+               | Error err -> protocol_error_of_error err))
          | Ok GSS ->
            (match gss_krb_token with
             | Some token ->
@@ -726,7 +780,7 @@ module Expert_with_command_complete = struct
               let s = "Server requested GSS auth, but no gss_krb_token was provided" in
               Stop
                 (Or_pgasync_error.error_string
-                   ~error_code:Pgasync_error.Sqlstate.invalid_password
+                   ~error_code:Pgasync_error.Sqlstate.invalid_authorization_specification
                    s))
          | Ok other ->
            let s =
@@ -933,7 +987,15 @@ module Expert_with_command_complete = struct
         Tcp.connect ~buffer_age_limit ~interrupt server)
     with
     | Error _ as result -> return result
-    | Ok (_sock, tcp_reader, tcp_writer) ->
+    | Ok (sock, tcp_reader, tcp_writer) ->
+      let%bind () =
+        (* Set SO_KEEPALIVE only for inet sockets, not unix sockets, to match the behavior
+           of libpq (see [postgres/src/interfaces/libpq/fe-connect.c]) *)
+        match%map Tcp.Where_to_connect.remote_address server with
+        | `Unix (_ : string) -> ()
+        | `Inet (_ : Async.Unix.Inet_addr.t * int) ->
+          Socket.setopt sock Socket.Opt.keepalive true
+      in
       (match%bind
          maybe_ssl_wrap
            ~where_to_connect
@@ -2319,6 +2381,8 @@ module Expert = struct
 end
 
 type t = Expert.t [@@deriving sexp_of]
+
+let backend_key = Expert.backend_key
 
 let connect
   ?interrupt

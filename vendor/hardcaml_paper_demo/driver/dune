@@ -1,0 +1,7 @@
+(library
+ (name hardcaml_paper_demo_driver)
+ (public_name hardcaml_paper_demo.driver)
+ (libraries core hardcaml hardcaml_computation_dsl hardcaml_paper_demo_rtl
+   unboxed)
+ (preprocess
+  (pps ppx_jane)))

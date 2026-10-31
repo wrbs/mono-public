@@ -113,6 +113,7 @@ module Sig_component_kind : sig
     | Extension_constructor
     | Class
     | Class_type
+    | Jkind
 
   val to_string : t -> string
 
@@ -141,6 +142,7 @@ module Item : sig
   val extension_constructor : Ident.t -> t
   val class_ : Ident.t -> t
   val class_type : Ident.t -> t
+  val jkind : Ident.t -> t
 
   val print : Format.formatter -> t -> unit
 
@@ -220,6 +222,8 @@ module Predef : sig
 
   val unboxed_type_to_base_layout : unboxed -> base_layout
 
+  val to_base_layout : t -> base_layout
+
   val to_layout : t -> Layout.t
 
   val simd_vec_split_to_byte_size : simd_vec_split -> int
@@ -277,6 +281,10 @@ and desc =
         abstractions inside. To project out a declaration, [Proj_decl] can be
         used. *)
   | Proj_decl of t * Ident.t
+  | Unknown_type
+    (** [Unknown_type] represents an unknown type. *)
+  | At_layout of t * Layout.t
+    (** [At_layout (shape, layout)] represents a shape with a known layout. *)
 
 (** For DWARF type emission to work as expected, we store the layouts in the
     declaration alongside the shapes in those cases where the layout "expands"
@@ -377,6 +385,8 @@ val record : ?uid:Uid.t -> record_kind ->
   (string * Uid.t option * t * Layout.t) list -> t
 val mutrec : ?uid:Uid.t -> t Ident.Map.t -> t
 val proj_decl : ?uid:Uid.t -> t -> Ident.t -> t
+val unknown_type : ?uid:Uid.t -> unit -> t
+val at_layout : ?uid:Uid.t -> t -> Layout.t -> t
 
 
 val set_approximated : approximated:bool -> t -> t
@@ -436,6 +446,9 @@ module Map : sig
 
   val add_class_type : t -> Ident.t -> Uid.t -> t
   val add_class_type_proj : t -> Ident.t -> shape -> t
+
+  val add_jkind : t -> Ident.t -> Uid.t -> t
+  val add_jkind_proj : t -> Ident.t -> shape -> t
 end
 
 val dummy_mod : t

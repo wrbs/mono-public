@@ -78,7 +78,14 @@ let opt conv = function | None -> None | Some x -> Some (conv x)
 
 #if OCAML_VERSION >= (4,10,0)
 
-let rec signature : Types.signature -> signature = fun x -> List.map signature_item x
+let rec signature : Types.signature -> signature = fun x ->
+#if defined OXCAML
+  List.filter_map (function
+    | Types.Sig_jkind _ -> None
+    | si -> Some (signature_item si)) x
+#else
+  List.map signature_item x
+#endif
 
 and signature_item : Types.signature_item -> signature_item = function
   | Types.Sig_value (a,b,c) -> Sig_value (a,b,visibility c)
@@ -88,26 +95,42 @@ and signature_item : Types.signature_item -> signature_item = function
   | Types.Sig_modtype (a,b,c) -> Sig_modtype (a, modtype_declaration b, visibility c)
   | Types.Sig_class (a,b,c,d) -> Sig_class (a,b,c, visibility d)
   | Types.Sig_class_type (a,b,c,d) -> Sig_class_type (a,b,c, visibility d)
+#if defined OXCAML
+  | Types.Sig_jkind _ -> assert false  (* filtered in [signature] *)
+#endif
 
 and visibility : Types.visibility -> visibility = function
   | Types.Hidden -> Hidden
   | Types.Exported -> Exported
 
-and aliasability : Types.Aliasability.t -> Aliasability.t = function
-  | Types.Aliasability.Not_aliasable -> Aliasability.Not_aliasable
-  | Types.Aliasability.Aliasable -> Aliasability.Aliasable
-
 and module_type : Types.module_type -> module_type = function
   | Types.Mty_ident p -> Mty_ident p
   | Types.Mty_signature s -> Mty_signature (signature s)
+#if defined OXCAML
+  (* oxcaml: [Mty_functor] gained a third [Mode.Alloc.lr] argument;
+     odoc has no use for the mode so we drop it. *)
+  | Types.Mty_functor (a, b, _mode) -> Mty_functor(functor_parameter a, module_type b)
+#else
   | Types.Mty_functor (a, b) -> Mty_functor(functor_parameter a, module_type b)
+#endif
   | Types.Mty_alias p -> Mty_alias p
+#if defined OXCAML
   | Types.Mty_strengthen (mty,p,a) ->
       Mty_strengthen (module_type mty, p, aliasability a)
 
+and aliasability : Types.Aliasability.t -> Aliasability.t = function
+  | Types.Aliasability.Not_aliasable -> Aliasability.Not_aliasable
+  | Types.Aliasability.Aliasable -> Aliasability.Aliasable
+#endif
+
 and functor_parameter : Types.functor_parameter -> functor_parameter = function
   | Types.Unit -> Unit
-  | Types.Named (a,b) -> Named (a, module_type b)
+#if defined OXCAML
+  (* oxcaml adds a [Mode.Alloc.lr] third argument that odoc ignores. *)
+  | Types.Named (a, b, _mode) -> Named (a, module_type b)
+#else
+  | Types.Named (a, b) -> Named (a, module_type b)
+#endif
 
 and module_presence : Types.module_presence -> module_presence = function
   | Types.Mp_present -> Mp_present
@@ -256,6 +279,9 @@ let shape_info_of_cmt_infos : Cmt_format.cmt_infos -> (shape * uid_to_loc) optio
     let open Typedtree in
     function
     | Value v -> v.val_loc
+#if OCAML_VERSION >= (5,6,0)
+    | Primitive p -> p.prim_loc
+#endif
     | Value_binding vb -> vb.vb_pat.pat_loc
     | Type t -> t.typ_loc
     | Constructor c -> c.cd_loc
@@ -267,6 +293,9 @@ let shape_info_of_cmt_infos : Cmt_format.cmt_infos -> (shape * uid_to_loc) optio
     | Module_type mt -> mt.mtd_loc
     | Class cd -> cd.ci_id_name.loc
     | Class_type ctd -> ctd.ci_id_name.loc
+#if defined OXCAML
+    | Jkind _ -> Location.none  (* oxcaml: odoc ignores jkind declarations *)
+#endif
   in
   fun x -> Option.map (fun s -> (s, Shape.Uid.Tbl.map x.cmt_uid_to_decl loc_of_declaration)) x.cmt_impl_shape
 #endif
@@ -284,16 +313,22 @@ let shape_info_of_cmt_infos : Cmt_format.cmt_infos -> (shape * uid_to_loc) optio
 
 #endif
 
-#if OCAML_VERSION >= (5,2,0)
+#if defined OXCAML
+
 let compunit_name : Compilation_unit.t -> string = Compilation_unit.name_as_string
+
+let required_compunit_names x = List.map compunit_name x.Cmo_format.cu_required_compunits
+
+#elif OCAML_VERSION >= (5,2,0)
+
+let compunit_name : Cmo_format.compunit -> string = function | Compunit x -> x
 
 let required_compunit_names x = List.map compunit_name x.Cmo_format.cu_required_compunits
 
 #elif OCAML_VERSION >= (4,04,0)
 
-let compunit_name x = Compilation_unit.name_as_string x
-
-let required_compunit_names x = List.map compunit_name x.Cmo_format.cu_required_globals
+let compunit_name x = x
+let required_compunit_names x = List.map Ident.name x.Cmo_format.cu_required_globals
 
 #else
 

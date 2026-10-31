@@ -83,60 +83,76 @@ val mutable_mode : ('l * 'r) Mode.Value.Comonadic.t -> ('l * 'r) Mode.Value.t
     Note on mutability: TBD.
  *)
 
-(** The mod-bounds of a jkind *)
-module Jkind_mod_bounds : sig
-  module Crossing = Mode.Crossing
-  module Externality = Jkind_axis.Externality
-  module Nullability = Jkind_axis.Nullability
-  module Separability = Jkind_axis.Separability
-
-  type t
-
-  val create :
-    Crossing.t->
-    externality:Externality.t ->
-    nullability:Nullability.t ->
-    separability:Separability.t ->
-    t
-
-  val crossing : t -> Crossing.t
-  val externality : t -> Externality.t
-  val nullability : t -> Nullability.t
-  val separability : t -> Separability.t
-
-  val set_crossing : Crossing.t -> t -> t
-  val set_externality : Externality.t -> t -> t
-  val set_nullability : Nullability.t -> t -> t
-  val set_separability : Separability.t -> t -> t
-
-  (** [set_max_in_set bounds axes] sets all the axes in [axes] to their [max] within
-      [bounds] *)
-  val set_max_in_set : t -> Jkind_axis.Axis_set.t -> t
-
-  (** [set_min_in_set bounds axes] sets all the axes in [axes] to their [min] within
-      [bounds] *)
-  val set_min_in_set : t -> Jkind_axis.Axis_set.t -> t
-
-  (** [is_max_within_set bounds axes] returns whether or not all the axes in [axes] are
-      [max] within [bounds] *)
-  val is_max_within_set : t -> Jkind_axis.Axis_set.t -> bool
-  val is_max : t -> bool
-
-  val debug_print : Format.formatter -> t -> unit
-end
-
-
 (** Information tracked about an individual type within the with-bounds for a jkind *)
 module With_bounds_type_info : sig
   (** The axes that the with-bound applies to *)
   type t = { relevant_axes : Jkind_axis.Axis_set.t } [@@unboxed]
+
+  val join : t -> t -> t
 end
+
+(** Types shared by ikind algorithms. *)
+module Rigid_name : sig
+  type unknown_id
+
+  type t =
+    | Atom of
+        { constr : Path.t;
+          arg_index : int
+          (** [arg_index] = 0 refers to the base contribution, and subsequent
+              indices refer to the coefficients of the i-th argument. This
+              is a positional index, not a type-variable id. *)
+        }
+    | KAtom of Path.t
+        (** A jkind-atom path. Unlike [Atom], this refers to a jkind alias
+            path and should be interpreted through jkind lookup in an
+            environment when possible. *)
+    | Param of int
+        (** [Param id] only occurs in formulas for type constructors. Refers to
+            a type-parameter of the constructor, where [id] is the
+            [Types.get_id] of the type variable representing the parameter. *)
+    | Unknown of unknown_id
+        (** An unknown quantity with a given id. Used to model not-best in
+            ikinds. This is used when we couldn't compute a precise ikind,
+            e.g. for a polymorphic variant with conjunctive type --
+            `Constr of (a & b & ...) *)
+
+  (** Ordering on rigid names used in the LDD to order the nodes. *)
+  val compare : t -> t -> int
+
+  val to_string : t -> string
+
+  val atomic : Path.t -> int -> t
+
+  val katom : Path.t -> t
+
+  val param : int -> t
+
+  val unknown : Shape.Uid.t -> t
+
+end
+
+module Ldd : Ldd_intf.S with module Name = Rigid_name
 
 type type_expr
 type row_desc
 type row_field
 type field_kind
 type commutable
+
+type constructor_ikind =
+  { base : Ldd.node;
+    coeffs : Ldd.node array;
+    (** Invariant: [coeffs] are in subtract-normal form, i.e.
+    [coeffs.(i)] is disjoint from [base]. *)
+  }
+
+
+type constructor_ikind_entry =
+  | Constructor_ikind of constructor_ikind
+  | No_constructor_ikind of string
+
+type type_ikind = constructor_ikind_entry
 
 and type_desc =
   | Tvar of { name : string option; jkind : jkind_lr }
@@ -201,6 +217,9 @@ and type_desc =
   | Tsplice of type_expr
   (** [Tsplice t] ==> [$t] *)
 
+  | Tquote_eval of type_expr
+  (** [Tquote_eval t] ==> [<[ t ]> eval] *)
+
   | Tnil
   (** [Tnil] ==> [<...; >] *)
 
@@ -227,6 +246,22 @@ and type_desc =
   (** [Tpoly (ty,tyl)] ==> ['a1... 'an. ty],
       where 'a1 ... 'an are names given to types in tyl
       and occurrences of those types in ty. *)
+
+  | Trepr of type_expr * Jkind_types.Sort.univar list
+  (** [Trepr (ty, sl)] represents layout polymorphism (from [repr_] syntax).
+      [sl] is an ordered list of sort univars that abstract over the layouts of
+      type variables in [ty]. The i-th sort univar in [sl] corresponds
+      positionally to the i-th type variable quantified in [ty] (typically by
+      an inner [Tpoly] node), and appears in the [jkind] field of the
+      corresponding [Tvar] or [Tunivar] node in [ty].
+
+      The ordering of [sl] is semantically significant: two [Trepr] types with
+      the same sort univars in different orders represent incompatible types.
+
+      Example: [(repr_ 'a) (repr_ 'b). 'a -> 'b] translates to
+      [Trepr (Tpoly ('a -> 'b, ['a; 'b]), [s1; s2])] where [s1] and [s2] are
+      sort univars that appear in the jkinds of ['a] and ['b] respectively. *)
+
 
   | Tpackage of Path.t * (Longident.t * type_expr) list
   (** Type of a first-class module (a.k.a package). *)
@@ -335,20 +370,34 @@ and jkind_history =
 (** The types within the with-bounds of a jkind *)
 and with_bounds_types
 
+(** The mod bounds of a jkind *)
+and mod_bounds =
+  { crossing : Mode.Crossing.t;
+    externality: Jkind_axis.Externality.t;
+  }
+
 and 'd with_bounds =
   | No_with_bounds : ('l * 'r) with_bounds
   | With_bounds
     : with_bounds_types -> ('l * Allowance.disallowed) with_bounds
     (** Invariant : there must always be at least one type in this set **)
 
-and ('layout, 'd) layout_and_axes =
-  { layout : 'layout;
-    mod_bounds : Jkind_mod_bounds.t;
+and 'layout jkind_base =
+  | Layout of 'layout
+  | Kconstr of Path.t
+
+and ('layout, 'd) base_and_axes =
+  { base : 'layout jkind_base;
+    mod_bounds : mod_bounds;
     with_bounds : 'd with_bounds
   }
   constraint 'd = 'l * 'r
 
-and 'd jkind_desc = (Jkind_types.Sort.t Jkind_types.Layout.t, 'd) layout_and_axes
+and 'd jkind_const_desc = (Jkind_types.Layout.Const.t, 'd) base_and_axes
+  constraint 'd = 'l * 'r
+and jkind_const_desc_lr = (allowed * allowed) jkind_const_desc
+
+and 'd jkind_desc = (Jkind_types.Sort.t Jkind_types.Layout.t, 'd) base_and_axes
   constraint 'd = 'l * 'r
 
 and jkind_desc_packed = Pack_jkind_desc : ('l * 'r) jkind_desc -> jkind_desc_packed
@@ -382,6 +431,15 @@ and jkind_r = (disallowed * allowed) jkind  (* the jkind expected of a type *)
 and jkind_lr = (allowed * allowed) jkind    (* the jkind of a variable *)
 and jkind_packed = Pack_jkind : ('l * 'r) jkind -> jkind_packed
 
+and jkind_declaration =
+  {
+    jkind_manifest : jkind_const_desc_lr option;
+    jkind_attributes : Parsetree.attributes;
+    jkind_uid : Shape.Uid.t;
+    jkind_loc : Location.t
+  }
+
+val ikinds_todo : string -> type_ikind
 (* A map from [type_expr] to [With_bounds_type_info.t], specifically defined with a
    (best-effort) semantic comparison function on types to be used in the with-bounds of a
    jkind.
@@ -771,6 +829,10 @@ type type_declaration =
        be computed from the decl kind. This happens in
        Ctype.add_jkind_equation. *)
 
+    type_ikind: constructor_ikind_entry;
+    (* Cached constructor ikind polynomial (opaque) populated when jkinds are
+       normalized with ikinds enabled; carries a reason when absent. *)
+
     type_private: private_flag;
     type_manifest: type_expr option;
     type_variance: Variance.t list;
@@ -781,7 +843,9 @@ type type_declaration =
     type_loc: Location.t;
     type_attributes: Parsetree.attributes;
     type_unboxed_default: bool;
-    (* true if the unboxed-ness of this type was chosen by a compiler flag *)
+    (* true if the user did not specify an explicit representation attribute
+       ([@@unboxed] or [@@represent_as_float_array]), so the representation may
+       have been chosen by a compiler flag. *)
     type_uid: Uid.t;
     type_unboxed_version : type_declaration option;
     (* stores the unboxed version of that this type introduces: this is [Some]
@@ -834,7 +898,7 @@ and tag = Ordinary of {src_index: int;  (* Unique name (per type) *)
    to appear in any order in a record, and later stages of the compiler
    re-arrange the block. *)
 and mixed_block_element =
-  | Value
+  | Scannable of Jkind_types.Scannable_axes.t
   | Float_boxed
   (* A [Float_boxed] is a float that's stored flat but boxed upon projection. *)
   | Float64
@@ -867,7 +931,7 @@ and record_representation =
   (* For an inlined record, we record the representation of the variant that
      contains it and the tag/representation of the relevant constructor of that
      variant. *)
-  | Record_boxed of Jkind_types.Sort.Const.t array
+  | Record_boxed
   | Record_float (* All fields are floats *)
   | Record_ufloat
   (* All fields are [float#]s.  Same runtime representation as [Record_float],
@@ -877,6 +941,19 @@ and record_representation =
   (* The record contains a mix of values and unboxed elements. The block
      is tagged such that polymorphic operations will not work.
   *)
+  | Record_dummy of { represent_as_float_array : bool }
+  (* Note [Record_dummy]:
+     We typecheck type declarations before updating their kinds, yet some record
+     representations are kind-dependent. In particular, we don't choose between
+     [Record_boxed], [Record_float], [Record_ufloat], and [Record_mixed] until
+     type declaration jkinds are updated in [update_decls_jkind].
+
+     Until then, we use [Record_dummy], which also tracks whether the
+     declaration has the attribute [@@represent_as_float_array], as we can't
+     check whether the attribute is valid until we know the kinds of the fields
+     (which must all be [float64]).
+
+     After [update_decls_jkind], no record should have this representation. *)
 
 and record_unboxed_product_representation =
   | Record_unboxed_product
@@ -1034,13 +1111,65 @@ module type Wrap = sig
   type 'a t
 end
 
+(** Tracks layout polymorphism state for a value binding. A value is either
+    pending generalization ([pending]) or has a finalized list of layout
+    vars ([determined]) at generic level. An empty list means the value is not
+    layout-polymorphic.
+
+    Layout poly cannot be inferred from usages, so a value description should
+    have determined layout poly. However, in [type_let] we add variables to the
+    environment before type-checking the RHS and generalizing. Therefore, the
+    value description uses a mutable cell that is filled in during
+    generalization. After filling, layout poly is determined and should not be
+    mutated again. We explicitly distinguish the two stages for extra safety. *)
+module Lpoly : sig
+  type t
+
+  (** [determined vars] creates a finalized value with the given generalized
+      layout vars. Pass [[]] for a non-layout-polymorphic value. *)
+  val determined : Jkind_types.Sort.var list -> t
+
+  (** [pending ~loc] creates a value pending layout generalization,
+      where [loc] is the source location that requested polymorphism. *)
+  val pending : loc:Location.t -> t
+
+  (** Assert that layout poly is determined and return the generalized vars. *)
+  val get_exn : t -> Jkind_types.Sort.var list
+
+  (** Returns [true] for [determined []], [false] otherwise.
+      Raise exception if [pending]. *)
+  val is_empty_exn : t -> bool
+
+  (** Dispatch on the state of [t]:
+      - If pending ([pending loc]), call [on_to_generalize loc],
+        transition to finalized with the returned vars.
+      - If finalized ([determined _]), call [on_determined]. *)
+  val generalize
+    :  on_determined:(unit -> unit)
+    -> on_to_generalize:(Location.t -> Jkind_types.Sort.var list)
+    -> t
+    -> unit
+end
+
 module type Wrapped = sig
   type 'a wrapped
 
   type value_description =
     { val_type: type_expr wrapped;                (* Type of the value *)
-      val_modalities: Mode.Modality.t;      (* Modalities on the value *)
+      val_modalities: Mode.Modality.t;
+   (** The modalities on the value in a signature. It is [undefined] in several
+      cases:
+    - The value is not in a structure, so there is no modalities
+      to talk about. For example, adding [let x = ... in] to the environment
+      will have [val_modalities] set to [undefined].
+    - The value was from a structure, but the original modalities
+      have been applied and we have the real mode of the value. The original
+      modalities shouldn't be looked again and is replaced by [undefined]. *)
       val_kind: value_kind;
+      val_lpoly: Lpoly.t wrapped;
+      (** Guaranteed [determined] for all values visible outside [type_let].
+          May be [to_generalize] during intermediate stages of typing a
+          [let poly_] binding. See [Lpoly]. *)
       val_loc: Location.t;
       val_zero_alloc: Zero_alloc.t;
       val_attributes: Parsetree.attributes;
@@ -1050,7 +1179,7 @@ module type Wrapped = sig
   type module_type =
     Mty_ident of Path.t
   | Mty_signature of signature
-  | Mty_functor of functor_parameter * module_type
+  | Mty_functor of functor_parameter * module_type * Mode.Alloc.lr
   | Mty_alias of Path.t
   | Mty_strengthen of module_type * Path.t * Aliasability.t
       (* See comments about the aliasability of strengthening in mtype.ml *)
@@ -1058,9 +1187,11 @@ module type Wrapped = sig
 
   and functor_parameter =
   | Unit
-  | Named of Ident.t option * module_type
+  | Named of Ident.t option * module_type * Mode.Alloc.lr
 
   and signature = signature_item list wrapped
+
+  and persistent_signature = signature * Mode.Staticity.Const.t
 
   and signature_item =
     Sig_value of Ident.t * value_description * visibility
@@ -1071,11 +1202,13 @@ module type Wrapped = sig
   | Sig_modtype of Ident.t * modtype_declaration * visibility
   | Sig_class of Ident.t * class_declaration * rec_status * visibility
   | Sig_class_type of Ident.t * class_type_declaration * rec_status * visibility
+  | Sig_jkind of Ident.t * jkind_declaration * visibility
 
   and module_declaration =
   {
     md_type: module_type;
     md_modalities : Mode.Modality.t;
+    (** Similiar to [val_modalities]; see comments there. *)
     md_attributes: Parsetree.attributes;
     md_loc: Location.t;
     md_uid: Uid.t;
@@ -1100,7 +1233,9 @@ module Map_wrapped(From : Wrapped)(To : Wrapped) : sig
   type mapper =
     {
       map_signature: mapper -> From.signature -> To.signature;
-      map_type_expr: mapper -> type_expr From.wrapped -> type_expr To.wrapped
+      map_type_expr: mapper -> type_expr From.wrapped -> type_expr To.wrapped;
+      map_value_description:
+        mapper -> From.value_description -> To.value_description;
     }
 
   val value_description :
@@ -1156,13 +1291,24 @@ val may_equal_constr :
 
 (* Equality *)
 
-val equal_record_representation :
+(* Note [Ignoring scannable axes in type declaration representations]:
+
+   For record and variant representations to be compatible, they only need to be
+   equal *up to scannable axes.*
+
+   This is safe because the only way that only the scannable axes can differ
+   between type definitions whose kinds match is through type substitution (or
+   perhaps other module typing tricks), which results in one representation
+   being *overapproximate* wrt scannable axes - this result in worse codegen but
+   is still sound. See references to this note. *)
+
+val equal_record_representation_up_to_scannable_axes :
   record_representation -> record_representation -> bool
 
-val equal_record_unboxed_product_representation :
+val equal_record_unboxed_product_representation_up_to_scannable_axes :
   record_unboxed_product_representation -> record_unboxed_product_representation -> bool
 
-val equal_variant_representation :
+val equal_variant_representation_up_to_scannable_axes :
   variant_representation -> variant_representation -> bool
 
 type 'a gen_label_description =
@@ -1218,12 +1364,16 @@ val bound_value_identifiers_and_sorts :
 
 val signature_item_id : signature_item -> Ident.t
 
-val equal_mixed_block_element :
+val equal_mixed_block_element_up_to_scannable_axes :
   mixed_block_element -> mixed_block_element -> bool
+(* CR layouts: this appears to be dead code *)
 val compare_mixed_block_element :
   mixed_block_element -> mixed_block_element -> int
 val mixed_block_element_to_string : mixed_block_element -> string
 val mixed_block_element_to_lowercase_string : mixed_block_element -> string
+
+val equal_mixed_product_shape_up_to_scannable_axes :
+  mixed_product_shape -> mixed_product_shape -> bool
 
 val equal_unsafe_mode_crossing :
   type_equal:(type_expr -> type_expr -> bool) ->
@@ -1272,9 +1422,8 @@ val set_univar: type_expr option ref -> type_expr -> unit
 val link_kind: inside:field_kind -> field_kind -> unit
 val link_commu: inside:commutable -> commutable -> unit
 val set_commu_ok: commutable -> unit
-
-val functor_param_mode : Mode.Alloc.lr
-val functor_res_mode : Mode.Alloc.lr
+val class_mode : Mode.Value.lr
+val toplevel_mode : Mode.Value.lr
 
 (* Merlin specific *)
 
@@ -1287,4 +1436,3 @@ val on_backtrack: (unit -> unit) -> unit
 (** Number of unification variables that have been linked so far.
    Used to estimate the "cost" of unification. *)
 val linked_variables: unit -> int
-

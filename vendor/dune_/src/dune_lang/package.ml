@@ -1,6 +1,33 @@
 open Import
 module Name = Package_name
-module Id = Package_id
+
+module Id = struct
+  module T = struct
+    type t =
+      { name : Name.t
+      ; dir : Path.Source.t
+      }
+
+    let compare { name; dir } pkg =
+      match Name.compare name pkg.name with
+      | Eq -> Path.Source.compare dir pkg.dir
+      | e -> e
+    ;;
+
+    let to_dyn { dir; name } =
+      Dyn.record [ "name", Name.to_dyn name; "dir", Path.Source.to_dyn dir ]
+    ;;
+  end
+
+  include T
+
+  let hash { name; dir } = Tuple.T2.hash Name.hash Path.Source.hash (name, dir)
+  let name t = t.name
+
+  module C = Comparable.Make (T)
+  module Set = C.Set
+  module Map = C.Map
+end
 
 type opam_file =
   | Exists of bool
@@ -30,7 +57,6 @@ type t =
   ; sites : Section.t Site.Map.t
   ; allow_empty : bool
   ; original_opam_file : original_opam_file option
-  ; exclusive_dir : (Loc.t * Path.Source.t) option
   }
 
 (* Package name are globally unique, so we can reasonably expect that there will
@@ -54,7 +80,6 @@ let id t = t.id
 let original_opam_file t = t.original_opam_file
 let set_inside_opam_dir t ~dir = { t with opam_file = Name.file t.id.name ~dir }
 let set_version_and_info t ~version ~info = { t with version; info }
-let exclusive_dir t = t.exclusive_dir
 
 let encode
       (name : Name.t)
@@ -74,7 +99,6 @@ let encode
       ; allow_empty
       ; opam_file = _
       ; original_opam_file = _
-      ; exclusive_dir
       }
   =
   let open Encoder in
@@ -95,10 +119,6 @@ let encode
             (Name.Map.keys deprecated_package_names)
         ; field_l "sites" (pair Site.encode Section.encode) (Site.Map.to_list sites)
         ; field_b "allow_empty" allow_empty
-        ; field_o
-            "dir"
-            (fun (_, dir) -> Path.Source.basename dir |> Dune_sexp.atom_or_quoted_string)
-            exclusive_dir
         ]
   in
   list sexp (string "package" :: fields)
@@ -135,11 +155,6 @@ let decode =
        and+ depopts = field ~default:[] "depopts" (repeat Package_dependency.decode)
        and+ info = Package_info.decode ~since:(2, 0) ()
        and+ tags = field "tags" (enter (repeat string)) ~default:[]
-       and+ exclusive_dir =
-         field_o
-           "dir"
-           (let+ loc, s = Syntax.since Stanza.syntax (3, 21) >>> located string in
-            loc, Path.Source.relative ~error_loc:loc dir s)
        and+ deprecated_package_names =
          name_map
            (Syntax.since Stanza.syntax (2, 0))
@@ -161,7 +176,7 @@ let decode =
        and+ allow_empty = field_b "allow_empty" ~check:(Syntax.since Stanza.syntax (3, 0))
        and+ lang_version = Syntax.get_exn Stanza.syntax in
        let allow_empty = lang_version < (3, 0) || allow_empty in
-       let id = Id.create ~name ~dir in
+       let id = { Id.name; dir } in
        let opam_file = Name.file id.name ~dir:id.dir in
        { id
        ; loc
@@ -179,7 +194,6 @@ let decode =
        ; allow_empty
        ; opam_file
        ; original_opam_file = None
-       ; exclusive_dir
        }
 ;;
 
@@ -207,7 +221,6 @@ let to_dyn
       ; allow_empty
       ; opam_file = _
       ; original_opam_file = _
-      ; exclusive_dir = _
       }
   =
   let open Dyn in
@@ -251,9 +264,8 @@ let create
       ~tags
       ~original_opam_file
       ~deprecated_package_names
-      ~contents_basename
   =
-  let id = Id.create ~name ~dir in
+  let id = { Id.name; dir } in
   { id
   ; loc
   ; version
@@ -270,7 +282,5 @@ let create
   ; allow_empty
   ; opam_file = Name.file name ~dir
   ; original_opam_file
-  ; exclusive_dir =
-      Option.map contents_basename ~f:(fun (loc, s) -> loc, Path.Source.relative dir s)
   }
 ;;

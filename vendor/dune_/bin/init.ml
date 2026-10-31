@@ -70,8 +70,7 @@ let print_completion kind name =
 
 let path =
   let docv = "PATH" in
-  (* CR-someday Alizter: document this option *)
-  Arg.(value & pos 1 (some string) None & info [] ~docv ~doc:None)
+  Arg.(value & pos 1 (some string) None & info [] ~docv)
 ;;
 
 let context_cwd : Init_context.t Term.t =
@@ -119,13 +118,13 @@ end
 let libraries =
   let docv = "LIBRARIES" in
   let doc = "A comma separated list of libraries on which the component depends" in
-  Arg.(value & opt (list atom_conv) [] & info [ "libs" ] ~docv ~doc:(Some doc))
+  Arg.(value & opt (list atom_conv) [] & info [ "libs" ] ~docv ~doc)
 ;;
 
 let pps =
   let docv = "PREPROCESSORS" in
   let doc = "A comma separated list of ppx preprocessors used by the component" in
-  Arg.(value & opt (list atom_conv) [] & info [ "ppx" ] ~docv ~doc:(Some doc))
+  Arg.(value & opt (list atom_conv) [] & info [ "ppx" ] ~docv ~doc)
 ;;
 
 let public : Public_name.t option Term.t =
@@ -137,14 +136,13 @@ let public : Public_name.t option Term.t =
   Arg.(
     value
     & opt ~vopt:(Some Public_name.Use_name) (some Public_name.conv) None
-    & info [ "public" ] ~docv ~doc:(Some doc))
+    & info [ "public" ] ~docv ~doc)
 ;;
 
 let common : Component.Options.Common.t Term.t =
   let+ name =
     let docv = "NAME" in
-    (* CR-someday Alizter: document this option *)
-    Arg.(required & pos 0 (some component_name_conv) None & info [] ~docv ~doc:None)
+    Arg.(required & pos 0 (some component_name_conv) None & info [] ~docv)
   and+ public = public
   and+ libraries = libraries
   and+ pps = pps in
@@ -155,8 +153,7 @@ let common : Component.Options.Common.t Term.t =
 let project_common : Component.Options.Common.t Term.t =
   let+ project_name =
     let docv = "NAME" in
-    (* CR-someday Alizter: document this option *)
-    Arg.(required & pos 0 (some project_name_conv) None & info [] ~docv ~doc:None)
+    Arg.(required & pos 0 (some project_name_conv) None & info [] ~docv)
   and+ libraries = libraries
   and+ pps = pps in
   let public = Dune_project_name.to_string_hum project_name in
@@ -180,7 +177,7 @@ let inline_tests : bool Term.t =
     "Whether to use inline tests. Only applicable for $(b,library) and $(b,project) \
      components."
   in
-  Arg.(value & flag & info [ "inline-tests" ] ~docv ~doc:(Some doc))
+  Arg.(value & flag & info [ "inline-tests" ] ~docv ~doc)
 ;;
 
 let opt_default ~default term = Term.(const (Option.value ~default) $ term)
@@ -248,7 +245,7 @@ let project =
          Arg.(
            value
            & opt (some (enum Component.Options.Project.Template.commands)) None
-           & info [ "kind" ] ~docv ~doc:(Some doc))
+           & info [ "kind" ] ~docv ~doc)
      and+ pkg =
        let docv = "PACKAGE_MANAGER" in
        let doc =
@@ -260,7 +257,7 @@ let project =
          Arg.(
            value
            & opt (some (enum Component.Options.Project.Pkg.commands)) None
-           & info [ "pkg" ] ~docv ~doc:(Some doc))
+           & info [ "pkg" ] ~docv ~doc)
      in
      let name =
        match common.public with

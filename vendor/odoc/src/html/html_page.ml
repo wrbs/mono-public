@@ -119,7 +119,7 @@ let default_meta_elements ~config ~url =
     Html.meta ~a:[ Html.a_charset "utf-8" ] ();
     Html.link ~rel:[ `Stylesheet ] ~href:odoc_css_uri ();
     Html.meta
-      ~a:[ Html.a_name "generator"; Html.a_content "odoc %%VERSION%%" ]
+      ~a:[ Html.a_name "generator"; Html.a_content "odoc 3.2.2" ]
       ();
     Html.meta
       ~a:
@@ -202,6 +202,7 @@ let search_urls = %s;
               (Html.cdata_script
                  {|
           document.addEventListener("DOMContentLoaded", function () {
+            var macros = {};
             var elements = Array.from(document.getElementsByClassName("odoc-katex-math"));
             for (var i = 0; i < elements.length; i++) {
               var el = elements[i];
@@ -209,7 +210,7 @@ let search_urls = %s;
               var new_el = document.createElement("span");
               new_el.setAttribute("class", "odoc-katex-math-rendered");
               var display = el.classList.contains("display");
-              katex.render(content, new_el, { throwOnError: false, displayMode: display });
+              katex.render(content, new_el, { throwOnError: false, displayMode: display, macros });
               el.replaceWith(new_el);
             }
           });

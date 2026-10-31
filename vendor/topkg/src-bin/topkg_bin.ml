@@ -34,7 +34,7 @@ let man =
 
 let main =
   let default = Term.(ret (const main $ Cli.setup)) in
-  let info = Cmd.info "topkg" ~version:"v1.0.8" ~doc ~sdocs ~exits ~man in
+  let info = Cmd.info "topkg" ~version:"v1.1.1" ~doc ~sdocs ~exits ~man in
   Cmd.group ~default info cmds
 
 let main () =

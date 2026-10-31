@@ -1,10 +1,11 @@
 {
-open Stdune
+open! Stdune
+module Re = Dune_re
 open Re
 
 type t =
   | Literal of string
-  | Re of Re.t
+  | Re of Dune_re.t
 
 let no_slash        = diff any (char '/')
 let no_slash_no_dot = diff any (set "./")

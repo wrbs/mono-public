@@ -1,7 +1,5 @@
 . ../helpers.sh
 
-dev_tool_lock_dir="_build/.dev-tools.locks/ocamlformat"
-
 make_fake_ocamlformat() {
   version=$1
   if [ "$#" -eq "1" ]
@@ -96,18 +94,15 @@ EOF
  (public_name foo))
 EOF
   cat > dune-workspace <<EOF
-(lang dune 3.20)
-
-(lock_dir
- (path "${dev_tool_lock_dir}")
- (repositories mock))
-
-(lock_dir
+(lang dune 3.13)
+ (lock_dir
+  (path "dev-tools.locks/ocamlformat")
   (repositories mock))
-
-(repository
- (name mock)
- (url "file://$(pwd)/mock-opam-repository"))
+  (lock_dir
+   (repositories mock))
+ (repository
+  (name mock)
+  (url "file://$(pwd)/mock-opam-repository"))
 EOF
 }
 

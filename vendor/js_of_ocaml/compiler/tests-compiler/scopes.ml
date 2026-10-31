@@ -31,6 +31,22 @@ let test js_prog =
   print_file (Filetype.path_of_js_file js_min_file);
   run_javascript js_file |> print_endline
 
+let test_no_run js_prog =
+  let js_file =
+    js_prog |> Filetype.js_text_of_string |> Filetype.write_js ~name:"test.js"
+  in
+  let js_min_file =
+    js_file
+    |> jsoo_minify
+         ~flags:[ "--enable"; "stable_var"; "--enable"; "shortvar" ]
+         ~pretty:true
+  in
+  print_file (Filetype.path_of_js_file js_min_file);
+  let js_min_file =
+    js_file |> jsoo_minify ~flags:[ "--enable"; "shortvar" ] ~pretty:true
+  in
+  print_file (Filetype.path_of_js_file js_min_file)
+
 let%expect_test "let inside forloop" =
   test
     {|
@@ -121,6 +137,74 @@ let%expect_test "let inside forof" =
     6
     2 |}]
 
+let%expect_test "forof iterable: loop binding is in TDZ" =
+  (* The loop binding is in the temporal dead zone when the iterable
+     expression is evaluated. The minifier should resolve `items` in
+     the iterable to the loop variable, not the outer one. *)
+  test_no_run
+    {|
+(function () {
+  let items = [1, 2, 3];
+  var result = 0;
+  for(let items of items) {
+    result += items;
+  }
+  console.log(result);
+})()
+|};
+  [%expect
+    {|
+    $ cat "test.min.js"
+      1: (function(){
+      2:    let v1 = [1, 2, 3];
+      3:    var v2 = 0;
+      4:    for(let v3 of v3) v2 += v3;
+      5:    console.log(v2);
+      6:   }
+      7:   ());
+    $ cat "test.min.js"
+      1: (function(){
+      2:    let b = [1, 2, 3];
+      3:    var a = 0;
+      4:    for(let b of b) a += b;
+      5:    console.log(a);
+      6:   }
+      7:   ());
+    |}]
+
+let%expect_test "forin iterable: loop binding is in TDZ" =
+  (* Same as above for for-in. *)
+  test_no_run
+    {|
+(function () {
+  let obj = {a: 1, b: 2};
+  var keys = "";
+  for(let obj in obj) {
+    keys += obj;
+  }
+  console.log(keys);
+})()
+|};
+  [%expect
+    {|
+    $ cat "test.min.js"
+      1: (function(){
+      2:    let v2 = {a: 1, b: 2};
+      3:    var v1 = "";
+      4:    for(let v3 in v3) v1 += v3;
+      5:    console.log(v1);
+      6:   }
+      7:   ());
+    $ cat "test.min.js"
+      1: (function(){
+      2:    let b = {a: 1, b: 2};
+      3:    var a = "";
+      4:    for(let b in b) a += b;
+      5:    console.log(a);
+      6:   }
+      7:   ());
+    |}]
+
 let%expect_test "let inside forawaitof" =
   test
     {|
@@ -200,15 +284,16 @@ let%expect_test "let and var inside class static block" =
       2:    let v2 = 2;
       3:    var v3 = 0;
       4:    class v4{
-      5:       static z = 2;
-      6:       static {let v5 = 3; var v6 = v5; this.z = v6;}
-      7:       getZ(){return this.z;}
-      8:     }
+      5:      static z = 2;
+      6:      static {let v5 = 3; var v6 = v5; this.z = v6;}
+      7:      getZ(){return this.z;}
+      8:    }
       9:    var v1 = new v4;
      10:    console.log(v3, v2, v4.z);
      11:   }
      12:   ());
-    0 2 3 |}]
+    0 2 3
+    |}]
 
 let%expect_test "named class expression" =
   test
@@ -241,16 +326,17 @@ let%expect_test "named class expression" =
       4:    const
       5:     v2 =
       6:       class v5{
-      7:          static z = 2;
-      8:          static {let v6 = 3; var v7 = v6; this.z = v7;}
-      9:          create(){return new v5;}
-     10:          getZ(){return this.z;}
-     11:        };
+      7:         static z = 2;
+      8:         static {let v6 = 3; var v7 = v6; this.z = v7;}
+      9:         create(){return new v5;}
+     10:         getZ(){return this.z;}
+     11:       };
      12:    var v1 = new v2;
      13:    console.log(v3, v2.z, v4.z);
      14:   }
      15:   ());
-    0 3 0 |}]
+    0 3 0
+    |}]
 
 let%expect_test "let inside block" =
   test
@@ -271,11 +357,12 @@ let%expect_test "let inside block" =
       1: (function(){
       2:    let v1 = 2;
       3:    var v2 = 0;
-      4:    {let v3 = 3; var v2 = 4;}
+      4:    {let v3 = 3; v2 = 4;}
       5:    console.log(v2, v1);
       6:   }
       7:   ());
-    4 2 |}]
+    4 2
+    |}]
 
 let%expect_test "functions have local scope" =
   test {|

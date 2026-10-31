@@ -67,12 +67,13 @@ let standalone ~serializable_options ~src =
     Buffer.add_string w "include ";
     Buffer.add_string w mli_file;
     Buffer.add_string w " end\n");
+  (* [src] may have a directory part (e.g. "./foo.css"), which isn't part of the
+     module name *)
+  let generated_module = String.capitalize (Filename.basename generated_name) in
   create_file alias_ml ~f:(fun w ->
-    Buffer.add_string w ("include " ^ String.capitalize generated_name ^ "\n"));
+    Buffer.add_string w ("include " ^ generated_module ^ "\n"));
   create_file alias_mli ~f:(fun w ->
-    Buffer.add_string
-      w
-      ("include module type of " ^ String.capitalize generated_name ^ "\n"))
+    Buffer.add_string w ("include module type of " ^ generated_module ^ "\n"))
 ;;
 
 let command =

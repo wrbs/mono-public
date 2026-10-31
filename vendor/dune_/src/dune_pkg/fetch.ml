@@ -7,26 +7,12 @@ module Curl = struct
       (match Bin.which ~path:(Env_path.path Env.initial) "curl" with
        | Some p -> p
        | None ->
-         let curl = User_message.command "curl" in
-         let sep = Pp.space in
          User_error.raise
-           ~hints:
-             [ Pp.concat
-                 ~sep
-                 [ Pp.text "Install"; curl; Pp.text "with your system package manager." ]
-             ]
-           [ Pp.concat
-               ~sep
-               [ Pp.text "The program"
-               ; curl
-               ; Pp.text "does not appear to be installed. Dune uses"
-               ; curl
-               ; Pp.text "to download packages. Dune requires that the"
-               ; curl
-               ; Pp.text
-                   "executable be located in one of the directories listed in the PATH \
-                    variable."
-               ]
+           ~hints:[ Pp.text "Install curl with your system package manager." ]
+           [ Pp.text
+               "The program \"curl\" does not appear to be installed. Dune uses curl to \
+                download packages. Dune requires that the \"curl\" executable be located \
+                in one of the directories listed in the PATH variable."
            ])
   ;;
 
@@ -48,7 +34,7 @@ module Curl = struct
   let compressed_supported =
     (* We check if curl supports --compressed by running curl -V and checking if
        the output contains the features we need. *)
-    Fiber.Lazy.create (fun () ->
+    Fiber_lazy.create (fun () ->
       let+ lines, _ =
         let stderr_to =
           Process.Io.make_stderr
@@ -68,7 +54,7 @@ module Curl = struct
   ;;
 
   let run ~url ~temp_dir ~output =
-    let* compressed_supported = Fiber.Lazy.force compressed_supported in
+    let* compressed_supported = Fiber_lazy.force compressed_supported in
     let args =
       List.flatten
         [ [ "-L"
@@ -103,20 +89,14 @@ module Curl = struct
           [ Pp.text s ]
         | exception s ->
           [ Pp.textf
-              "Failed to read stderr from file %s"
+              "failed to read stderr form file %s"
               (Path.to_string_maybe_quoted stderr)
           ; Exn.pp s
           ]
       in
       Error
         (User_message.make
-           ([ Pp.concat
-                ~sep:Pp.space
-                [ User_message.command "curl"
-                ; Pp.textf "returned an invalid error code %d" exit_code
-                ]
-            ]
-            @ stderr)))
+           ([ Pp.textf "curl returned an invalid error code %d" exit_code ] @ stderr)))
     else (
       Path.unlink_no_err stderr;
       match
@@ -128,17 +108,12 @@ module Curl = struct
       | None ->
         Error
           (User_message.make
-             [ Pp.concat
-                 ~sep:Pp.space
-                 [ User_message.command "curl"
-                 ; Pp.textf "returned an HTTP code we don't understand: %S" http_code
-                 ]
-             ])
+             [ Pp.textf "curl returned an HTTP code we don't understand: %S" http_code ])
       | Some http_code ->
         if http_code = 200
         then Ok ()
         else
-          Error (User_message.make [ Pp.textf "Download failed with code %d" http_code ]))
+          Error (User_message.make [ Pp.textf "download failed with code %d" http_code ]))
   ;;
 end
 
@@ -146,10 +121,12 @@ type failure =
   | Checksum_mismatch of Checksum.t
   | Unavailable of User_message.t option
 
+let label = "dune-fetch"
+
 let unpack_archive ~archive_driver ~target ~archive =
   Archive_driver.extract archive_driver ~archive ~target
   >>| Result.map_error ~f:(fun () ->
-    Pp.textf "Unable to extract %s" (Path.to_string_maybe_quoted archive))
+    Pp.textf "unable to extract %S" (Path.to_string archive))
 ;;
 
 let check_checksum checksum path =
@@ -203,9 +180,9 @@ let fetch_curl ~unpack:unpack_flag ~checksum ~target (url : OpamUrl.t) =
          let exn =
            User_message.make
              [ Pp.textf
-                 "Failed to unpack archive downloaded from %s"
+                 "failed to unpack archive downloaded from %s"
                  (OpamUrl.to_string url)
-             ; Pp.text "Reason:"
+             ; Pp.text "reason:"
              ; msg
              ]
          in
@@ -249,19 +226,29 @@ let fetch_local ~checksum ~target (url, url_loc) =
 
 let fetch ~unpack ~checksum ~target ~url:(url_loc, url) =
   let event =
-    Dune_trace.(
+    Dune_stats.(
       start (global ()) (fun () ->
-        Dune_trace.Event.Async.fetch
-          ~url:(OpamUrl.to_string url)
-          ~target
-          ~checksum:(Option.map ~f:Checksum.to_string checksum)))
+        { cat = None
+        ; name = label
+        ; args =
+            (let args =
+               [ "url", `String (OpamUrl.to_string url)
+               ; "target", `String (Path.to_string target)
+               ]
+             in
+             Some
+               (match checksum with
+                | None -> args
+                | Some checksum ->
+                  ("checksum", `String (Checksum.to_string checksum)) :: args))
+        }))
   in
   let unsupported_backend s =
     User_error.raise ~loc:url_loc [ Pp.textf "Unsupported backend: %s" s ]
   in
   Fiber.finalize
     ~finally:(fun () ->
-      Dune_trace.finish event;
+      Dune_stats.finish event;
       Fiber.return ())
     (fun () ->
        match url.backend with

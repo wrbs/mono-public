@@ -1,0 +1,101 @@
+open! Core
+
+(* An example of behavior when trying to [%bin_and_sexp_digest: t] for a t that doesn't
+   derive sexp or sexp_grammar *)
+
+type t = Int.t
+
+let s = [%bin_and_sexp_digest: t]
+
+[%%expect
+  {|
+Line _, characters _-_:
+Error: Unbound value sexp_of_t
+Hint: Did you mean sexp_of_int or sexp_of_mat?
+|}]
+
+(* An example of behavior when trying to [%bin_and_sexp_digest: t] for a t that doesn't
+   derive quickcheck *)
+
+type t = Int.t [@@deriving sexp]
+
+let s = [%bin_and_sexp_digest: t]
+
+[%%expect
+  {|
+Line _, characters _-_:
+Error: Unbound value t_sexp_grammar
+Hint: Did you mean int_sexp_grammar?
+|}]
+
+(*********************************)
+(* Permanently Unsupported types *)
+(*********************************)
+
+(* Certain Ptyp_variants *)
+let s = [%bin_and_sexp_digest: [> `A | `B ]]
+
+[%%expect
+  {|
+Line _, characters _-_:
+Error: Type unsupported for ppx [sexp_of] conversion (open polymorphic variant type)
+|}]
+
+let s = [%bin_and_sexp_digest: [< `A | `B ]]
+
+[%%expect
+  {|
+Line _, characters _-_:
+Error: ppx_bin_shape: unsupported type: [< `A  | `B ]
+|}]
+
+(* Ptyp_package *)
+let s = [%bin_and_sexp_digest: (module Int)]
+
+[%%expect
+  {|
+Line _, characters _-_:
+Error: Unsupported sexp_digest payload: Ptyp_package (module Int)
+|}]
+
+(* Ptyp_extension *)
+let s = [%bin_and_sexp_digest: [%bin_digest: int]]
+
+[%%expect
+  {|
+Line _, characters _-_:
+Error: Unsupported sexp_digest payload: Ptyp_extension [%bin_digest : int]
+|}]
+
+(* Ptyp_any *)
+let s = [%bin_and_sexp_digest: _]
+
+[%%expect
+  {|
+Line _, characters _-_:
+Error: Unsupported sexp_digest payload: Ptyp_any _
+|}]
+
+(* Ptyp_var *)
+let s = [%bin_and_sexp_digest: 'a]
+
+[%%expect
+  {|
+Line _, characters _-_:
+Error: Unsupported sexp_digest payload: Ptyp_var 'a
+|}]
+
+(* Ptyp_arrow *)
+let s = [%bin_and_sexp_digest: 'a -> 'b]
+
+[%%expect
+  {|
+Line _, characters _-_:
+Error: Unsupported sexp_digest payload: Ptyp_arrow 'a -> 'b
+|}]
+
+(*=The following types are also unsupported:
+   Ptyp_object
+   Ptyp_class
+   Ptyp_alias
+   Ptyp_poly *)

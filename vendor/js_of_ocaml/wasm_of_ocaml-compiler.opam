@@ -19,14 +19,14 @@ depends: [
   "ppx_expect" {>= "v0.14.2" & with-test}
   "ppxlib" {>= "0.33"}
   "re" {with-test}
-  "cmdliner" {>= "1.1.0"}
+  "cmdliner" {>= "2.0"}
   "opam-format" {with-test}
   "sedlex" {>= "2.3"}
-  "menhir"
+  "menhir" {>= "20180523"}
   "menhirLib"
   "menhirSdk"
   "yojson" {>= "2.1"}
-  "binaryen-bin"
+  "conf-binaryen"
   "odoc" {with-doc}
 ]
 depopts: ["ocamlfind"]
@@ -47,4 +47,9 @@ build: [
     "@install"
     "@doc" {with-doc}
   ]
+  ["cmdliner" "install" "tool-support"
+              "--update-opam-install=%{_:name}%.install"
+              "_build/install/default/bin/wasm_of_ocaml" {os-family != "windows"}
+              "_build/install/default/bin/wasm_of_ocaml.exe:wasm_of_ocaml" {os-family = "windows"}
+              "_build/cmdliner-install"]
 ]

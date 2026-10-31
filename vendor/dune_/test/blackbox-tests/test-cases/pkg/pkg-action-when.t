@@ -5,8 +5,7 @@ Testing the when action in lockfiles
   $ make_lockdir
 
 Case with a mix of uncoditional and conditional actions in a progn action
-
-  $ make_lockpkg test <<EOF
+  $ cat >dune.lock/test.pkg <<'EOF'
   > (version 0.0.1)
   > (install
   >  (progn

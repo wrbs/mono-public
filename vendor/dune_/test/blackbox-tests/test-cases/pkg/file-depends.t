@@ -6,7 +6,9 @@ the files found in files-depend.
 
   $ . ./helpers.sh
   $ make_lockdir
-  $ foo=$PWD/foo make_lockpkg file-depends <<EOF
+
+  $ foo=$PWD/foo
+  > cat > dune.lock/file-depends.pkg <<EOF
   > (version 0.0.1)
   > (build
   >  (system "\| echo Building file-depends
@@ -22,7 +24,7 @@ checksum is not parsable.
 
 Now we make a package depending on file-depends.
 
-  $ make_lockpkg dep <<EOF
+  $ cat > dune.lock/dep.pkg <<EOF
   > (version 0.0.1)
   > (depends file-depends)
   > (build

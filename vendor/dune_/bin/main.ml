@@ -13,33 +13,32 @@ let all : _ Cmdliner.Cmd.t list =
       ; Exec.command
       ; Subst.command
       ; Print_rules.command
-      ; Ocaml.Utop.command
+      ; Utop.command
       ; Promotion.promote
       ; command_alias Printenv.command Printenv.term "printenv"
       ; Help.command
       ; Format_dune_file.command
       ; Upgrade.command
       ; Cache.command
-      ; Ocaml.Top.command
-      ; Ocaml.Ocaml_merlin.command
+      ; Top.command
+      ; Ocaml_merlin.command
       ; Shutdown.command
       ; Diagnostics.command
       ; Monitor.command
       ]
   in
   let groups =
-    [ Ocaml.Ocaml_cmd.group
-    ; Coq.Group.group
-    ; Rocq.group
+    [ Ocaml_cmd.group
+    ; Coq.group
     ; Describe.group
     ; Describe.Show.group
-    ; Rpc.Group.group
+    ; Rpc.group
     ; Internal.group
     ; Init.group
     ; Promotion.group
-    ; Pkg.Group.group
-    ; Pkg.Group.Alias.group
-    ; Tools.Group.group
+    ; Pkg.group
+    ; Pkg.Alias.group
+    ; Tools.group
     ]
   in
   terms @ groups
@@ -109,8 +108,8 @@ let () =
     | Ok _ -> exit_and_flush Success
     | Error _ -> exit_and_flush Error
   with
-  | Dune_engine.Scheduler.Run.Shutdown.E Requested -> exit_and_flush Success
-  | Dune_engine.Scheduler.Run.Shutdown.E (Signal _) -> exit_and_flush Signal
+  | Scheduler.Run.Shutdown.E Requested -> exit_and_flush Success
+  | Scheduler.Run.Shutdown.E (Signal _) -> exit_and_flush Signal
   | exn ->
     let exn = Exn_with_backtrace.capture exn in
     Dune_util.Report_error.report exn;

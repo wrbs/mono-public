@@ -31,17 +31,26 @@
 let version = Sys.ocaml_version
 
 (* When bumping this number, be sure to also update ../typing/magic_numbers.ml *)
-let cmi_magic_number = "Caml1999I571"
+let cmi_magic_number = "Caml1999I578"
 
-let ast_impl_magic_number = "Caml1999M571"
-let ast_intf_magic_number = "Caml1999N571"
-let cmt_magic_number = "Caml1999T571"
-let cms_magic_number = "Caml1999S571"
-let index_magic_number = "Merl2023I571"
+let as_debug_prefix_map_flag = ""
+
+let ast_impl_magic_number = "Caml1999M578"
+let ast_intf_magic_number = "Caml1999N578"
+let cmt_magic_number = "Caml1999T578"
+let cms_magic_number = "Caml1999S578"
+let index_magic_number = "Merl2023I578"
 
 let interface_suffix = ref ".mli"
 
 let max_tag = 245
+
+type name_mangling_scheme =
+  | Flat
+  | Structured
+
+let name_mangling_scheme = Flat
+
 let flat_float_array = false
 
 let reserved_header_bits = 8
@@ -84,3 +93,7 @@ module Magic_numbers = struct
          (fun (key, value) -> (key, Merlin_utils.Std.Json.string value))
          nums)
 end
+
+let config_var _ = failwith "Config.config_var is unimplemented in Merlin"
+
+let print_config _ = failwith "print_config is unimplemented in Merlin"

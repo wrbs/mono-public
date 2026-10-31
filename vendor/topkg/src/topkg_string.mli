@@ -20,10 +20,13 @@ val exists : (char -> bool) -> string -> bool
 
 val find_byte : ?start:int -> char -> string -> int option
 
+val trim : string -> string @@ portable
 val cut : ?rev:bool -> sep:char -> string -> (string * string) option
 val cuts : ?empty:bool -> sep:char -> string -> string list
 
 val with_index_range : ?first:int -> ?last:int -> string -> string
+
+val uppercase_ascii : string -> string @@ portable
 
 val parse_version : string -> (int * int * int * string option) option
 val drop_initial_v : string -> string

@@ -17,6 +17,15 @@
 
 open Types
 open Misc
+module Jkind = Btype.Jkind0
+
+type stage = private int
+
+module StagedPath : sig
+    type t = { stage : stage; path : Path.t }
+
+    module Map : Map.S with type key = t
+end
 
 type value_unbound_reason =
   | Val_unbound_instance_variable
@@ -46,21 +55,20 @@ type summary =
   (** The string set argument of [Env_open] represents a list of module names
       to skip, i.e. that won't be imported in the toplevel namespace. *)
   | Env_functor_arg of summary * Ident.t
-  | Env_constraints of summary * type_declaration Path.Map.t
+  | Env_constraints of summary * type_declaration StagedPath.Map.t
   | Env_copy_types of summary
   | Env_persistent of summary * Ident.t
   | Env_value_unbound of summary * string * value_unbound_reason
   | Env_module_unbound of summary * string * module_unbound_reason
+  | Env_jkind of summary * Ident.t * jkind_declaration
   (* CR zqian: track [add_lock] as well *)
 
 type address = Persistent_env.address =
   | Aunit of Compilation_unit.t
   | Alocal of Ident.t
-  | Adot of address * Jkind.Sort.t array * int
+  | Adot of address * Jkind_types.Sort.t array * int
 
 type t
-
-type stage
 
 val empty: t
 
@@ -109,6 +117,7 @@ val find_modtype_lazy: Path.t -> t -> Subst.Lazy.modtype_declaration
 val find_modtype: Path.t -> t -> modtype_declaration
 val find_class: Path.t -> t -> class_declaration
 val find_cltype: Path.t -> t -> class_type_declaration
+val find_jkind: Path.t -> t -> jkind_declaration
 
 val find_ident_constructor: Ident.t -> t -> constructor_description
 val find_ident_label: 'rcd record_form -> Ident.t -> t -> 'rcd gen_label_description
@@ -121,9 +130,13 @@ val find_type_expansion_opt:
    of the compiler's type-based optimisations. *)
 val find_modtype_expansion: Path.t -> t -> module_type
 val find_modtype_expansion_lazy: Path.t -> t -> Subst.Lazy.module_type
+val find_jkind_expansion : Path.t -> t -> jkind_const_desc_lr
 
 val find_hash_type: Path.t -> t -> type_declaration
 (* Find the "#t" type given the path for "t" *)
+
+val find_implicit_jkind: string -> t -> jkind_lr option
+(* Find the implicit jkind for a type variable name. *)
 
 val find_value_address: Path.t -> t -> address
 val find_module_address: Path.t -> t -> address
@@ -163,6 +176,18 @@ val normalize_instance_names_in_module_path: Path.t -> Path.t
 val reset_required_globals: unit -> unit
 val get_required_globals: unit -> Compilation_unit.t list
 val add_required_global: Path.t -> t -> unit
+val add_required_global_for_quote: Path.t -> t -> unit
+
+(* Return the set of interfaces referenced by quotes *)
+val quoted_intfs: unit -> Compilation_unit.Name.Set.t
+
+(* Compute the transitive closure of the dependencies of these interfaces that
+   have been loaded by typing. Always includes the input interfaces. *)
+val loaded_transitive_dependencies:
+  Compilation_unit.Name.Set.t -> Compilation_unit.Name.Set.t
+
+(* Return the set of implementations referenced by quotes *)
+val quoted_impls: unit -> Compilation_unit.Set.t
 
 val reset_probes: unit -> unit
 val add_probe: string -> unit
@@ -174,6 +199,7 @@ val has_local_constraints: t -> bool
 val mark_value_used: Uid.t -> unit
 val mark_module_used: Uid.t -> unit
 val mark_type_used: Uid.t -> unit
+val mark_jkind_used: Uid.t -> unit
 
 (* Mark mutable variable as mutated *)
 val mark_value_mutated: Uid.t -> unit
@@ -206,7 +232,9 @@ val locks_empty : locks
 
 val locks_is_empty : locks -> bool
 
-val mode_unit : Mode.Value.lr
+(* CR-soon zqian: all persistent modules should always be [Static], at which
+   point the [staticity] parameter can be removed. *)
+val mode_unit : staticity:Mode.Staticity.Const.t -> Mode.Value.lr
 
 type structure_components_reason =
   | Project
@@ -217,6 +245,16 @@ type no_open_quotations_context =
   | Struct_qt
   | Sig_qt
   | Open_qt
+  | Object_field_with_attribute_qt
+  | Variant_tag_with_attribute_qt
+  | Jkind_annotation_qt
+  | Layout_polymorphism_qt
+  | Tconst_pat_qt of Longident.t
+  | Class_type_qt
+
+type none_in_quotations_context =
+  | Constructor
+  | Label
 
 type lookup_error =
   | Unbound_value of Longident.t * unbound_value_hint
@@ -227,6 +265,7 @@ type lookup_error =
   | Unbound_class of Longident.t
   | Unbound_modtype of Longident.t
   | Unbound_cltype of Longident.t
+  | Unbound_jkind of Longident.t
   | Unbound_settable_variable of string
   | Not_a_settable_variable of string
   | Masked_instance_variable of Longident.t
@@ -252,7 +291,8 @@ type lookup_error =
   | Error_from_persistent_env of Persistent_env.error
   | Mutable_value_used_in_closure of Mode.Hint.pinpoint
   | Incompatible_stage of Longident.t * Location.t * stage * Location.t * stage
-  | No_constructor_in_stage of Longident.t * Location.t * int
+  | Unbound_in_stage of
+      none_in_quotations_context * Longident.t * Location.t * stage * stage
 
 
 val lookup_error: Location.t -> t -> lookup_error -> 'a
@@ -295,6 +335,9 @@ val lookup_class:
 val lookup_cltype:
   ?use:bool -> loc:Location.t -> Longident.t -> t ->
   Path.t * class_type_declaration
+val lookup_jkind :
+  ?use:bool -> loc:Location.t -> Longident.t -> t ->
+  Path.t * jkind_declaration
 
 (* When locks are returned instead of walked for modules, the mode remains as
   defined (always legacy), and thus not returned. *)
@@ -305,7 +348,7 @@ val lookup_modtype_path:
   ?use:bool -> loc:Location.t -> Longident.t -> t -> Path.t
 val lookup_module_instance_path:
   ?use:bool -> loc:Location.t -> load:bool -> Global_module.Name.t -> t ->
-    Path.t * locks
+    Path.t * mode_with_locks
 
 val lookup_constructor:
   ?use:bool -> loc:Location.t -> constructor_usage -> Longident.t -> t ->
@@ -331,7 +374,7 @@ val lookup_all_labels_from_type:
 
 type settable_variable =
   | Instance_variable of Path.t * Asttypes.mutable_flag * string * type_expr
-  | Mutable_variable of Ident.t * Mode.Value.r * type_expr * Jkind.Sort.t
+  | Mutable_variable of Ident.t * Mode.Value.r * type_expr * Jkind_types.Sort.t
 
 (** For a mutable variable, [use] means mark as mutated. For an instance
     variable, it means mark as used. *)
@@ -352,6 +395,8 @@ val find_class_by_name:
   Longident.t -> t -> Path.t * class_declaration
 val find_cltype_by_name:
   Longident.t -> t -> Path.t * class_type_declaration
+val find_jkind_by_name:
+  Longident.t -> t -> Path.t * jkind_declaration
 
 val find_constructor_by_name:
   Longident.t -> t -> constructor_description
@@ -422,7 +467,11 @@ val add_modtype_lazy: update_summary:bool ->
    Ident.t -> Subst.Lazy.modtype_declaration -> t -> t
 val add_class: Ident.t -> class_declaration -> t -> t
 val add_cltype: Ident.t -> class_type_declaration -> t -> t
-val add_local_constraint: Path.t -> type_declaration -> t -> t
+val add_local_constraint: stage:stage -> Path.t -> type_declaration -> t -> t
+val add_implicit_jkind: loc:Location.t -> string -> jkind_lr -> t -> t
+val clear_implicit_jkinds : t -> t
+val add_jkind:
+  check:bool -> ?shape:Shape.t -> Ident.t -> jkind_declaration -> t -> t
 
 (* Insertion of persistent signatures *)
 
@@ -487,6 +536,8 @@ val enter_modtype:
 val enter_class: scope:int -> string -> class_declaration -> t -> Ident.t * t
 val enter_cltype:
   scope:int -> string -> class_type_declaration -> t -> Ident.t * t
+val enter_jkind:
+  scope:int -> string -> jkind_declaration -> t -> Ident.t * t
 
 (* Same as [add_signature] but refreshes (new stamp) and rescopes bound idents
    in the process. *)
@@ -522,9 +573,16 @@ val add_unboxed_lock : t -> t
 val enter_quotation : t -> t
 val enter_splice : loc:Location.t -> t -> t
 
+(** Set the environment's stage to a fixed one in the far future.
+    Should only be used in cases where the stage is unknown. *)
+val enter_future : t -> t
+
 val check_no_open_quotations :
   Location.t -> t -> no_open_quotations_context -> unit
 val stage : t -> stage
+
+val mark_toplevel_in_quotations : scope:int -> t -> t
+val path_is_toplevel_in_quotations : t -> Path.t -> bool
 
 (* Initialize the cache of in-core module interfaces. *)
 val reset_cache: preserve_persistent_env:bool -> unit
@@ -539,16 +597,18 @@ val get_unit_name: unit -> Unit_info.t option
 (* Read, save a signature to/from a file. *)
 val read_signature:
   Global_module.Name.t -> Unit_info.Artifact.t
-  -> signature
+  -> persistent_signature
         (* Arguments: module name, file name, [add_binding] flag.
            Results: signature. If [add_binding] is true, creates an entry for
            the module in the environment. *)
 val save_signature:
-  alerts:alerts -> Types.signature -> Compilation_unit.Name.t -> Cmi_format.kind
+  alerts:alerts -> persistent_signature
+  -> Compilation_unit.Name.t -> Cmi_format.kind
   -> Unit_info.Artifact.t -> Cmi_format.cmi_infos_lazy
         (* Arguments: signature, module name, module kind, file name. *)
 val save_signature_with_imports:
-  alerts:alerts -> signature -> Compilation_unit.Name.t -> Cmi_format.kind
+  alerts:alerts -> persistent_signature
+  -> Compilation_unit.Name.t -> Cmi_format.kind
   -> Unit_info.Artifact.t -> Import_info.t array -> Cmi_format.cmi_infos_lazy
         (* Arguments: signature, module name, module kind,
            file name, imported units with their CRCs. *)
@@ -564,13 +624,6 @@ val imports: unit -> Import_info.t list
 
 (* may raise Persistent_env.Consistbl.Inconsistency *)
 val import_crcs: source:string -> Import_info.t array -> unit
-
-(* Require that the provided compilation unit will be available at quotation
-   compile time. *)
-val require_global_for_quote: Compilation_unit.Name.t -> unit
-
-(* Return the set of compilation units referenced by quotes *)
-val quoted_globals: unit -> Compilation_unit.Name.t list
 
 (* Return the set of imports represented as runtime parameters (see
    [Persistent_env.runtime_parameter_bindings] for details) *)
@@ -626,13 +679,14 @@ type error =
 
 exception Error of error
 
-open Format
 
-val report_error: level:int -> formatter -> error -> unit
+val report_error: error Format_doc.format_printer
+val report_error_doc: error Format_doc.printer
 
 val report_lookup_error:
-    level:int -> Location.t -> t -> formatter -> lookup_error -> unit
-
+    Location.t -> t -> lookup_error Format_doc.format_printer
+val report_lookup_error_doc:
+    Location.t -> t -> lookup_error Format_doc.printer
 val in_signature: bool -> t -> t
 
 val is_in_signature: t -> bool
@@ -666,11 +720,15 @@ val same_constr: (t -> type_expr -> type_expr -> bool) ref
 val constrain_type_jkind:
   (t -> type_expr -> jkind_r -> (unit, Jkind.Violation.t) result) ref
 (* Forward declaration to break mutual recursion with Printtyp. *)
-val print_longident: (Format.formatter -> Longident.t -> unit) ref
+val print_longident: Longident.t Format_doc.printer ref
 (* Forward declaration to break mutual recursion with Printtyp. *)
-val print_path: (Format.formatter -> Path.t -> unit) ref
+val print_path: Path.t Format_doc.printer ref
 (* Forward declaration to break mutual recursion with Printtyp. *)
-val print_type_expr: (Format.formatter -> Types.type_expr -> unit) ref
+val print_type_expr: Types.type_expr Format_doc.printer ref
+(* Forward declaration to break mutual recursion with Jkind. *)
+val report_jkind_violation_with_offender:
+  (offender:(Format_doc.formatter -> unit) -> t ->
+   Format_doc.formatter -> Jkind.Violation.t -> unit) ref
 
 
 (** Folds *)
@@ -715,7 +773,7 @@ type address_head =
 
 val address_head : address -> address_head
 
-val print_stage : Format.formatter -> stage -> unit
+val print_stage : Format_doc.formatter -> stage -> unit
 
 val print_with_quote_promote :
-  Format.formatter -> (string * stage * stage) -> unit
+  Format_doc.formatter -> (string * stage * stage) -> unit

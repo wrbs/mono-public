@@ -16,8 +16,6 @@
 (* Typing of type definitions and primitive definitions *)
 
 open Types
-open Format
-
 val transl_type_decl:
     Env.t -> Asttypes.rec_flag -> Parsetree.type_declaration list ->
     Typedtree.type_declaration list * Env.t * Shape.t list
@@ -63,6 +61,14 @@ val transl_with_constraint:
 val transl_package_constraint:
   loc:Location.t -> type_expr -> Types.type_declaration
 
+val transl_jkind_decl:
+  Env.t -> Parsetree.jkind_declaration ->
+  Ident.t * Env.t * Typedtree.jkind_declaration
+
+val transl_jkind_constraint:
+  Ident.t -> Env.t -> Types.jkind_declaration -> Parsetree.jkind_declaration ->
+  Typedtree.jkind_declaration
+
 val abstract_type_decl:
   injective:bool ->
   jkind:jkind_l ->
@@ -70,9 +76,17 @@ val abstract_type_decl:
   type_declaration
 
 val approx_type_decl:
-    Parsetree.type_declaration list -> (Ident.t * type_declaration) list
+    Env.t -> Parsetree.type_declaration list ->
+    (Ident.t * type_declaration) list
+
+val approx_jkind_decl : Parsetree.jkind_declaration -> Types.jkind_declaration
+
 val check_recmod_typedecl:
     Env.t -> Location.t -> Ident.t list -> Path.t -> type_declaration -> unit
+
+val check_recmod_jkind_decl:
+    Env.t -> Location.t -> Ident.t list -> Path.t ->
+    Types.jkind_declaration -> unit
 
 (* Checks that constraints are respected in the [type_declaration] *)
 val check_coherence:
@@ -83,7 +97,7 @@ val is_fixed_type : Parsetree.type_declaration -> bool
 
 val mixed_block_element : Env.t -> type_expr -> _ jkind -> mixed_block_element
 
-type native_repr_kind = Unboxed | Untagged
+type native_repr_kind = Unboxed | Untagged | Unpacked
 
 (* Records reason for a jkind representability requirement in errors. *)
 type jkind_sort_loc =
@@ -95,10 +109,14 @@ type jkind_sort_loc =
   | External
   | External_with_layout_poly
 
-type reaching_type_path = reaching_type_step list
-and reaching_type_step =
-  | Expands_to of type_expr * type_expr
-  | Contains of type_expr * type_expr
+type ('a, 'b) reaching_path = ('a, 'b) reaching_path_step list
+and ('a, 'b) reaching_path_step =
+  | Expands_to of 'a * 'b
+  | Contains of 'b * 'a
+
+type reaching_type_path = (type_expr, type_expr) reaching_path
+type reaching_kind_path =
+  (Path.t, Types.jkind_const_desc_lr) reaching_path
 
 module Mixed_product_kind : sig
   type t =
@@ -164,27 +182,30 @@ type error =
   | Multiple_native_repr_attributes
   | Cannot_unbox_or_untag_type of native_repr_kind
   | Deep_unbox_or_untag_attribute of native_repr_kind
-  | Jkind_mismatch_of_type of type_expr * Jkind.Violation.t
-  | Jkind_mismatch_of_path of Path.t * Jkind.Violation.t
+  | Jkind_mismatch_of_type of Env.t * type_expr * Jkind.Violation.t
+  | Jkind_mismatch_of_path of Env.t * Path.t * Jkind.Violation.t
   | Jkind_mismatch_due_to_bad_inference of
-      type_expr * Jkind.Violation.t * bad_jkind_inference_location
+      Env.t * type_expr * Jkind.Violation.t * bad_jkind_inference_location
   | Jkind_sort of
-      { kloc : jkind_sort_loc
+      { env : Env.t
+      ; kloc : jkind_sort_loc
       ; typ : type_expr
       ; err : Jkind.Violation.t
       }
   | Jkind_empty_record
-  | Non_representable_in_module of Jkind.Violation.t * type_expr
+  | Non_representable_in_module of Env.t * Jkind.Violation.t * type_expr
   | Invalid_jkind_in_block of type_expr * Jkind.Sort.Const.t * jkind_sort_loc
   | Illegal_mixed_product of mixed_product_violation
   | Separability of Typedecl_separability.error
   | Bad_unboxed_attribute of string
+  | Poly_not_yet_implemented
   | Boxed_and_unboxed
   | Nonrec_gadt
   | Invalid_private_row_declaration of type_expr
   | Local_not_enabled
   | Unexpected_layout_any_in_primitive of string
   | Useless_layout_poly
+  | Bad_or_null_attribute of string
   | Zero_alloc_attr_unsupported of Builtin_attributes.zero_alloc_attribute
   | Zero_alloc_attr_non_function
   | Zero_alloc_attr_bad_user_arity
@@ -194,13 +215,19 @@ type error =
       }
   | Non_abstract_reexport of Path.t
   | Unsafe_mode_crossing_on_invalid_type_kind
-  | Illegal_baggage of jkind_l
+  | Illegal_baggage of Env.t * jkind_l
   | No_unboxed_version of Path.t
   | Atomic_field_must_be_mutable of string
   | Constructor_submode_failed of Mode.Value.error
   | Atomic_field_in_mixed_block
   | Non_value_atomic_field
+  | Layout_poly_unsupported
+  | Missing_flatten_floats
+  | Misplaced_flatten_floats
+  | Recursive_jkind_definition of Path.t * Env.t * reaching_kind_path
+  | Bad_represent_as_float_array_attribute
 
 exception Error of Location.t * error
 
-val report_error: formatter -> error -> unit
+val report_error: error Format_doc.format_printer
+val report_error_doc: error Format_doc.printer

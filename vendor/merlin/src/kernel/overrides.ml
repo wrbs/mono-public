@@ -79,7 +79,7 @@ module Override = struct
             ({ txt = Lident "payload"; _ }, payload_expression)
           ],
           None ) ->
-      let open Misc_stdlib.Monad.Result.Syntax in
+      let open Misc.Stdlib.Monad.Result.Syntax in
       let* loc_start = expr_to_pos loc_start_expr in
       let* loc_end = expr_to_pos loc_end_expr in
       let* loc_ghost =
@@ -144,17 +144,17 @@ let get_overrides ~attribute_name (ppx_parsetree : Mreader.parsetree) =
   in
   attributes
   |> List.concat_map ~f:(fun attribute ->
-         match of_attribute ~attribute_name attribute with
-         | Ok overrides -> overrides
-         | Error err ->
-           log ~title:"get_overrides" "%s" err;
-           [])
+      match of_attribute ~attribute_name attribute with
+      | Ok overrides -> overrides
+      | Error err ->
+        log ~title:"get_overrides" "%s" err;
+        [])
   |> List.filter_map ~f:(fun (override : _ Override.t) ->
-         match Override.to_interval override with
-         | Ok interval -> Some interval
-         | Error err ->
-           log ~title:"get_overrides" "%s" err;
-           None)
+      match Override.to_interval override with
+      | Ok interval -> Some interval
+      | Error err ->
+        log ~title:"get_overrides" "%s" err;
+        None)
   |> Overrides_interval_tree.of_alist
 
 let find t ~cursor = Overrides_interval_tree.find t cursor

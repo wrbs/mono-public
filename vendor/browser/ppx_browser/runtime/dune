@@ -1,0 +1,5 @@
+(library
+ (name ppx_browser_runtime)
+ (public_name browser.ppx_browser.runtime)
+ (libraries browser_manually_written_bindings)
+ (preprocess no_preprocessing))

@@ -17,8 +17,7 @@ constraints.
   - a.0.0.1
   - foo.0.0.1
 
-  $ cat ${default_lock_dir}/foo.0.0.1.pkg
+  $ cat dune.lock/foo.pkg
   (version 0.0.1)
   
-  (depends
-   (all_platforms (a)))
+  (depends a)

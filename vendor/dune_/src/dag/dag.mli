@@ -1,5 +1,7 @@
 (** Detection of cycles in dynamic dags *)
 
+open! Stdune
+
 (** Based on the work by:
 
     Michael A. Bender, Jeremy T. Fineman, Seth Gilbert, and Robert E. Tarjan.

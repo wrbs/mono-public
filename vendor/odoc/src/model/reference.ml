@@ -480,7 +480,8 @@ let parse whole_reference_location s :
           | `TField ->
               `Field (parent next_token tokens, FieldName.make_std identifier)
           | `TUnboxedField ->
-              `UnboxedField (parent next_token tokens, UnboxedFieldName.make_std identifier)
+              `UnboxedField
+                (parent next_token tokens, UnboxedFieldName.make_std identifier)
           | `TExtension ->
               `Extension
                 (signature next_token tokens, ExtensionName.make_std identifier)
@@ -592,8 +593,8 @@ let read_path_longident location s =
   in
   Error.catch_warnings (fun () ->
       match loop s (String.length s - 1) with
-      | Some r -> Result.Ok (r :> path)
-      | None -> Result.Error (expected_err_str "a valid path" location))
+      | Some r -> Ok (r :> path)
+      | None -> Error (expected_err_str "a valid path" location))
 
 let read_mod_longident location lid =
   Error.catch_warnings (fun () ->
@@ -603,7 +604,5 @@ let read_mod_longident location lid =
           match p with
           | (`Root (_, (`TUnknown | `TModule)) | `Dot (_, _) | `Module (_, _))
             as r ->
-              Result.Ok r
-          | _ ->
-              Result.Error (expected_err_str "a reference to a module" location)
-          ))
+              Ok r
+          | _ -> Error (expected_err_str "a reference to a module" location)))

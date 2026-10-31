@@ -1,0 +1,6 @@
+(library
+ (name unstring_test)
+ (public_name unstring.test)
+ (libraries core expect_test_helpers_core heterogeneous_list unstring)
+ (preprocess
+  (pps ppx_jane ppx_quick_test)))

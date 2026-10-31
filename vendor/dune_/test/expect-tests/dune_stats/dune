@@ -1,10 +1,10 @@
 (library
- (name dune_trace_tests)
+ (name dune_stats_tests)
  (inline_tests
   (deps
    (sandbox always)))
  (libraries
-  dune_trace
+  dune_stats
   stdune
   unix
   ;; This is because of the (implicit_transitive_deps false)

@@ -100,9 +100,8 @@ let term =
       & info
           [ "all" ]
           ~doc:
-            (Some
-               "Show all running Dune instances together with their root, pids and \
-                number of clients."))
+            "Show all running Dune instances together with their root, pids and number \
+             of clients.")
   in
   Rpc_common.client_term builder
   @@ fun () ->

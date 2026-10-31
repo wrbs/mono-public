@@ -1,65 +1,116 @@
+[@@@B0.include "test/b0/B0.ml"]
+(* See DEVEL.md for an explanation for the above line *)
+
 open B0_kit.V000
+open Result.Syntax
 
 (* OCaml library names *)
 
+let b0_std = B0_ocaml.libname "b0.std"
 let cmdliner = B0_ocaml.libname "cmdliner"
 
 (* Units *)
 
 let cmdliner_lib =
-  let srcs = Fpath.[`Dir (v "src")] in
-  B0_ocaml.lib cmdliner ~doc:"The cmdliner library" ~srcs ~requires:[]
+  B0_ocaml.lib cmdliner ~name:"cmdliner-lib" ~srcs:[`Dir ~/"src"]
+
+(* Tool *)
+
+let cmdliner_tool =
+  let srcs = [`Dir ~/"src/tool"] in
+  B0_ocaml.exe "cmdliner" ~public:true ~srcs ~requires:[cmdliner]
 
 (* Tests *)
 
-let test ?doc t =
-  let srcs = [`File (Fpath.v (Fmt.str "test/%s.ml" t))] in
-  let requires = [cmdliner] in
-  let meta = B0_meta.(empty |> tag test) in
-  B0_ocaml.exe t ?doc ~srcs ~requires ~meta
+let test ?(requires = []) = B0_ocaml.test ~requires:(cmdliner :: requires)
 
-let chorus = test "chorus"
-let cp_ex = test "cp_ex"
-let darcs_ex = test "darcs_ex"
-let revolt = test "revolt"
-let rm_ex = test "rm_ex"
-let tail_ex = test "tail_ex"
-let tail_ex = test "test_nest"
-let test_dupe_stdopts = test "test_dupe_stdopts"
-let test_man = test "test_man"
-let test_man_utf8 = test "test_man_utf8"
-let test_opt_req = test "test_opt_req"
-let test_pos = test "test_pos"
-let test_pos_all = test "test_pos_all"
-let test_pos_left = test "test_pos_left"
-let test_pos_req = test "test_pos_req"
-let test_pos_rev = test "test_pos_rev"
-let test_term_dups = test "test_term_dups"
-let test_with_used_args = test "test_with_used_args"
+let testing = `File ~/"test/testing_cmdliner.ml"
+
+let test_shell = test ~/"test/test_shell.ml" ~run:false
+let test_arg = test ~/"test/test_arg.ml" ~srcs:[testing] ~requires:[b0_std]
+let test_cmd = test ~/"test/test_cmd.ml" ~srcs:[testing] ~requires:[b0_std]
+let test_completion =
+  test ~/"test/test_completion.ml" ~srcs:[testing] ~requires:[b0_std]
+
+let test_deprecation =
+  test ~/"test/test_deprecation.ml" ~srcs:[testing] ~requires:[b0_std]
+
+let test_legacy_prefix =
+  test ~/"test/test_legacy_prefix.ml" ~srcs:[testing] ~requires:[b0_std]
+
+let test_man = test ~/"test/test_man.ml" ~srcs:[testing] ~requires:[b0_std]
+let test_term = test ~/"test/test_term.ml" ~srcs:[testing] ~requires:[b0_std]
+
+let example_chorus = test ~/"test/example_chorus.ml" ~run:false
+let example_cp = test ~/"test/example_cp.ml" ~run:false
+let example_darcs = test ~/"test/example_darcs.ml" ~run:false
+let example_group =
+  let srcs = [testing] and requires = [b0_std] in
+  test ~/"test/example_group.ml" ~run:false ~srcs ~requires
+
+let example_revolt1 = test ~/"test/example_revolt1.ml" ~run:false
+let example_revolt2 = test ~/"test/example_revolt2.ml" ~run:false
+let example_rm = test ~/"test/example_rm.ml" ~run:false
+let example_tail = test ~/"test/example_tail.ml" ~run:false
+
+let blueprint_min = test ~/"test/blueprint_min.ml" ~run:false
+let blueprint_tool = test ~/"test/blueprint_tool.ml" ~run:false
+let blueprint_cmds = test ~/"test/blueprint_cmds.ml" ~run:false
+
+(* Completion scripts update *)
+
+let update_completion_scripts =
+  B0_unit.of_action "update-cmdliner-data" @@ fun env _ ~args:_ ->
+  let bash = B0_env.in_scope_dir env ~/"src/tool/bash-completion.sh" in
+  let zsh = B0_env.in_scope_dir env ~/"src/tool/zsh-completion.sh" in
+  let pwsh = B0_env.in_scope_dir env ~/"src/tool/pwsh-completion.ps1" in
+  let munge_src src =
+    src
+    |> String.replace_all ~sub:"%" ~by:"%%" (* need to escape for fmt *)
+    |> String.replace_first ~sub:"_cmdliner_generic" ~by:"%s"
+  in
+  let ml = B0_env.in_scope_dir env ~/"src/tool/cmdliner_data.ml" in
+  let* bash = Os.File.read bash in
+  let* zsh = Os.File.read zsh in
+  let* pwsh = Os.File.read pwsh in
+  let src = Fmt.str
+      "let strf = Printf.sprintf\n\n\
+       let bash_generic_completion fun_name = strf\n{|%s\
+       |} fun_name\n\n\
+       let zsh_generic_completion fun_name = strf\n{|%s\
+       |} fun_name\n\n\
+       let pwsh_generic_completion fun_name = strf\n{|%s\
+       |} fun_name" (munge_src bash) (munge_src zsh) (munge_src pwsh)
+  in
+  Os.File.write ~force:true ~make_path:false ml src
 
 (* Packs *)
+
+(* FIXME b0 it's unclear whether the fact that the @@@B0.included units
+   show up in B0_unit.list () is a bug or a feature. If it's a bug
+   the filter on B0_unit.in_current_scope could be avoided. *)
 
 let default =
   let meta =
     B0_meta.empty
-    |> B0_meta.(add authors) ["The cmdliner programmers"]
-    |> B0_meta.(add maintainers)
-       ["Daniel Bünzli <daniel.buenzl i@erratique.ch>"]
-    |> B0_meta.(add homepage) "https://erratique.ch/software/cmdliner"
-    |> B0_meta.(add online_doc) "https://erratique.ch/software/cmdliner/doc"
-    |> B0_meta.(add issues) "https://github.com/dbuenzli/cmdliner/issues"
-    |> B0_meta.(add repo) "git+https://erratique.ch/repos/cmdliner.git"
-    |> B0_meta.(add licenses) ["ISC"]
-    |> B0_meta.(add description_tags)
-       ["cli"; "system"; "declarative"; "org:erratique"]
+    |> ~~ B0_meta.authors ["The cmdliner programmers"]
+    |> ~~ B0_meta.maintainers ["Daniel Bünzli <daniel.buenzl i@erratique.ch>"]
+    |> ~~ B0_meta.homepage "https://erratique.ch/software/cmdliner"
+    |> ~~ B0_meta.online_doc "https://erratique.ch/software/cmdliner/doc"
+    |> ~~ B0_meta.issues "https://github.com/dbuenzli/cmdliner/issues"
+    |> ~~ B0_meta.repo "git+https://erratique.ch/repos/cmdliner.git"
+    |> ~~ B0_meta.licenses ["ISC"]
+    |> ~~ B0_meta.description_tags
+      ["cli"; "system"; "declarative"; "org:erratique"]
+    |> ~~ B0_opam.depends [ "ocaml", {|>= "4.08.0"|}; ]
+    |> ~~ B0_opam.build {|[[ make "all" "PREFIX=%{prefix}%" ]]|}
+    |> ~~ B0_opam.install
+{|[[make "install" "BINDIR=%{_:bin}%" "LIBDIR=%{_:lib}%" "DOCDIR=%{_:doc}%"
+         "SHAREDIR=%{share}%" "MANDIR=%{man}%"]
+   [make "install-doc" "LIBDIR=%{_:lib}%" "DOCDIR=%{_:doc}%"
+         "SHAREDIR=%{share}%" "MANDIR=%{man}%"]]|}
     |> B0_meta.tag B0_opam.tag
-    |> B0_meta.add B0_opam.depends
-      [ "ocaml", {|>= "4.08.0"|}; ]
-    |> B0_meta.add B0_opam.build
-      {|[[ make "all" "PREFIX=%{prefix}%" ]]|}
-    |> B0_meta.add B0_opam.install
-      {|[[make "install" "LIBDIR=%{_:lib}%" "DOCDIR=%{_:doc}%"]
-         [make "install-doc" "LIBDIR=%{_:lib}%" "DOCDIR=%{_:doc}%"]]|}
   in
-  B0_pack.make "default" ~doc:"cmdliner package" ~meta ~locked:true @@
-  B0_unit.list ()
+  let locked = false (* So that it looks up b0.std *) in
+  B0_pack.make "default" ~doc:"cmdliner package" ~meta ~locked @@
+  List.filter B0_unit.in_current_scope (B0_unit.list ())

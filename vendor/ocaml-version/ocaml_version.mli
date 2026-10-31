@@ -407,6 +407,12 @@ module Releases : sig
   val v4_14_2 : t
   (** Version 4.14.2 *)
 
+  val v4_14_3 : t
+  (** Version 4.14.3 *)
+
+  val v4_14_4 : t
+  (** Version 4.14.4 *)
+
   val v4_14 : t
   (** Latest release in the 4.14.x series *)
 
@@ -437,11 +443,26 @@ module Releases : sig
   val v5_3 : t
   (** Latest release in the 5.3.x series *)
 
-    val v5_4_0 : t
+  val v5_4_0 : t
   (** Version 5.4.0 *)
+
+  val v5_4_1 : t
+  (** Version 5.4.1 *)
 
   val v5_4 : t
   (** Latest release in the 5.4.x series *)
+
+  val v5_5_0 : t
+  (** Version 5.5.0 *)
+
+  val v5_5_1 : t
+  (** Version 5.5.1 *)
+
+  val v5_5_2 : t
+  (** Version 5.5.2 *)
+
+  val v5_5 : t
+  (** Latest release in the 5.5.x series *)
 
   val all_patches : t list
   (** [all_patches] is an enumeration of all OCaml releases, including every patch release.
@@ -450,6 +471,11 @@ module Releases : sig
   val all : t list
   (** [all] is an enumeration of all the OCaml releases, with the latest patch versions in
       each major and minor release. *)
+
+  val significant : t list
+  (** [significant] is an enumeration of OCaml releases against which packages are
+      regularly tested. This includes a curated base set from the 4.x series, 
+      plus the last two releases from {!all}. *)
 
   val unreleased_betas : t list
   (** Enumerates the latest alpha / beta / release-candidate versions for each {i

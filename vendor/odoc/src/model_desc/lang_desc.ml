@@ -184,10 +184,10 @@ and moduletype_u_expr =
             (t, (o :> Paths.Path.t)),
             Pair (moduletype_type_of_desc, path) )
     | Strengthen (e, x, a) ->
-      C
-        ( "Strengthen",
-          (e, (x :> Paths.Path.t), a),
-          Triple (moduletype_u_expr, path, bool) ))
+        C
+          ( "Strengthen",
+            (e, (x :> Paths.Path.t), a),
+            Triple (moduletype_u_expr, path, bool) ))
 
 and moduletype_t =
   let open Lang.ModuleType in
@@ -358,12 +358,14 @@ and typedecl_representation =
     (function
     | Variant x -> C ("Variant", x, List typedecl_constructor)
     | Record x -> C ("Record", x, List typedecl_field)
-    | Record_unboxed_product x -> C ("Record_unboxed_product", x, List typedecl_unboxed_field)
+    | Record_unboxed_product x ->
+        C ("Record_unboxed_product", x, List typedecl_unboxed_field)
     | Extensible -> C0 "Extensible")
 
 and typedecl_variance =
   let open Lang.TypeDecl in
-  Variant (function Pos -> C0 "Pos" | Neg -> C0 "Neg")
+  Variant
+    (function Pos -> C0 "Pos" | Neg -> C0 "Neg" | Bivariant -> C0 "Bivariant")
 
 and typedecl_param_desc =
   let open Lang.TypeDecl in
@@ -635,6 +637,14 @@ and typeexpr_package =
           List typeexpr_package_substitution );
     ]
 
+and typeexpr_module_arg =
+  let open Lang.TypeExpr.Module in
+  Record
+    [
+      F ("id", (fun t -> t.id), identifier);
+      F ("package", (fun t -> t.package), typeexpr_package);
+    ]
+
 and typeexpr_label =
   let open Lang.TypeExpr in
   Variant
@@ -656,7 +666,8 @@ and typeexpr_t =
             (x1, x2, x3),
             Triple (Option typeexpr_label, typeexpr_t, typeexpr_t) )
     | Tuple x -> C ("Tuple", x, List (Pair (Option string, typeexpr_t)))
-    | Unboxed_tuple x -> C ("Unboxed_tuple", x, List (Pair (Option string, typeexpr_t)))
+    | Unboxed_tuple x ->
+        C ("Unboxed_tuple", x, List (Pair (Option string, typeexpr_t)))
     | Constr (x1, x2) ->
         C ("Constr", ((x1 :> Paths.Path.t), x2), Pair (path, List typeexpr_t))
     | Polymorphic_variant x ->
@@ -665,7 +676,14 @@ and typeexpr_t =
     | Class (x1, x2) ->
         C ("Class", ((x1 :> Paths.Path.t), x2), Pair (path, List typeexpr_t))
     | Poly (x1, x2) -> C ("Poly", (x1, x2), Pair (List string, typeexpr_t))
-    | Package x -> C ("Package", x, typeexpr_package))
+    | Quote x -> C ("Quote", x, typeexpr_t)
+    | Splice x -> C ("Splice", x, typeexpr_t)
+    | Package x -> C ("Package", x, typeexpr_package)
+    | Arrow_functor (lbl, m_arg, t) ->
+        C
+          ( "Arrow_functor",
+            (lbl, m_arg, t),
+            Triple (Option typeexpr_label, typeexpr_module_arg, typeexpr_t) ))
 
 (** {3 Compilation_unit} *)
 
@@ -768,60 +786,6 @@ and child =
     | { Location_.value = Dir s; _ } -> C ("Dir", s, string)
     | { Location_.value = Module s; _ } -> C ("Module", s, string))
 
-(** {3 Source_info} *)
-
-and source_location_t : Paths.Identifier.SourceLocation.t t =
-  Indirect ((fun sl -> (sl :> Paths.Identifier.t)), identifier)
-
-and jump_to_impl_t =
-  let open Lang.Source_info in
-  Variant
-    (function
-    | Unresolved x -> C ("Unresolved", x, path)
-    | Resolved i -> C ("Resolved", i, source_location_t))
-
-and jump_to_t =
-  let open Lang.Source_info in
-  Record
-    [
-      F ("documentation", (fun t -> t.documentation), Option path);
-      F ("implementation", (fun t -> t.implementation), Option jump_to_impl_t);
-    ]
-
-and source_info_annotation_t =
-  let open Lang.Source_info in
-  Variant
-    (function
-    | Definition i -> C ("Definition", i, source_location_t)
-    | Value j -> C ("Value", (j :> Paths.Path.t jump_to), jump_to_t)
-    | Module j -> C ("Module", (j :> Paths.Path.t jump_to), jump_to_t)
-    | ModuleType j -> C ("ModuleType", (j :> Paths.Path.t jump_to), jump_to_t)
-    | Type j -> C ("Type", (j :> Paths.Path.t jump_to), jump_to_t))
-
-and source_info_point_in_file_t : Lang.Source_info.point_in_file t =
-  let open Lang.Source_info in
-  Record
-    [
-      F ("pos_lnum", (fun t -> t.pos_lnum), int);
-      F ("pos_cnum", (fun t -> t.pos_cnum), int);
-    ]
-
-and source_info_location_in_file_t : Lang.Source_info.location_in_file t =
-  let open Lang.Source_info in
-  Record
-    [
-      F ("loc_start", (fun t -> t.loc_start), source_info_point_in_file_t);
-      F ("loc_end", (fun t -> t.loc_end), source_info_point_in_file_t);
-    ]
-
-and source_info_annotation_with_pos_t : Lang.Source_info.annotation Lang.Source_info.with_pos t =
-  Pair (source_info_annotation_t, source_info_location_in_file_t)
-
-and source_info_t : Lang.Source_info.t t =
-  List source_info_annotation_with_pos_t
-
-(** {3 Implementation} *)
-
 and implementation_t =
   let open Lang.Implementation in
   Record
@@ -829,7 +793,6 @@ and implementation_t =
       F ("id", (fun t -> t.id), Option identifier);
       F ("digest", (fun t -> t.digest), Digest.t);
       F ("root", (fun t -> t.root), root);
-      F ("source_info", (fun t -> t.source_info), source_info_t);
     ]
 
 and asset_t =

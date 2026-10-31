@@ -29,9 +29,8 @@ val fatal_errorf: ('a, Format.formatter, unit, 'b) format4 -> 'a
   (** Format the arguments according to the given format string
       and raise [Fatal_error] with the resulting string. *)
 
-val splices_should_not_exist_after_eval : unit -> _
-  (** Raise a [Fatal_error] explaining that a slambda splice shouldn't exist in
-      lambda code after slambda eval has happened. *)
+val fatal_errorf_doc: ('a, Format_doc.formatter, unit, 'b) format4 -> 'a
+  (** Like [fatal_errorf] but using [Format_doc]. *)
 
 exception Fatal_error
 
@@ -106,6 +105,9 @@ val split_last: 'a list -> 'a list * 'a
 val last : 'a list -> 'a option
         (** Return the last element of a list if it's nonempty *)
 
+val repeated_label : (string option * 'a) list -> string option
+       (** Detects a repeated label - for use with labeled tuples. *)
+
 (** {1 Hash table operations} *)
 
 val create_hashtable: int -> ('a * 'b) list -> ('a, 'b) Hashtbl.t
@@ -136,6 +138,8 @@ module Stdlib : sig
     (** If all elements of the given list are [Some _] then [Some xs]
         is returned with the [xs] being the contents of those [Some]s, with
         order preserved.  Otherwise return [None]. *)
+
+    val map : ('a -> 'b) -> 'a t -> 'b t
 
     val map_option : ('a -> 'b option) -> 'a t -> 'b t option
     (** [map_option f l] is [some_if_all_elements_are_some (map f l)], but with
@@ -256,6 +260,10 @@ module Stdlib : sig
       -> Format.formatter
       -> 'a t
       -> unit
+
+    val map_sharing : ('a -> 'a) -> 'a option -> 'a option
+    (** [map_sharing f a] is [map f a]. If [a] is [None] or it is [Some e] and
+        [f e == e] then [map_sharing f a == a]. *)
   end
 
 (** {2 Extensions to the Array module} *)
@@ -439,6 +447,11 @@ val remove_dir: string -> unit
        (** Delete the given directory if it exists, is a directory, and is
            empty. Never raises an error. *)
 
+val remove_dir_contents: string -> unit
+       (** Delete all files in the given directory, then delete the directory
+           itself. Only handles flat directories (no subdirectories).
+           Never raises an error. *)
+
 val expand_directory: string -> string -> string
        (** [expand_directory alt file] eventually expands a [+] at the
            beginning of file into [alt] (an alternate root directory) *)
@@ -535,6 +548,14 @@ val no_overflow_mul: int -> int -> bool
 val no_overflow_lsl: int -> int -> bool
        (** [no_overflow_lsl n k] returns [true] if the computation of
            [n lsl k] does not overflow. *)
+
+val no_overflow_add_int64: int64 -> int64 -> bool
+       (** [no_overflow_add_int64 n1 n2] returns [true] if the computation of
+           [Int64.add n1 n2] does not overflow. *)
+
+val no_overflow_sub_int64: int64 -> int64 -> bool
+       (** [no_overflow_sub_int64 n1 n2] returns [true] if the computation of
+           [Int64.sub n1 n2] does not overflow. *)
 
 val letter_of_int : int -> string
 
@@ -664,23 +685,6 @@ val snd4: 'a * 'b * 'c * 'd -> 'b
 val thd4: 'a * 'b * 'c * 'd -> 'c
 val for4: 'a * 'b * 'c * 'd -> 'd
 
-(** {1 Long strings} *)
-
-(** ``Long strings'' are mutable arrays of characters that are not limited
-    in length to {!Sys.max_string_length}. *)
-
-module LongString :
-  sig
-    type t = bytes array
-    val create : int -> t
-    val length : t -> int
-    val get : t -> int -> char
-    val set : t -> int -> char -> unit
-    val blit : t -> int -> t -> int -> int -> unit
-    val output : out_channel -> t -> int -> int -> unit
-    val input_bytes : in_channel -> int -> t
-  end
-
 (** {1 Spell checking and ``did you mean'' suggestions} *)
 
 val edit_distance : string -> string -> int -> int option
@@ -701,7 +705,8 @@ val spellcheck : string list -> string -> string list
     list of suggestions taken from [env], that are close enough to
     [name] that it may be a typo for one of them. *)
 
-val did_you_mean : Format.formatter -> (unit -> string list) -> unit
+val did_you_mean :
+    Format_doc.formatter -> (unit -> string list) -> unit
 (** [did_you_mean ppf get_choices] hints that the user may have meant
     one of the option returned by calling [get_choices]. It does nothing
     if the returned list is empty.
@@ -761,11 +766,10 @@ module Style : sig
     inline_code: tag_style;
   }
 
-  val as_inline_code: (Format.formatter -> 'a -> unit as 'printer) -> 'printer
-  val inline_code: Format.formatter -> string -> unit
+  val as_inline_code: 'a Format_doc.printer -> 'a Format_doc.printer
+  val inline_code: string Format_doc.printer
 
-  val as_clflag:
-    string -> (Format.formatter -> 'a -> unit as 'printer) -> 'printer
+  val as_clflag: string -> 'a Format_doc.printer -> 'a Format_doc.printer
 
   val default_styles: styles
   val get_styles: unit -> styles
@@ -849,7 +853,7 @@ val pp_nested_list :
     always called with [nested:true], indicating that any inner lists are nested
     and need parens. *)
 
-val print_see_manual : Format.formatter -> int list -> unit
+val print_see_manual : int list Format_doc.printer
 (** See manual section *)
 
 val output_of_print :
@@ -857,6 +861,10 @@ val output_of_print :
 (** [output_of_print print] produces an output function from a pretty printer.
     Note that naively using [Format.formatter_of_out_channel] typechecks but
     doesn't work because it fails to flush the formatter. *)
+
+val output_of_doc_print :
+  (Format_doc.formatter -> 'a -> unit) -> out_channel -> 'a -> unit
+(** Like [output_of_print] but for [Format_doc] printers. *)
 
 val is_print_longer_than: int -> (Format.formatter -> unit) -> bool
 (** Returns [true] if the printed string is longer than the given integer. Stops
@@ -889,7 +897,7 @@ val get_build_path_prefix_map: unit -> Build_path_prefix_map.map option
     variable. *)
 
 val debug_prefix_map_flags: unit -> string list
-(** Returns the list of [--debug-prefix-map] flags to be passed to the
+(** Returns the list of debug-prefix-map flags to be passed to the
     assembler, built from the [BUILD_PATH_PREFIX_MAP] environment variable. *)
 
 module Bitmap : sig
@@ -1109,6 +1117,11 @@ end
 
 (** Propositional equality *)
 type (_, _) eq = Refl : ('a, 'a) eq
+
+(** Propositional equality test *)
+type (_, _) is_eq =
+  | Is_eq : ('a, 'a) is_eq
+  | Is_not_eq : ('a, 'b) is_eq
 
 (** Utilities for module-level programming *)
 module type T = sig

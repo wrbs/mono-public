@@ -111,7 +111,7 @@
 
    (func (export "caml_find_custom_operations")
       (param $id (ref $bytes)) (result (ref null $custom_operations))
-      (local $l (ref null $custom_operations_list))
+      (local $l (ref $custom_operations_list))
       (block $not_found
          (local.set $l (br_on_null $not_found (global.get $custom_operations)))
          (loop $loop
@@ -141,7 +141,12 @@
       (call $caml_register_custom_operations (global.get $float32_ops))
       (global.set $initialized (i32.const 1)))
 
+  (@string $empty_custom "")
+
   (func (export "caml_custom_identifier") (param $v (ref eq)) (result (ref eq))
-     (struct.get $custom_operations $id
-        (struct.get $custom 0 (ref.cast (ref $custom) (local.get $v)))))
+    (drop (block $not_custom (result anyref)
+      (return
+        (struct.get $custom_operations $id
+          (struct.get $custom 0 (br_on_cast_fail $not_custom (ref eq) (ref $custom) (local.get $v)))))))
+    (return (global.get $empty_custom)))
 )

@@ -24,15 +24,12 @@ module L : sig
 
   val to_iflags : Path.Set.t -> _ Command.Args.t
 
-  type flag =
-    | Hidden
-    | Include
-
-  type flags := flag Path.Map.t
-
-  val include_only : flags -> Path.t list
-  val to_flags : flags -> _ Command.Args.t
-  val include_paths : ?project:Dune_project.t -> t -> Lib_mode.t -> Lib_config.t -> flags
+  val include_paths
+    :  ?project:Dune_project.t
+    -> t
+    -> Lib_mode.t
+    -> Lib_config.t
+    -> Path.Set.t
 
   val include_flags
     :  ?project:Dune_project.t
@@ -50,7 +47,7 @@ module L : sig
 
   val c_include_flags : t -> Super_context.t -> _ Command.Args.t
   val toplevel_ld_paths : t -> Lib_config.t -> Path.Set.t
-  val toplevel_include_paths : t -> Lib_config.t -> flags
+  val toplevel_include_paths : t -> Lib_config.t -> Path.Set.t
 end
 
 (** The list of files that will be read by the compiler when linking an

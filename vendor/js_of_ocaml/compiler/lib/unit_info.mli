@@ -20,8 +20,8 @@
 open! Stdlib
 
 type t =
-  { provides : StringSet.t
-  ; requires : StringSet.t
+  { provides : Global_name.Compunit_set.t
+  ; requires : Global_name.Compunit_set.t
   ; primitives : string list
   ; aliases : (string * string) list
   ; force_link : bool

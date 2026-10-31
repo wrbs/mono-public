@@ -57,7 +57,7 @@ end = struct
   type t = tag
 
   let make s =
-    let tag = Lr1.encode s in
+    let tag = Lr1.number s in
     if not (Invariant.represented s) then begin
       Printf.eprintf "Attempt to use an unrepresented state: %d\n" tag;
       assert false
@@ -69,10 +69,15 @@ end = struct
     lazy (make s)
 
   let print tag =
-    MString.padded_index Lr1.n tag
+    Misc.padded_index Lr1.n tag
 
   let compare (tag1 : tag) (tag2 : tag) =
-    Int.compare tag1 tag2
+    compare tag1 tag2
+
+  module Int = struct
+    type t = int
+    let compare (x : t) (y : t) = x - y
+  end
 
   module Set = Set.Make(Int)
   module Map = Map.Make(Int)
@@ -99,7 +104,7 @@ type start_nonterminal =
 
 (**A production index. *)
 type production =
-  Grammar.Production.t
+  Grammar.Production.index
 
 (* -------------------------------------------------------------------------- *)
 

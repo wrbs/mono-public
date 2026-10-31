@@ -1,0 +1,8 @@
+(library
+ (name skyline_ephemeral_keyboard_hint_v2)
+ (public_name skyline.ephemeral_keyboard_hint_v2)
+ (preprocess
+  (pps ppx_jane js_of_ocaml-ppx bonsai.ppx_bonsai ppx_css ppx_html))
+ (libraries bonsai_web bonsai_web_components.keyboard_shortcut core
+   virtual_dom.css_gen ppx_css.inline_css private_skyline_prelude
+   skyline_tokens_v2 virtual_dom.keyboard))

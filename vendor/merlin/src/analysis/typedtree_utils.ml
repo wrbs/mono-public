@@ -13,6 +13,7 @@ let extract_toplevel_identifier item =
     List.map ~f:(fun Typedtree.{ ci_id_class; _ } -> ci_id_class) cls
   | Typedtree.Tsig_class_type cls ->
     List.map ~f:(fun Typedtree.{ ci_id_class_type; _ } -> ci_id_class_type) cls
+  | Typedtree.Tsig_jkind { jkind_id; _ } -> [ jkind_id ]
   | Typedtree.Tsig_type _
   | Typedtree.Tsig_typesubst _
   | Typedtree.Tsig_typext _
@@ -25,12 +26,15 @@ let let_bound_vars bindings =
   List.filter_map
     ~f:(fun value_binding ->
       match value_binding.Typedtree.vb_pat.pat_desc with
-      | Tpat_var (id, loc, _, _, _) -> Some (id, loc)
+      | Tpat_var { id; name; _ } | Tpat_fun_layout { id; name; _ } ->
+        Some (id, name)
       | Typedtree.Tpat_any
-      | Typedtree.Tpat_alias (_, _, _, _, _, _, _)
+      | Typedtree.Tpat_alias _
       | Typedtree.Tpat_constant _
       | Typedtree.Tpat_tuple _
       | Typedtree.Tpat_unboxed_tuple _
+      | Typedtree.Tpat_unboxed_bool _
+      | Typedtree.Tpat_unboxed_unit
       | Typedtree.Tpat_construct (_, _, _, _)
       | Typedtree.Tpat_variant (_, _, _)
       | Typedtree.Tpat_record (_, _)
@@ -64,12 +68,13 @@ let location_of_declaration ~uid =
   | Module_substitution msd -> Some msd.ms_name
   | Class cd -> Some cd.ci_id_name
   | Class_type ctd -> Some ctd.ci_id_name
+  | Jkind jkind -> Some jkind.jkind_name
 
 let pat_var_id_and_loc = function
-  | Typedtree.{ pat_desc = Tpat_var (id, loc, _, _, _); _ } -> Some (id, loc)
+  | Typedtree.{ pat_desc = Tpat_var { id; name = loc; _ }; _ } -> Some (id, loc)
   | _ -> None
 
 let pat_alias_pat_id_and_loc = function
-  | Typedtree.{ pat_desc = Tpat_alias (pat, id, loc, _, _, _, _); _ } ->
-    Some (pat, id, loc)
+  | Typedtree.{ pat_desc = Tpat_alias { pattern = pat; id; name; _ }; _ } ->
+    Some (pat, id, name)
   | _ -> None

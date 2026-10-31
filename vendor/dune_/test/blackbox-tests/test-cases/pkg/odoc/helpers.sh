@@ -1,13 +1,10 @@
-dev_tool_lock_dir="_build/.dev-tools.locks/odoc"
-
 # Create a dune-workspace file with mock repos set up for the main
 # project and the odoc lockdir.
 setup_odoc_workspace() {
   cat > dune-workspace <<EOF
-(lang dune 3.20)
-(pkg enabled)
+(lang dune 3.16)
 (lock_dir
- (path "${dev_tool_lock_dir}")
+ (path "dev-tools.locks/odoc")
  (repositories mock))
  (lock_dir
   (repositories mock))

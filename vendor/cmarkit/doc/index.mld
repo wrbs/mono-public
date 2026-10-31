@@ -1,4 +1,4 @@
-{0 Cmarkit {%html: <span class="version">v0.3.0+dune</span>%}}
+{0 Cmarkit {%html: <span class="version">v0.3.0</span>%}}
 
 Cmarkit parses the {{:https://spec.commonmark.org/current}CommonMark
 specification}. It provides:

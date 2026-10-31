@@ -1,0 +1,8 @@
+(library
+ (name ppx_loc)
+ (public_name ppx_loc)
+ (kind ppx_rewriter)
+ (libraries base ppxlib)
+ (ppx_runtime_libraries ppx_loc.runtime)
+ (preprocess
+  (pps ppx_jane ppxlib.metaquot -compare-require-explicit-locality)))

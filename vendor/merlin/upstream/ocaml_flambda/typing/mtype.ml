@@ -46,15 +46,15 @@ let rec reduce_strengthen_lazy ~aliasable mty p =
     Mty_signature sg ->
       Some (Mty_signature(strengthen_lazy_sig ~aliasable sg p))
 
-  | Mty_functor(Named (Some param, arg), res)
+  | Mty_functor(Named (Some param, arg, marg), res, mres)
     when !Clflags.applicative_functors ->
-      Some (Mty_functor(Named (Some param, arg),
-        strengthen_lazy ~aliasable:false res (Papply(p, Pident param))))
-  | Mty_functor(Named (None, arg), res)
+      Some (Mty_functor(Named (Some param, arg, marg),
+        strengthen_lazy ~aliasable:false res (Papply(p, Pident param)), mres))
+  | Mty_functor(Named (None, arg, marg), res, mres)
     when !Clflags.applicative_functors ->
       let param = Ident.create_scoped ~scope:(Path.scope p) "Arg" in
-      Some (Mty_functor(Named (Some param, arg),
-        strengthen_lazy ~aliasable:false res (Papply(p, Pident param))))
+      Some (Mty_functor(Named (Some param, arg, marg),
+        strengthen_lazy ~aliasable:false res (Papply(p, Pident param)), mres))
 
   | Mty_strengthen (mty,q,Not_aliasable) when aliasable ->
       (* Normally, we have S/M/N = S/M. However, if the inner strengthening is
@@ -98,10 +98,24 @@ and strengthen_lazy_sig' ~aliasable sg p =
             let manif =
               Some(Btype.newgenty(Tconstr(path,
                                           decl.type_params, ref Mnil))) in
-            if Btype.type_kind_is_abstract decl then
-              { decl with type_private = Public; type_manifest = manif }
-            else
-              { decl with type_manifest = manif }
+            if Btype.type_kind_is_abstract decl then begin
+              { decl with
+                type_private = Public;
+                type_manifest = manif;
+                type_ikind =
+                  Types.ikinds_todo
+                    (Format_doc.asprintf "strengthen abstract path=%a"
+                       Path.print path)
+              }
+            end else begin
+              { decl with
+                type_manifest = manif;
+                type_ikind =
+                  Types.ikinds_todo
+                    (Format_doc.asprintf "strengthen manifest path=%a"
+                       Path.print path)
+              }
+            end
       in
       let path = Pdot(p, Ident.name id) in
       let new_unboxed_version =
@@ -137,6 +151,18 @@ and strengthen_lazy_sig' ~aliasable sg p =
   | (Sig_class _ as sigelt) :: rem ->
       sigelt :: strengthen_lazy_sig' ~aliasable rem p
   | (Sig_class_type _ as sigelt) :: rem ->
+      sigelt :: strengthen_lazy_sig' ~aliasable rem p
+  | Sig_jkind(id, decl, vis) as sigelt :: rem ->
+      let sigelt =
+        match decl.jkind_manifest with
+        | Some _ -> sigelt
+        | None ->
+          let manif =
+            Some (Jkind.Const.of_path (Pdot(p, Ident.name id)))
+          in
+          let newdecl = { decl with jkind_manifest = manif } in
+          Sig_jkind (id, newdecl, vis)
+      in
       sigelt :: strengthen_lazy_sig' ~aliasable rem p
 
 and strengthen_lazy_sig ~aliasable sg p =
@@ -233,20 +259,22 @@ let rec expand_paths_lazy paths env =
   function
     Mty_signature sg ->
       Mty_signature (expand_paths_lazy_sig paths env sg)
-  | Mty_functor (param,res) ->
+  | Mty_functor (param,res,mres) ->
       let param, env = match param with
         Unit -> Unit, env
-      | Named (name,mty) ->
+      | Named (name,mty,mm) ->
           let mty = expand_paths_lazy paths env mty in
+          let mode = Mode.(alloc_as_value mm |> Value.disallow_right) in
           let env = match name with
             | Some param when !Clflags.applicative_functors ->
-                Env.add_module_lazy ~update_summary:false param Mp_present mty env
+                Env.add_module_lazy ~update_summary:false param Mp_present mty
+                  ~mode env
             | Some _ | None -> env
           in
-          Named (name, mty), env
+          Named (name, mty, mm), env
       in
       let res = expand_paths_lazy paths env res in
-      Mty_functor (param,res)
+      Mty_functor (param,res,mres)
   | Mty_strengthen (_,p,_) as mty when Path.Set.mem p paths ->
       (* If the path we're strengthening with is in paths then we need to
           unfold the node. *)
@@ -288,7 +316,7 @@ and expand_paths_lazy_sig_items paths env sg =
           let env = Env.add_modtype_lazy ~update_summary:false id mtd env in
           env, Sig_modtype (id,mtd,vis)
       | Sig_value _ | Sig_type _ | Sig_typext _ | Sig_class _
-      | Sig_class_type _ as item ->
+      | Sig_class_type _ | Sig_jkind _ as item ->
           env, item
   in
   List.fold_left_map expand_item env sg |> snd
@@ -352,6 +380,16 @@ let rec sig_make_manifest sg =
                    | Some _ -> decl.mtd_type }
     in
     Sig_modtype(Ident.rename id, newdecl, vis) :: sig_make_manifest rem
+  | Sig_jkind (id, decl, vis) as sigelt :: rem ->
+    let sigelt =
+      match decl.jkind_manifest with
+      | Some _ -> sigelt
+      | None ->
+        let manifest = Jkind.Const.of_path (Pident id) in
+        let newdecl = { decl with jkind_manifest = Some manifest } in
+        Sig_jkind (Ident.rename id, newdecl, vis)
+    in
+    sigelt :: sig_make_manifest rem
 
 let rec make_aliases_absent ~aliased pres mty =
   (* aliased=true means that mty is subject to aliasable strengthening
@@ -373,13 +411,13 @@ let rec make_aliases_absent ~aliased pres mty =
           in
           Sig_module(id, pres, md, rs, priv)
         | Sig_value _ | Sig_type _ | Sig_typext _ | Sig_modtype _
-        | Sig_class _ | Sig_class_type _ as item ->
+        | Sig_class _ | Sig_class_type _ | Sig_jkind _ as item ->
           item
       in
       pres, Mty_signature(List.map make_item sg)
-  | Mty_functor(arg, res) ->
+  | Mty_functor(arg, res, mres) ->
       let _, res = make_aliases_absent ~aliased:false Mp_present res in
-      pres, Mty_functor(arg, res)
+      pres, Mty_functor(arg, res, mres)
   | Mty_ident _ ->
       pres, mty
   | Mty_strengthen (mty,p,a) ->
@@ -464,19 +502,20 @@ let rec nondep_mty_with_presence env va ids pres mty =
   | Mty_signature sg ->
       let mty = Mty_signature(nondep_sig env va ids sg) in
       pres, mty
-  | Mty_functor(Unit, res) ->
-      pres, Mty_functor(Unit, nondep_mty env va ids res)
-  | Mty_functor(Named (param, arg), res) ->
+  | Mty_functor(Unit, res, mres) ->
+      pres, Mty_functor(Unit, nondep_mty env va ids res, mres)
+  | Mty_functor(Named (param, arg, marg), res, mres) ->
       let var_inv =
         match va with Co -> Contra | Contra -> Co | Strict -> Strict in
+      let mode = Mode.(alloc_as_value marg |> Value.disallow_right) in
       let res_env =
         match param with
         | None -> env
-        | Some param -> Env.add_module ~arg:true param Mp_present arg env
+        | Some param -> Env.add_module ~arg:true param Mp_present arg ~mode env
       in
       let mty =
-        Mty_functor(Named (param, nondep_mty env var_inv ids arg),
-                    nondep_mty res_env va ids res)
+        Mty_functor(Named (param, nondep_mty env var_inv ids arg, marg),
+                    nondep_mty res_env va ids res, mres)
       in
       pres, mty
   | Mty_strengthen (mty,p,a) ->
@@ -519,6 +558,8 @@ and nondep_sig_item env va ids = function
       Sig_class(id, Ctype.nondep_class_declaration env ids d, rs, vis)
   | Sig_class_type(id, d, rs, vis) ->
       Sig_class_type(id, Ctype.nondep_cltype_declaration env ids d, rs, vis)
+  | Sig_jkind (id, d, vis) ->
+      Sig_jkind (id, Ctype.nondep_jkind_declaration env ids d, vis)
 
 and nondep_sig env va ids sg =
   let scope = Ctype.create_scope () in
@@ -567,14 +608,26 @@ let enrich_typedecl env p id decl =
                 Option.map
                   (fun d ->
                     let orig_ty_unboxed =
-                      Btype.newgenty(
-                        Tconstr
-                          (Path.unboxed_version p, decl.type_params, ref Mnil))
+                      Btype.newgenty
+                        (Tconstr
+                           (Path.unboxed_version p, decl.type_params, ref Mnil))
                     in
-                    { d with type_manifest = Some orig_ty_unboxed })
+                    { d with
+                      type_manifest = Some orig_ty_unboxed;
+                      type_ikind =
+                        Types.ikinds_todo
+                          (Format_doc.asprintf "enrich unboxed path=%a"
+                             Path.print (Path.unboxed_version p))
+                    })
                   decl.type_unboxed_version
               in
-              {decl with type_manifest = Some orig_ty; type_unboxed_version}
+              { decl with
+                type_manifest = Some orig_ty;
+                type_unboxed_version;
+                type_ikind =
+                  Types.ikinds_todo
+                    (Format_doc.asprintf "enrich manifest path=%a" Path.print p)
+              }
         end
 
 let rec enrich_modtype env p mty =
@@ -597,28 +650,36 @@ and enrich_item env p = function
                  priv)
   | item -> item
 
-let rec type_paths env p mty =
+let rec type_and_jkind_paths env p mty =
   match scrape env mty with
-    Mty_ident _ -> []
-  | Mty_alias _ -> []
-  | Mty_signature sg -> type_paths_sig env p sg
-  | Mty_functor _ -> []
-  | Mty_strengthen _ -> []
+  | Mty_ident _ | Mty_alias _ | Mty_functor _ | Mty_strengthen _ ->
+    ~types:[], ~jkinds:[]
+  | Mty_signature sg -> type_and_jkind_paths_sig env p sg
 
-and type_paths_sig env p sg =
+and type_and_jkind_paths_sig env p sg =
   match sg with
-    [] -> []
+  | [] -> ~types:[], ~jkinds:[]
   | Sig_type(id, _decl, _, _) :: rem ->
-      Pdot(p, Ident.name id) :: type_paths_sig env p rem
+    let ~types, ~jkinds = type_and_jkind_paths_sig env p rem in
+    ~types:(Pdot(p, Ident.name id) :: types), ~jkinds
+  | Sig_jkind(id, _decl, _) :: rem ->
+    let ~types, ~jkinds = type_and_jkind_paths_sig env p rem in
+    ~types, ~jkinds:(Pdot(p, Ident.name id) :: jkinds)
   | Sig_module(id, pres, md, _, _) :: rem ->
-      type_paths env (Pdot(p, Ident.name id)) md.md_type @
-      type_paths_sig (Env.add_module_declaration ~check:false id pres md env)
-        p rem
+    let ~types:nested_types, ~jkinds:nested_jkinds =
+      type_and_jkind_paths env (Pdot(p, Ident.name id)) md.md_type
+    in
+    let env =
+      Env.add_module_declaration ~check:false id pres md env
+    in
+    let ~types:rem_types, ~jkinds:rem_jkinds =
+      type_and_jkind_paths_sig env p rem
+    in
+    ~types:(nested_types @ rem_types), ~jkinds:(nested_jkinds @ rem_jkinds)
   | Sig_modtype(id, decl, _) :: rem ->
-      type_paths_sig (Env.add_modtype id decl env) p rem
+    type_and_jkind_paths_sig (Env.add_modtype id decl env) p rem
   | (Sig_value _ | Sig_typext _ | Sig_class _ | Sig_class_type _) :: rem ->
-      type_paths_sig env p rem
-
+    type_and_jkind_paths_sig env p rem
 
 let rec no_code_needed_mod env pres mty =
   match pres with
@@ -644,7 +705,7 @@ and no_code_needed_sig env sg =
       no_code_needed_mod env pres md.md_type &&
       no_code_needed_sig
         (Env.add_module_declaration ~check:false id pres md env) rem
-  | (Sig_type _ | Sig_modtype _ | Sig_class_type _) :: rem ->
+  | (Sig_type _ | Sig_modtype _ | Sig_class_type _ | Sig_jkind _) :: rem ->
       no_code_needed_sig env rem
   | (Sig_typext _ | Sig_class _) :: _ ->
       false
@@ -653,41 +714,55 @@ let no_code_needed env mty = no_code_needed_mod env Mp_present mty
 
 (* Check whether a module type may return types *)
 
-let rec contains_type env mty =
-  match scrape env mty with
-    Mty_ident _ -> raise Exit (* PR#6427 *)
-  | Mty_signature sg ->
-      contains_type_sig env sg
-  | Mty_functor (_, body) ->
-      contains_type env body
-  | Mty_alias _ ->
-      ()
-  | Mty_strengthen _ -> raise Exit
+module Contains_type_or_jkind = struct
+  type t = Type | Jkind
 
-and contains_type_sig env = List.iter (contains_type_item env)
+  let to_string_plural = function
+    | Type -> "types"
+    | Jkind -> "kinds"
 
-and contains_type_item env = function
-    Sig_type (_,({type_manifest = None} |
-                 {type_kind = Type_abstract _; type_private = Private}),_, _)
-  | Sig_modtype _
-  | Sig_typext (_, {ext_args = Cstr_record _}, _, _) ->
-      (* We consider that extension constructors with an inlined
-         record create a type (the inlined record), even though
-         it would be technically safe to ignore that considering
-         the current constraints which guarantee that this type
-         is kept local to expressions.  *)
-      raise Exit
-  | Sig_module (_, _, {md_type = mty}, _, _) ->
-      contains_type env mty
-  | Sig_value _
-  | Sig_type _
-  | Sig_typext _
-  | Sig_class _
-  | Sig_class_type _ ->
-      ()
+  exception Contains of t
 
-let contains_type env mty =
-  try contains_type env mty; false with Exit -> true
+  let rec contains_type_or_jkind env mty =
+    match scrape env mty with
+      Mty_ident _ -> raise (Contains Type) (* PR#6427 *)
+    | Mty_signature sg ->
+        contains_type_or_jkind_sig env sg
+    | Mty_functor (_, body, _) ->
+        contains_type_or_jkind env body
+    | Mty_alias _ ->
+        ()
+    | Mty_strengthen _ -> raise (Contains Type)
+
+  and contains_type_or_jkind_sig env =
+    List.iter (contains_type_or_jkind_item env)
+
+  and contains_type_or_jkind_item env = function
+      Sig_type (_,({type_manifest = None} |
+                   {type_kind = Type_abstract _; type_private = Private}),_, _)
+    | Sig_modtype _
+    | Sig_typext (_, {ext_args = Cstr_record _}, _, _) ->
+        (* We consider that extension constructors with an inlined
+           record create a type (the inlined record), even though
+           it would be technically safe to ignore that considering
+           the current constraints which guarantee that this type
+           is kept local to expressions.  *)
+        raise (Contains Type)
+    | Sig_jkind (_, {jkind_manifest = None; _}, _) ->
+        raise (Contains Jkind)
+    | Sig_module (_, _, {md_type = mty}, _, _) ->
+        contains_type_or_jkind env mty
+    | Sig_value _
+    | Sig_type _
+    | Sig_typext _
+    | Sig_class _
+    | Sig_class_type _
+    | Sig_jkind _ ->
+        ()
+
+  let check env mty =
+    try contains_type_or_jkind env mty; None with Contains tj -> Some tj
+end
 
 
 (* Remove module aliases from a signature *)
@@ -737,26 +812,26 @@ let collect_arg_paths mty =
   (* let rt = Ident.create "Root" in
      and prefix = ref (Path.Pident rt) in *)
   with_type_mark begin fun mark ->
-  let super = type_iterators mark in
-  let it_path p = paths := Path.Set.union (get_arg_paths p) !paths
-  and it_signature_item it si =
-    super.it_signature_item it si;
-    match si with
-    | Sig_module (id, _, {md_type=Mty_alias p}, _, _) ->
-        bindings := Ident.add id p !bindings
-    | Sig_module (id, _, {md_type=Mty_signature sg}, _, _) ->
-        List.iter
-          (function Sig_module (id', _, _, _, _) ->
-              subst :=
-                Path.Map.add (Pdot (Pident id, Ident.name id')) id' !subst
-            | _ -> ())
-          sg
-    | _ -> ()
-  in
-  let it = {super with it_path; it_signature_item} in
-  it.it_module_type it mty;
-  Path.Set.fold (fun p -> Ident.Set.union (collect_ids !subst !bindings p))
-    !paths Ident.Set.empty
+    let super = type_iterators mark in
+    let it_path p = paths := Path.Set.union (get_arg_paths p) !paths
+    and it_signature_item it si =
+      super.it_signature_item it si;
+      match si with
+      | Sig_module (id, _, {md_type=Mty_alias p}, _, _) ->
+          bindings := Ident.add id p !bindings
+      | Sig_module (id, _, {md_type=Mty_signature sg}, _, _) ->
+          List.iter
+            (function Sig_module (id', _, _, _, _) ->
+                subst :=
+                  Path.Map.add (Pdot (Pident id, Ident.name id')) id' !subst
+              | _ -> ())
+            sg
+      | _ -> ()
+    in
+    let it = {super with it_path; it_signature_item} in
+    it.it_module_type it mty;
+    Path.Set.fold (fun p -> Ident.Set.union (collect_ids !subst !bindings p))
+      !paths Ident.Set.empty
   end
 
 type remove_alias_from =
@@ -845,15 +920,15 @@ let scrape_for_type_of ~remove_aliases env mty =
 let lower_nongen nglev mty =
   let open Btype in
   with_type_mark begin fun mark ->
-  let super = type_iterators mark in
-  let it_do_type_expr it ty =
-    match get_desc ty with
-      Tvar _ ->
-        let level = get_level ty in
-        if level < generic_level && level > nglev then set_level ty nglev
-    | _ ->
-        super.it_do_type_expr it ty
-  in
-  let it = {super with it_do_type_expr} in
-  it.it_module_type it mty
+    let super = type_iterators mark in
+    let it_do_type_expr it ty =
+      match get_desc ty with
+        Tvar _ ->
+          let level = get_level ty in
+          if level < generic_level && level > nglev then set_level ty nglev
+      | _ ->
+          super.it_do_type_expr it ty
+    in
+    let it = {super with it_do_type_expr} in
+    it.it_module_type it mty
   end

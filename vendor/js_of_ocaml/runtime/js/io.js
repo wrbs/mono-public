@@ -27,7 +27,7 @@ var caml_sys_fds = new Array(3);
 function caml_sys_close(fd) {
   var x = caml_sys_fds[fd];
   if (x) {
-    x.file.close();
+    x.file.close(false);
     delete caml_sys_fds[fd];
   }
   return 0;
@@ -43,8 +43,10 @@ function MlChanid(id) {
 //Requires: MlFakeFd_out
 //Requires: resolve_fs_device
 //Requires: fs_node_supported
+//Requires: fs_quickjs_supported
 //Requires: caml_sys_fds
 //Requires: caml_sys_open_for_node
+//Requires: caml_sys_open_for_quickjs
 //Requires: MlChanid
 function caml_sys_open_internal(file, idx) {
   var chanid;
@@ -98,21 +100,23 @@ function caml_sys_open(name, flags, perms) {
 }
 (function () {
   var is_node = fs_node_supported();
+  var is_qjs = !is_node && fs_quickjs_supported();
+  var buffered = is_node || is_qjs ? 1 : 2;
   function file(fd, flags) {
-    if (is_node) {
-      return caml_sys_open_for_node(fd, flags);
-    } else return new MlFakeFd_out(fd, flags);
+    if (is_node) return caml_sys_open_for_node(fd, flags);
+    if (is_qjs) return caml_sys_open_for_quickjs(fd, flags);
+    return new MlFakeFd_out(fd, flags);
   }
   caml_sys_open_internal(
     file(0, { rdonly: 1, altname: "/dev/stdin", isCharacterDevice: true }),
     0,
   );
   caml_sys_open_internal(
-    file(1, { buffered: is_node ? 1 : 2, wronly: 1, isCharacterDevice: true }),
+    file(1, { buffered: buffered, wronly: 1, isCharacterDevice: true }),
     1,
   );
   caml_sys_open_internal(
-    file(2, { buffered: is_node ? 1 : 2, wronly: 1, isCharacterDevice: true }),
+    file(2, { buffered: buffered, wronly: 1, isCharacterDevice: true }),
     2,
   );
 })();
@@ -204,7 +208,7 @@ function caml_ml_open_descriptor_out(fd) {
   var buffered = file.flags.buffered !== undefined ? file.flags.buffered : 1;
   var channel = {
     file: file,
-    offset: file.offset,
+    offset: file.pos(),
     fd: fd,
     opened: true,
     out: true,
@@ -230,7 +234,7 @@ function caml_ml_open_descriptor_in(fd) {
   var refill = null;
   var channel = {
     file: file,
-    offset: file.offset,
+    offset: file.pos(),
     fd: fd,
     opened: true,
     out: false,
@@ -360,6 +364,7 @@ function caml_refill(chan) {
       chan.buffer,
       chan.buffer_max,
       chan.buffer.length - chan.buffer_max,
+      false,
     );
     chan.offset += nread;
     chan.buffer_max += nread;
@@ -568,7 +573,7 @@ function caml_ml_flush(chanid) {
     );
   } else {
     for (var pos = 0; pos < chan.buffer_curr; ) {
-      pos += chan.file.write(chan.buffer, pos, chan.buffer_curr - pos);
+      pos += chan.file.write(chan.buffer, pos, chan.buffer_curr - pos, false);
     }
   }
   chan.offset += chan.buffer_curr;

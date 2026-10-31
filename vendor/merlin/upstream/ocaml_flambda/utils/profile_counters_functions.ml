@@ -8,10 +8,10 @@ let count_language_extensions typing_input =
    fun lang_ext ->
     match lang_ext with
     | Comprehensions | Include_functor | Immutable_arrays | Module_strengthening
-    | Labeled_tuples ->
+      ->
       Language_extension_kernel.to_string lang_ext
     | Mode | Unique | Polymorphic_parameters | Layouts | SIMD | Small_numbers
-    | Instances | Overwriting | Separability | Let_mutable | Layout_poly
+    | Instances | Overwriting | Let_mutable | Layout_poly
     | Runtime_metaprogramming ->
       let error_msg =
         Format.sprintf "No counters supported for language extension : %s."
@@ -29,19 +29,12 @@ let count_language_extensions typing_input =
         Include_functor;
         Immutable_arrays;
         Module_strengthening;
-        Labeled_tuples;
         Immutable_arrays ]
   in
   List.iter
     (fun lang_ext ->
       counters := Profile.Counters.set (to_string lang_ext) 0 !counters)
     supported_lang_exts;
-  let check_for_labeled_tuples label_opt_pair_list =
-    if List.exists
-         (fun (label_opt, _) -> Option.is_some label_opt)
-         label_opt_pair_list
-    then incr Labeled_tuples
-  in
   let check_array_mutability mutability =
     if not (Types.is_mutable mutability) then incr Immutable_arrays
   in
@@ -75,8 +68,6 @@ let count_language_extensions typing_input =
               check_array_mutability mutability
             | Texp_array (mutability, _, _, _) ->
               check_array_mutability mutability
-            | Texp_tuple (label_opt_pair_list, _) ->
-              check_for_labeled_tuples label_opt_pair_list
             | _ -> ());
             default_iterator.expr sub e);
         module_type =
@@ -88,22 +79,21 @@ let count_language_extensions typing_input =
         typ =
           (fun sub ({ ctyp_desc; _ } as ctyp) ->
             (match ctyp_desc with
-            | Ttyp_tuple label_opt_pair_list ->
-              check_for_labeled_tuples label_opt_pair_list
             (* CR-someday mitom: type occurence of [iarray] double counted in
                [let a_iarray : int iarray = [: 1; 2; 3; 4; 5 :]] *)
             | Ttyp_constr (Pident ident, _, _) ->
-              if Ident.is_predef ident
-                 && String.equal (Ident.name ident) "iarray"
+              if
+                Ident.is_predef ident
+                && String.equal (Ident.name ident) "iarray"
               then incr Immutable_arrays
             | _ -> ());
             default_iterator.typ sub ctyp);
         pat =
-          (fun (type k) sub
-               ({ pat_desc; _ } as gen_pat : k Typedtree.general_pattern) ->
+          (fun (type k)
+            sub
+            ({ pat_desc; _ } as gen_pat : k Typedtree.general_pattern)
+          ->
             (match pat_desc with
-            | Tpat_tuple label_opt_pair_list ->
-              check_for_labeled_tuples label_opt_pair_list
             | Tpat_array (mutability, _, _) -> check_array_mutability mutability
             | _ -> ());
             default_iterator.pat sub gen_pat)

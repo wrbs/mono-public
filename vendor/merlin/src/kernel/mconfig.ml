@@ -5,7 +5,7 @@ open Std
 let { Logger.log } = Logger.for_section "Mconfig"
 
 type ocaml =
-  { include_dirs : string list;
+  { include_dirs : Clflags.visible_include list;
     hidden_dirs : string list;
     no_std_include : bool;
     unsafe : bool;
@@ -28,7 +28,9 @@ type ocaml =
     as_argument_for : string option;
     zero_alloc_check : Zero_alloc_annotations.Check.t;
     zero_alloc_assert : Zero_alloc_annotations.Assert.t;
-    infer_with_bounds : bool
+    infer_with_bounds : bool;
+    kind_verbosity : int;
+    ikinds : bool
   }
 
 let dump_warnings st =
@@ -36,9 +38,12 @@ let dump_warnings st =
   Warnings.restore st;
   Misc.try_finally Warnings.dump ~always:(fun () -> Warnings.restore st')
 
+let dump_visible_include ({ path; cmx_guaranteed } : Clflags.visible_include) =
+  `Assoc [ ("path", `String path); ("cmx_guaranteed", `Bool cmx_guaranteed) ]
+
 let dump_ocaml x =
   `Assoc
-    [ ("include_dirs", `List (List.map ~f:Json.string x.include_dirs));
+    [ ("include_dirs", `List (List.map ~f:dump_visible_include x.include_dirs));
       ("hidden_dirs", `List (List.map ~f:Json.string x.hidden_dirs));
       ("no_std_include", `Bool x.no_std_include);
       ("unsafe", `Bool x.unsafe);
@@ -60,7 +65,10 @@ let dump_ocaml x =
       ( "zero_alloc_check",
         `String (Zero_alloc_annotations.Check.to_string x.zero_alloc_check) );
       ( "zero_alloc_assert",
-        `String (Zero_alloc_annotations.Assert.to_string x.zero_alloc_assert) )
+        `String (Zero_alloc_annotations.Assert.to_string x.zero_alloc_assert) );
+      ("infer_with_bounds", `Bool x.infer_with_bounds);
+      ("kind_verbosity", `Int x.kind_verbosity);
+      ("ikinds", `Bool x.ikinds)
     ]
 
 (** Some paths can be resolved relative to a current working directory *)
@@ -342,8 +350,8 @@ let merlin_flags =
       "<command> Use <command> as a merlin reader" );
     ( "-assocsuffix",
       Marg.param "suffix:reader" (fun assoc_pair merlin ->
-          match Misc.rev_string_split ~on:':' assoc_pair with
-          | [ reader; suffix ] ->
+          match String.split_on_char ~sep:':' assoc_pair with
+          | [ suffix; reader ] ->
             { merlin with
               extension_to_reader =
                 (suffix, reader) :: merlin.extension_to_reader
@@ -353,8 +361,8 @@ let merlin_flags =
     ( "-addsuffix",
       Marg.param "implementation Suffix, interface Suffix"
         (fun suffix_pair merlin ->
-          match Misc.rev_string_split ~on:':' suffix_pair with
-          | [ intf; impl ] ->
+          match String.split_on_char ~sep:':' suffix_pair with
+          | [ impl; intf ] ->
             { merlin with suffixes = (impl, intf) :: merlin.suffixes }
           | _ -> merlin),
       "Add a suffix implementation,interface pair" );
@@ -447,6 +455,7 @@ let ocaml_ignored_flags =
     "-dlinear";
     "-dparsetree";
     "-dshape";
+    "-dtlambda";
     "-dslambda";
     "-drawclambda";
     "-drawflambda";
@@ -467,6 +476,8 @@ let ocaml_ignored_flags =
     "-no-keep-docs";
     "-keep-locs";
     "-linkall";
+    "-requires-metaprogramming";
+    "-uses-metaprogramming";
     "-make_runtime";
     "-make-runtime";
     "-modern";
@@ -486,6 +497,7 @@ let ocaml_ignored_flags =
     "-no-unboxed-types";
     "-O2";
     "-O3";
+    "-O4";
     "-Oclassic";
     "-only-erasable-extensions";
     "-opaque";
@@ -555,6 +567,11 @@ let ocaml_ignored_flags =
     "-flambda2-basic-meet";
     "-flambda2-advanced-meet";
     "-directory";
+    "-flambda2-inline-large-functor-size";
+    "-flambda2-inline-small-functor-size";
+    "-flambda2-speculative-inlining-track-lifted-constants";
+    "-name-mangling-scheme";
+    "-no-flambda2-speculative-inlining-track-lifted-constants";
     (* Jane Street specific *)
     "-disable-builtin-check";
     "-disable-poll-insertion";
@@ -565,6 +582,11 @@ let ocaml_ignored_flags =
     "-ddebug-invariants";
     "-cfg-peephole-optimize";
     "-no-cfg-peephole-optimize";
+    "-x86-peephole-optimize";
+    "-no-x86-peephole-optimize";
+    "-no-x86-peephole-remove-mov-to-dead-register";
+    "-no-x86-peephole-remove-redundant-cmp";
+    "-no-x86-peephole-combine-add-rsp";
     "-verbose-types";
     "-no-verbose-types";
     "-fsse3";
@@ -638,10 +660,14 @@ let ocaml_ignored_flags =
     "-no-cfg-prologue-validate";
     "-cfg-prologue-shrink-wrap";
     "-no-cfg-prologue-shrink-wrap";
+    "-cfg-merge-blocks";
+    "-no-cfg-merge-blocks";
     "-cfg-value-propagation";
     "-no-cfg-value-propagation";
     "-cfg-value-propagation-float";
     "-no-cfg-value-propagation-float";
+    "-cfg-value-propagation-flow";
+    "-no-cfg-value-propagation-flow";
     "-gdwarf-pedantic";
     "-ddwarf-metrics";
     "-afl-instrument";
@@ -678,10 +704,56 @@ let ocaml_ignored_flags =
     "-no-reaper-local-fields";
     "-reaper-unbox";
     "-no-reaper-unbox";
+    "-reaper-max-unbox-size";
     "-reaper-change-calling-conventions";
     "-no-reaper-change-calling-conventions";
     "-flambda2-expert-cmm-safe-subst";
-    "-no-flambda2-expert-cmm-safe-subst"
+    "-no-flambda2-expert-cmm-safe-subst";
+    "-dissector";
+    "-ddissector";
+    "-ddissector-sizes";
+    "-ddissector-verbose";
+    "-ddissector-partitions";
+    "-dissector-assume-lld-without-64-bit-eh-frames";
+    "-no-dissector-assume-lld-without-64-bit-eh-frames";
+    "-manual-module-init";
+    "-no-manual-module-init";
+    "-dfexpr-annot";
+    "-dfexpr-annot-after";
+    "-linscan";
+    "-clambda-checks";
+    "-dasm-comments";
+    "-dcfg";
+    "-dcfg-invariants";
+    "-dcmm-invariants";
+    "-ddebug-available-regs";
+    "-dfexpr";
+    "-dflambda-invariants";
+    "-dflow";
+    "-dfreshen";
+    "-dno-asm-comments";
+    "-drawfexpr";
+    "-dslot-offsets";
+    "-dump-inlining-paths";
+    "-enable-poll-insertion";
+    "-fno-asan";
+    "-fno-trap-notes";
+    "-ftrap-notes";
+    "-function-sections";
+    "-gdwarf-may-alter-codegen-experimental";
+    "-gno-dwarf-may-alter-codegen-experimental";
+    "-gno-startup";
+    "-gstartup";
+    "-gupstream-dwarf";
+    "-insn-sched";
+    "-internal-assembler";
+    "-long-frames";
+    "-no-insn-sched";
+    "-no-long-frames";
+    "-no-unbox-free-vars-of-closures";
+    "-verify-binary-emitter";
+    "-ikinds-debug";
+    "-thunkify-compilation-unit-initialization"
   ]
 
 let ocaml_ignored_parametrized_flags =
@@ -726,7 +798,6 @@ let ocaml_ignored_parametrized_flags =
     "-no-extension";
     "-drawfexpr-to";
     "-dfexpr-to";
-    "-dflexpect-to";
     "-reorder-blocks-random";
     "-heap-reduction-threshold";
     "-flambda2-cse-depth";
@@ -779,7 +850,15 @@ let ocaml_ignored_parametrized_flags =
     "-plugin";
     "-dump-into-file";
     "-ddwarf-metrics-output-file";
-    "-reaper-debug-flags"
+    "-reaper-debug-flags";
+    "-dissector-partition-size";
+    "-ddissector-inputs";
+    "-dfexpr-after";
+    "-debug-long-frames-threshold";
+    "-flambda2-expert-max-function-simplify-run";
+    "-llvm-flags";
+    "-reaper-preserve-direct-calls";
+    "-save-ir-after"
   ]
 
 let ocaml_warnings_spec ~error =
@@ -804,9 +883,19 @@ let ocaml_alert_spec =
 
 let ocaml_flags =
   [ ( "-I",
-      marg_path (fun dir ocaml ->
-          { ocaml with include_dirs = dir :: ocaml.include_dirs }),
+      marg_path (fun path ocaml ->
+          { ocaml with
+            include_dirs =
+              { path; cmx_guaranteed = false } :: ocaml.include_dirs
+          }),
       "<dir> Add <dir> to the list of include directories" );
+    ( "-Ix",
+      marg_path (fun path ocaml ->
+          { ocaml with
+            include_dirs = { path; cmx_guaranteed = true } :: ocaml.include_dirs
+          }),
+      "<dir> Add <dir> to the list of include directories (Like -I, but \
+       indicates that cmx files for modules in <dir> are always available)" );
     ( "-H",
       marg_path (fun dir ocaml ->
           { ocaml with hidden_dirs = dir :: ocaml.hidden_dirs }),
@@ -880,13 +969,15 @@ let ocaml_flags =
         \        <num>             a single warning number\n\
         \        <num1>..<num2>    a range of consecutive warning numbers\n\
         \        <letter>          a predefined set\n\
-        \     default setting is %S" Warnings.defaults_w );
+        \     default setting is %S"
+        Warnings.defaults_w );
     ( "-warn-error",
       ocaml_warnings_spec ~error:true,
       Printf.sprintf
         "<list> Enable or disable error status for warnings according\n\
         \     to <list>.  See option -w for the syntax of <list>.\n\
-        \     Default setting is %S" Warnings.defaults_warn_error );
+        \     Default setting is %S"
+        Warnings.defaults_warn_error );
     ( "-alert",
       ocaml_alert_spec,
       Printf.sprintf
@@ -932,7 +1023,14 @@ let ocaml_flags =
     ( "-infer-with-bounds",
       Marg.unit (fun ocaml -> { ocaml with infer_with_bounds = true }),
       "Infer with-bounds on kinds for type declarations. May impact \
-       performance." )
+       performance." );
+    ( "-kind-verbosity",
+      Marg.int (fun kind_verbosity ocaml -> { ocaml with kind_verbosity }),
+      "Set the verbosity used for printing kinds (0=not verbose, 1=expanded, \
+       2=expanded with all mod bounds)" );
+    ( "-no-ikinds",
+      Marg.bool (fun no_ikinds ocaml -> { ocaml with ikinds = not no_ikinds }),
+      "Disable ikinds-based kind checker" )
   ]
 
 (** {1 Main configuration} *)
@@ -962,7 +1060,9 @@ let initial =
         as_argument_for = None;
         zero_alloc_check = Zero_alloc_annotations.Check.Check_default;
         zero_alloc_assert = Zero_alloc_annotations.Assert.Assert_default;
-        infer_with_bounds = false
+        infer_with_bounds = false;
+        kind_verbosity = 0;
+        ikinds = false
       };
     merlin =
       { build_path = [];
@@ -1090,11 +1190,15 @@ let hidden_source_path config =
   config.merlin.hidden_source_path @ config.ocaml.hidden_dirs
 
 let collect_paths ~log_title ~config paths =
+  let include_dirs =
+    List.map config.ocaml.include_dirs ~f:(fun (vi : Clflags.visible_include) ->
+        vi.path)
+  in
   let dirs =
     match config.ocaml.threads with
-    | `None -> config.ocaml.include_dirs
-    | `Threads -> "+threads" :: config.ocaml.include_dirs
-    | `Vmthreads -> "+vmthreads" :: config.ocaml.include_dirs
+    | `None -> include_dirs
+    | `Threads -> "+threads" :: include_dirs
+    | `Vmthreads -> "+vmthreads" :: include_dirs
   in
   let dirs = paths @ dirs in
   let stdlib = stdlib config in
@@ -1123,12 +1227,12 @@ let cmt_path config =
    @ config.merlin.hidden_build_path)
 
 let global_modules ?(include_current = false) config =
-  let modules = Misc.modules_in_path ~ext:".cmi" (build_path config) in
+  let modules = modules_in_path ~ext:".cmi" (build_path config) in
   if include_current then modules
   else
     match config.query.filename with
     | "" -> modules
-    | filename -> List.remove (Misc.unitname filename) modules
+    | filename -> List.remove (unitname filename) modules
 
 (** {1 Accessors for other information} *)
 
@@ -1136,15 +1240,14 @@ let filename t = t.query.filename
 
 let unitname t =
   match t.merlin.unit_name with
-  | Some name -> Misc.unitname name
+  | Some name -> unitname name
   | None ->
-    let basename = Misc.unitname t.query.filename in
+    let basename = unitname t.query.filename in
     (* CR: get rid of wrapping_prefix. it is only here for legacy reasons at the moment *)
-    begin
-      match t.merlin.wrapping_prefix with
-      | Some prefix -> Misc.unitname (prefix ^ basename)
-      | None ->
-        String.Map.find_opt basename t.merlin.unit_name_for
-        |> Option.map ~f:Misc.unitname
-        |> Option.value ~default:basename
+    begin match t.merlin.wrapping_prefix with
+    | Some prefix -> unitname (prefix ^ basename)
+    | None ->
+      String.Map.find_opt basename t.merlin.unit_name_for
+      |> Option.map ~f:unitname
+      |> Option.value ~default:basename
     end

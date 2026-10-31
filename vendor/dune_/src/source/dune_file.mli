@@ -25,15 +25,6 @@ val path : t -> Path.Source.t option
 
 val sub_dir_status : t -> Source_dir_status.Spec.t
 
-module Files : sig
-  type t
-
-  val default : t
-  val eval : t -> files:Filename.Set.t -> Filename.Set.t
-end
-
-val files : t -> Files.t
-
 (** Directories introduced via [(subdir ..)] *)
 val sub_dirnames : t -> Filename.t list
 

@@ -26,7 +26,7 @@ let times = Debug.find "times"
 let effects_cps () =
   match Config.effects () with
   | `Cps -> true
-  | `Disabled | `Jspi -> false
+  | `Disabled | `Jspi | `Native -> false
   | `Double_translation -> assert false
 
 module Generate (Target : Target_sig.S) = struct
@@ -41,6 +41,7 @@ module Generate (Target : Target_sig.S) = struct
     ; blocks : block Addr.Map.t
     ; closures : Closure_conversion.closure Var.Map.t
     ; global_context : Code_generation.context
+    ; at_toplevel : bool
     }
 
   let label_index context pc =
@@ -110,23 +111,32 @@ module Generate (Target : Target_sig.S) = struct
       ; "caml_int32_compare", (`Pure, [ Int32; Int32 ], Int Normalized)
       ; "caml_nativeint_compare", (`Pure, [ Nativeint; Nativeint ], Int Normalized)
       ; "caml_int64_compare", (`Pure, [ Int64; Int64 ], Int Normalized)
+      ; "caml_string_geti8", (`Mutator, [ Value; Int Normalized ], Int Normalized)
+      ; "caml_string_geti16", (`Mutator, [ Value; Int Normalized ], Int Normalized)
       ; "caml_string_get16", (`Mutator, [ Value; Int Normalized ], Int Normalized)
       ; "caml_string_get32", (`Mutator, [ Value; Int Normalized ], Int32)
       ; "caml_string_get64", (`Mutator, [ Value; Int Normalized ], Int64)
       ; "caml_string_getf32", (`Mutator, [ Value; Int Normalized ], Float32)
+      ; "caml_bytes_geti8", (`Mutator, [ Value; Int Normalized ], Int Normalized)
+      ; "caml_bytes_geti16", (`Mutator, [ Value; Int Normalized ], Int Normalized)
       ; "caml_bytes_get16", (`Mutator, [ Value; Int Normalized ], Int Normalized)
       ; "caml_bytes_get32", (`Mutator, [ Value; Int Normalized ], Int32)
       ; "caml_bytes_get64", (`Mutator, [ Value; Int Normalized ], Int64)
       ; "caml_bytes_getf32", (`Mutator, [ Value; Int Normalized ], Float32)
+      ; "caml_bytes_set8", (`Mutator, [ Value; Int Normalized; Int Unnormalized ], Value)
       ; "caml_bytes_set16", (`Mutator, [ Value; Int Normalized; Int Unnormalized ], Value)
       ; "caml_bytes_set32", (`Mutator, [ Value; Int Normalized; Int32 ], Value)
       ; "caml_bytes_set64", (`Mutator, [ Value; Int Normalized; Int64 ], Value)
       ; "caml_bytes_setf32", (`Mutator, [ Value; Int Normalized; Float32 ], Value)
       ; "caml_lxm_next", (`Mutable, [ Value ], Int64)
+      ; "caml_ba_uint8_geti8", (`Mutator, [ Value; Int Normalized ], Int Normalized)
+      ; "caml_ba_uint8_geti16", (`Mutator, [ Value; Int Normalized ], Int Normalized)
       ; "caml_ba_uint8_get16", (`Mutator, [ Value; Int Normalized ], Int Normalized)
       ; "caml_ba_uint8_get32", (`Mutator, [ Value; Int Normalized ], Int32)
       ; "caml_ba_uint8_get64", (`Mutator, [ Value; Int Normalized ], Int64)
       ; "caml_ba_uint8_getf32", (`Mutator, [ Value; Int Normalized ], Float32)
+      ; ( "caml_ba_uint8_set8"
+        , (`Mutator, [ Value; Int Normalized; Int Unnormalized ], Value) )
       ; ( "caml_ba_uint8_set16"
         , (`Mutator, [ Value; Int Normalized; Int Unnormalized ], Value) )
       ; "caml_ba_uint8_set32", (`Mutator, [ Value; Int Normalized; Int32 ], Value)
@@ -145,6 +155,8 @@ module Generate (Target : Target_sig.S) = struct
       ; "caml_ldexp_float32_bytecode", (`Pure, [ Float32; Int Normalized ], Float32)
       ; "caml_erf_float32_bytecode", (`Pure, [ Float32 ], Float32)
       ; "caml_erfc_float32_bytecode", (`Pure, [ Float32 ], Float32)
+      ; "caml_simd_float32_min_bytecode", (`Pure, [ Float32; Float32 ], Float32)
+      ; "caml_simd_float32_max_bytecode", (`Pure, [ Float32; Float32 ], Float32)
       ; "caml_float32_compare", (`Pure, [ Float32; Float32 ], Int Normalized)
       ; "caml_float16_of_double", (`Pure, [ Float ], Int32)
       ; "caml_double_of_float16", (`Pure, [ Int32 ], Float)
@@ -502,12 +514,18 @@ module Generate (Target : Target_sig.S) = struct
     register_arith_bin_prim "%int_sub" `Pure ~typ:int_u Value.int_sub;
     register_arith_bin_prim "%int_mul" `Pure ~typ:int_u Value.int_mul;
     register_arith_bin_prim "%direct_int_mul" `Pure ~typ:int_u Value.int_mul;
-    register_arith_bin_prim "%direct_int_div" `Pure ~typ:int_n Value.int_div;
+    register_bin_prim
+      "%direct_int_div"
+      `Pure
+      ~tx:int_n
+      ~ty:int_n
+      ~ret_typ:int_u
+      Value.int_div;
     register_bin_prim_ctx
       "%int_div"
       ~tx:int_n
       ~ty:int_n
-      ~ret_typ:int_n
+      ~ret_typ:int_u
       (fun context x y ->
         seq
           (let* cond = Arith.eqz y in
@@ -1005,16 +1023,6 @@ module Generate (Target : Target_sig.S) = struct
       ~typ:float32_u
       ~ret_typ:float32_u
       (fun f -> float32_un_op Trunc f);
-    register_arith_bin_prim
-      "caml_simd_float32_min_bytecode"
-      `Pure
-      ~typ:float32_u
-      (fun f g -> float32_bin_op Min f g);
-    register_arith_bin_prim
-      "caml_simd_float32_max_bytecode"
-      `Pure
-      ~typ:float32_u
-      (fun f g -> float32_bin_op Max f g);
     register_un_prim
       "caml_int32_bits_of_float"
       `Pure
@@ -1394,6 +1402,18 @@ module Generate (Target : Target_sig.S) = struct
     register_un_prim "caml_nativeint_of_int" `Pure ~typ:int_n ~ret_typ:nativeint_u Fun.id;
     register_arith_bin_prim "caml_int_compare" `Pure ~typ:int_n (fun i j ->
         Arith.((j < i) - (i < j)));
+    (* The runtime function has a fixed signature (no parameters), but
+       this primitive stands in for externals of varying arity. We bridge
+       the two by dropping the call site's arguments and invoking the
+       runtime function with none -- it always traps, so they are
+       unused. *)
+    register_prim "caml_no_bytecode_impl" `Mutator (fun _ _ _ ->
+        let* f =
+          register_import ~name:"caml_no_bytecode_impl" (Fun { params = []; result = [] })
+        in
+        let* () = instr (W.CallInstr (f, [])) in
+        let* () = instr W.Unreachable in
+        return (W.RefI31 (Const (I32 0l))));
     register_prim "%js_array" `Pure (fun ctx _ l ->
         Memory.allocate ~tag:0 (expression_list (fun x -> transl_prim_arg ctx x) l));
     register_comparison "caml_greaterthan" (Gt S) Gt (fun ctx x y ->
@@ -1690,7 +1710,7 @@ module Generate (Target : Target_sig.S) = struct
           match
             if exact then Global_flow.get_unique_closure ctx.global_flow_info f else None
           with
-          | Some (g, params) ->
+          | Some (g, params) when ctx.live.(Var.idx g) > 0 ->
               let* cl =
                 (* Functions with constant closures ignore their environment. *)
                 match closure with
@@ -1715,7 +1735,7 @@ module Generate (Target : Target_sig.S) = struct
                 ~from:(Typing.return_type ctx.types g)
                 ~into:(Typing.var_type ctx.types x)
                 (return (W.Call (g, args @ [ cl ])))
-          | None -> (
+          | _ -> (
               let funct = Var.fresh () in
               let* closure = tee funct (return closure) in
               let* ty, funct =
@@ -1738,12 +1758,14 @@ module Generate (Target : Target_sig.S) = struct
         if tag = 254
         then
           Memory.allocate_float_array
+            ~safepoint_friendly_array_init:ctx.at_toplevel
             (expression_list
                (fun x ->
                  convert ~from:(Typing.var_type ctx.types x) ~into:float_u (load x))
                (Array.to_list a))
         else
           Memory.allocate
+            ~safepoint_friendly_array_init:ctx.at_toplevel
             ~tag
             (expression_list (fun x -> load_and_box ctx x) (Array.to_list a))
     | Field (y, n, Non_float) -> Memory.field (load_and_box ctx y) n
@@ -1772,6 +1794,15 @@ module Generate (Target : Target_sig.S) = struct
         Closure.dummy ~cps:(effects_cps ()) ~arity:(Targetint.to_int_exn arity)
     | Prim (Extern "caml_alloc_dummy_infix", _) ->
         Closure.dummy ~cps:(effects_cps ()) ~arity:1
+    | Prim (Extern "caml_get_global_data", []) ->
+        let* x =
+          let* typ = Value.block_type in
+          register_import
+            ~import_module:"env"
+            ~name:"caml_global_data"
+            (Global { mut = true; typ })
+        in
+        return (W.GlobalGet x)
     | Prim (Extern "caml_get_global", [ Pc (String name) ]) ->
         let* x =
           let* context = get_context in
@@ -1790,7 +1821,29 @@ module Generate (Target : Target_sig.S) = struct
               register_import ~import_module:"OCaml" ~name (Global { mut = true; typ })
         in
         return (W.GlobalGet x)
-    | Prim (Extern "caml_set_global", [ Pc (String name); v ]) ->
+    | Prim (Extern "caml_get_global_predef", [ Pc (String name) ]) ->
+        let exported_name = "predef:" ^ name in
+        let* x =
+          let* context = get_context in
+          match
+            List.find_map
+              ~f:(fun f ->
+                match f with
+                | W.Global { name = name'; exported_name = Some en; _ }
+                  when String.equal en exported_name -> Some name'
+                | _ -> None)
+              context.other_fields
+          with
+          | Some x -> return x
+          | _ ->
+              let* typ = Value.block_type in
+              register_import
+                ~import_module:"OCaml"
+                ~name:exported_name
+                (Global { mut = true; typ })
+        in
+        return (W.GlobalGet x)
+    | Prim (Extern "caml_register_global", [ v; Pc (String name) ]) ->
         let v = transl_prim_arg ctx v in
         let x = Var.fresh_n name in
         let* () =
@@ -1799,8 +1852,35 @@ module Generate (Target : Target_sig.S) = struct
           register_global x ~exported_name:name { mut = true; typ } dummy
         in
         seq
-          (let* v = Value.as_block v in
-           instr (W.GlobalSet (x, v)))
+          (let* v = v in
+           let* v_block = Value.as_block (return v) in
+           let* () = instr (W.GlobalSet (x, v_block)) in
+           let* f =
+             register_import ~name:"caml_register_global" (Fun (Type.primitive_type 2))
+           in
+           let* name_str = Constant.translate ~unboxed:false (String name) in
+           instr (W.Drop (W.Call (f, [ v; name_str ]))))
+          Value.unit
+    | Prim (Extern "caml_register_global_predef", [ v; Pc (String name) ]) ->
+        let exported_name = "predef:" ^ name in
+        let v = transl_prim_arg ctx v in
+        let x = Var.fresh_n name in
+        let* () =
+          let* typ = Value.block_type in
+          let* dummy = Value.dummy_block in
+          register_global x ~exported_name { mut = true; typ } dummy
+        in
+        seq
+          (let* v = v in
+           let* v_block = Value.as_block (return v) in
+           let* () = instr (W.GlobalSet (x, v_block)) in
+           let* f =
+             register_import
+               ~name:"caml_register_global_predef"
+               (Fun (Type.primitive_type 2))
+           in
+           let* name_str = Constant.translate ~unboxed:false (String name) in
+           instr (W.Drop (W.Call (f, [ v; name_str ]))))
           Value.unit
     | Prim (Not, [ x ]) -> Value.not (transl_prim_arg ctx ~typ:int_u x)
     | Prim (Lt, [ x; y ]) -> translate_int_comparison ctx Arith.( < ) x y
@@ -1948,9 +2028,28 @@ module Generate (Target : Target_sig.S) = struct
     | (`Block _ | `Catch | `Skip) as b -> b :: context
     | `Return -> `Skip :: context
 
-  let needed_handlers (p : program) pc =
+  (* Walk the dominator subtree of [pc] (the structural region of the
+     loop body, try body, or function body that the wrap covers),
+     skipping any nested try body since it carries its own wrap. *)
+  let needed_handlers (p : program) ~dom pc =
+    let fold : 'c. _ -> _ -> (Addr.t -> 'c -> 'c) -> 'c -> 'c =
+     fun _blocks pc' f accu ->
+      let block = Addr.Map.find pc' p.blocks in
+      let try_body =
+        match block.branch with
+        | Pushtrap ((pc'', _), _, _) -> Some pc''
+        | _ -> None
+      in
+      Addr.Set.fold
+        (fun child acc ->
+          match try_body with
+          | Some pc'' when pc'' = child -> acc
+          | _ -> f child acc)
+        (Structure.get_edges dom pc')
+        accu
+    in
     Code.traverse
-      { fold = fold_children_skip_try_body }
+      { fold }
       (fun pc n ->
         let block = Addr.Map.find pc p.blocks in
         List.fold_left
@@ -2020,8 +2119,8 @@ module Generate (Target : Target_sig.S) = struct
         instr W.Unreachable
     else body ~result_typ ~fall_through ~context
 
-  let wrap_with_handlers p pc ~result_typ ~fall_through ~context body =
-    let need_zero_divide_handler, need_bound_error_handler = needed_handlers p pc in
+  let wrap_with_handlers p ~dom pc ~result_typ ~fall_through ~context body =
+    let need_zero_divide_handler, need_bound_error_handler = needed_handlers p ~dom pc in
     wrap_with_handler
       need_bound_error_handler
       bound_error_pc
@@ -2053,6 +2152,11 @@ module Generate (Target : Target_sig.S) = struct
       ((pc, _) as cont)
       cloc
       acc =
+    let ctx =
+      match name_opt with
+      | None -> { ctx with at_toplevel = true }
+      | Some _ -> ctx
+    in
     let return_type =
       match name_opt with
       | Some f -> Typing.return_type ctx.types f
@@ -2068,7 +2172,7 @@ module Generate (Target : Target_sig.S) = struct
         | Cond (_, (pc1, _), (pc2, _)) when pc' = pc1 && pc' = pc2 -> true
         | _ -> Structure.is_merge_node g pc'
       in
-      let code ~context =
+      let code ~result_typ ~fall_through ~context =
         let block = Addr.Map.find pc ctx.blocks in
         let* () = translate_instrs ctx context block.body in
         translate_node_within
@@ -2085,8 +2189,20 @@ module Generate (Target : Target_sig.S) = struct
       in
       if Structure.is_loop_header g pc
       then
-        loop { params = []; result = result_typ } (code ~context:(`Block pc :: context))
-      else code ~context
+        loop
+          { params = []; result = result_typ }
+          (if Option.is_none name_opt
+           then
+             wrap_with_handlers
+               p
+               ~dom
+               pc
+               ~result_typ
+               ~fall_through
+               ~context:(`Block pc :: context)
+               code
+           else code ~result_typ ~fall_through ~context:(`Block pc :: context))
+      else code ~result_typ ~fall_through ~context
     and translate_node_within ~result_typ ~fall_through ~pc ~l ~context =
       match l with
       | pc' :: rem ->
@@ -2165,6 +2281,7 @@ module Generate (Target : Target_sig.S) = struct
                 ~context:(extend_context fall_through context)
                 (wrap_with_handlers
                    p
+                   ~dom
                    (fst cont)
                    (fun ~result_typ ~fall_through ~context ->
                      translate_branch result_typ fall_through pc cont context))
@@ -2236,6 +2353,7 @@ module Generate (Target : Target_sig.S) = struct
            let* () =
              wrap_with_handlers
                p
+               ~dom
                pc
                ~result_typ:[ Option.value ~default:Type.value (unboxed_type return_type) ]
                ~fall_through:`Return
@@ -2362,6 +2480,7 @@ module Generate (Target : Target_sig.S) = struct
       ; blocks = p.blocks
       ; closures
       ; global_context
+      ; at_toplevel = false
       }
     in
     let toplevel_name = Var.fresh_n "toplevel" in
@@ -2382,6 +2501,7 @@ module Generate (Target : Target_sig.S) = struct
         functions
     in
     global_context.init_code <- [];
+    let functions = Hoist_loops.f ~toplevel:toplevel_name functions in
     global_context.other_fields <- List.rev_append functions global_context.other_fields;
     let js_code = StringMap.bindings global_context.fragments in
     global_context.fragments <- StringMap.empty;
@@ -2410,6 +2530,12 @@ module Generate (Target : Target_sig.S) = struct
     Typing.reset ();
     Primitive.register "caml_make_array" `Mutable None None;
     Primitive.register "caml_array_of_uniform_array" `Mutable None None;
+    (* These primitives are rewritten by [Specialize_js] before code
+       generation, but need to be registered so that
+       [Primitive.get_external] reports them as available for the
+       toplevel. *)
+    Primitive.register "caml_array_get_addr" `Mutable None None;
+    Primitive.register "caml_array_set_addr" `Mutable None None;
     String.Hashtbl.iter
       (fun name (k, unbox, typ, _) ->
         Primitive.register name k None None;
@@ -2441,7 +2567,7 @@ let fix_switch_branches p =
         if not (List.is_empty args)
         then
           l.(i) <-
-            ( (let l = try Addr.Map.find pc !updates with Not_found -> [] in
+            ( (let l = Addr.Map.find_opt pc !updates |> Option.value ~default:[] in
                match
                  List.find_map
                    ~f:(fun (args', pc') ->
@@ -2479,11 +2605,11 @@ let init = G.init
 
 let start () = make_context ~value_type:Gc_target.Type.value
 
-let f ~context ~unit_name p ~live_vars ~in_cps ~deadcode_sentinal ~global_flow_data =
+let f ~context ~unit_name p ~live_vars ~in_cps ~deadcode_sentinel ~global_flow_data =
   let global_flow_state, global_flow_info = global_flow_data in
   let fun_info = Call_graph_analysis.f p global_flow_info in
   let types =
-    Typing.f ~global_flow_state ~global_flow_info ~fun_info ~deadcode_sentinal p
+    Typing.f ~global_flow_state ~global_flow_info ~fun_info ~deadcode_sentinel p
   in
   let t = Timer.make () in
   let p = Structure.norm p in
@@ -2511,3 +2637,27 @@ let wasm_output ch ~opt_source_map_file ~context =
   if times () then Format.eprintf "    fields: %a@." Timer.print t;
   Wasm_output.f ch ~opt_source_map_file fields;
   if times () then Format.eprintf "  output: %a@." Timer.print t
+
+let compile ~unit_name code =
+  let Driver.{ program; variable_uses; in_cps; deadcode_sentinel; _ }, global_flow_data =
+    Driver.optimize_for_wasm ~shapes:false ~profile:O1 code
+  in
+  let context = start () in
+  let toplevel_name, fragments =
+    f
+      ~context
+      ~unit_name
+      ~live_vars:variable_uses
+      ~in_cps
+      ~deadcode_sentinel
+      ~global_flow_data
+      program
+  in
+  add_start_function ~context toplevel_name;
+  let fields = G.output ~context in
+  let wasm_binary = Wasm_output.to_string fields in
+  wasm_binary, fragments
+
+let from_string ~prims ~debug ~unit_name s =
+  let code = Parse_bytecode.from_string ~prims ~debug s in
+  compile ~unit_name code

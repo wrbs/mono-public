@@ -1,0 +1,741 @@
+#print_line_numbers true
+
+#reset_line_numbers_after_expect true
+
+open! Core
+open! Unstring.Export
+
+let test (type a) (sexp_of_a : a -> Sexp.t) ~input parser =
+  let compiled = Unstring.compile parser in
+  match Unstring.Compiled.run_unambiguous sexp_of_a compiled input with
+  | Some (Ok value) -> print_s (sexp_of_a value)
+  | Some (Error error) -> print_s [%sexp (error : Error.t)]
+  | None -> print_endline "No parse found"
+;;
+
+(* ============================================================ *)
+(* [%unstring: type]: type-directed parser lookup *)
+(* *)
+(* The ppx resolves types to parsers by naming convention: *)
+(* [int] -> [unstring_int], [Foo.t] -> [Foo.unstring], etc. *)
+(* Attributes on types become labeled arguments. *)
+(* ============================================================ *)
+
+(* Built-in types: int, float, string, bool.
+   - Parsing and shape for each primitive
+   - Negative int to confirm sign handling *)
+Unstring.print_shape [%unstring: string];;
+Unstring.print_shape [%unstring: int];;
+Unstring.print_shape [%unstring: float];;
+Unstring.print_shape [%unstring: bool];;
+[%unstring: int] |> test [%sexp_of: int] ~input:"-123"
+
+[%%expect
+  {|
+«·⋆»
+«(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧»
+«(- ‖ + ‖ "")
+ (⟦.0-9⟧⋆ ⟦.0-9⟧ ("" ‖ ⟦Ee⟧ (- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧) ‖ nan ‖ inf)»
+false ‖ true
+-123
+|}]
+
+(* [%unstring.with_restring: type]: returns (unstring, restring) pair *)
+
+let unstring, restring = [%unstring.with_restring: int];;
+
+unstring |> test [%sexp_of: int] ~input:"42";;
+print_endline (restring 42);;
+print_endline (restring (-7))
+
+[%%expect
+  {|
+42
+42
+-7
+|}]
+
+(* String with [@chars]: restrict allowed characters.
+   - Digit, Alpha, Not Whitespace
+   - Specific character via [Char] *)
+;;
+
+Unstring.print_shape [%unstring: (string[@chars Digit])];;
+Unstring.print_shape [%unstring: (string[@chars Alpha])];;
+Unstring.print_shape [%unstring: (string[@chars Not Whitespace])];;
+Unstring.print_shape [%unstring: (string[@chars Char '-'])]
+
+[%%expect
+  {|
+«⟦\d⟧⋆»
+«⟦\a⟧⋆»
+«⟦^\s⟧⋆»
+«-⋆»
+|}]
+
+(* Option type with [@some] and [@none] attributes.
+   - Some case and None case
+   - Shape showing the alternation *)
+;;
+
+Unstring.print_shape [%unstring: (int option[@some "%{_}"] [@none "none"])];;
+
+[%unstring: (int option[@some "%{_}"] [@none "none"])]
+|> test [%sexp_of: int option] ~input:"42"
+;;
+
+[%unstring: (int option[@some "%{_}"] [@none "none"])]
+|> test [%sexp_of: int option] ~input:"none"
+
+[%%expect
+  {|
+«(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧» ‖ none
+(42)
+()
+|}]
+
+(* [%unstring.with_restring: option] *)
+
+let _unstring, restring =
+  [%unstring.with_restring: (int option[@some "%{_}"] [@none "none"])]
+;;
+
+print_endline (restring (Some 42));;
+print_endline (restring None)
+
+[%%expect
+  {|
+42
+none
+|}]
+
+(* Unit with [@unit]: specifies a literal that matches a unit value.
+   - Standalone unit
+   - Unit inside option (common pattern for sentinel values) *)
+;;
+
+Unstring.print_shape [%unstring: (unit[@unit "()"])];;
+
+Unstring.print_shape
+  [%unstring: ((unit[@unit "()"]) option[@some "Some %{_}"] [@none "None"])]
+;;
+
+[%unstring: ((unit[@unit "()"]) option[@some "Some %{_}"] [@none "None"])]
+|> test [%sexp_of: unit option] ~input:"Some ()"
+
+[%%expect
+  {|
+"()"
+"Some ()" ‖ None
+(())
+|}]
+
+(* [%unstring.with_restring: unit] and unit inside option *)
+
+let _unstring, restring =
+  [%unstring.with_restring: ((unit[@unit "()"]) option[@some "Some %{_}"] [@none "None"])]
+;;
+
+print_endline (restring (Some ()));;
+print_endline (restring None)
+
+[%%expect
+  {|
+Some ()
+None
+|}]
+
+(* Custom type via naming convention: [Foo.t] -> [Foo.unstring]. *)
+
+module Color = struct
+  type t =
+    | Red
+    | Green
+    | Blue
+  [@@deriving sexp_of]
+
+  let unstring =
+    Unstring.choice
+      [ Unstring.(lit "red" |> map ~f:(fun () -> Red))
+      ; Unstring.(lit "green" |> map ~f:(fun () -> Green))
+      ; Unstring.(lit "blue" |> map ~f:(fun () -> Blue))
+      ]
+  ;;
+end
+;;
+
+Unstring.print_shape [%unstring: Color.t];;
+[%unstring: Color.t] |> test [%sexp_of: Color.t] ~input:"green"
+
+[%%expect
+  {|
+red ‖ green ‖ blue
+Green
+|}]
+
+(* [@custom] attribute: override the default lookup with a custom parser.
+   - On a bare type
+   - Inside a format string *)
+;;
+
+let my_parser = Unstring.(lit "yes" |> map ~f:(fun () -> true)) in
+Unstring.print_shape [%unstring: (bool[@custom my_parser])];
+[%unstring: (bool[@custom my_parser])] |> test [%sexp_of: bool] ~input:"yes"
+
+[%%expect
+  {|
+yes
+true
+|}]
+;;
+
+let my_parser = Unstring.(lit "yes" |> map ~f:(fun () -> true)) in
+Unstring.print_shape [%unstring ("flag=%{_}" : (bool[@custom my_parser]))]
+
+[%%expect
+  {|
+flag=yes
+|}]
+
+(* [@custom_restring] attribute: override the restring lookup with a custom function.
+   - On a bare type via [%unstring.with_restring]
+   - Inside a format string *)
+;;
+
+let my_parser = Unstring.(lit "yes" |> map ~f:(fun () -> true))
+and my_restring b = if b then "yes" else "no" in
+let _unstring, restring =
+  [%unstring.with_restring: (bool[@custom my_parser] [@custom_restring my_restring])]
+in
+print_endline (restring true);
+print_endline (restring false)
+
+[%%expect
+  {|
+yes
+no
+|}]
+;;
+
+let my_parser = Unstring.(lit "yes" |> map ~f:(fun () -> true))
+and my_restring b = if b then "yes" else "no" in
+let _unstring, restring =
+  [%unstring.with_restring
+    ("flag=%{_}" : (bool[@custom my_parser] [@custom_restring my_restring]))]
+in
+print_endline (restring true);
+print_endline (restring false)
+
+[%%expect
+  {|
+flag=yes
+flag=no
+|}]
+
+(* Polymorphic variants with [@format].
+   - Nullary constructors
+   - Constructor with payload
+   - Shape for each *)
+;;
+
+Unstring.print_shape [%unstring: [ `On [@format "on"] | `Off [@format "off"] ]];;
+
+[%unstring: [ `On [@format "on"] | `Off [@format "off"] ]]
+|> test [%sexp_of: [ `On | `Off ]] ~input:"on"
+
+[%%expect
+  {|
+on ‖ off
+On
+|}]
+;;
+
+Unstring.print_shape
+  [%unstring: [ `Value of (int[@format "value=%{_}"]) | `Empty [@format "empty"] ]]
+;;
+
+[%unstring: [ `Value of (int[@format "value=%{_}"]) | `Empty [@format "empty"] ]]
+|> test [%sexp_of: [ `Value of int | `Empty ]] ~input:"value=100"
+
+[%%expect
+  {|
+value= «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧» ‖ empty
+(Value 100)
+|}]
+
+(* ============================================================ *)
+(* [%unstring ("format" : type)]: format string with type       *)
+(* *)
+(* Ad-hoc parsing without defining types. The format string *)
+(* determines the shape; the type annotation determines the *)
+(* result type. *)
+(* ============================================================ *)
+
+(* Single value with %[{_}].
+   - Shape and parse for a single hole *)
+;;
+
+Unstring.print_shape [%unstring ("x=%{_}" : int)];;
+[%unstring ("x=%{_}" : int)] |> test [%sexp_of: int] ~input:"x=42"
+
+[%%expect
+  {|
+x= «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧»
+42
+|}]
+
+(* Unlabeled tuple with %{1}, %{2}, ... *)
+;;
+
+Unstring.print_shape [%unstring ("x=%{1} y=%{2}" : int * int)];;
+[%unstring ("x=%{1} y=%{2}" : int * int)] |> test [%sexp_of: int * int] ~input:"x=10 y=20"
+
+[%%expect
+  {|
+x= «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧» " y=" «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧»
+(10 20)
+|}]
+
+(* Out-of-order numbered holes: the result tuple matches the numbering, not the appearance
+   order.
+   - 2 holes reversed
+   - 3 holes shuffled *)
+;;
+
+Unstring.print_shape [%unstring ("%{2} %{1}" : int * string)];;
+
+[%unstring ("%{2} %{1}" : int * string)]
+|> test [%sexp_of: int * string] ~input:"hello 42"
+
+[%%expect
+  {|
+«·⋆» " " «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧»
+(42 hello)
+|}]
+;;
+
+Unstring.print_shape [%unstring ("%{2} %{3} %{1}" : bool * int * string)];;
+
+[%unstring ("%{2} %{3} %{1}" : bool * int * string)]
+|> test [%sexp_of: bool * int * string] ~input:"7 goodbye true"
+
+[%%expect
+  {|
+«(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧» " " «·⋆» " " (false ‖ true)
+(true 7 goodbye)
+|}]
+
+(* Labeled tuple with %[{name}].
+   - Labels in natural order
+   - Labels in different order than format (alphabetical in result) *)
+;;
+
+Unstring.print_shape [%unstring ("x=%{x} y=%{y}" : x:int * y:int)];;
+
+[%unstring ("x=%{x} y=%{y}" : x:int * y:int)]
+|> test [%sexp_of: x:int * y:int] ~input:"x=10 y=20"
+
+[%%expect
+  {|
+x= «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧» " y=" «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧»
+((~x 10) (~y 20))
+|}]
+;;
+
+Unstring.print_shape [%unstring ("name:%{name}, age:%{age}" : age:int * name:string)];;
+
+[%unstring ("name:%{name}, age:%{age}" : age:int * name:string)]
+|> test [%sexp_of: age:int * name:string] ~input:"name:Alice, age:30"
+
+[%%expect
+  {|
+name: «·⋆» ", age:" «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧»
+((~age 30) (~name Alice))
+|}]
+
+(* No placeholders: returns unit (degenerate case — literal match only) *)
+;;
+
+Unstring.print_shape [%unstring "hello world"];;
+[%unstring "hello world"] |> test [%sexp_of: unit] ~input:"hello world"
+
+[%%expect
+  {|
+"hello world"
+()
+|}]
+
+(* ============================================================ *)
+(* [%unstring: type] with [@format] for tuples *)
+(* *)
+(* Tuple types require [@format] specifying the layout. *)
+(* Unlabeled tuples use %{1}, %{2}; labeled use %{name}.       *)
+(* ============================================================ *)
+
+(* Unlabeled tuple with [@format] *)
+;;
+
+Unstring.print_shape [%unstring: (int * int[@format "(%{1},%{2})"])];;
+
+[%unstring: (int * int[@format "(%{1},%{2})"])]
+|> test [%sexp_of: int * int] ~input:"(10,20)"
+
+[%%expect
+  {|
+"(" «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧» , «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧» ")"
+(10 20)
+|}]
+
+(* Labeled tuple with [@format] *)
+;;
+
+Unstring.print_shape [%unstring: (x:int * y:int[@format "x=%{x}, y=%{y}"])];;
+
+[%unstring: (x:int * y:int[@format "x=%{x}, y=%{y}"])]
+|> test [%sexp_of: x:int * y:int] ~input:"x=5, y=10"
+
+[%%expect
+  {|
+x= «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧» ", y=" «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧»
+((~x 5) (~y 10))
+|}]
+
+(* ============================================================ *)
+(* [%unstring: type] for lists with [@sep] *)
+(* *)
+(* Lists require a [@sep] attribute for the separator. *)
+(* - Non-empty list *)
+(* - Multi-character separator *)
+(* - Empty list (empty string input) *)
+(* ============================================================ *)
+;;
+
+Unstring.print_shape [%unstring: (int list[@sep ","])];;
+[%unstring: (int list[@sep ","])] |> test [%sexp_of: int list] ~input:"1,2,3";;
+[%unstring: (int list[@sep ", "])] |> test [%sexp_of: int list] ~input:"10, 20, 30";;
+[%unstring: (int list[@sep ","])] |> test [%sexp_of: int list] ~input:""
+
+[%%expect
+  {|
+(«(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧» ,)⋆ «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧» ‖ ""
+(1 2 3)
+(10 20 30)
+()
+|}]
+
+(* [%unstring.with_restring: list] *)
+
+let _unstring, restring = [%unstring.with_restring: (int list[@sep ","])];;
+
+print_endline (restring [ 1; 2; 3 ]);;
+print_endline (restring [])
+
+[%%expect
+  {|
+1,2,3
+|}]
+
+(* ============================================================ *)
+(* [%unstring.with_restring ("format" : type)]                 *)
+(* *)
+(* Same as [%unstring ("format" : type)] but returns both the   *)
+(* unstring parser and the restring function as a pair. *)
+(* ============================================================ *)
+
+(* Single value *)
+
+let unstring, restring = [%unstring.with_restring ("x=%{_}" : int)];;
+
+unstring |> test [%sexp_of: int] ~input:"x=42";;
+print_endline (restring 42)
+
+[%%expect
+  {|
+42
+x=42
+|}]
+
+(* Unlabeled tuple *)
+
+let unstring, restring = [%unstring.with_restring ("(%{1},%{2})" : int * string)];;
+
+unstring |> test [%sexp_of: int * string] ~input:"(42,hello)";;
+print_endline (restring (42, "hello"))
+
+[%%expect
+  {|
+(42 hello)
+(42,hello)
+|}]
+
+(* Labeled tuple *)
+
+let unstring, restring =
+  [%unstring.with_restring ("name:%{name}, age:%{age}" : name:string * age:int)]
+;;
+
+unstring |> test [%sexp_of: name:string * age:int] ~input:"name:Alice, age:30";;
+print_endline (restring (~name:"Alice", ~age:30))
+
+[%%expect
+  {|
+((~name Alice) (~age 30))
+name:Alice, age:30
+|}]
+
+(* Literal string (no holes, unit) *)
+
+let unstring, restring = [%unstring.with_restring "hello world"];;
+
+unstring |> test [%sexp_of: unit] ~input:"hello world";;
+print_endline restring
+
+[%%expect
+  {|
+()
+hello world
+|}]
+
+(* ============================================================ *)
+(* Parameterized custom types *)
+(* *)
+(* For ['a Foo.t], the ppx calls [Foo.unstring] with a parser *)
+(* for each type argument. *)
+(* ============================================================ *)
+
+(* Parameterized record *)
+
+module Wrapper = struct
+  type 'a t = { value : 'a } [@@deriving unstring, sexp_of] [@@format "%{value}"]
+end
+;;
+
+Unstring.print_shape [%unstring: int Wrapper.t];;
+[%unstring: int Wrapper.t] |> test [%sexp_of: int Wrapper.t] ~input:"42"
+
+[%%expect
+  {|
+«(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧»
+((value 42))
+|}]
+
+(* Parameterized variant *)
+
+module Result_like = struct
+  type 'a t =
+    | Ok of 'a [@format "ok:%{_}"]
+    | Error of string [@format "error:%{_}"]
+  [@@deriving unstring, sexp_of]
+end
+;;
+
+Unstring.print_shape [%unstring: int Result_like.t];;
+[%unstring: int Result_like.t] |> test [%sexp_of: int Result_like.t] ~input:"ok:42";;
+
+[%unstring: int Result_like.t]
+|> test [%sexp_of: int Result_like.t] ~input:"error:something went wrong"
+
+[%%expect
+  {|
+ok: «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧» ‖ error: «·⋆»
+(Ok 42)
+(Error "something went wrong")
+|}]
+
+(* ============================================================ *)
+(* Polymorphic variant inheritance *)
+(* *)
+(* Inherit rows from an existing polymorphic variant type. *)
+(* - Nullary base rows *)
+(* - Base rows with payloads *)
+(* ============================================================ *)
+
+(* Nullary base *)
+
+type base =
+  [ `A [@format "a"]
+  | `B [@format "b"]
+  ]
+[@@deriving unstring ~restring, sexp_of]
+;;
+
+Unstring.print_shape [%unstring: [ base | `C [@format "c"] ]];;
+[%unstring: [ base | `C [@format "c"] ]] |> test [%sexp_of: [ base | `C ]] ~input:"a";;
+[%unstring: [ base | `C [@format "c"] ]] |> test [%sexp_of: [ base | `C ]] ~input:"c"
+
+[%%expect
+  {|
+(a ‖ b) ‖ c
+A
+C
+|}]
+
+(* Restring with inherited nullary poly variant rows *)
+;;
+
+let _unstring, restring = [%unstring.with_restring: [ base | `C [@format "c"] ]] in
+print_endline (restring `A);
+print_endline (restring `B);
+print_endline (restring `C)
+
+[%%expect
+  {|
+a
+b
+c
+|}]
+
+(* Base with payload *)
+
+type base_with_payload =
+  [ `X of (int[@format "x=%{_}"])
+  | `Y [@format "y"]
+  ]
+[@@deriving unstring ~restring, sexp_of]
+;;
+
+Unstring.print_shape [%unstring: [ base_with_payload | `Z of (string[@format "z=%{_}"]) ]]
+;;
+
+[%unstring: [ base_with_payload | `Z of (string[@format "z=%{_}"]) ]]
+|> test [%sexp_of: [ base_with_payload | `Z of string ]] ~input:"x=99"
+;;
+
+[%unstring: [ base_with_payload | `Z of (string[@format "z=%{_}"]) ]]
+|> test [%sexp_of: [ base_with_payload | `Z of string ]] ~input:"z=hello"
+
+[%%expect
+  {|
+(x= «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧» ‖ y) ‖ z= «·⋆»
+(X 99)
+(Z hello)
+|}]
+
+(* Restring with inherited poly variant rows that have payloads *)
+;;
+
+let _unstring, restring =
+  [%unstring.with_restring: [ base_with_payload | `Z of (string[@format "z=%{_}"]) ]]
+in
+print_endline (restring (`X 99));
+print_endline (restring `Y);
+print_endline (restring (`Z "hello"))
+
+[%%expect
+  {|
+x=99
+y
+z=hello
+|}]
+
+(* ============================================================ *)
+(* Error cases *)
+(* *)
+(* Missing required attributes, type mismatches, and invalid *)
+(* uses of the extension. *)
+(* ============================================================ *)
+
+(* Missing [@some] and [@none] for option *)
+
+let _ = [%unstring: int option]
+
+[%%expect
+  {|
+Line 1, characters 24-30:
+Error: This expression has type
+         some:(int Unstring.t -> int Unstring.t) ->
+         none:unit Unstring.t -> int option Unstring.t
+       but an expression was expected of type
+         'a Unstring.t
+        Hint: option types require [@some "..."] and [@none "..."] attributes to specify the format for Some and None cases.
+Line 0:
+  Hint: This function application is partial,
+  maybe some arguments are missing.
+|}]
+
+(* Polymorphic variant missing [@format] *)
+
+let _ = [%unstring: [ `Foo | `Bar ]]
+
+[%%expect
+  {|
+Line 1, characters 22-26:
+Error: [@format] is required for each variant
+|}]
+
+(* Tuple missing [@format] *)
+
+let _ = [%unstring: int * int]
+
+[%%expect
+  {|
+Line 1, characters 8-30:
+Error: [@format] is required for tuple types
+|}]
+
+(* List missing [@sep] *)
+
+let _ = [%unstring: int list]
+
+[%%expect
+  {|
+Line 1, characters 24-28:
+Error: This expression has type sep:unit Unstring.t -> int list Unstring.t
+       but an expression was expected of type
+         'a Unstring.t
+        Hint: list types require a [@sep "..."] attribute to specify the separator between elements.
+Line 0:
+  Hint: This function application is partial,
+  maybe some arguments are missing.
+|}]
+
+(* Type variable outside of parameterized type context *)
+
+let _ = [%unstring: 'a]
+
+[%%expect
+  {|
+Line 1, characters 8-23:
+Error: Type variable 'a' not found
+|}]
+
+(* Wrong placeholder for single-value type: named hole instead of %{_} *)
+
+let (_ : _ Unstring.t) = [%unstring ("%{x}" : int)]
+
+[%%expect
+  {|
+Line 1, characters 38-42:
+Error: The format string is expected to contain the hole %{_} but no such hole found
+|}]
+
+(* Missing placeholder for single-value type *)
+
+let (_ : _ Unstring.t) = [%unstring ("hello" : int)]
+
+[%%expect
+  {|
+Line 1, characters 38-43:
+Error: The format string is expected to contain the hole %{_} but no such hole found
+|}]
+
+(* Placeholder in unit format string *)
+
+let (_ : _ Unstring.t) = [%unstring ("%{_}" : unit)]
+
+[%%expect
+  {|
+Line 1, characters 38-42:
+Error: The hole %{_} inside the format string does not correspond to any field
+|}]
+
+(* Unknown label in labeled tuple format *)
+;;
+
+[%unstring: (x:int * y:int[@format "%{x} %{z}"])]
+
+[%%expect
+  {|
+Line 1, characters 36-45:
+Error: The format string is expected to contain the hole %{y} but no such hole found
+|}]

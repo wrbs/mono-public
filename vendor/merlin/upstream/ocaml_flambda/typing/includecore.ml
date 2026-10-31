@@ -37,6 +37,12 @@ type primitive_mismatch =
   | Argument_repr of int
   | Layout_poly_attr
 
+type layout_poly_coercion =
+  | Extra_lhs of { extra: int }
+  | Extra_rhs of { extra: int }
+  | Instantiate_lhs_to_rhs of { index_lhs: int; index_rhs: int }
+  | Instantiate_lhs of { index_lhs: int; arg: Jkind_types.Sort.t option }
+
 type value_mismatch =
   | Primitive_mismatch of primitive_mismatch
   | Not_a_primitive
@@ -44,14 +50,16 @@ type value_mismatch =
   | Zero_alloc of Zero_alloc.error
   | Modality of Mode.Modality.error
   | Mode of Mode.Value.error
+  | Layout_poly_coercion of layout_poly_coercion
 
 exception Dont_match of value_mismatch
 
-type close_over_coercion = Env.locks * Longident.t * Location.t
-
 type mmodes =
   | All
-  | Specific of Mode.Value.l * Mode.Value.r * close_over_coercion option
+  | Specific :
+      ((Mode.allowed * 'r) Mode.Value.t * Typedtree.held_locks option) *
+      ('l * Mode.allowed) Mode.Value.t ->
+      mmodes
 
 let child_close_over_coercion_opt id c =
   match c with
@@ -60,9 +68,9 @@ let child_close_over_coercion_opt id c =
 
 let child_modes id = function
   | All -> All
-  | Specific (m0, m1, c) ->
+  | Specific ((m0, c), m1) ->
     let c = child_close_over_coercion_opt id c in
-    Specific (m0, m1, c)
+    Specific ((m0, c), m1)
 
 let child_modes_with_modalities id ~modalities:(moda0, moda1) = function
   | All ->
@@ -70,7 +78,7 @@ let child_modes_with_modalities id ~modalities:(moda0, moda1) = function
       | Ok () -> Ok All
       | Error e -> Error e
     end
-  | Specific (m0, m1, c) ->
+  | Specific ((m0, c), m1)->
     let c = child_close_over_coercion_opt id c in
     begin match Mode.Modality.to_const_opt moda1 with
     | None ->
@@ -83,15 +91,15 @@ let child_modes_with_modalities id ~modalities:(moda0, moda1) = function
     | Some moda1 ->
       let m0 = Mode.Modality.apply moda0 m0 in
       let m1 = Mode.Modality.Const.apply moda1 m1 in
-      Ok (Specific (m0, m1, c))
+      Ok (Specific ((m0, c), m1))
     end
 
 let check_modes env ?(crossing = Crossing.max) ~item ?typ = function
   | All -> Ok ()
-  | Specific (m0, m1, c) ->
+  | Specific ((m0, c), m1) ->
       let m0 =
         match c with
-        | None -> m0
+        | None -> m0 |> Mode.Value.disallow_right
         | Some (locks, lid, loc) ->
             let m0 = Crossing.apply_left crossing m0 in
             Env.walk_locks ~env ~loc lid ~item typ (m0, locks)
@@ -142,6 +150,42 @@ let primitive_descriptions pd1 pd2 =
   else
     native_repr_args pd1.prim_native_repr_args pd2.prim_native_repr_args
 
+let moregeneral_lpoly env pat_lpoly subj_lpoly ty1 ty2 =
+  let pat_refs =
+    Ctype.moregeneral env true pat_lpoly subj_lpoly ty1 ty2
+  in
+  (* Map from RHS sort poly var to its 1-indexed position *)
+  let subj_index = List.mapi (fun i v -> (v, i + 1)) subj_lpoly in
+  let subj_rest =
+    List.fold_left
+      (fun (i, subj_rest) r ->
+        let i = i + 1 in
+        let v, subj_rest = match subj_rest with
+          | v :: rest -> v, rest
+          | [] ->
+            let extra = List.length pat_refs - i + 1 in
+            raise (Dont_match (Layout_poly_coercion (Extra_lhs { extra })))
+        in
+        (match r with
+        | Some (Jkind_types.Sort.Var v') when v' == v -> ()
+        | Some (Jkind_types.Sort.Var v') ->
+          let j = List.assq v' subj_index in
+          raise (Dont_match (Layout_poly_coercion
+            (Instantiate_lhs_to_rhs { index_lhs = i; index_rhs = j })))
+        | _ ->
+          raise (Dont_match (Layout_poly_coercion
+            (Instantiate_lhs { index_lhs = i; arg = r }))));
+        (i, subj_rest))
+      (0, subj_lpoly)
+      pat_refs
+    |> snd
+  in
+  match subj_rest with
+  | [] -> ()
+  | _ ->
+    raise (Dont_match (Layout_poly_coercion
+      (Extra_rhs { extra = List.length subj_rest })))
+
 let value_descriptions ~loc env name
     ~mmodes
     (vd1 : Types.value_description)
@@ -167,8 +211,11 @@ let value_descriptions ~loc env name
   | Ok () -> ()
   | Error e -> raise (Dont_match (Mode e))
   end;
+  let val_lpoly1 = Lpoly.get_exn vd1.val_lpoly in
+  let val_lpoly2 = Lpoly.get_exn vd2.val_lpoly in
   match vd1.val_kind with
   | Val_prim p1 -> begin
+     assert (List.is_empty val_lpoly1);
      match vd2.val_kind with
      | Val_prim p2 -> begin
          let locality = [ Mode.Locality.global; Mode.Locality.local ] in
@@ -177,9 +224,9 @@ let value_descriptions ~loc env name
          List.iter (fun loc ->
           List.iter (fun fork ->
            List.iter (fun yield ->
-             let ty1, _, _, _ = Ctype.instance_prim p1 vd1.val_type in
+             let ty1, _, _, _ = Ctype.instance_prim env p1 vd1.val_type in
              let ty2, mode_l2, mode_fy2, _ =
-               Ctype.instance_prim p2 vd2.val_type
+               Ctype.instance_prim env p2 vd2.val_type
              in
              let mode_f2 = Option.map fst mode_fy2 in
              let mode_y2 = Option.map snd mode_fy2 in
@@ -187,7 +234,7 @@ let value_descriptions ~loc env name
              Option.iter (Mode.Forkable.equate_exn fork) mode_f2;
              Option.iter (Mode.Yielding.equate_exn yield) mode_y2;
              try
-               Ctype.moregeneral env true ty1 ty2
+               moregeneral_lpoly env val_lpoly1 val_lpoly2 ty1 ty2
              with Ctype.Moregen err ->
                raise (Dont_match (Type err))
            ) yielding
@@ -198,8 +245,8 @@ let value_descriptions ~loc env name
          | Some err -> raise (Dont_match (Primitive_mismatch err))
        end
      | _ ->
-        let ty1, mode_l1, _, sort1 = Ctype.instance_prim p1 vd1.val_type in
-        (try Ctype.moregeneral env true ty1 vd2.val_type
+        let ty1, mode_l1, _, sort1 = Ctype.instance_prim env p1 vd1.val_type in
+        (try moregeneral_lpoly env val_lpoly1 val_lpoly2 ty1 vd2.val_type
          with Ctype.Moregen err -> raise (Dont_match (Type err)));
         let pc =
           {pc_desc = p1; pc_type = vd2.Types.val_type;
@@ -209,7 +256,8 @@ let value_descriptions ~loc env name
         Tcoerce_primitive pc
      end
   | _ ->
-     match Ctype.moregeneral env true vd1.val_type vd2.val_type with
+     match moregeneral_lpoly env
+             val_lpoly1 val_lpoly2 vd1.val_type vd2.val_type with
      | exception Ctype.Moregen err -> raise (Dont_match (Type err))
      | () -> begin
        match vd2.val_kind with
@@ -286,6 +334,7 @@ type record_mismatch =
   | Ufloat_representation of position
   | Mixed_representation of position
   | Mixed_representation_with_flat_floats of position
+  | Representation_shape_mismatch
 
 type constructor_mismatch =
   | Type of Errortrace.equality_error
@@ -339,28 +388,34 @@ type type_mismatch =
   | Jkind of Jkind.Violation.t
   | Unsafe_mode_crossing of unsafe_mode_crossing_mismatch
 
+type jkind_mismatch =
+  | Manifest_missing
+  | Manifest_mismatch
+
 let report_modality_sub_error first second ppf e =
   let Modality.Error (ax, {left; right}) = e in
   let print_modality id ppf m =
-    Printtyp.modality ~id:(fun ppf -> Format.pp_print_string ppf id) ax ppf m
+    Printtyp.modality
+      ~id:(fun ppf -> Format_doc.pp_print_string ppf id) ax ppf m
   in
-  Format.fprintf ppf "%s is %a and %s is %a."
+  Format_doc.fprintf ppf "%s is %a and %s is %a."
     (String.capitalize_ascii second)
     (print_modality "empty") right
     first
     (print_modality "not") left
 
-let report_mode_sub_error got expected ppf e =
-  let {left; right} : _ Mode.simple_error =
-    Mode.Value.print_error (Location.none, Unknown) e
-  in
-  Format.fprintf ppf "%s " (String.capitalize_ascii got);
+let report_mode_sub_error ~pp got expected ppf e =
+  let ({ left; right } : _ Mode.simple_error) = Mode.Value.print_error pp e in
+  let open Format_doc in
+  let open_box = dprintf "@[<hov 2>" in
+  let reopen_box = dprintf "@]@ %t" open_box in
+  fprintf ppf "%t%s " open_box (String.capitalize_ascii got);
   begin match left ppf with
-  | Mode -> Format.fprintf ppf "@ but %s " expected
-  | Mode_with_hint -> Format.fprintf ppf ".@\nHowever, %s " expected
+  | Mode -> fprintf ppf "%tbut %s " reopen_box expected
+  | Mode_with_hint -> fprintf ppf ".%tHowever, %s " reopen_box expected
   end;
   ignore (right ppf);
-  Format.pp_print_string ppf "."
+  fprintf ppf ".@]"
 
 let report_modality_equate_error first second ppf
   ((equate_step, sub_error) : Modality.equate_error) =
@@ -369,9 +424,10 @@ let report_modality_equate_error first second ppf
   | Right_le_left -> report_modality_sub_error second first ppf sub_error
 
 module Style = Misc.Style
+module Fmt = Format_doc
 
 let report_primitive_mismatch first second ppf err =
-  let pr fmt = Format.fprintf ppf fmt in
+  let pr fmt = Fmt.fprintf ppf fmt in
   match (err : primitive_mismatch) with
   | Name ->
       pr "The names of the primitives are not the same"
@@ -399,8 +455,8 @@ let report_primitive_mismatch first second ppf err =
   | Layout_poly_attr ->
       pr "The two primitives have different [@@layout_poly] attributes"
 
-let report_value_mismatch first second env ppf err =
-  let pr fmt = Format.fprintf ppf fmt in
+let report_value_mismatch ~pp first second env ppf err =
+  let pr fmt = Fmt.fprintf ppf fmt in
   pr "@ ";
   match (err : value_mismatch) with
   | Primitive_mismatch pm ->
@@ -408,20 +464,49 @@ let report_value_mismatch first second env ppf err =
   | Not_a_primitive ->
       pr "The implementation is not a primitive."
   | Type trace ->
+      let msg = Fmt.Doc.msg in
       Printtyp.report_moregen_error ppf Type_scheme env trace
-        (fun ppf -> Format.fprintf ppf "The type")
-        (fun ppf -> Format.fprintf ppf "is not compatible with the type")
+        (msg "The type")
+        (msg "is not compatible with the type")
   | Zero_alloc e -> Zero_alloc.print_error ppf e
   | Modality e -> report_modality_sub_error first second ppf e
   | Mode e ->
       let got = first ^ " is" in
       let expected = second ^ " is" in
-      report_mode_sub_error got expected ppf e
+      report_mode_sub_error ~pp got expected ppf e
+  | Layout_poly_coercion (Extra_lhs { extra }) ->
+      pr "%s has %d more layout parameter%s that %s not used,@ \
+          which is not supported yet."
+        first extra
+        (if extra = 1 then "" else "s")
+        (if extra = 1 then "is" else "are")
+  | Layout_poly_coercion (Extra_rhs { extra }) ->
+      pr "%s has %d more layout parameter%s that %s not used,@ \
+          which is not supported yet."
+        second extra
+        (if extra = 1 then "" else "s")
+        (if extra = 1 then "is" else "are")
+  | Layout_poly_coercion (Instantiate_lhs_to_rhs { index_lhs; index_rhs }) ->
+      pr "The layout parameter at position %d in %s@ \
+          corresponds to the parameter at position %d in %s,@ \
+          which is not supported yet."
+        index_lhs first index_rhs second
+  | Layout_poly_coercion (Instantiate_lhs { index_lhs; arg }) ->
+      let format_got ppf = match arg with
+        | None -> Fmt.fprintf ppf "an unconstrained layout variable"
+        | Some s ->
+          Fmt.fprintf ppf "layout %a"
+            (Style.as_inline_code Jkind_types.Sort.format) s
+      in
+      pr "The layout parameter at position %d in %s@ \
+          is instantiated with %t,@ \
+          which is not supported yet." index_lhs first format_got
 
 let report_type_inequality env ppf err =
+  let msg = Fmt.Doc.msg in
   Printtyp.report_equality_error ppf Type_scheme env err
-    (fun ppf -> Format.fprintf ppf "The type")
-    (fun ppf -> Format.fprintf ppf "is not equal to the type")
+    (msg "The type")
+    (msg "is not equal to the type")
 
 let report_privacy_mismatch ppf err =
   let singular, item =
@@ -432,7 +517,7 @@ let report_privacy_mismatch ppf err =
     | Private_record_unboxed_product_type -> true, "unboxed record constructor"
     | Private_extensible_variant -> true,  "extensible variant"
     | Private_row_type           -> true,  "row type"
-  in Format.fprintf ppf "%s %s would be revealed."
+  in Format_doc.fprintf ppf "%s %s would be revealed."
        (if singular then "A private" else "Private")
        item
 
@@ -441,11 +526,11 @@ let report_label_mismatch first second env ppf err =
   | Type err ->
       report_type_inequality env ppf err
   | Mutability ord ->
-      Format.fprintf ppf "%s is mutable and %s is not."
+      Format_doc.fprintf ppf "%s is mutable and %s is not."
         (String.capitalize_ascii (choose ord first second))
         (choose_other ord first second)
   | Atomicity ord ->
-      Format.fprintf ppf "%s is atomic and %s is not."
+      Format_doc.fprintf ppf "%s is atomic and %s is not."
         (String.capitalize_ascii (choose ord first second))
         (choose_other ord first second)
   | Modality err_ -> report_modality_equate_error first second ppf err_
@@ -453,13 +538,13 @@ let report_label_mismatch first second env ppf err =
 let pp_record_diff first second prefix decl env ppf (x : record_change) =
   match x with
   | Delete cd ->
-      Format.fprintf ppf "%aAn extra field, %a, is provided in %s %s."
+      Fmt.fprintf ppf "%aAn extra field, %a, is provided in %s %s."
         prefix x Style.inline_code (Ident.name cd.delete.ld_id) first decl
   | Insert cd ->
-      Format.fprintf  ppf "%aA field, %a, is missing in %s %s."
+      Fmt.fprintf  ppf "%aA field, %a, is missing in %s %s."
         prefix x Style.inline_code (Ident.name cd.insert.ld_id) first decl
   | Change Type {got=lbl1; expected=lbl2; reason} ->
-      Format.fprintf ppf
+      Fmt.fprintf ppf
         "@[<hv>%aFields do not match:@;<1 2>\
          %a@ is not the same as:\
          @;<1 2>%a@ %a@]"
@@ -468,34 +553,34 @@ let pp_record_diff first second prefix decl env ppf (x : record_change) =
         (Style.as_inline_code Printtyp.label) lbl2
         (report_label_mismatch first second env) reason
   | Change Name n ->
-      Format.fprintf ppf "%aFields have different names, %a and %a."
+      Fmt.fprintf ppf "%aFields have different names, %a and %a."
         prefix x
         Style.inline_code n.got
         Style.inline_code n.expected
   | Swap sw ->
-      Format.fprintf ppf "%aFields %a and %a have been swapped."
+      Fmt.fprintf ppf "%aFields %a and %a have been swapped."
         prefix x
         Style.inline_code sw.first
         Style.inline_code sw.last
   | Move {name; got; expected } ->
-      Format.fprintf ppf
+      Fmt.fprintf ppf
         "@[<2>%aField %a has been moved@ from@ position %d@ to %d.@]"
         prefix x Style.inline_code name expected got
 
 let report_patch pr_diff first second decl env ppf patch =
-  let nl ppf () = Format.fprintf ppf "@," in
+  let nl ppf () = Fmt.fprintf ppf "@," in
   let no_prefix _ppf _ = () in
   match patch with
   | [ elt ] ->
-      Format.fprintf ppf "@[<hv>%a@]"
+      Fmt.fprintf ppf "@[<hv>%a@]"
         (pr_diff first second no_prefix decl env) elt
   | _ ->
       let pp_diff = pr_diff first second Diffing_with_keys.prefix decl env in
-      Format.fprintf ppf "@[<hv>%a@]"
-        (Format.pp_print_list ~pp_sep:nl pp_diff) patch
+      Fmt.fprintf ppf "@[<hv>%a@]"
+        (Fmt.pp_print_list ~pp_sep:nl pp_diff) patch
 
 let report_record_mismatch first second decl env ppf err =
-  let pr fmt = Format.fprintf ppf fmt in
+  let pr fmt = Fmt.fprintf ppf fmt in
   match err with
   | Label_mismatch patch ->
       report_patch pp_record_diff first second decl env ppf patch
@@ -524,9 +609,12 @@ let report_record_mismatch first second decl env ppf err =
       pr "@[<hv>Their internal representations differ:@ %s %s %s.@]"
         (choose ord first second) decl
         "uses a mixed representation where boxed floats are stored flat"
+  | Representation_shape_mismatch ->
+    pr "@[<hv>Their internal representations differ:@;\
+        This is likely caused by a layout mismatch in a later definition.@]"
 
 let report_constructor_mismatch first second decl env ppf err =
-  let pr fmt  = Format.fprintf ppf fmt in
+  let pr fmt  = Fmt.fprintf ppf fmt in
   match (err : constructor_mismatch) with
   | Type err -> report_type_inequality env ppf err
   | Arity -> pr "They have different arities."
@@ -548,39 +636,40 @@ let report_constructor_mismatch first second decl env ppf err =
 let pp_variant_diff first second prefix decl env ppf (x : variant_change) =
   match x with
   | Delete cd ->
-      Format.fprintf ppf  "%aAn extra constructor, %a, is provided in %s %s."
+      Fmt.fprintf ppf  "%aAn extra constructor, %a, is provided in %s %s."
         prefix x Style.inline_code (Ident.name cd.delete.cd_id) first decl
   | Insert cd ->
-      Format.fprintf ppf "%aA constructor, %a, is missing in %s %s."
+      Fmt.fprintf ppf "%aA constructor, %a, is missing in %s %s."
         prefix x Style.inline_code (Ident.name cd.insert.cd_id) first decl
   | Change Type {got; expected; reason} ->
-      Format.fprintf ppf
+    Printtyp.wrap_printing_env ~error:true env (fun () ->
+      Fmt.fprintf ppf
         "@[<hv>%aConstructors do not match:@;<1 2>\
          %a@ is not the same as:\
          @;<1 2>%a@ %a@]"
         prefix x
         (Style.as_inline_code Printtyp.constructor) got
         (Style.as_inline_code Printtyp.constructor) expected
-        (report_constructor_mismatch first second decl env) reason
+        (report_constructor_mismatch first second decl env) reason)
   | Change Name n ->
-      Format.fprintf ppf
+      Fmt.fprintf ppf
         "%aConstructors have different names, %a and %a."
         prefix x
         Style.inline_code n.got
         Style.inline_code n.expected
   | Swap sw ->
-      Format.fprintf ppf
+      Fmt.fprintf ppf
         "%aConstructors %a and %a have been swapped."
         prefix x
         Style.inline_code sw.first
         Style.inline_code sw.last
   | Move {name; got; expected} ->
-      Format.fprintf ppf
+      Fmt.fprintf ppf
         "@[<2>%aConstructor %a has been moved@ from@ position %d@ to %d.@]"
         prefix x Style.inline_code name expected got
 
 let report_extension_constructor_mismatch first second decl env ppf err =
-  let pr fmt = Format.fprintf ppf fmt in
+  let pr fmt = Fmt.fprintf ppf fmt in
   match (err : extension_constructor_mismatch) with
   | Constructor_privacy ->
       pr "Private extension constructor(s) would be revealed."
@@ -596,8 +685,8 @@ let report_extension_constructor_mismatch first second decl env ppf err =
 
 
 let report_private_variant_mismatch first second decl env ppf err =
-  let pr fmt = Format.fprintf ppf fmt in
-  let pp_tag ppf x = Format.fprintf ppf "`%s" x in
+  let pr fmt = Fmt.fprintf ppf fmt in
+  let pp_tag ppf x = Fmt.fprintf ppf "`%s" x in
   match (err : private_variant_mismatch) with
   | Only_outer_closed ->
       (* It's only dangerous in one direction, so we don't have a position *)
@@ -614,14 +703,14 @@ let report_private_variant_mismatch first second decl env ppf err =
       report_type_inequality env ppf err
 
 let report_private_object_mismatch env ppf err =
-  let pr fmt = Format.fprintf ppf fmt in
+  let pr fmt = Fmt.fprintf ppf fmt in
   match (err : private_object_mismatch) with
   | Missing s ->
       pr "The implementation is missing the method %a" Style.inline_code s
   | Types err -> report_type_inequality env ppf err
 
 let report_kind_mismatch first second ppf (kind1, kind2) =
-  let pr fmt = Format.fprintf ppf fmt in
+  let pr fmt = Fmt.fprintf ppf fmt in
   let kind_to_string = function
   | Kind_abstract -> "abstract"
   | Kind_record -> "a record"
@@ -635,12 +724,12 @@ let report_kind_mismatch first second ppf (kind1, kind2) =
     (kind_to_string kind2)
 
 let print_unsafe_mode_crossing ppf umc =
-  Format.fprintf ppf "mod %a@ %a"
+  Fmt.fprintf ppf "mod %a@ %a"
     Mode.Crossing.print umc.unsafe_mod_bounds
     Jkind.With_bounds.format umc.unsafe_with_bounds
 
 let report_unsafe_mode_crossing_mismatch first second ppf e =
-  let pr fmt = Format.fprintf ppf fmt in
+  let pr fmt = Fmt.fprintf ppf fmt in
   match e with
   | Mode_crossing_only_on ord ->
     pr "%s has [%@%@unsafe_allow_any_mode_crossing], but %s does not"
@@ -657,7 +746,7 @@ let report_unsafe_mode_crossing_mismatch first second ppf e =
       second print_unsafe_mode_crossing second_umc
 
 let report_type_mismatch first second decl env ppf err =
-  let pr fmt = Format.fprintf ppf fmt in
+  let pr fmt = Fmt.fprintf ppf fmt in
   pr "@ ";
   match err with
   | Arity ->
@@ -678,7 +767,7 @@ let report_type_mismatch first second decl env ppf err =
       pr "The problem is in the kinds of a parameter:@,";
       Jkind.Violation.report_with_offender
         ~offender:(fun pp -> Printtyp.type_expr pp ty)
-        ~level:(Ctype.get_current_level ()) ppf v
+        env ppf v
   | Private_variant (_ty1, _ty2, mismatch) ->
       report_private_variant_mismatch first second decl env ppf mismatch
   | Private_object (_ty1, _ty2, mismatch) ->
@@ -704,15 +793,24 @@ let report_type_mismatch first second decl env ppf err =
       pr "Their internal representations differ:@ %s %s %s."
          (choose ord first second) decl
          "has a constructor represented as a null pointer";
-      pr "@ Hint: add [%@%@or_null_reexport]."
+      pr "@ Hint: add [%@%@or_null] or [%@%@or_null_reexport]."
   | Jkind v ->
       Jkind.Violation.report_with_name ~name:first
-        ~level:(Ctype.get_current_level ()) ppf v
+        env ppf v
   | Unsafe_mode_crossing mismatch ->
     pr "They have different unsafe mode crossing behavior:@,@[<v 2>%a@]"
       (fun ppf (first, second, mismatch) ->
          report_unsafe_mode_crossing_mismatch first second ppf mismatch)
       (first, second, mismatch)
+
+let report_jkind_mismatch first second ppf err =
+  let pr fmt = Fmt.fprintf ppf fmt in
+  pr "@ ";
+  match err with
+  | Manifest_missing ->
+      pr "The %s is abstract, but %s is not." first second
+  | Manifest_mismatch ->
+      pr "Their definitions are not equal."
 
 let compare_unsafe_mode_crossing ~env umc1 umc2 =
   match umc1, umc2 with
@@ -862,7 +960,10 @@ module Record_diffing = struct
   let find_mismatch_in_mixed_record_representations
       (s1 : mixed_product_shape) (s2 : mixed_product_shape)
     =
-    if s1 = s2 then None
+    (* It's possible for [s1] to be higher than [s2] here: see
+       Note [Ignoring scannable axes in type declaration representations] *)
+    if Types.equal_mixed_product_shape_up_to_scannable_axes s1 s2
+    then None
     else
       let has_float_boxed_on_read fields =
         Array.exists (function
@@ -875,10 +976,11 @@ module Record_diffing = struct
       else if has_float_boxed_on_read s2
       then Some (Mixed_representation_with_flat_floats Second)
       else
-        Misc.fatal_error
-          "Impossible: the only way for mixed blocks to differ in \
-           representation is if one is a flat float record with a boxed float \
-           field, and the other isn't."
+        (* Before, this case was thought to be impossible. We report the first
+           error when doing the inclusion check: the real culprit may be a
+           layout mismatch that is actually defined later defined mutually
+           recursively with this record. *)
+        Some Representation_shape_mismatch
 
   let compare_with_representation (type rep) ~loc
         (record_form : rep record_form) env params1 params2 l r
@@ -922,7 +1024,11 @@ module Record_diffing = struct
         | _, Record_mixed _ ->
            Some (Record_mismatch (Mixed_representation Second))
 
-        | Record_boxed _, Record_boxed _ -> None
+        | Record_boxed, Record_boxed -> None
+
+        | Record_dummy _, _ | _, Record_dummy _ ->
+          Misc.fatal_error
+            "compare_with_representation: dummy record representation"
         end
       | Unboxed_product ->
         begin match rep1, rep2 with
@@ -1388,12 +1494,13 @@ let type_declarations ?(equality = false) ~loc env ~mark name
         in
         begin match List.find_map get_jkind_violation err.trace with
         | Some _ as err -> err
-        | None -> Misc.fatal_errorf
+        | None -> Misc.fatal_errorf_doc
                     "Unification in type_declarations failed, \
                      but not with Bad_jkind:@;<1 2>%t"
-              (fun ppf -> Printtyp.report_unification_error ppf env err
-               (fun ppf -> Format.fprintf ppf "The type")
-               (fun ppf -> Format.fprintf ppf "does not unify with the type"))
+                    (fun ppf ->
+                       Printtyp.report_unification_error ppf env err
+                         (Fmt.doc_printf "The type")
+                         (Fmt.doc_printf "does not unify with the type"))
         end
       | () -> None
   in
@@ -1495,7 +1602,7 @@ let type_declarations ?(equality = false) ~loc env ~mark name
   match Ctype.Rigidify.all_distinct_vars_with_original_jkinds env rigidity_info with
   | Unification_failure { name; ty }
     (* This should be caught by the call to Ctype.equal above *)
-    -> Misc.fatal_errorf
+    -> Misc.fatal_errorf_doc
          "Unification failure in type inclusion rigidity check:@;\
           %s unified with %a."
          (match name with None -> "_" | Some n -> "'" ^ n)
@@ -1503,7 +1610,7 @@ let type_declarations ?(equality = false) ~loc env ~mark name
   | Jkind_mismatch { original_jkind; inferred_jkind; ty } ->
      let context = Ctype.mk_jkind_context_always_principal env in
      Some (Parameter_jkind
-             (ty, Jkind.Violation.of_ ~context
+             (ty, Jkind.Violation.of_ ~context env
                     (Not_a_subjkind (Jkind.disallow_right original_jkind,
                                      Jkind.disallow_left inferred_jkind,
                                      []))))
@@ -1562,3 +1669,20 @@ let extension_constructors ~loc env ~mark id ext1 ext2 =
       match ext1.ext_private, ext2.ext_private with
       | Private, Public -> Some Constructor_privacy
       | _, _ -> None
+
+(* Inclusion between jkind declarations *)
+let jkind_declarations ~loc env name
+      (decl1 : Types.jkind_declaration) (decl2 : Types.jkind_declaration) =
+  Builtin_attributes.check_alerts_inclusion
+    ~def:decl1.jkind_loc
+    ~use:decl2.jkind_loc
+    loc
+    decl1.jkind_attributes decl2.jkind_attributes
+    name;
+  match decl1.jkind_manifest, decl2.jkind_manifest with
+  | _, None -> None
+  | None, Some _ -> Some Manifest_missing
+  | Some k1, Some k2 ->
+    if Jkind.Const.equal env k1 k2
+    then None
+    else Some Manifest_mismatch

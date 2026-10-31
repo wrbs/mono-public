@@ -26,4 +26,3 @@ module Package_name = Package_name
 module Ocamlformat = Ocamlformat
 module Dev_tool = Dev_tool
 module Outdated = Outdated
-module Dune_dep = Dune_dep

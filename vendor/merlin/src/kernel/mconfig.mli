@@ -3,7 +3,7 @@ open Std
 (** {1 OCaml commandline parsing} *)
 
 type ocaml =
-  { include_dirs : string list;
+  { include_dirs : Clflags.visible_include list;
     hidden_dirs : string list;
     no_std_include : bool;
     unsafe : bool;
@@ -26,7 +26,9 @@ type ocaml =
     as_argument_for : string option;
     zero_alloc_check : Zero_alloc_annotations.Check.t;
     zero_alloc_assert : Zero_alloc_annotations.Assert.t;
-    infer_with_bounds : bool
+    infer_with_bounds : bool;
+    kind_verbosity : int;
+    ikinds : bool
   }
 
 val dump_ocaml : ocaml -> json

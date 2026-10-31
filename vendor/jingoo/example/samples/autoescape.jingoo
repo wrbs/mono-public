@@ -1,7 +1,0 @@
-{%- set script = "<script></script>" -%}
-{%- autoescape true -%}
-{{ script }}
-{% endautoescape -%}
-{%- autoescape false -%}
-{{ script }}
-{% endautoescape -%}

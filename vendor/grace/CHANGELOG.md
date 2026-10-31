@@ -1,3 +1,19 @@
+## 0.4.1 (2026-08-05)
+
+- fix(renderer): adjust margin for messages near end of line ([#97](https://github.com/johnyob/grace/pull/97))
+- fix(renderer): remove extra space in trailing labels ([#98](https://github.com/johnyob/grace/pull/98))
+- fix(renderer): error recovery on invalid UTF-8 strings ([#99](https://github.com/johnyob/grace/pull/99))
+
+## 0.4.0 (2026-07-22)
+
+- feat(renderer): add boxing to trailing labels ([#92](https://github.com/johnyob/grace/pull/92))
+- fix(renderer): print unicode and ansi-styled snippets as correct lengths ([#88](https://github.com/johnyob/grace/pull/88))
+- feat(renderer): add boxing to multi-line labels ([#88](https://github.com/johnyob/grace/pull/88))
+- feat(json_conv): use `Yojson.Basic.t` ([#87](https://github.com/johnyob/grace/pull/87))
+- feat(json_conv): add `Grace_json_conv` for conversion to Yojson ([#84](https://github.com/johnyob/grace/pull/84))
+- fix(core): dont catch `Sys_error` in `Source.length` if the fail doesn't exist ([#81](https://github.com/johnyob/grace/pull/81))
+- feat(renderer): support configurable contextual lines ([#74](https://github.com/johnyob/grace/pull/74))
+
 ## 0.3.0 (2025-02-13)
 
 - feat(renderer): add breaks in large diagnostics ([#63](https://github.com/johnyob/grace/pull/63))

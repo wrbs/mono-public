@@ -50,7 +50,7 @@ module Reduce_conf (Loaded_shapes : sig
   val shapes : (Compilation_unit.t, Shape.t) Hashtbl.t
 end) =
 struct
-  let fuel () = Misc_stdlib.Maybe_bounded.of_int 10
+  let fuel () = Misc.Maybe_bounded.of_int 10
 
   let try_load ~unit_name () =
     match
@@ -81,17 +81,16 @@ struct
       match artifact with
       | None -> None
       | Some artifact -> Merlin_analysis.Locate.Artifact.impl_shape artifact
-    end
+      end
 
   let read_unit_shape ~diagnostics:_ ~unit_name =
     Log.debug "Read unit shape: %s\n%!" unit_name;
     try_load ~unit_name ()
 
   let projection_rules_for_merlin_enabled = true
-  let fuel_for_compilation_units () : Misc_stdlib.Maybe_bounded.t = Unbounded
-  let max_shape_reduce_steps_per_variable () : Misc_stdlib.Maybe_bounded.t =
-    Unbounded
-  let max_compilation_unit_depth () : Misc_stdlib.Maybe_bounded.t = Unbounded
+  let fuel_for_compilation_units () : Misc.Maybe_bounded.t = Unbounded
+  let max_shape_reduce_steps_per_variable () : Misc.Maybe_bounded.t = Unbounded
+  let max_compilation_unit_depth () : Misc.Maybe_bounded.t = Unbounded
 end
 
 let init_load_path_once ~do_not_use_cmt_loadpath =
@@ -114,7 +113,8 @@ let index_of_artifact ~into ~root ~rewrite_root ~build_path
   init_load_path_once ~do_not_use_cmt_loadpath ~dirs:build_path cmt_loadpath;
   let module Reduce = Shape_reduce.Make (Reduce_conf (struct
     let shapes = shapes
-  end)) in
+  end))
+  in
   let defs =
     gather_locs_from_fragments ~root ~rewrite_root into.defs uid_to_loc
   in
@@ -209,7 +209,7 @@ let index_of_cmt ~root ~build_path ~shapes ~store_shapes cmt_infos =
   let uid_to_loc =
     Shape.Uid.Tbl.to_list cmt_uid_to_decl
     |> List.map (fun (uid, fragment) ->
-           (uid, Typedtree_utils.location_of_declaration ~uid fragment))
+        (uid, Typedtree_utils.location_of_declaration ~uid fragment))
     |> Shape.Uid.Tbl.of_list
   in
   index_of_artifact ~root ~build_path ~shapes ~store_shapes ~cmt_loadpath

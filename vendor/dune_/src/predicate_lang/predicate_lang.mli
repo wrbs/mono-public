@@ -1,6 +1,6 @@
 (** DSL to define sets that are defined by a membership : 'a -> bool function. *)
 
-open Stdune
+open! Stdune
 open Dune_sexp
 
 type 'a t
@@ -23,7 +23,9 @@ val compare : ('a -> 'a -> Ordering.t) -> 'a t -> 'a t -> Ordering.t
 
 module Glob : sig
   module Element : sig
-    type t
+    type t =
+      | Glob of Dune_glob.V1.t
+      | Literal of string
   end
 
   type nonrec t = Element.t t
@@ -45,5 +47,7 @@ module Glob : sig
   val hash : t -> int
   val decode : t Dune_sexp.Decoder.t
   val encode : t -> Dune_sexp.t
-  val digest : t -> Dune_digest.t
+
+  (** Raises on non-serialisable globs, just like most other functions above. *)
+  val digest_exn : t -> Dune_digest.t
 end

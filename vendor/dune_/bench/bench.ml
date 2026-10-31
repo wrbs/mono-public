@@ -7,19 +7,34 @@ module Console = struct
   let printf fmt = printf ("[Bench] " ^^ fmt)
 end
 
+module Json = struct
+  include Chrome_trace.Json
+  include Dune_stats.Json
+end
+
 module Output = struct
+  type measurement =
+    [ `Int of int
+    | `Float of float
+    ]
+
   type bench =
     { name : string
-    ; metrics : (string * Json.t * string) list
+    ; metrics : (string * [ measurement | `List of measurement list ] * string) list
     }
 
   let json_of_bench { name; metrics } : Json.t =
     let metrics =
       List.map metrics ~f:(fun (name, value, units) ->
-        Json.assoc
-          [ "name", Json.string name; "value", value; "units", Json.string units ])
+        let value =
+          match value with
+          | `Int i -> `Int i
+          | `Float f -> `Float f
+          | `List xs -> `List (xs :> Json.t list)
+        in
+        `Assoc [ "name", `String name; "value", value; "units", `String units ])
     in
-    Json.assoc [ "name", Json.string name; "metrics", Json.list metrics ]
+    `Assoc [ "name", `String name; "metrics", `List metrics ]
   ;;
 
   type t =
@@ -29,14 +44,14 @@ module Output = struct
     }
 
   let to_json { config; version; results } : Json.t =
-    let assoc = [ "results", Json.list (List.map results ~f:json_of_bench) ] in
-    let assoc = ("version", Json.int version) :: assoc in
+    let assoc = [ "results", `List (List.map results ~f:json_of_bench) ] in
+    let assoc = ("version", `Int version) :: assoc in
     let assoc =
       match config with
       | [] -> assoc
-      | _ :: _ -> ("config", Json.assoc config) :: assoc
+      | _ :: _ -> ("config", `Assoc config) :: assoc
     in
-    Json.assoc assoc
+    `Assoc assoc
   ;;
 end
 
@@ -150,11 +165,13 @@ type ('float, 'int) bench_results =
   }
 
 let tag_results { size; clean; zero } =
-  let tag data = Metrics.map ~f:Json.float ~g:Json.int data in
+  let tag data = Metrics.map ~f:(fun t -> `Float t) ~g:(fun t -> `Int t) data in
   let list_tag data =
-    List.map data ~f:tag |> Metrics.unzip |> Metrics.map ~f:Json.list ~g:Json.list
+    List.map data ~f:tag
+    |> Metrics.unzip
+    |> Metrics.map ~f:(fun x -> `List x) ~g:(fun x -> `List x)
   in
-  Json.int size, tag clean, list_tag zero
+  `Int size, tag clean, list_tag zero
 ;;
 
 (** Display all clean and null builds with a few exceptions:
@@ -220,7 +237,7 @@ let format_results bench_results =
 ;;
 
 let () =
-  Log.init ~file:No_log_file ();
+  Dune_util.Log.init ~file:No_log_file ();
   let dir = Temp.create Dir ~prefix:"dune" ~suffix:"bench" in
   Sys.chdir (Path.to_string dir);
   Path.as_external dir |> Option.value_exn |> Path.set_root;

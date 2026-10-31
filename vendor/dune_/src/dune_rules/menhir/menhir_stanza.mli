@@ -6,7 +6,7 @@ type t =
   { merge_into : string option
   ; flags : Ordered_set_lang.Unexpanded.t
   ; modules : string list
-  ; mode : Rule_mode.t
+  ; mode : Rule.Mode.t
   ; loc : Loc.t
   ; infer : bool
   ; enabled_if : Blang.t

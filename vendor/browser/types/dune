@@ -1,0 +1,5 @@
+(library
+ (name browser_types)
+ (public_name browser.types)
+ (libraries browser_js_types js_of_ocaml)
+ (preprocess no_preprocessing))

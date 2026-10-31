@@ -80,10 +80,14 @@ let preprocessor_variables () =
   (* Keep this variables in sync with gen/gen.ml *)
   [ ( "effects"
     , Wat_preprocess.String
-        (match Config.effects () with
-        | `Disabled | `Jspi -> "jspi"
-        | `Cps -> "cps"
-        | `Double_translation -> assert false) )
+        ((match Config.effects () with
+           | `Disabled ->
+               (* We are using the same runtime
+                  [runtime-standard.wasm] in both cases. *)
+               `Jspi
+           | (`Jspi | `Cps | `Native) as e -> e
+           | `Double_translation -> assert false)
+        |> Build_info.string_of_effects_backend) )
   ]
 
 let with_runtime_files ~runtime_wasm_files f =
@@ -138,6 +142,7 @@ let link_and_optimize
     ~sourcemap_root
     ~sourcemap_don't_inline_content
     ~opt_sourcemap
+    ~dynlink
     runtime_wasm_files
     wat_files
     output_file =
@@ -176,35 +181,50 @@ let link_and_optimize
     ();
   if binaryen_times () then Format.eprintf "  binaryen link: %a@." Timer.print t);
 
-  Fs.with_intermediate_file (Filename.temp_file "wasm-dce" ".wasm")
-  @@ fun temp_file' ->
-  opt_with
-    Fs.with_intermediate_file
-    (if enable_source_maps then Some (Filename.temp_file "wasm-dce" ".wasm.map") else None)
-  @@ fun opt_temp_sourcemap' ->
-  let t = Timer.make ~get_time:Unix.time () in
-  let primitives =
-    Binaryen.dead_code_elimination
-      ~dependencies:Runtime_files.dependencies
-      ~opt_input_sourcemap:opt_temp_sourcemap
-      ~opt_output_sourcemap:opt_temp_sourcemap'
-      ~input_file:temp_file
-      ~output_file:temp_file'
+  let optimize_and_finish ~opt_input_sourcemap ~input_file primitives =
+    let t = Timer.make ~get_time:Unix.time () in
+    Binaryen.optimize
+      ~profile
+      ~opt_input_sourcemap
+      ~opt_output_sourcemap:opt_sourcemap
+      ~input_file
+      ~output_file
+      ();
+    if binaryen_times () then Format.eprintf "  binaryen opt: %a@." Timer.print t;
+    Option.iter
+      ~f:(update_sourcemap ~sourcemap_root ~sourcemap_don't_inline_content)
+      opt_sourcemap_file;
+    primitives
   in
-  if binaryen_times () then Format.eprintf "  binaryen dce: %a@." Timer.print t;
-  let t = Timer.make ~get_time:Unix.time () in
-  Binaryen.optimize
-    ~profile
-    ~opt_input_sourcemap:opt_temp_sourcemap'
-    ~opt_output_sourcemap:opt_sourcemap
-    ~input_file:temp_file'
-    ~output_file
-    ();
-  if binaryen_times () then Format.eprintf "  binaryen opt: %a@." Timer.print t;
-  Option.iter
-    ~f:(update_sourcemap ~sourcemap_root ~sourcemap_don't_inline_content)
-    opt_sourcemap_file;
-  primitives
+  if dynlink
+  then
+    optimize_and_finish
+      ~opt_input_sourcemap:opt_temp_sourcemap
+      ~input_file:temp_file
+      (Linker.list_all ())
+  else
+    Fs.with_intermediate_file (Filename.temp_file "wasm-dce" ".wasm")
+    @@ fun temp_file' ->
+    opt_with
+      Fs.with_intermediate_file
+      (if enable_source_maps
+       then Some (Filename.temp_file "wasm-dce" ".wasm.map")
+       else None)
+    @@ fun opt_temp_sourcemap' ->
+    let t = Timer.make ~get_time:Unix.time () in
+    let primitives =
+      Binaryen.dead_code_elimination
+        ~dependencies:Runtime_files.dependencies
+        ~opt_input_sourcemap:opt_temp_sourcemap
+        ~opt_output_sourcemap:opt_temp_sourcemap'
+        ~input_file:temp_file
+        ~output_file:temp_file'
+    in
+    if binaryen_times () then Format.eprintf "  binaryen dce: %a@." Timer.print t;
+    optimize_and_finish
+      ~opt_input_sourcemap:opt_temp_sourcemap'
+      ~input_file:temp_file'
+      primitives
 
 let link_runtime ~profile runtime_wasm_files output_file =
   if List.is_empty runtime_wasm_files
@@ -249,7 +269,7 @@ let generate_prelude ~out_file =
           { program
           ; variable_uses
           ; in_cps
-          ; deadcode_sentinal
+          ; deadcode_sentinel
           ; shapes = _
           ; trampolined_calls = _
           }
@@ -263,19 +283,19 @@ let generate_prelude ~out_file =
       ~unit_name:(Some "prelude")
       ~live_vars:variable_uses
       ~in_cps
-      ~deadcode_sentinal
+      ~deadcode_sentinel
       ~global_flow_data
       program
   in
   Generate.wasm_output ch ~opt_source_map_file:None ~context;
-  uinfo.provides
+  uinfo
 
 let build_prelude z =
   Fs.with_intermediate_file (Filename.temp_file "prelude" ".wasm")
   @@ fun prelude_file ->
-  let predefined_exceptions = generate_prelude ~out_file:prelude_file in
+  let uinfo = generate_prelude ~out_file:prelude_file in
   Zip.add_file z ~name:"prelude.wasm" ~file:prelude_file;
-  predefined_exceptions
+  uinfo
 
 let build_js_runtime ~primitives ?runtime_arguments () =
   let always_required_js, primitives =
@@ -302,7 +322,7 @@ let build_js_runtime ~primitives ?runtime_arguments () =
     | _ -> assert false
   in
   let init_fun =
-    match Parse_js.parse (Parse_js.Lexer.of_string Runtime_files.js_runtime) with
+    match Parse_js.parse `Script (Parse_js.Lexer.of_string Runtime_files.js_runtime) with
     | [ (Expression_statement f, _) ] -> f
     | _ -> assert false
   in
@@ -336,8 +356,7 @@ let add_source_map sourcemap_don't_inline_content z opt_source_map =
                 ~name:(Link.source_name i j file)
                 ~contents:(Yojson.Basic.to_string (`String sm))))
 
-let merge_shape a b =
-  StringMap.union (fun _name s1 s2 -> if Shape.equal s1 s2 then Some s1 else None) a b
+let merge_shape a b = StringMap.union (fun _name _s1 _s2 -> assert false) a b
 
 let sexp_of_shapes s =
   StringMap.bindings s
@@ -360,10 +379,21 @@ let run
     ; sourcemap_don't_inline_content
     ; effects
     ; shape_files
+    ; build_config
+    ; apply_build_config
+    ; toplevel
+    ; dynlink
+    ; no_cmis
+    ; export_file
+    ; fs_files
     } =
   Config.set_target `Wasm;
   Jsoo_cmdline.Arg.eval common;
   Config.set_effects_backend effects;
+  Jsoo_cmdline.Build_config.process
+    `Wasm
+    ~apply:apply_build_config
+    ~print_and_exit:build_config;
   Generate.init ();
   List.iter shape_files ~f:(fun s ->
       let z = Zip.open_in s in
@@ -383,6 +413,23 @@ let run
   let t = Timer.make () in
   let include_dirs =
     List.filter_map (include_dirs @ [ "+stdlib/" ]) ~f:(fun d -> Findlib.find [] d)
+  in
+  let exported_unit =
+    match export_file with
+    | None -> None
+    | Some file ->
+        if not (Sys.file_exists file)
+        then failwith (Printf.sprintf "export file %S does not exist" file);
+        let ic = open_in_text file in
+        let t = String.Hashtbl.create 17 in
+        (try
+           while true do
+             String.Hashtbl.add t (String.trim (In_channel.input_line_exn ic)) ()
+           done;
+           assert false
+         with End_of_file -> ());
+        close_in ic;
+        Some (String.Hashtbl.fold (fun cmi () acc -> cmi :: acc) t [])
   in
   let runtime_wasm_files, runtime_js_files =
     List.partition runtime_files ~f:(fun name ->
@@ -434,7 +481,7 @@ let run
             { program
             ; variable_uses
             ; in_cps
-            ; deadcode_sentinal
+            ; deadcode_sentinel
             ; shapes
             ; trampolined_calls = _
             }
@@ -449,7 +496,7 @@ let run
         ~unit_name
         ~live_vars:variable_uses
         ~in_cps
-        ~deadcode_sentinal
+        ~deadcode_sentinel
         ~global_flow_data
         program
     in
@@ -483,12 +530,12 @@ let run
      let z = Zip.open_out tmp_output_file in
      Zip.add_file z ~name:"runtime.wasm" ~file:tmp_wasm_file;
      Zip.add_entry z ~name:"runtime.js" ~contents:js_runtime;
-     let predefined_exceptions = build_prelude z in
+     let prelude_uinfo = build_prelude z in
      Link.add_info
        z
-       ~predefined_exceptions
        ~build_info:(Build_info.create `Runtime)
-       ~unit_data:[]
+       ~unit_data:
+         [ { Link.unit_name = "prelude"; unit_info = prelude_uinfo; fragments = [] } ]
        ();
      Zip.close_out z)
    else
@@ -500,16 +547,34 @@ let run
        in
        let ch = open_in_bin input_file in
        let res = Parse_bytecode.from_channel ch in
+       Gc.compact ();
        let include_dirs = Filename.dirname input_file :: include_dirs in
        res, ch, (fun () -> close_in ch), include_dirs
      in
+     let include_cmis = toplevel && not no_cmis in
      let compile_cmo cmo cont =
        let t1 = Timer.make () in
        let code =
-         Parse_bytecode.from_cmo ~includes:include_dirs ~debug:need_debug cmo ic
+         Parse_bytecode.from_cmo
+           ~includes:include_dirs
+           ~include_cmis
+           ~debug:need_debug
+           cmo
+           ic
+       in
+       Gc.compact ();
+       let cmi_files =
+         if include_cmis
+         then
+           let paths =
+             include_dirs
+             @ StringSet.elements (Parse_bytecode.Debug.paths code.debug ~units:code.cmis)
+           in
+           Pseudo_fs.collect_cmis ~cmis:code.cmis ~paths
+         else []
        in
        let unit_info = Unit_info.of_cmo cmo in
-       let unit_name = Ocaml_compiler.Cmo_format.name cmo in
+       let (Global_name.Compunit unit_name) = Ocaml_compiler.Cmo_format.name cmo in
        if times () then Format.eprintf "  parsing: %a (%s)@." Timer.print t1 unit_name;
        Fs.with_intermediate_file (Filename.temp_file unit_name ".wasm")
        @@ fun tmp_wasm_file ->
@@ -546,21 +611,44 @@ let run
            ();
          { Link.unit_name; unit_info; fragments }, shapes
        in
-       cont unit_data unit_name tmp_wasm_file opt_tmp_map_file shapes
+       cont unit_data unit_name tmp_wasm_file opt_tmp_map_file shapes cmi_files
      in
      (match kind with
      | `Exe ->
          let t1 = Timer.make () in
+         let dynlink = toplevel || dynlink in
          let code =
            Parse_bytecode.from_exe
              ~includes:include_dirs
-             ~include_cmis:false
-             ~link_info:false
-             ~linkall:false
+             ~include_cmis
+             ?exported_unit
+             ~link_info:(toplevel || dynlink)
+             ~linkall:dynlink
              ~debug:need_debug
              ic
          in
+         Gc.compact ();
          if times () then Format.eprintf "  parsing: %a@." Timer.print t1;
+         let embedded_files =
+           let cmi_files =
+             if include_cmis
+             then
+               let paths =
+                 include_dirs
+                 @ StringSet.elements
+                     (Parse_bytecode.Debug.paths code.debug ~units:code.cmis)
+               in
+               Pseudo_fs.collect_cmis ~cmis:code.cmis ~paths
+             else []
+           in
+           let user_files =
+             List.concat_map fs_files ~f:(fun f ->
+                 List.map
+                   (Pseudo_fs.list_files f include_dirs)
+                   ~f:(fun (name, filename) -> name, Fs.read_file filename))
+           in
+           user_files @ cmi_files
+         in
          Fs.with_intermediate_file (Filename.temp_file "code" ".wasm")
          @@ fun input_wasm_file ->
          let dir = Filename.chop_extension output_file ^ ".assets" in
@@ -593,6 +681,7 @@ let run
              ~sourcemap_root
              ~sourcemap_don't_inline_content
              ~opt_sourcemap
+             ~dynlink
              runtime_wasm_files
              [ input_wasm_file, opt_source_map_file ]
              tmp_wasm_file
@@ -630,6 +719,7 @@ let run
                   ~link_spec:[ wasm_name, None ]
                   ~separate_compilation:false
                   ~generated_js:[ None, generated_js ]
+                  ~embedded_files
                   ())
              ()
          in
@@ -641,10 +731,19 @@ let run
          @@ fun tmp_output_file ->
          let z = Zip.open_out tmp_output_file in
          let compile_cmo' z cmo =
-           compile_cmo cmo (fun unit_data _ tmp_wasm_file opt_tmp_map_file shapes ->
+           compile_cmo
+             cmo
+             (fun unit_data unit_name tmp_wasm_file opt_tmp_map_file shapes cmi_files ->
                Zip.add_file z ~name:"code.wasm" ~file:tmp_wasm_file;
+               Zip.add_entry z ~name:"link_order" ~contents:unit_name;
                Zip.add_entry z ~name:"shapes.sexp" ~contents:(string_of_shapes shapes);
                add_source_map sourcemap_don't_inline_content z (`File opt_tmp_map_file);
+               if not (List.is_empty cmi_files)
+               then
+                 Zip.add_entry
+                   z
+                   ~name:"embedded_files"
+                   ~contents:(Marshal.to_string cmi_files []);
                unit_data)
          in
          let unit_data = [ compile_cmo' z cmo ] in
@@ -659,8 +758,21 @@ let run
            List.fold_right
              ~f:(fun cmo cont l ->
                compile_cmo cmo
-               @@ fun unit_data unit_name tmp_wasm_file opt_tmp_map_file shapes ->
-               cont ((unit_data, unit_name, tmp_wasm_file, opt_tmp_map_file, shapes) :: l))
+               @@ fun unit_data
+                      unit_name
+                      tmp_wasm_file
+                      opt_tmp_map_file
+                      shapes
+                      cmi_files
+                    ->
+               cont
+                 (( unit_data
+                  , unit_name
+                  , tmp_wasm_file
+                  , opt_tmp_map_file
+                  , shapes
+                  , cmi_files )
+                 :: l))
              cma.lib_units
              ~init:(fun l ->
                Fs.with_intermediate_file (Filename.temp_file "wasm" ".wasm")
@@ -669,7 +781,7 @@ let run
                let source_map =
                  Wasm_link.f
                    (List.map
-                      ~f:(fun (_, _, file, opt_source_map, _) ->
+                      ~f:(fun (_, _, file, opt_source_map, _, _) ->
                         { Wasm_link.module_name = "OCaml"
                         ; file
                         ; code = None
@@ -682,17 +794,31 @@ let run
                    ~output_file:tmp_wasm_file
                in
                Zip.add_file z ~name:"code.wasm" ~file:tmp_wasm_file;
+               Zip.add_entry
+                 z
+                 ~name:"link_order"
+                 ~contents:
+                   (String.concat
+                      ~sep:"\x00"
+                      (List.map ~f:(fun (_, unit_name, _, _, _, _) -> unit_name) l));
                let shapes =
                  List.fold_left
                    ~init:StringMap.empty
-                   ~f:(fun acc (_, _, _, _, shapes) -> merge_shape acc shapes)
+                   ~f:(fun acc (_, _, _, _, shapes, _) -> merge_shape acc shapes)
                    l
                in
                Zip.add_entry z ~name:"shapes.sexp" ~contents:(string_of_shapes shapes);
                if enable_source_maps
                then
                  add_source_map sourcemap_don't_inline_content z (`Source_map source_map);
-               List.map ~f:(fun (unit_data, _, _, _, _) -> unit_data) l)
+               let cmi_files = List.concat_map ~f:(fun (_, _, _, _, _, cmis) -> cmis) l in
+               if not (List.is_empty cmi_files)
+               then
+                 Zip.add_entry
+                   z
+                   ~name:"embedded_files"
+                   ~contents:(Marshal.to_string cmi_files []);
+               List.map ~f:(fun (unit_data, _, _, _, _, _) -> unit_data) l)
              []
          in
          Link.add_info z ~build_info:(Build_info.create `Cma) ~unit_data ();

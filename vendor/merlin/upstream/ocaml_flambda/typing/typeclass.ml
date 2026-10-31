@@ -18,7 +18,6 @@ open Asttypes
 open Path
 open Types
 open Typetexp
-open Format
 open Mode
 
 
@@ -48,7 +47,7 @@ type class_type_info = {
 
 type 'a full_class = {
   id : Ident.t;
-  id_loc : tag loc;
+  id_loc : string loc;
   clty: class_declaration;
   ty_id: Ident.t;
   cltydef: class_type_declaration;
@@ -94,7 +93,7 @@ type error =
   | Bad_class_type_parameters of Ident.t * type_expr list * type_expr list
   | Class_match_failure of Ctype.class_match_failure list
   | Unbound_val of string
-  | Unbound_type_var of (formatter -> unit) * Ctype.closed_class_failure
+  | Unbound_type_var of Format_doc.t * Ctype.closed_class_failure
   | Non_generalizable_class of
       { id : Ident.t
       ; clty : Types.class_declaration
@@ -490,7 +489,8 @@ let enter_ancestor_met ~loc name ~sign ~meths ~cl_num ~ty ~attrs met_env =
   let check s = Warnings.Unused_ancestor s in
   let kind = Val_anc (sign, meths, cl_num) in
   let desc =
-    { val_type = ty; val_modalities = Modality.id; val_kind = kind;
+    { val_type = ty; val_modalities = Modality.undefined; val_kind = kind;
+      val_lpoly = Lpoly.determined [];
       val_attributes = attrs;
       val_zero_alloc = Zero_alloc.default;
       Types.val_loc = loc;
@@ -506,7 +506,8 @@ let add_self_met loc id sign self_var_kind vars cl_num
   in
   let kind = Val_self (sign, self_var_kind, vars, cl_num) in
   let desc =
-    { val_type = ty; val_modalities = Modality.id; val_kind = kind;
+    { val_type = ty; val_modalities = Modality.undefined; val_kind = kind;
+      val_lpoly = Lpoly.determined [];
       val_attributes = attrs;
       val_zero_alloc = Zero_alloc.default;
       Types.val_loc = loc;
@@ -522,7 +523,8 @@ let add_instance_var_met loc label id sign cl_num attrs met_env =
   in
   let kind = Val_ivar (mut, cl_num) in
   let desc =
-    { val_type = ty; val_modalities = Modality.id; val_kind = kind;
+    { val_type = ty; val_modalities = Modality.undefined; val_kind = kind;
+      val_lpoly = Lpoly.determined [];
       val_attributes = attrs;
       Types.val_loc = loc;
       val_zero_alloc = Zero_alloc.default;
@@ -1259,8 +1261,11 @@ and class_expr_aux cl_num val_env met_env virt self_scope scl =
             in
             (id,
              {exp_desc =
-              Texp_ident(path, mknoloc (Longident.Lident (Ident.name id)), vd,
-                         Id_value, aliased_many_use);
+              Texp_ident { path;
+                           lid = mknoloc (Longident.Lident (Ident.name id));
+                           desc = vd; kind = Id_value;
+                           unique_use = aliased_many_use;
+                           mode = Mode.Value.(disallow_right legacy) };
               exp_loc = Location.none; exp_extra = [];
               exp_type = Ctype.instance vd.val_type;
               exp_attributes = []; (* check *)
@@ -1342,24 +1347,24 @@ and class_expr_aux cl_num val_env met_env virt self_scope scl =
               Arg (
                 if not optional || Btype.is_optional l' then
                   let arg = Typecore.type_argument val_env sarg ty ty0 in
-                  arg, Jkind.Sort.value
+                  arg, Jkind.Sort.scannable
                 else
                   Typecore.type_option_some val_env sarg ty ty0,
                   (* CR layouts v5: Change the sort when options can hold
                      non-values. *)
-                  Jkind.Sort.value
+                  Jkind.Sort.scannable
               )
             in
             let eliminate_optional_arg () =
               Arg (Typecore.type_option_none val_env ty0 Location.none,
                    (* CR layouts v5: Change the sort when options can hold
                       non-values. *)
-                   Jkind.Sort.value
+                   Jkind.Sort.scannable
                   )
             in
             let eliminate_position_arg () =
               let arg = Typecore.src_pos (Location.ghostify scl.pcl_loc) [] val_env in
-              Arg (arg, Jkind.Sort.value)
+              Arg (arg, Jkind.Sort.scannable)
             in
             let remaining_sargs, arg =
               if ignore_labels then begin
@@ -1405,8 +1410,8 @@ and class_expr_aux cl_num val_env met_env virt self_scope scl =
                       let mode_closure = Mode.Alloc.disallow_left Mode.Alloc.legacy in
                       let mode_arg = Mode.Alloc.disallow_right Mode.Alloc.legacy in
                       let mode_ret = Mode.Alloc.disallow_right Mode.Alloc.legacy in
-                      let sort_arg = Jkind.Sort.value in
-                      let sort_ret = Jkind.Sort.value in
+                      let sort_arg = Jkind.Sort.scannable in
+                      let sort_ret = Jkind.Sort.scannable in
                       Omitted { mode_closure; mode_arg; mode_ret; sort_arg;
                                 sort_ret }
                     end
@@ -1450,7 +1455,7 @@ and class_expr_aux cl_num val_env met_env virt self_scope scl =
              List.iter
                (fun (loc, mode, sort) ->
                   Typecore.escape ~loc ~env:val_env ~reason:Other mode;
-                  if not (Jkind.Sort.(equate sort value))
+                  if not (Jkind.Sort.(equate sort scannable))
                   then
                     raise (Error(loc, met_env,
                                  Non_value_let_binding (Ident.name id, sort)))
@@ -1467,8 +1472,11 @@ and class_expr_aux cl_num val_env met_env virt self_scope scl =
              in
              let expr =
                {exp_desc =
-                Texp_ident(path, mknoloc(Longident.Lident (Ident.name id)),vd,
-                           Id_value, aliased_many_use);
+                Texp_ident { path;
+                             lid = mknoloc (Longident.Lident (Ident.name id));
+                             desc = vd; kind = Id_value;
+                             unique_use = aliased_many_use;
+                             mode = Mode.Value.(disallow_right legacy) };
                 exp_loc = Location.none; exp_extra = [];
                 exp_type = ty;
                 exp_attributes = [];
@@ -1477,8 +1485,9 @@ and class_expr_aux cl_num val_env met_env virt self_scope scl =
              in
              let desc =
                {val_type = expr.exp_type;
-                val_modalities = Modality.id;
+                val_modalities = Modality.undefined;
                 val_kind = Val_ivar (Immutable, cl_num);
+                val_lpoly = Lpoly.determined [];
                 val_attributes = [];
                 val_zero_alloc = Zero_alloc.default;
                 Types.val_loc = vd.val_loc;
@@ -1621,6 +1630,7 @@ let temp_abbrev loc id arity uid =
        type_arity = arity;
        type_kind = Type_abstract Definition;
        type_jkind = Jkind.Builtin.value ~why:Object;
+       type_ikind = Types.ikinds_todo "typeclass temp_abbrev";
        type_private = Public;
        type_manifest = Some ty;
        type_variance = Variance.unknown_signature ~injective:false ~arity;
@@ -1852,6 +1862,7 @@ let class_infos define_class kind
      type_arity = arity;
      type_kind = Type_abstract Definition;
      type_jkind = Jkind.Builtin.value ~why:Object;
+     type_ikind = Types.ikinds_todo "typeclass temp_abbrev";
      type_private = Public;
      type_manifest = Some obj_ty;
      type_variance = Variance.unknown_signature ~injective:false ~arity;
@@ -1922,8 +1933,8 @@ let final_decl env define_class
   | Some reason ->
       let printer =
         if define_class
-        then function ppf -> Printtyp.class_declaration id ppf clty
-        else function ppf -> Printtyp.cltype_declaration id ppf cltydef
+        then Format_doc.doc_printf "%a" (Printtyp.class_declaration id) clty
+        else Format_doc.doc_printf "%a" (Printtyp.cltype_declaration id) cltydef
       in
       raise(Error(cl.pci_loc, env, Unbound_type_var(printer, reason)))
   end;
@@ -2174,7 +2185,7 @@ let approx_class_declarations env sdecls =
 
 (* Error report *)
 
-open Format
+open Format_doc
 
 let non_virtual_string_of_kind : kind -> string = function
   | Object -> "object"
@@ -2183,7 +2194,9 @@ let non_virtual_string_of_kind : kind -> string = function
 
 module Style=Misc.Style
 
-let report_error env ppf =
+let out_type ppf t = Style.as_inline_code !Oprint.out_type ppf t
+
+let report_error_doc env ppf =
   let pp_args ppf args =
     let args = List.map (Printtyp.tree_of_typexp Type) args in
     Style.as_inline_code !Oprint.out_type_args ppf args
@@ -2192,17 +2205,17 @@ let report_error env ppf =
   | Repeated_parameter ->
       fprintf ppf "A type parameter occurs several times"
   | Unconsistent_constraint err ->
+      let msg = Format_doc.Doc.msg in
       fprintf ppf "@[<v>The class constraints are not consistent.@ ";
       Printtyp.report_unification_error ppf env err
-        (fun ppf -> fprintf ppf "Type")
-        (fun ppf -> fprintf ppf "is not compatible with type");
+        (msg "Type")
+        (msg "is not compatible with type");
       fprintf ppf "@]"
   | Field_type_mismatch (k, m, err) ->
+      let msg  = Format_doc.doc_printf in
       Printtyp.report_unification_error ppf env err
-        (function ppf ->
-           fprintf ppf "The %s %a@ has type" k Style.inline_code m)
-        (function ppf ->
-           fprintf ppf "but is expected to have type")
+        (msg "The %s %a@ has type" k Style.inline_code m)
+        (msg "but is expected to have type")
   | Unexpected_field (ty, lab) ->
       fprintf ppf
         "@[@[<2>This object is expected to have type :@ %a@]\
@@ -2240,20 +2253,16 @@ let report_error env ppf =
       Printtyp.prepare_for_printing [abbrev; actual; expected];
       fprintf ppf "@[The abbreviation@ %a@ expands to type@ %a@ \
        but is used with type@ %a@]"
-        (Style.as_inline_code !Oprint.out_type)
-        (Printtyp.tree_of_typexp Type abbrev)
-        (Style.as_inline_code !Oprint.out_type)
-        (Printtyp.tree_of_typexp Type actual)
-        (Style.as_inline_code !Oprint.out_type)
-        (Printtyp.tree_of_typexp Type expected)
+        out_type (Printtyp.tree_of_typexp Type abbrev)
+        out_type (Printtyp.tree_of_typexp Type actual)
+        out_type (Printtyp.tree_of_typexp Type expected)
   | Constructor_type_mismatch (c, err) ->
+      let msg = Format_doc.doc_printf in
       Printtyp.report_unification_error ppf env err
-        (function ppf ->
-           fprintf ppf "The expression %a has type"
+        (msg "The expression %a has type"
              Style.inline_code ("new " ^ c)
         )
-        (function ppf ->
-           fprintf ppf "but is used with type")
+        (msg "but is used with type")
   | Virtual_class (kind, mets, vals) ->
       let kind = non_virtual_string_of_kind kind in
       let missings =
@@ -2279,11 +2288,10 @@ let report_error env ppf =
            but is here applied to %i type argument(s)@]"
         (Style.as_inline_code Printtyp.longident) lid expected provided
   | Parameter_mismatch err ->
+      let msg = Format_doc.Doc.msg in
       Printtyp.report_unification_error ppf env err
-        (function ppf ->
-           fprintf ppf "The type parameter")
-        (function ppf ->
-           fprintf ppf "does not meet its constraint: it should be")
+        (msg  "The type parameter")
+        (msg "does not meet its constraint: it should be")
   | Bad_parameters (id, params, cstrs) ->
       Printtyp.prepare_for_printing (params @ cstrs);
       fprintf ppf
@@ -2303,10 +2311,10 @@ let report_error env ppf =
        pp_args params
        pp_args cstrs
   | Class_match_failure error ->
-      Includeclass.report_error Type ppf error
+      Includeclass.report_error_doc Type ppf error
   | Unbound_val lab ->
       fprintf ppf "Unbound instance variable %a" Style.inline_code lab
-  | Unbound_type_var (printer, reason) ->
+  | Unbound_type_var (msg, reason) ->
       let print_reason ppf { Ctype.free_variable; meth; meth_ty; } =
         let (ty0, kind) = free_variable in
         let ty1 =
@@ -2316,17 +2324,16 @@ let report_error env ppf =
         in
         Printtyp.add_type_to_preparation meth_ty;
         Printtyp.add_type_to_preparation ty1;
-        let pp_type ppf ty = Style.as_inline_code !Oprint.out_type ppf ty in
         fprintf ppf
           "The method %a@ has type@;<1 2>%a@ where@ %a@ is unbound"
           Style.inline_code meth
-          pp_type (Printtyp.tree_of_typexp Type meth_ty)
-          pp_type (Printtyp.tree_of_typexp Type ty0)
+          out_type (Printtyp.tree_of_typexp Type meth_ty)
+          out_type (Printtyp.tree_of_typexp Type ty0)
       in
       fprintf ppf
-        "@[<v>@[Some type variables are unbound in this type:@;<1 2>%t@]@ \
+        "@[<v>@[Some type variables are unbound in this type:@;<1 2>%a@]@ \
               @[%a@]@]"
-       printer print_reason reason
+       pp_doc msg print_reason reason
   | Non_generalizable_class {id;  clty; nongen_vars } ->
       let[@manual.ref "ss:valuerestriction"] manual_ref = [ 6; 1; 2] in
       Printtyp.prepare_for_printing nongen_vars;
@@ -2346,20 +2353,20 @@ let report_error env ppf =
            Some occurrences are contravariant@]"
         (Style.as_inline_code Printtyp.type_scheme) ty
   | Non_collapsable_conjunction (id, clty, err) ->
+      let msg = Format_doc.Doc.msg in
       fprintf ppf
         "@[The type of this class,@ %a,@ \
            contains non-collapsible conjunctive types in constraints.@ %t@]"
         (Style.as_inline_code @@ Printtyp.class_declaration id) clty
         (fun ppf -> Printtyp.report_unification_error ppf env err
-            (fun ppf -> fprintf ppf "Type")
-            (fun ppf -> fprintf ppf "is not compatible with type")
+            (msg "Type")
+            (msg "is not compatible with type")
         )
   | Self_clash err ->
+      let msg = Format_doc.Doc.msg in
       Printtyp.report_unification_error ppf env err
-        (function ppf ->
-           fprintf ppf "This object is expected to have type")
-        (function ppf ->
-           fprintf ppf "but actually has type")
+        (msg "This object is expected to have type")
+        (msg "but actually has type")
   | Mutability_mismatch (_lab, mut) ->
       let mut1, mut2 =
         match mut with
@@ -2395,7 +2402,7 @@ let report_error env ppf =
       "@[Variables bound in a class must have layout value.@ %a@]"
       (Jkind.Violation.report_with_name
          ~name:nm
-         ~level:(Ctype.get_current_level ()))
+         env)
       err
   | Non_value_let_binding (nm, sort) ->
     fprintf ppf
@@ -2407,17 +2414,19 @@ let report_error env ppf =
       "@[the argument labeled '%s' is a [%%call_pos] argument, filled in @ \
          automatically if ommitted. It cannot be passed with '?'.@]" label
 
-let report_error env ppf err =
+let report_error_doc env ppf err =
   Printtyp.wrap_printing_env ~error:true
-    env (fun () -> report_error env ppf err)
+    env (fun () -> report_error_doc env ppf err)
 
 let () =
   Location.register_error_of_exn
     (function
       | Error (loc, env, err) ->
-        Some (Location.error_of_printer ~loc (report_error env) err)
+        Some (Location.error_of_printer ~loc (report_error_doc env) err)
       | Error_forward err ->
         Some err
       | _ ->
         None
     )
+
+let report_error = Format_doc.compat1 report_error_doc

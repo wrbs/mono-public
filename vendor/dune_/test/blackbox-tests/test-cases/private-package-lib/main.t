@@ -137,9 +137,9 @@ But we shouldn't be able to access it directly:
   > print_endline Secret.secret
   > EOF
   $ dune exec ./subproj/subproj.exe
-  File "subproj/subproj.ml", line 1, characters 14-20:
+  File "subproj/subproj.ml", line 1, characters 14-27:
   1 | print_endline Secret.secret
-                    ^^^^^^
+                    ^^^^^^^^^^^^^
   Error: Unbound module Secret
   [1]
 
@@ -168,9 +168,9 @@ But we cannot use such libraries directly:
   > EOF
   $ dune exec --root use -- ./run.exe
   Entering directory 'use'
-  File "run.ml", line 1, characters 43-49:
+  File "run.ml", line 1, characters 43-56:
   1 | print_endline ("direct access attempt: " ^ Secret.secret)
-                                                 ^^^^^^
+                                                 ^^^^^^^^^^^^^
   Error: Unbound module Secret
   Leaving directory 'use'
   [1]

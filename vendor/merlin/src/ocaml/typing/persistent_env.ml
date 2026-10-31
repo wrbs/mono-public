@@ -22,6 +22,7 @@ open Cmi_format
 module CU = Compilation_unit
 module Consistbl_data = Import_info.Intf.Nonalias.Kind
 module Consistbl = Consistbl.Make (CU.Name) (Consistbl_data)
+module Style = Misc.Style
 
 let add_delayed_check_forward = ref (fun _ -> assert false)
 
@@ -76,9 +77,9 @@ module Persistent_signature = struct
     | filename, visibility when allow_hidden ->
       let cmi = Cmi_cache.read filename in
       Some { filename; cmi; visibility}
-    | filename, Visible ->
+    | filename, (Visible _ as visibility) ->
       let cmi = Cmi_cache.read filename in
-      Some { filename; cmi; visibility = Visible}
+      Some { filename; cmi; visibility}
     | _, Hidden
     | exception Not_found -> None)
 end
@@ -115,7 +116,7 @@ type import = {
 (* If a .cmi file is missing (or invalid), we
    store it as Missing in the cache. *)
 type import_info =
-  | Missing
+  | Missing of { hidden_were_allowed : bool }
   | Found of import
 
 (* Data relating to a global name (possibly with arguments) but not necessarily
@@ -126,7 +127,7 @@ type import_info =
 type pers_name = {
   pn_import : import;
   pn_global : Global_module.t;
-  pn_sign : Subst.Lazy.signature;
+  pn_sign : Subst.Lazy.persistent_signature;
 }
 
 (* What a global identifier is actually bound to in Lambda code *)
@@ -155,7 +156,8 @@ type 'a t = {
   locals_bound_to_runtime_parameters : unit Ident.Tbl.t;
   imported_units: CU.Name.Set.t ref;
   imported_opaque_units: CU.Name.Set.t ref;
-  quoted_globals: CU.Name.Set.t ref;
+  quoted_intfs: CU.Name.Set.t ref;
+  quoted_impls: CU.Set.t ref;
   param_imports : Param_set.t ref;
   crc_units: Consistbl.t;
   can_load_cmis: can_load_cmis ref;
@@ -170,7 +172,8 @@ let empty () = {
   locals_bound_to_runtime_parameters = Ident.Tbl.create 17;
   imported_units = ref CU.Name.Set.empty;
   imported_opaque_units = ref CU.Name.Set.empty;
-  quoted_globals = ref CU.Name.Set.empty;
+  quoted_intfs = ref CU.Name.Set.empty;
+  quoted_impls = ref CU.Set.empty;
   param_imports = ref Param_set.empty;
   crc_units = Consistbl.create ();
   can_load_cmis = ref Can_load_cmis;
@@ -186,7 +189,8 @@ let clear penv =
     locals_bound_to_runtime_parameters;
     imported_units;
     imported_opaque_units;
-    quoted_globals;
+    quoted_intfs;
+    quoted_impls;
     param_imports;
     crc_units;
     can_load_cmis;
@@ -199,7 +203,8 @@ let clear penv =
   Ident.Tbl.clear locals_bound_to_runtime_parameters;
   imported_units := CU.Name.Set.empty;
   imported_opaque_units := CU.Name.Set.empty;
-  quoted_globals := CU.Name.Set.empty;
+  quoted_intfs := CU.Name.Set.empty;
+  quoted_impls := CU.Set.empty;
   param_imports := Param_set.empty;
   Consistbl.clear crc_units;
   can_load_cmis := Can_load_cmis;
@@ -209,7 +214,9 @@ let clear penv =
 let clear_missing {imports; _} =
   let missing_entries =
     Hashtbl.fold
-      (fun name r acc -> if r = Missing then name :: acc else acc)
+      (fun name r acc -> match r with
+       | Missing _ -> name :: acc
+       | Found _ -> acc)
       imports []
   in
   List.iter (Hashtbl.remove imports) missing_entries
@@ -231,7 +238,7 @@ let register_import_as_opaque {imported_opaque_units; _} s =
 let find_import_info_in_cache {imports; _} import =
   match Hashtbl.find imports import with
   | exception Not_found -> None
-  | Missing -> None
+  | Missing _ -> None
   | Found imp -> Some imp
 
 let find_name_info_in_cache {persistent_names; _} name =
@@ -347,8 +354,8 @@ let register_pers_for_short_paths penv modname ps components =
     List.exists
       (function
         | Alerts alerts ->
-          String.Map.mem "deprecated" alerts ||
-          String.Map.mem "ocaml.deprecated" alerts
+          Misc.Stdlib.String.Map.mem "deprecated" alerts ||
+          Misc.Stdlib.String.Map.mem "ocaml.deprecated" alerts
         | _ -> false)
       ps.ps_name_info.pn_import.imp_flags
   in
@@ -446,18 +453,24 @@ let read_import penv ~check modname cmi =
   let filename = Unit_info.Artifact.filename cmi in
   add_import penv modname;
   let cmi = read_cmi_lazy filename in
-  let pers_sig = { Persistent_signature.filename; cmi; visibility = Visible } in
+  let pers_sig =
+    { Persistent_signature.filename; cmi;
+      visibility = Visible { cmx_guaranteed = false } }
+  in
   acknowledge_import penv ~check modname pers_sig
 
 let check_visibility ~allow_hidden imp =
-  if not allow_hidden && imp.imp_visibility = Load_path.Hidden then raise Not_found
+  match imp.imp_visibility with
+  | Hidden when not allow_hidden -> raise Not_found
+  | Hidden | Visible _ -> ()
 
 let find_import ~allow_hidden penv ~check modname =
   let {imports; _} = penv in
   if CU.Name.equal modname CU.Name.predef_exn then raise Not_found;
   match Hashtbl.find imports modname with
   | Found imp -> check_visibility ~allow_hidden imp; imp
-  | Missing -> raise Not_found
+  | Missing { hidden_were_allowed = true } -> raise Not_found
+  | Missing { hidden_were_allowed = false }
   | exception Not_found ->
       match can_load_cmis penv with
       | Cannot_load_cmis _ -> raise Not_found
@@ -466,7 +479,8 @@ let find_import ~allow_hidden penv ~check modname =
             match !Persistent_signature.load ~allow_hidden ~unit_name:modname with
             | Some psig -> psig
             | None ->
-                if allow_hidden then Hashtbl.add imports modname Missing;
+                Hashtbl.replace imports modname
+                  (Missing { hidden_were_allowed = allow_hidden });
                 raise Not_found
           in
           add_import penv modname;
@@ -494,11 +508,11 @@ let remember_global { globals; _ } global ~precision ~mentioned_by =
       | exception Global_module.With_precision.Inconsistent ->
           let pp_mentioned_by ppf = function
             | Current ->
-                Format.fprintf ppf "this compilation unit"
+                Format_doc.fprintf ppf "this compilation unit"
             | Other modname ->
                 Style.as_inline_code Global_module.Name.print ppf modname
           in
-          Misc.fatal_errorf
+          Misc.fatal_errorf_doc
             "@[<hov>The name %a@ was bound to %a@ by %a@ \
              but it is instead bound to %a@ by %a.@]"
             (Style.as_inline_code Global_module.Name.print) global_name
@@ -613,7 +627,7 @@ and compute_global penv modname ~params ~check ~allow_excess_args =
     let compare_by_param param1 (param2, _) =
       Global_module.Parameter_name.compare param1 param2
     in
-    Misc_stdlib.List.merge_iter
+    Misc.Stdlib.List.merge_iter
       ~cmp:compare_by_param
       params
       arg_global_by_param_name
@@ -801,7 +815,7 @@ let make_binding penv (global : Global_module.t) (impl : CU.t option) : binding 
       match impl with
       | Some unit -> unit
       | None ->
-          Misc.fatal_errorf
+          Misc.fatal_errorf_doc
             "Can't bind a parameter statically:@ %a"
             Global_module.print global
     in
@@ -826,7 +840,7 @@ type address =
   | Adot of address * Types.module_representation * int
 
 type 'a sig_reader =
-  Subst.Lazy.signature
+  Subst.Lazy.persistent_signature
   -> Global_module.Name.t
   -> Shape.Uid.t
   -> shape:Shape.t
@@ -919,11 +933,10 @@ let find_pers_struct
 
 let describe_prefix ppf prefix =
   if CU.Prefix.is_empty prefix then
-    Format.fprintf ppf "outside of any package"
+    Format_doc.fprintf ppf "outside of any package"
   else
-    Format.fprintf ppf "package %a" CU.Prefix.print prefix
+    Format_doc.fprintf ppf "package %a" CU.Prefix.print prefix
 
-module Style = Misc.Style
 (* Emits a warning if there is no valid cmi for name *)
 let check_pers_struct ~allow_hidden penv f1 f2 ~loc name =
   let name_as_string = CU.Name.to_string (CU.Name.of_head_of_global_name name) in
@@ -935,61 +948,63 @@ let check_pers_struct ~allow_hidden penv f1 f2 ~loc name =
       let warn = Warnings.No_cmi_file(name_as_string, None) in
         Location.prerr_warning loc warn
   | Magic_numbers.Cmi.Error err ->
-      let msg = Format.asprintf "%a" Magic_numbers.Cmi.report_error err in
+      let msg = Format.asprintf "%a"
+          Magic_numbers.Cmi.report_error err in
       let warn = Warnings.No_cmi_file(name_as_string, Some msg) in
         Location.prerr_warning loc warn
   | Error err ->
       let msg =
         match err with
         | Illegal_renaming(name, ps_name, filename) ->
-            Format.asprintf
+            Format_doc.doc_printf
               " %a@ contains the compiled interface for @ \
                %a when %a was expected"
-              (Style.as_inline_code Location.print_filename) filename
-              (Style.as_inline_code CU.Name.print) ps_name
-              (Style.as_inline_code CU.Name.print) name
+              Location.Doc.quoted_filename filename
+              CU.Name.print_as_inline_code ps_name
+              CU.Name.print_as_inline_code name
         | Inconsistent_import _ ->
             (* Can't be raised by [find_pers_struct ~check:false] *)
             assert false
         | Need_recursive_types name ->
-            Format.asprintf
+            Format_doc.doc_printf
               "%a uses recursive types"
-              (Style.as_inline_code CU.Name.print) name
+              CU.Name.print_as_inline_code name
         | Inconsistent_package_declaration_between_imports _ ->
             (* Can't be raised by [find_pers_struct ~check:false] *)
             assert false
         | Direct_reference_from_wrong_package (unit, _filename, prefix) ->
-            Format.asprintf "%a is inaccessible from %a"
-              CU.print unit
+            Format_doc.doc_printf "%a is inaccessible from %a"
+              CU.print_as_inline_code unit
               describe_prefix prefix
         | Illegal_import_of_parameter (name, _) ->
-            Format.asprintf "%a is a parameter"
+            Format_doc.doc_printf "%a is a parameter"
               (Style.as_inline_code Global_module.Name.print) name
         | Not_compiled_as_parameter name ->
-            Format.asprintf "%a should be a parameter but isn't"
+            Format_doc.doc_printf "%a should be a parameter but isn't"
               (Style.as_inline_code Global_module.Name.print) name
         | Imported_module_has_unset_parameter { imported; parameter } ->
-            Format.asprintf "%a requires argument for %a"
+            Format_doc.doc_printf "%a requires argument for %a"
               (Style.as_inline_code Global_module.Name.print) imported
               (Style.as_inline_code Global_module.Parameter_name.print)
               parameter
         | Imported_module_has_no_such_parameter { imported; parameter; _ } ->
-            Format.asprintf "%a has no parameter %a"
-              (Style.as_inline_code CU.Name.print) imported
+            Format_doc.doc_printf "%a has no parameter %a"
+              CU.Name.print_as_inline_code imported
               (Style.as_inline_code Global_module.Parameter_name.print)
               parameter
         | Not_compiled_as_argument { value; _ } ->
-            Format.asprintf "%a is not compiled as an argument"
+            Format_doc.doc_printf "%a is not compiled as an argument"
               (Style.as_inline_code Global_module.Name.print) value
         | Argument_type_mismatch { value; expected; actual; _ } ->
-            Format.asprintf "%a implements %a, not %a"
+            Format_doc.doc_printf "%a implements %a, not %a"
               (Style.as_inline_code Global_module.Name.print) value
               (Style.as_inline_code Global_module.Parameter_name.print) actual
               (Style.as_inline_code Global_module.Parameter_name.print) expected
         | Unbound_module_as_argument_value { value; _ } ->
-            Format.asprintf "Can't find argument %a"
+            Format_doc.doc_printf "Can't find argument %a"
               (Style.as_inline_code Global_module.Name.print) value
       in
+      let msg = Format_doc.(asprintf "%a" pp_doc) msg in
       let warn = Warnings.No_cmi_file(name_as_string, Some msg) in
         Location.prerr_warning loc warn
 
@@ -1002,7 +1017,19 @@ let find ~allow_hidden penv f1 f2 name ~allow_excess_args =
 
 let check ~allow_hidden penv f1 f2 ~loc name =
   let {persistent_structures; _} = penv in
-  if not (Hashtbl.mem persistent_structures name) then begin
+  let persistent_structure_visible =
+    match Hashtbl.find persistent_structures name with
+    | ps ->
+        begin
+          match
+            check_visibility ~allow_hidden ps.ps_name_info.pn_import
+          with
+        | () -> true
+        | exception Not_found -> false
+        end
+    | exception Not_found -> false
+  in
+  if not persistent_structure_visible then begin
     (* PR#6843: record the weak dependency ([add_import]) regardless of
        whether the check succeeds, to help make builds more
        deterministic. *)
@@ -1038,10 +1065,31 @@ let imports {imported_units; crc_units; _} =
   List.map (fun (cu_name, spec) -> Import_info.Intf.create cu_name spec)
     imports
 
-let require_global_for_quote {quoted_globals; _} name =
-  quoted_globals := CU.Name.Set.add name !quoted_globals
+let require_intf_for_quote {quoted_intfs; _} name =
+  quoted_intfs := CU.Name.Set.add name !quoted_intfs
 
-let quoted_globals {quoted_globals; _} = CU.Name.Set.elements !quoted_globals
+let quoted_intfs { quoted_intfs; _ } = !quoted_intfs
+
+let loaded_transitive_dependencies penv intfs =
+  let names = ref Compilation_unit.Name.Set.empty in
+  let rec add_loaded_deps name =
+    match find_import_info_in_cache penv name with
+    | None -> ()
+    | Some { imp_crcs; _ } ->
+      if not (CU.Name.Set.mem name !names)
+      then (
+        names := CU.Name.Set.add name !names;
+        Array.iter
+          (fun import_info -> add_loaded_deps (Import_info.name import_info))
+          imp_crcs)
+  in
+  Compilation_unit.Name.Set.iter add_loaded_deps intfs;
+  !names
+
+let require_impl_for_quote {quoted_impls; _} name =
+  quoted_impls := CU.Set.add name !quoted_impls
+
+let quoted_impls {quoted_impls; _} = !quoted_impls
 
 let is_imported_parameter penv modname =
   match find_info_in_cache penv modname with
@@ -1154,37 +1202,37 @@ let save_cmi penv psig =
     )
     ~exceptionally:(fun () -> remove_file filename)
 
-let report_error ppf =
-  let open Format in
+let report_error_doc ppf =
+  let open Format_doc in
   function
   | Illegal_renaming(modname, ps_name, filename) -> fprintf ppf
       "Wrong file naming: %a@ contains the compiled interface for@ \
        %a when %a was expected"
-      (Style.as_inline_code Location.print_filename) filename
-      (Style.as_inline_code CU.Name.print) ps_name
-      (Style.as_inline_code CU.Name.print) modname
+      Location.Doc.quoted_filename filename
+      CU.Name.print_as_inline_code ps_name
+      CU.Name.print_as_inline_code modname
   | Inconsistent_import(name, source1, source2) -> fprintf ppf
       "@[<hov>The files %a@ and %a@ \
               make inconsistent assumptions@ over interface %a@]"
-      (Style.as_inline_code Location.print_filename) source1
-      (Style.as_inline_code Location.print_filename) source2
-      (Style.as_inline_code CU.Name.print) name
+      Location.Doc.quoted_filename source1
+      Location.Doc.quoted_filename source2
+      CU.Name.print_as_inline_code name
   | Need_recursive_types(import) ->
       fprintf ppf
         "@[<hov>Invalid import of %a, which uses recursive types.@ \
          The compilation flag %a is required@]"
-        (Style.as_inline_code CU.Name.print) import
+        CU.Name.print_as_inline_code import
         Style.inline_code "-rectypes"
   | Inconsistent_package_declaration_between_imports (filename, unit1, unit2) ->
       fprintf ppf
         "@[<hov>The file %s@ is imported both as %a@ and as %a.@]"
         filename
-        (Style.as_inline_code CU.print) unit1
-        (Style.as_inline_code CU.print) unit2
+        CU.print_as_inline_code unit1
+        CU.print_as_inline_code unit2
   | Direct_reference_from_wrong_package(unit, filename, prefix) ->
       fprintf ppf
         "@[<hov>Invalid reference to %a (in file %s) from %a.@ %s]"
-        (Style.as_inline_code CU.print) unit
+        CU.print_as_inline_code unit
         filename
         describe_prefix prefix
         "Can only access members of this library's package or a containing package"
@@ -1195,7 +1243,7 @@ let report_error ppf =
          @[<hov>@{<hint>Hint@}: \
            @[<hov>Compile the current unit with \
            @{<inline_code>-parameter %a@}.@]@]"
-        (Style.as_inline_code Location.print_filename) filename
+        Location.Doc.quoted_filename filename
         (Style.as_inline_code Global_module.Name.print) modname
         Global_module.Name.print modname
   | Not_compiled_as_parameter modname ->
@@ -1227,22 +1275,22 @@ let report_error ppf =
             fprintf ppf
               "Compile %a@ with @{<inline_code>-parameter %a@}@ to make it a \
                parameter."
-              (Style.as_inline_code CU.Name.print) modname
+              CU.Name.print_as_inline_code modname
               Global_module.Parameter_name.print param
         | _ ->
           let print_params =
-            Format.pp_print_list ~pp_sep:Format.pp_print_space
+            Format_doc.pp_print_list ~pp_sep:Format_doc.pp_print_space
               (Style.as_inline_code Global_module.Parameter_name.print)
           in
           fprintf ppf "Parameters for %a:@ @[<hov>%a@]"
-            (Style.as_inline_code CU.Name.print) modname
+            CU.Name.print_as_inline_code modname
             print_params valid_parameters
       in
       fprintf ppf
         "@[<hov>The module %a@ has no parameter %a.@]@.\
          @[<hov>@{<hint>Hint@}: @[<hov>%a@]@]"
-        (Style.as_inline_code CU.Name.print) modname
-        (Style.as_inline_code Global_module.Parameter_name.print) param
+        CU.Name.print_as_inline_code modname
+        (Style.as_inline_code Global_module.Parameter_name.print ) param
         pp_hint ()
   | Not_compiled_as_argument { param; value; filename } ->
       fprintf ppf
@@ -1251,8 +1299,8 @@ let report_error ppf =
          @[<hov>@{<hint>Hint@}: \
            @[<hov>Compile %a@ with @{<inline_code>-as-argument-for %a@}.@]@]"
         (Style.as_inline_code Global_module.Name.print) value
-        (Style.as_inline_code Global_module.Parameter_name.print) param
-        (Style.as_inline_code Location.print_filename) filename
+        (Style.as_inline_code Global_module.Parameter_name.print ) param
+        (Style.as_inline_code Location.Doc.filename) filename
         Global_module.Parameter_name.print param
   | Argument_type_mismatch { value; filename; expected; actual; } ->
       fprintf ppf
@@ -1262,10 +1310,10 @@ let report_error ppf =
            @[<hov>%a@ was compiled with \
              @{<inline_code>-as-argument-for %a@}.@]@]"
         (Style.as_inline_code Global_module.Name.print) value
-        (Style.as_inline_code Global_module.Parameter_name.print) expected
+        (Style.as_inline_code Global_module.Parameter_name.print ) expected
         (Style.as_inline_code Global_module.Name.print) value
-        (Style.as_inline_code Global_module.Parameter_name.print) actual
-        (Style.as_inline_code Location.print_filename) filename
+        (Style.as_inline_code Global_module.Parameter_name.print ) actual
+        (Style.as_inline_code Location.Doc.filename) filename
         Global_module.Parameter_name.print expected
   | Unbound_module_as_argument_value { instance; value } ->
       fprintf ppf
@@ -1282,7 +1330,7 @@ let () =
              [Env] is often able to add location info to our errors by
              re-raising them with the [Env.Error_from_persistent_env]
              constructor. *)
-          Some (Location.error_of_printer_file report_error err)
+          Some (Location.error_of_printer_file report_error_doc err)
       | _ -> None
     )
 
@@ -1295,7 +1343,9 @@ let with_cmis penv f x =
 
 let forall ~found ~missing t =
   Std.Hashtbl.forall t.imports (fun name -> function
-      | Missing -> missing name
+      | Missing _ -> missing name
       | Found import ->
         found name import.imp_filename name
     )
+
+let report_error = Format_doc.compat report_error_doc

@@ -16,10 +16,10 @@ Reproducing test case for #5532.
   > EOF
 
   $ dune build
-  Warning: Dune's Coq Build Language is deprecated, and will be removed in Dune
-  3.24. Please upgrade to the new Rocq Build Language.
+  Warning: Coq Language Versions lower than 0.8 have been deprecated in Dune
+  3.8 and will be removed in an upcoming Dune version.
   Hint: To disable this warning, add the following to your dune-project file:
-  (warnings (deprecated_coq_lang disabled))
+  (warnings (deprecated_coq_lang_lt_08 disabled))
   File "dune", lines 1-2, characters 0-26:
   1 | (coq.theory
   2 |  (name basic))

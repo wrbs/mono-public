@@ -1,3 +1,0 @@
-{% filter upper -%}
-must be upper
-{%- endfilter %}

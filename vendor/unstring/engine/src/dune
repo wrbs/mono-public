@@ -1,0 +1,7 @@
+(library
+ (name unstring_engine)
+ (public_name unstring.engine)
+ (libraries base.composition_infix core heterogeneous_list
+   core_kernel.reversed_list vec)
+ (preprocess
+  (pps ppx_jane)))

@@ -1,0 +1,7 @@
+(library
+ (name file_path_test)
+ (public_name file_path_test)
+ (libraries core_unix.command_test_helpers core core_unix
+   expect_test_helpers_core file_path filesystem.core)
+ (preprocess
+  (pps ppx_jane -require-template-extension)))

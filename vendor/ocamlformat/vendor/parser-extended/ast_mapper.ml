@@ -85,6 +85,7 @@ type mapper = {
   with_constraint: mapper -> with_constraint -> with_constraint;
   directive_argument: mapper -> directive_argument -> directive_argument;
   toplevel_directive: mapper -> toplevel_directive -> toplevel_directive;
+  lexer_directive: mapper -> lexer_directive -> lexer_directive;
   toplevel_phrase: mapper -> toplevel_phrase -> toplevel_phrase;
   repl_phrase: mapper -> repl_phrase -> repl_phrase;
 }
@@ -239,6 +240,10 @@ module T = struct
         of_kind ~loc ~attrs (sub.jkind_annotation sub jkind)
     | Ptyp_constr_unboxed (lid, tl) ->
         constr_unboxed ~loc ~attrs (map_loc sub lid) (List.map (sub.typ sub) tl)
+    | Ptyp_quote t ->
+        quote ~loc ~attrs (sub.typ sub t)
+    | Ptyp_splice t ->
+        splice ~loc ~attrs (sub.typ sub t)
     (* End Jane Street extension *)
 
   let map_variance_and_injectivity sub = List.map (map_loc sub)
@@ -260,8 +265,13 @@ module T = struct
           sub.typ sub ct, sub.variance_and_injectivity sub var_inj)
         ptype_params
     in
+    let jkind = 
+      map_opt
+        (fun jkind -> map_loc_txt sub sub.jkind_annotation jkind)
+        ptype_jkind 
+    in
     Type.mk ~loc ~attrs (map_loc sub ptype_name)
-      ?jkind:(ptype_jkind)
+      ?jkind
       ~params
       ~priv:(Flag.map_private sub ptype_private)
       ~cstrs:(List.map
@@ -573,6 +583,20 @@ module E = struct
     let if_attrs = sub.attributes sub if_attrs in
     { if_cond; if_body; if_attrs }
 
+  let map_block_access sub = function
+    | Baccess_field lid -> Baccess_field (map_loc sub lid)
+    | Baccess_array (mut, idx_kind, expr) ->
+        let mut = Flag.map_mutable sub mut in
+        let expr = sub.expr sub expr in
+        Baccess_array (mut, idx_kind, expr)
+    | Baccess_block (mut, expr) ->
+        let mut = Flag.map_mutable sub mut in
+        let expr = sub.expr sub expr in
+        Baccess_block (mut, expr)
+
+  let map_unboxed_access sub = function
+    | Uaccess_unboxed_field lid -> Uaccess_unboxed_field (map_loc sub lid)
+
   let map sub {pexp_loc = loc; pexp_desc = desc; pexp_attributes = attrs; pexp_loc_stack = _} =
     let open Exp in
     let loc = sub.location sub loc in
@@ -599,6 +623,8 @@ module E = struct
         tuple ~loc ~attrs (List.map (fun (lbl, e) -> map_opt (map_loc sub) lbl, sub.expr sub e) el)
     | Pexp_unboxed_tuple el ->
         unboxed_tuple ~loc ~attrs (List.map (fun (lbl, e) -> map_opt (map_loc sub) lbl, sub.expr sub e) el)
+    | Pexp_unboxed_unit -> unboxed_unit ~loc ~attrs ()
+    | Pexp_unboxed_bool b -> unboxed_bool ~loc ~attrs b
     | Pexp_construct (lid, arg) ->
         construct ~loc ~attrs (map_loc sub lid) (map_opt (sub.expr sub) arg)
     | Pexp_variant (lab, eo) ->
@@ -632,6 +658,10 @@ module E = struct
           (sub.expr sub e2)
     | Pexp_array (mf, el) ->
         array ~loc ~attrs (Flag.map_mutable sub mf) (List.map (sub.expr sub) el)
+    | Pexp_idx (bacc, uaccs) ->
+        let bacc = map_block_access sub bacc in
+        let uaccs = List.map (map_unboxed_access sub) uaccs in
+        idx ~loc ~attrs bacc uaccs
     | Pexp_list el -> list ~loc ~attrs (List.map (sub.expr sub) el)
     | Pexp_ifthenelse (eN, e2) ->
         ifthenelse ~loc ~attrs (List.map (map_if_branch sub) eN)
@@ -696,6 +726,7 @@ module E = struct
     | Pexp_unreachable -> unreachable ~loc ~attrs ()
     | Pexp_hole -> hole ~loc ~attrs ()
     | Pexp_stack e -> stack ~loc ~attrs (sub.expr sub e)
+    | Pexp_borrow e -> borrow ~loc ~attrs (sub.expr sub e)
     | Pexp_beginend e -> beginend ~loc ~attrs (sub.expr sub e)
     | Pexp_parens e -> parens ~loc ~attrs (sub.expr sub e)
     | Pexp_cons l -> cons ~loc ~attrs (List.map (sub.expr sub) l)
@@ -706,6 +737,8 @@ module E = struct
     | Pexp_list_comprehension c -> list_comp ~loc ~attrs (Comprehension.map sub c)
     | Pexp_array_comprehension (f, c) ->
         array_comp ~loc ~attrs (Flag.map_mutable sub f) (Comprehension.map sub c)
+    | Pexp_quote e -> quote ~loc ~attrs (sub.expr sub e)
+    | Pexp_splice e -> splice ~loc ~attrs (sub.expr sub e)
 
   let map_binding_op sub {pbop_op; pbop_pat; pbop_exp; pbop_is_pun; pbop_loc} =
     let open Exp in
@@ -743,6 +776,8 @@ module P = struct
         tuple ~loc ~attrs (List.map (fun (lbl, p) -> map_opt (map_loc sub) lbl, sub.pat sub p) pl) oc
     | Ppat_unboxed_tuple (pl, oc) ->
         unboxed_tuple ~loc ~attrs (List.map (fun (lbl, p) -> map_opt (map_loc sub) lbl, sub.pat sub p) pl) oc
+    | Ppat_unboxed_unit -> unboxed_unit ~loc ~attrs ()
+    | Ppat_unboxed_bool b -> unboxed_bool ~loc ~attrs b
     | Ppat_construct (l, p) ->
         construct ~loc ~attrs (map_loc sub l)
           (map_opt
@@ -1099,10 +1134,19 @@ let default_mapper =
          ; pdir_arg= map_opt (this.directive_argument this) d.pdir_arg
          ; pdir_loc= this.location this d.pdir_loc } );
 
+    lexer_directive =
+      (fun this l ->
+         match l.plex_desc with
+         | Plex_syntax s ->
+           {plex_desc= Plex_syntax { psyn_mode = map_loc this s.psyn_mode
+                                   ; psyn_toggle = s.psyn_toggle };
+            plex_loc= this.location this l.plex_loc });
+
     toplevel_phrase =
       (fun this -> function
          | Ptop_def s -> Ptop_def (this.structure this s)
-         | Ptop_dir d -> Ptop_dir (this.toplevel_directive this d) );
+         | Ptop_dir d -> Ptop_dir (this.toplevel_directive this d)
+         | Ptop_lex l -> Ptop_lex (this.lexer_directive this l) );
 
     repl_phrase =
       (fun this p ->

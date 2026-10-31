@@ -16,6 +16,9 @@ let empty, singleton, mem, (+), (-) =
 let maybe = function Some s -> s | None -> empty
 let union = List.fold_left ( + ) empty
 
+module Variable =
+  Fix.Glue.HashTablesAsImperativeMaps(Label)
+
 (* -------------------------------------------------------------------------- *)
 
 (* The set of registers defined by a [tokpat]. *)
@@ -158,12 +161,12 @@ let prune block (query : label -> registers) : registers * block =
         query label,
         IJump label
     | ICaseToken (r, branches, odefault) ->
-        let used1, branches = List.split (List.map prune_casetok_branch branches)
-        and used2, odefault = MOption.split (Option.map prune odefault) in
+        let used1, branches = List.(split (map prune_casetok_branch branches))
+        and used2, odefault = Option.(split (map prune odefault)) in
         singleton r + union used1 + maybe used2,
         ICaseToken (r, branches, odefault)
     | ICaseTag (r, branches) ->
-        let used, branches = List.split (List.map prune_casetag_branch branches) in
+        let used, branches = List.(split (map prune_casetag_branch branches)) in
         singleton r + union used,
         ICaseTag (r, branches)
 
@@ -198,7 +201,7 @@ module Property =
   Fix.Prop.Set(Reg.Set)
 
 module F =
-  Fix.Fix.ForHashedType(Label)(Property)
+  Fix.Make(Variable)(Property)
 
 let update program =
 
@@ -207,20 +210,18 @@ let update program =
     F.lfp (fun label -> needed (lookup program label).block)
   in
   (* Force the fixed point, to obtain correct timing data. *)
-  let () =
-    Time.time "StackLang: computing needed registers" @@ fun () ->
-    Label.Map.iter (fun label _ -> ignore (needed label)) program.cfg
-  in
+  Label.Map.iter (fun label _ -> ignore (needed label)) program.cfg;
+  Time.tick "StackLang: computing needed registers";
 
   (* Transform every block by pruning its dead DEF and PRIM instructions
      and by updating its [needed] field. *)
   let cfg =
-    Time.time "StackLang: updating needed registers" @@ fun () ->
     Label.Map.mapi (fun _label tblock ->
       let needed, block = prune tblock.block needed in
       { tblock with needed; block }
     ) program.cfg
   in
+  Time.tick "StackLang: updating needed registers";
 
   (* Done. *)
   { program with cfg }

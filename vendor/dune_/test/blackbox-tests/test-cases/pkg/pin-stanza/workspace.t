@@ -39,6 +39,6 @@ Note that sources in the projects are overriden by the workspace
   >  (depends foo))
   > EOF
 
-  $ dune_pkg_lock_normalized
+  $ dune pkg lock
   Solution for dune.lock:
   - foo.dev

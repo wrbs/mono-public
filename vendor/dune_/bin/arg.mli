@@ -1,19 +1,8 @@
 open Stdune
 
 include module type of struct
-    include Cmdliner.Arg
-  end
-  with type info := Cmdliner.Arg.info
-
-val info
-  :  ?deprecated:string
-  -> ?absent:string
-  -> ?docs:string
-  -> ?docv:string
-  -> doc:string option
-  -> ?env:Cmdliner.Cmd.Env.info
-  -> string list
-  -> Cmdliner.Arg.info
+  include Cmdliner.Arg
+end
 
 module Path : sig
   module External : sig

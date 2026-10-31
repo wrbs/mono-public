@@ -74,7 +74,9 @@ let rec env_from_summary ~allow_missing_modules sum subst =
           if allow_missing_modules then
             (try Env.open_signature_by_path path' env with
             | Not_found -> env)
-          else Env.open_signature_by_path path' env
+          else
+            (try Env.open_signature_by_path path' env with
+            | Not_found -> raise (Error (Module_not_found path')))
       | Env_functor_arg(Env_module(s, id, pres, desc, mode, locks), id')
             when Ident.same id id' ->
           let desc =
@@ -85,9 +87,9 @@ let rec env_from_summary ~allow_missing_modules sum subst =
             ~arg:true (env_from_summary ~allow_missing_modules s subst)
       | Env_functor_arg _ -> assert false
       | Env_constraints(s, map) ->
-          Path.Map.fold
-            (fun path info ->
-              Env.add_local_constraint (Subst.type_path subst path)
+          StagedPath.Map.fold
+            (fun { stage; path } info ->
+              Env.add_local_constraint ~stage (Subst.type_path subst path)
                 (Subst.type_declaration subst info))
             map (env_from_summary ~allow_missing_modules s subst)
       | Env_copy_types s ->
@@ -102,6 +104,9 @@ let rec env_from_summary ~allow_missing_modules sum subst =
       | Env_module_unbound (s, str, reason) ->
           let env = env_from_summary ~allow_missing_modules s subst in
           Env.enter_unbound_module str reason env
+      | Env_jkind (s, id, desc) ->
+          let env = env_from_summary ~allow_missing_modules s subst in
+          Env.add_jkind ~check:false id (Subst.jkind_declaration subst desc) env
     in
       Hashtbl.add env_cache (sum, subst) env;
       env
@@ -111,10 +116,10 @@ let env_of_only_summary ?(allow_missing_modules = false) env =
 
 (* Error report *)
 
-open Format
+open Format_doc
 module Style = Misc.Style
 
-let report_error ppf = function
+let report_error_doc ppf = function
   | Module_not_found p ->
       fprintf ppf "@[Cannot find module %a@].@."
         (Style.as_inline_code Printtyp.path) p
@@ -122,6 +127,8 @@ let report_error ppf = function
 let () =
   Location.register_error_of_exn
     (function
-      | Error err -> Some (Location.error_of_printer_file report_error err)
+      | Error err -> Some (Location.error_of_printer_file report_error_doc err)
       | _ -> None
     )
+
+let report_error = Format_doc.compat report_error_doc

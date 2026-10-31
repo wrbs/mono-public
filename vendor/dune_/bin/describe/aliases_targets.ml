@@ -2,11 +2,9 @@ open Import
 
 let ls_term (fetch_results : Path.Build.t -> string list Action_builder.t) =
   let+ builder = Common.Builder.term
-  (* CR-someday Alizter: document this option *)
-  and+ paths = Arg.(value & pos_all string [ "." ] & info [] ~docv:"DIR" ~doc:None)
+  and+ paths = Arg.(value & pos_all string [ "." ] & info [] ~docv:"DIR")
   and+ context =
-    Common.context_arg
-      ~doc:(Some "The context to look in. Defaults to the default context.")
+    Common.context_arg ~doc:"The context to look in. Defaults to the default context."
   in
   let common, config = Common.init builder in
   let request (_ : Dune_rules.Main.build_system) =

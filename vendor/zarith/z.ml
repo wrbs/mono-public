@@ -201,10 +201,10 @@ let shift_right_trunc x y =
   else
     c_shift_right_trunc x y
 
-external of_int32: local_ int32 -> t @@ portable = "ml_z_of_int32"
-external of_int64: local_ int64 -> t @@ portable = "ml_z_of_int64"
-external of_nativeint: local_ nativeint -> t @@ portable = "ml_z_of_nativeint"
-external of_float: local_ float -> t @@ portable = "ml_z_of_float"
+external of_int32: int32 @ local -> t @@ portable = "ml_z_of_int32"
+external of_int64: int64 @ local -> t @@ portable = "ml_z_of_int64"
+external of_nativeint: nativeint @ local -> t @@ portable = "ml_z_of_nativeint"
+external of_float: float @ local -> t @@ portable = "ml_z_of_float"
 
 external c_to_int: t -> int @@ portable = "ml_z_to_int"
 
@@ -215,7 +215,7 @@ external to_int32: t -> int32 @@ portable = "ml_z_to_int32"
 external to_int64: t -> int64 @@ portable = "ml_z_to_int64"
 external to_nativeint: t -> nativeint @@ portable = "ml_z_to_nativeint"
 external format: string -> t -> string @@ portable = "ml_z_format"
-external of_substring_base: int -> local_ string -> pos:int -> len:int -> t @@ portable = "ml_z_of_substring_base"
+external of_substring_base: int -> string @ local -> pos:int -> len:int -> t @@ portable = "ml_z_of_substring_base"
 external compare: t -> t -> int @@ portable = "ml_z_compare" [@@noalloc]
 external equal: t -> t -> bool @@ portable = "ml_z_equal" [@@noalloc]
 external sign: t -> int @@ portable = "ml_z_sign" [@@noalloc]
@@ -245,7 +245,7 @@ external probab_prime: t -> int -> int @@ portable = "ml_z_probab_prime"
 external nextprime: t -> t @@ portable = "ml_z_nextprime"
 external hash: t -> int @@ portable = "ml_z_hash" [@@noalloc]
 external to_bits: t -> string @@ portable = "ml_z_to_bits"
-external of_bits: string -> t @@ portable = "ml_z_of_bits"
+external of_bits: string @ local -> t @@ portable = "ml_z_of_bits"
 external divisible: t -> t -> bool @@ portable = "ml_z_divisible"
 external congruent: t -> t -> t -> bool @@ portable = "ml_z_congruent"
 external jacobi: t -> t -> int @@ portable = "ml_z_jacobi"
@@ -274,7 +274,7 @@ let gt a b = compare a b > 0
 
 let to_string n = format "%d" n
 
-external string_length : local_ string -> int @@ portable = "%string_length"
+external string_length : string @ local -> int @@ portable = "%string_length"
 
 let of_string s = of_substring_base 0 s ~pos:0 ~len:(string_length s)
 let of_substring s ~pos ~len = of_substring_base 0 s ~pos ~len

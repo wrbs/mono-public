@@ -1,0 +1,11 @@
+(library
+  (public_name uunf)
+  (modules (:standard \ uunf_string))
+  (flags :standard -w -32))
+
+(library
+  (public_name uunf.string)
+  (name uunf_string)
+  (modules uunf_string)
+  (optional)
+  (libraries uunf uutf))

@@ -63,8 +63,9 @@ let keyword_table =
     "include", INCLUDE;
     "inherit", INHERIT;
     "initializer", INITIALIZER;
-    "kind_abbrev_", KIND_ABBREV;
+    "kind_", KIND;
     "kind_of_", KIND_OF;
+    "layout_", LAYOUT;
     "lazy", LAZY;
     "let", LET;
     "local_", LOCAL;
@@ -77,22 +78,23 @@ let keyword_table =
     "nonrec", NONREC;
     "object", OBJECT;
     "of", OF;
-    "once_", ONCE;
     "open", OPEN;
     "or", OR;
     "overwrite_", OVERWRITE;
 (*  "parser", PARSER; *)
+    "poly_", POLY;
     "private", PRIVATE;
     "rec", REC;
+    "repr_", REPR;
     "sig", SIG;
     "stack_", STACK;
+    "borrow_", BORROW;
     "struct", STRUCT;
     "then", THEN;
     "to", TO;
     "true", TRUE;
     "try", TRY;
     "type", TYPE;
-    "unique_", UNIQUE;
     "val", VAL;
     "virtual", VIRTUAL;
     "when", WHEN;
@@ -480,7 +482,7 @@ let skip_hash ~maybe_hash =
 
 (* Error report *)
 
-open Format
+open Format_doc
 
 let prepare_error loc = function
   | Illegal_character c ->
@@ -774,6 +776,8 @@ rule token = parse
   | ")"  { RPAREN }
   | "#(" { HASHLPAREN }
   | "#{" { HASHLBRACE }
+  | "#false" { HASHFALSE }
+  | "#true" { HASHTRUE }
   | "*"  { STAR }
   | ","  { COMMA }
   | "->" { MINUSGREATER }
@@ -923,7 +927,9 @@ and directive already_consumed = parse
         match mode with
         | "quotations" ->
             Syntax_mode.quotations := toggle;
-            token lexbuf
+            let tok = token lexbuf in
+            enqueue_token_from_end_of_lexbuf_window lexbuf SEMISEMI ~len:0;
+            tok
         | _ ->
             directive_error lexbuf ("unknown syntax mode " ^ mode)
               ~already_consumed ~directive:"syntax"

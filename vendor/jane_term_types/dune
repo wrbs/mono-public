@@ -1,0 +1,6 @@
+(library
+ (name jane_term_types)
+ (public_name jane_term_types)
+ (libraries core)
+ (preprocess
+  (pps ppx_jane -compare-require-explicit-locality)))

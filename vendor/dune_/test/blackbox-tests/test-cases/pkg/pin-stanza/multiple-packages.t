@@ -24,7 +24,7 @@ We can pull multiple packages from a single source
   >  (depends foo bar))
   > EOF
 
-  $ dune_pkg_lock_normalized
+  $ dune pkg lock
   Solution for dune.lock:
   - bar.dev
   - foo.dev

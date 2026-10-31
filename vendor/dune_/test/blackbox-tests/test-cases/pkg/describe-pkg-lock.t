@@ -13,8 +13,7 @@ First we setup a repo.
   > mkpkg E 3.0~alpha1
 
   $ cat > dune-workspace <<EOF
-  > (lang dune 3.20)
-  > (pkg enabled)
+  > (lang dune 3.11)
   > (context
   >  (default))
   > (context

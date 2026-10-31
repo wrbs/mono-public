@@ -1,0 +1,6 @@
+(library
+ (name browser_manually_written_bindings)
+ (public_name browser.manually_written)
+ (libraries sexplib)
+ (preprocess
+  (pps js_of_ocaml-ppx)))

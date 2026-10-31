@@ -318,20 +318,18 @@ type 'path t =
   ; jsoo_runtime : 'path list
   ; wasmoo_runtime : 'path list
   ; requires : Lib_dep.t list
-  ; parameters : (Loc.t * Lib_name.t) list
   ; ppx_runtime_deps : (Loc.t * Lib_name.t) list
-  ; allow_unused_libraries : (Loc.t * Lib_name.t) list
   ; preprocess : Preprocess.With_instrumentation.t Preprocess.Per_module.t
   ; enabled : Enabled_status.t Memo.t
   ; virtual_deps : (Loc.t * Lib_name.t) list
   ; dune_version : Dune_lang.Syntax.Version.t option
   ; sub_systems : Sub_system_info.t Sub_system_name.Map.t
+  ; virtual_ : bool
   ; entry_modules : (Module_name.t list, User_message.t) result Source.t
   ; implements : (Loc.t * Lib_name.t) option
   ; default_implementation : (Loc.t * Lib_name.t) option
   ; wrapped : Wrapped.t Inherited.t option
   ; main_module_name : Main_module_name.t
-  ; local_main_module_name : Module_name.t option
   ; modes : Lib_mode.Map.Set.t
   ; modules : Modules.With_vlib.t option Source.t
   ; special_builtin_support : (Loc.t * Special_builtin_support.t) option
@@ -339,7 +337,6 @@ type 'path t =
   ; instrumentation_backend : (Loc.t * Lib_name.t) option
   ; path_kind : 'path path
   ; melange_runtime_deps : 'path File_deps.t
-  ; root_module : Module_name.t option
   }
 
 let name t = t.name
@@ -348,10 +345,8 @@ let version t = t.version
 let dune_version t = t.dune_version
 let loc t = t.loc
 let requires t = t.requires
-let parameters t = t.parameters
 let preprocess t = t.preprocess
 let ppx_runtime_deps t = t.ppx_runtime_deps
-let allow_unused_libraries t = t.allow_unused_libraries
 let sub_systems t = t.sub_systems
 let modes t = t.modes
 let modules t = t.modules
@@ -364,7 +359,6 @@ let public_headers t = t.public_headers
 let exit_module t = t.exit_module
 let instrumentation_backend t = t.instrumentation_backend
 let melange_runtime_deps t = t.melange_runtime_deps
-let root_module t = t.root_module
 let plugins t = t.plugins
 let src_dir t = t.src_dir
 let enabled t = t.enabled
@@ -372,7 +366,7 @@ let status t = t.status
 let kind t = t.kind
 let default_implementation t = t.default_implementation
 let obj_dir t = t.obj_dir
-let virtual_ t = t.kind = Virtual
+let virtual_ t = t.virtual_
 let implements t = t.implements
 let synopsis t = t.synopsis
 let wrapped t = t.wrapped
@@ -380,7 +374,6 @@ let special_builtin_support t = t.special_builtin_support
 let jsoo_runtime t = t.jsoo_runtime
 let wasmoo_runtime t = t.wasmoo_runtime
 let main_module_name t = t.main_module_name
-let local_main_module_name t = t.local_main_module_name
 let orig_src_dir t = t.orig_src_dir
 let best_src_dir t = Option.value ~default:t.src_dir t.orig_src_dir
 let set_version t version = { t with version }
@@ -408,16 +401,13 @@ let create
       ~version
       ~synopsis
       ~main_module_name
-      ~local_main_module_name
       ~sub_systems
       ~requires
-      ~parameters
       ~foreign_objects
       ~public_headers
       ~plugins
       ~archives
       ~ppx_runtime_deps
-      ~allow_unused_libraries
       ~foreign_archives
       ~native_archives
       ~foreign_dll_files
@@ -427,6 +417,7 @@ let create
       ~enabled
       ~virtual_deps
       ~dune_version
+      ~virtual_
       ~entry_modules
       ~implements
       ~default_implementation
@@ -437,7 +428,6 @@ let create
       ~exit_module
       ~instrumentation_backend
       ~melange_runtime_deps
-      ~root_module
   =
   { loc
   ; name
@@ -450,15 +440,12 @@ let create
   ; version
   ; synopsis
   ; requires
-  ; parameters
   ; main_module_name
-  ; local_main_module_name
   ; foreign_objects
   ; public_headers
   ; plugins
   ; archives
   ; ppx_runtime_deps
-  ; allow_unused_libraries
   ; foreign_archives
   ; native_archives
   ; foreign_dll_files
@@ -469,6 +456,7 @@ let create
   ; virtual_deps
   ; dune_version
   ; sub_systems
+  ; virtual_
   ; entry_modules
   ; implements
   ; default_implementation
@@ -480,7 +468,6 @@ let create
   ; instrumentation_backend
   ; path_kind
   ; melange_runtime_deps
-  ; root_module
   }
 ;;
 
@@ -549,15 +536,12 @@ let to_dyn
       ; version
       ; synopsis
       ; requires
-      ; parameters
       ; main_module_name
-      ; local_main_module_name
       ; foreign_objects
       ; public_headers
       ; plugins
       ; archives
       ; ppx_runtime_deps
-      ; allow_unused_libraries = _
       ; foreign_archives
       ; native_archives
       ; foreign_dll_files
@@ -568,6 +552,7 @@ let to_dyn
       ; virtual_deps
       ; dune_version
       ; sub_systems
+      ; virtual_
       ; implements
       ; default_implementation
       ; modes
@@ -578,7 +563,6 @@ let to_dyn
       ; instrumentation_backend
       ; melange_runtime_deps
       ; entry_modules
-      ; root_module
       }
   =
   let open Dyn in
@@ -604,11 +588,11 @@ let to_dyn
     ; "jsoo_runtime", list path jsoo_runtime
     ; "wasmoo_runtime", list path wasmoo_runtime
     ; "requires", list Lib_dep.to_dyn requires
-    ; "parameters", list (snd Lib_name.to_dyn) parameters
     ; "ppx_runtime_deps", list (snd Lib_name.to_dyn) ppx_runtime_deps
     ; "virtual_deps", list (snd Lib_name.to_dyn) virtual_deps
     ; "dune_version", option Dune_lang.Syntax.Version.to_dyn dune_version
     ; "sub_systems", Sub_system_name.Map.to_dyn Dyn.opaque sub_systems
+    ; "virtual_", bool virtual_
     ; ( "entry_modules"
       , Source.to_dyn
           (Result.to_dyn (list Module_name.to_dyn) string)
@@ -617,7 +601,6 @@ let to_dyn
     ; "default_implementation", option (snd Lib_name.to_dyn) default_implementation
     ; "wrapped", option (Inherited.to_dyn Wrapped.to_dyn) wrapped
     ; "main_module_name", Main_module_name.to_dyn main_module_name
-    ; "local_main_module_name", Dyn.option Module_name.to_dyn local_main_module_name
     ; "modes", Lib_mode.Map.Set.to_dyn modes
     ; "modules", Source.to_dyn (Dyn.option Modules.With_vlib.to_dyn) modules
     ; ( "special_builtin_support"
@@ -625,7 +608,6 @@ let to_dyn
     ; "exit_module", option Module_name.to_dyn exit_module
     ; "instrumentation_backend", option (snd Lib_name.to_dyn) instrumentation_backend
     ; "melange_runtime_deps", File_deps.to_dyn path melange_runtime_deps
-    ; "root_module", option Module_name.to_dyn root_module
     ]
 ;;
 
@@ -644,7 +626,6 @@ let for_dune_package
       ~foreign_objects
       ~obj_dir
       ~implements
-      ~parameters
       ~default_implementation
       ~sub_systems
       ~melange_runtime_deps
@@ -676,7 +657,6 @@ let for_dune_package
   ; foreign_objects
   ; obj_dir
   ; implements
-  ; parameters
   ; default_implementation
   ; sub_systems
   ; orig_src_dir
@@ -695,36 +675,4 @@ let for_dune_package
               | `File -> Path.relative dir (Path.basename p)
               | `Dir -> dir)
             else p)
-;;
-
-let for_instance ~dir ~ext_lib t =
-  let obj_dir =
-    Obj_dir.make_lib
-      ~dir
-      ~has_private_modules:false
-      ~private_lib:false
-      (Lib_name.Local.of_string "instance")
-  in
-  let archives =
-    Mode.Dict.mapi t.archives ~f:(fun m _ ->
-      [ Path.Build.relative dir ("archive" ^ Mode.compiled_lib_ext m) ])
-  in
-  let native_archives = Files [ Path.Build.relative dir ("archive" ^ ext_lib) ] in
-  { t with
-    obj_dir
-  ; archives
-  ; native_archives
-  ; modules = External None
-  ; src_dir = dir
-  ; orig_src_dir = None
-  ; plugins = Mode.Dict.make ~byte:[] ~native:[]
-  ; foreign_objects = Local
-  ; public_headers = File_deps.External []
-  ; foreign_archives = Mode.Map.empty
-  ; foreign_dll_files = []
-  ; jsoo_runtime = []
-  ; wasmoo_runtime = []
-  ; path_kind = Local
-  ; melange_runtime_deps = File_deps.External []
-  }
 ;;

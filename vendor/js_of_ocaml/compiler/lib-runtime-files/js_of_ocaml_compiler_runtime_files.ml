@@ -23,6 +23,7 @@ let runtime =
     ; backtrace
     ; bigarray
     ; bigstring
+    ; block_index
     ; compare
     ; fail
     ; format
@@ -46,6 +47,7 @@ let runtime =
     ; nat
     ; obj
     ; parsing
+    ; promise
     ; stdlib
     ; sys
     ; str

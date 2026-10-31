@@ -168,7 +168,9 @@ type t = {
   ids : ElementsById.t;
       (** Elements mapped by their identifier. Queried with {!find_by_id}. *)
   ambiguous_labels : Component.Element.label amb_err Identifier.Maps.Label.t;
-  ambiguous_unboxed_labels : Component.Element.label amb_err Identifier.Maps.Label.t;
+  ambiguous_unboxed_labels :
+    Component.Element.label amb_err Identifier.Maps.Label.t;
+      [@warning "-unused-field"]
   resolver : resolver option;
   recorder : recorder option;
   warnings_tags : string list;
@@ -284,7 +286,9 @@ let add_docs (docs : Comment.docs) env =
     (fun env -> function
       | { Location_.value = `Heading (attrs, id, text); location } ->
           let label = Ident.Of_Identifier.label id in
-          add_label id { Component.Label.attrs; label; text; location } env ~unboxed:false
+          add_label id
+            { Component.Label.attrs; label; text; location }
+            env ~unboxed:false
       | _ -> env)
     env docs.elements
 
@@ -396,7 +400,6 @@ let module_of_unit : Lang.Compilation_unit.t -> Component.Module.t =
           {
             id;
             source_loc = None;
-            source_loc_jane = unit.source_loc_jane;
             doc = { elements = []; warnings_tag = None };
             type_ = ModuleType (Signature s);
             canonical = unit.canonical;
@@ -411,7 +414,6 @@ let module_of_unit : Lang.Compilation_unit.t -> Component.Module.t =
           {
             id;
             source_loc = None;
-            source_loc_jane = unit.source_loc_jane;
             doc = { elements = []; warnings_tag = None };
             type_ =
               ModuleType
@@ -496,7 +498,7 @@ type 'a scope = {
   root : string -> t -> 'a option;
 }
 
-type 'a maybe_ambiguous = ('a, [ 'a amb_err | `Not_found ]) Result.t
+type 'a maybe_ambiguous = ('a, [ 'a amb_err | `Not_found ]) result
 
 let make_scope ?(root = fun _ _ -> None) ?check
     (filter : _ -> ([< Component.Element.any ] as 'a) option) : 'a scope =
@@ -520,12 +522,10 @@ let lookup_by_name scope name env =
   with
   | ([ x ] as results), Some c -> (
       record_lookup_results env results;
-      match c env x with
-      | Some (`Ambiguous _ as e) -> Result.Error e
-      | None -> Result.Ok x)
+      match c env x with Some (`Ambiguous _ as e) -> Error e | None -> Ok x)
   | ([ x ] as results), None ->
       record_lookup_results env results;
-      Result.Ok x
+      Ok x
   | (x :: tl as results), _ ->
       record_lookup_results env results;
       Error (`Ambiguous (x, tl))
@@ -645,7 +645,9 @@ let s_field : Component.Element.field scope =
   make_scope (function #Component.Element.field as r -> Some r | _ -> None)
 
 let s_unboxed_field : Component.Element.unboxed_field scope =
-  make_scope (function #Component.Element.unboxed_field as r -> Some r | _ -> None)
+  make_scope (function
+    | #Component.Element.unboxed_field as r -> Some r
+    | _ -> None)
 
 let s_label_parent : Component.Element.label_parent scope =
   make_scope ~root:lookup_page_or_root_module_fallback (function
@@ -678,7 +680,6 @@ let mk_functor_parameter module_type =
   Component.Module.
     {
       source_loc = None;
-      source_loc_jane = None;
       doc = { elements = []; warnings_tag = None };
       type_;
       canonical = None;
@@ -699,6 +700,21 @@ let add_functor_parameter : Lang.FunctorParameter.t -> t -> t =
         (Component.Delayed.put_val m)
         { elements = []; warnings_tag = None }
         t
+
+let add_module_arg : Lang.TypeExpr.Module.t -> t -> t =
+ fun p t ->
+  let id = (p.id :> Paths.Identifier.Path.Module.t) in
+  let m =
+    let expr =
+      Lang.ModuleType.Path { p_path = p.package.path; p_expansion = None }
+    in
+    let open Component.Of_Lang in
+    mk_functor_parameter (module_type_expr (empty ()) expr)
+  in
+  add_module id
+    (Component.Delayed.put_val m)
+    { elements = []; warnings_tag = None }
+    t
 
 let add_functor_args' :
     Paths.Identifier.Signature.t -> Component.ModuleType.expr -> t -> t =
@@ -853,7 +869,6 @@ let open_module_type_substitution : Lang.ModuleTypeSubstitution.t -> t -> t =
       {
         id = t.id;
         source_loc = None;
-        source_loc_jane = None;
         doc = t.doc;
         expr = Some t.manifest;
         canonical = None;

@@ -11,8 +11,7 @@
   > depends: [ "foo" {>= "0.0.1"} ]
   > EOF
   $ cat > dune-workspace <<EOF
-  > (lang dune 3.20)
-  > (pkg enabled)
+  > (lang dune 3.11)
   > (lock_dir
   >  (repositories mock))
   > (lock_dir

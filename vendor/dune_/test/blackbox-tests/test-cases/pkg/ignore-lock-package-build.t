@@ -5,7 +5,8 @@ without using locked dependencies.
   $ . ./helpers.sh
 
   $ make_lockdir
-  $ make_lockpkg test <<EOF
+
+  $ cat >dune.lock/test.pkg <<EOF
   > (build
   >  (run echo "I have not been ignored."))
   > EOF

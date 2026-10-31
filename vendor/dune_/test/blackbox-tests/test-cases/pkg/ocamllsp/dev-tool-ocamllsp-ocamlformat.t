@@ -7,8 +7,7 @@ Test that the ocamllsp dev tool can see the ocamlformat dev tool.
   $ mkpkg ocaml 5.2.0
 
   $ cat > dune-workspace <<EOF
-  > (lang dune 3.20)
-  > (pkg enabled)
+  > (lang dune 3.16)
   > (lock_dir
   >  (path "dev-tools.locks/ocaml-lsp-server")
   >  (repositories mock))
@@ -17,8 +16,10 @@ Test that the ocamllsp dev tool can see the ocamlformat dev tool.
   >  (repositories mock))
   > (lock_dir
   >   (repositories mock))
+  > (repository
+  >  (name mock)
+  >  (url "file://$(pwd)/mock-opam-repository"))
   > EOF
-  $ add_mock_repo_if_needed
 
 Make a fake ocamllsp package that prints out the PATH variable:
   $ mkpkg ocaml-lsp-server <<EOF
@@ -40,7 +41,7 @@ Make a fake ocamlformat
   > EOF
 
   $ make_lockdir
-  $ make_lockpkg ocaml <<EOF
+  $ cat > dune.lock/ocaml.pkg <<EOF
   > (version 5.2.0)
   > EOF
 

@@ -638,7 +638,7 @@ let preprocess_literal_object mappper fields :
     | _, "readonly" -> Some `Readonly
     | _, "readwrite" -> Some `Readwrite
     | false, _ -> None
-    | true, _ -> Some (`Unkown x)
+    | true, _ -> Some (`Unknown x)
   in
   let jsoo_attributes =
     filter_map (fun { attr_name = { txt; _ }; attr_payload = _; attr_loc = _ } ->
@@ -657,8 +657,8 @@ let preprocess_literal_object mappper fields :
           | (Immutable | Mutable), [ `Optdef ] -> `Optdef
           | (Immutable | Mutable), [ `Writeonly ] -> `Writeonly
           | (Immutable | Mutable), [ `Readwrite ] -> `Readwrite
-          | (Immutable | Mutable), [ `Unkown s ] ->
-              raise_errorf ~loc:exp.pcf_loc "Unkown jsoo attribute ([@@%s])." s
+          | (Immutable | Mutable), [ `Unknown s ] ->
+              raise_errorf ~loc:exp.pcf_loc "Unknown jsoo attribute ([@@%s])." s
           | Mutable, [ `Readonly ] ->
               raise_errorf ~loc:exp.pcf_loc "A mutable field cannot be readonly."
           | _, _ :: _ :: _ -> raise_errorf ~loc:exp.pcf_loc "Too many attributes."
@@ -730,12 +730,30 @@ let literal_object self_id (fields : field_desc list) =
   let body = function
     | Val (_, _, _, body) -> body
     | Meth (_, _, _, body, _) ->
+        let body =
+          match self_id.ppat_desc with
+          | Ppat_var id ->
+              (* mark self as used to avoid spurious unused-var-strict warning, see gh#2125 *)
+              Ast_builder.Default.pexp_let
+                ~loc:Location.none
+                Nonrecursive
+                [ Ast_builder.Default.value_binding
+                    ~pat:(Ast_builder.Default.ppat_any ~loc:Location.none)
+                    ~loc:Location.none
+                    ~expr:(Ast_builder.Default.evar id.txt ~loc:Location.none)
+                ]
+                body
+          | _ -> body
+        in
+        let ghost_self_id =
+          { self_id with ppat_loc = { self_id.ppat_loc with loc_ghost = true } }
+        in
         lift_function_body_constraint
           (Ast_builder.Default.pexp_fun
              ~loc:{ body.pexp_loc with loc_ghost = true }
              Nolabel
              None
-             self_id
+             ghost_self_id
              body)
   in
   let extra_types =

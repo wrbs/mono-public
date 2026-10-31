@@ -1,0 +1,6 @@
+(library
+ (name unstring_engine_test)
+ (public_name unstring.engine_test)
+ (libraries core unstring_engine)
+ (preprocess
+  (pps ppx_jane ppx_quick_test)))

@@ -2,7 +2,7 @@
 (*                                                                        *)
 (*  Copyright 2012,2013 OCamlPro                                          *)
 (*                                                                        *)
-(*  All rights reserved.This file is distributed under the terms of the   *)
+(*  All rights reserved. This file is distributed under the terms of the   *)
 (*  GNU Lesser General Public License version 2.1 with linking            *)
 (*  exception.                                                            *)
 (*                                                                        *)
@@ -76,9 +76,11 @@ type indentKind = Normal
 
 let warn_tabs = ref true
 
+exception Check_failure
+
 (* must be called exactly once for each line, in order *)
 (* let line_debug_counter = ref 0 *)
-let print_indent output line blank ?(kind=Normal) block usr =
+let print_indent ?(check=false) output line blank ?(kind=Normal) block usr =
   (* assert (incr line_debug_counter; line = !line_debug_counter); *)
   if output.in_lines line then
     let indent =
@@ -91,6 +93,8 @@ let print_indent output line blank ?(kind=Normal) block usr =
           IndentBlock.indent block + IndentBlock.padding block
       | Fixed n -> n
     in
+    if check && not (Int.equal (IndentBlock.original_column block) indent) then
+      raise Check_failure;
     match output.kind with
     | Numeric pr -> pr indent usr
     | Print pr -> pr (String.make indent ' ') usr
@@ -98,9 +102,8 @@ let print_indent output line blank ?(kind=Normal) block usr =
   else (
     if !warn_tabs && String.contains blank '\t' then (
       warn_tabs := false;
-      prerr_endline
-        "Warning: ocp-indent input contains indentation by tabs, \
-         partial indent will be unreliable."
+      IndentWarning.emit
+        "input contains indentation by tabs, partial indent will be unreliable."
     );
     match output.kind with
     | Numeric _ -> usr
@@ -108,11 +111,54 @@ let print_indent output line blank ?(kind=Normal) block usr =
     | Extended pr -> pr block (Whitespace blank) usr
   )
 
-let print_token output block tok usr =
+(* Tells whether the given comment has each line starting with a ['*'] and
+   whether they will all be aligned once properly indented.
+   Used to determine how to indent a lone comment close on its own line, i.e.
+   whether it should be indent as the comment open or as the comment open + 1.
+*)
+let star_aligned_comment ~strict_comments ~orig_start_column tok _first_line
+    next_lines =
+  match tok.token, next_lines with
+  | COMMENT, _::_ ->
+      let without_closing_line =
+        match List.rev next_lines with
+        | hd::tl ->
+            if is_prefix "*)" (String.trim hd) then List.rev tl
+            else next_lines
+        | _ -> assert false
+      in
+      (match without_closing_line with
+       | [] ->
+           (* The comment contains only one line + a line with a lone comment
+              close. That's not enough to determine the user want star aligned
+              comments, we default to regular indentation. *)
+           false
+       | _ ->
+           List.for_all
+             (fun line ->
+                let trimmed = String.trim line in
+                if strict_comments then
+                  (* Starts with a ['*'], strict_comments will take care
+                     of aligning leading stars. *)
+                  is_prefix "*" trimmed
+                else
+                  (* Starts with a ['*'] and is already aligned with
+                     the star from the comment open. *)
+                  is_prefix "*)" trimmed ||
+                  let line_len = String.length line in
+                  let trimmed_len = String.length trimmed in
+                  let line_indent = line_len - trimmed_len in
+                  (is_prefix "*" trimmed &&
+                   Int.equal line_indent (orig_start_column + 1)))
+             without_closing_line)
+  | _ -> false
+
+let print_token ~check output block tok usr =
   let orig_start_column = IndentBlock.original_column block in
   let start_column = IndentBlock.offset block in
   (* Handle multi-line tokens (strings, comments) *)
-  let rec print_extra_lines line pad last ?(item_cont=false) lines usr =
+  let rec print_extra_lines line pad last ?(star_aligned_comment=false)
+      ?(item_cont=false) lines usr =
     match lines with
     | [] -> usr
     | text::next_lines ->
@@ -121,11 +167,11 @@ let print_token output block tok usr =
           usr
           |> print_indent output line "" block
           |> pr_string output block text
-          |> print_extra_lines (line+1) pad text next_lines
+          |> print_extra_lines ~star_aligned_comment (line+1) pad text next_lines
         else if String.trim text = "" && tok.token <> OCAMLDOC_VERB then
           usr
           |> print_indent output line "" ~kind:Empty block
-          |> print_extra_lines (line+1) pad text next_lines
+          |> print_extra_lines ~star_aligned_comment (line+1) pad text next_lines
         else
           let orig_line_indent = count_leading_spaces text in
           let orig_offset = orig_line_indent - orig_start_column in
@@ -157,7 +203,11 @@ let print_token output block tok usr =
                     if output.config.IndentConfig.i_strict_comments || is_item
                     then n else max orig_offset n
                   in
-                  let n = if next_lines = [] && text = "*)" then 0 else n in
+                  let n =
+                    if next_lines = [] && text = "*)" then
+                      (if star_aligned_comment then 1 else 0)
+                    else n
+                  in
                   start_column + n, item_cont
               | QUOTATION opening ->
                   if is_prefix "{" opening then orig_line_indent, item_cont
@@ -168,10 +218,13 @@ let print_token output block tok usr =
                     item_cont
               | _ -> start_column + max orig_offset pad, item_cont
           in
+          if check && not (Int.equal orig_line_indent indent_value) then
+            raise Check_failure;
           usr
           |> print_indent output line "" ~kind:(Fixed indent_value) block
           |> pr_string output block text
-          |> print_extra_lines (line+1) pad ~item_cont text next_lines
+          |> print_extra_lines ~star_aligned_comment (line+1) pad ~item_cont
+            text next_lines
   in
   let line = Region.start_line tok.region in
   let text, next_lines =
@@ -179,6 +232,10 @@ let print_token output block tok usr =
     else match string_split '\n' (Lazy.force tok.substr) with
       | [] -> assert false
       | hd::tl -> hd,tl
+  in
+  let strict_comments = output.config.IndentConfig.i_strict_comments in
+  let star_aligned_comment =
+    star_aligned_comment ~strict_comments ~orig_start_column tok text next_lines
   in
   let pad =
     if next_lines = [] then None
@@ -207,11 +264,11 @@ let print_token output block tok usr =
   in
   usr
   |> pr_string output block text
-  |> print_extra_lines (line+1) pad text next_lines
+  |> print_extra_lines ~star_aligned_comment (line+1) pad text next_lines
 
 (* [block] is the current indentation block
    [stream] is the token stream *)
-let rec loop output block stream usr =
+let rec loop ?(check=false) output block stream usr =
   match Nstream.next stream with
   | None -> usr (* End of file *)
   | Some (t, stream) ->
@@ -263,14 +320,18 @@ let rec loop output block stream usr =
             | _ -> Normal
           in
           usr
-          |> print_indent output line blank ~kind block
+          |> print_indent ~check output line blank ~kind block
         else
           usr
           |> pr_whitespace output block blank
       in
-      let usr = usr |> print_token output block t in
+      let usr = usr |> print_token ~check output block t in
       match t.token with EOF -> usr
-                       | _ -> usr |> loop output block stream
+                       | _ -> usr |> loop ~check output block stream
 
 let proceed output stream block usr =
   usr |> loop output block stream
+
+let check output stream block =
+  let output = { output with kind = Print (fun _ () -> ()) } in
+  try loop ~check:true output block stream (); true with Check_failure -> false

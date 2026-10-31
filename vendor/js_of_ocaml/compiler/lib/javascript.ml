@@ -90,23 +90,32 @@ end = struct
 
   (* Windows uses 3 digits for the exponent, let's fix it. *)
   let fix_exponent s =
-    try
-      let start = String.index_from s 0 'e' + 1 in
-      let start =
-        match String.get s start with
-        | '-' | '+' -> succ start
-        | _ -> start
-      in
-      let stop = ref start in
-      while Char.equal (String.get s !stop) '0' do
-        incr stop
-      done;
-      if start = !stop
-      then s
-      else
-        String.sub s ~pos:0 ~len:start
-        ^ String.sub s ~pos:!stop ~len:(String.length s - !stop)
-    with Not_found -> s
+    let e_pos =
+      match String.index_from_opt s 0 'e' with
+      | Some _ as r -> r
+      | None -> String.index_from_opt s 0 'E'
+    in
+    match e_pos with
+    | None -> s
+    | Some e_pos ->
+        let len = String.length s in
+        let start = e_pos + 1 in
+        assert (start < len);
+        let start =
+          match String.get s start with
+          | '-' | '+' -> start + 1
+          | _ -> start
+        in
+        (* Skip leading zeros but keep at least one digit *)
+        let rec first_nonzero i =
+          if i < len - 1 && Char.equal (String.get s i) '0'
+          then first_nonzero (i + 1)
+          else i
+        in
+        let stop = first_nonzero start in
+        if stop = start
+        then s
+        else String.sub s ~pos:0 ~len:start ^ String.sub s ~pos:stop ~len:(len - stop)
 
   let of_float v =
     match Float.classify_float v with
@@ -389,6 +398,8 @@ and variable_declaration_kind =
   | Var
   | Let
   | Const
+  | Using
+  | AwaitUsing
 
 and case_clause = expression * statement_list
 
@@ -403,14 +414,18 @@ and function_kind =
   ; generator : bool
   }
 
+and decorator = expression
+
 and class_declaration =
-  { extends : expression option
+  { decorators : decorator list
+  ; extends : expression option
   ; body : class_element list
   }
 
 and class_element =
-  | CEMethod of bool * class_element_name * method_
-  | CEField of bool * class_element_name * initialiser option
+  | CEMethod of decorator list * bool * class_element_name * method_
+  | CEField of decorator list * bool * class_element_name * initialiser option
+  | CEAccessor of decorator list * bool * class_element_name * initialiser option
   | CEStaticBLock of statement_list
 
 and class_element_name =
@@ -477,6 +492,7 @@ and export =
   | ExportFrom of
       { kind : export_from_kind
       ; from : Utf8_string.t
+      ; withClause : withClause option
       }
   | CoverExportFrom of early_error
 
@@ -487,11 +503,15 @@ and export_from_kind =
 and import =
   { from : Utf8_string.t
   ; kind : import_kind
+  ; withClause : withClause option
   }
+
+and withClause = (Utf8_string.t * Utf8_string.t) list
 
 and import_default = ident
 
 and import_kind =
+  | DeferNamespace of ident
   | Namespace of import_default option * ident
   (* import * as name from "fname" *)
   (* import defaultname, * as name from "fname" *)

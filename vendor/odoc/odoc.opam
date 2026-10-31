@@ -1,11 +1,10 @@
+version: "3.2.2"
 opam-version: "2.0"
 
-version: "dev"
 homepage: "https://github.com/ocaml/odoc"
 doc: "https://ocaml.github.io/odoc/"
 bug-reports: "https://github.com/ocaml/odoc/issues"
 license: "ISC"
-flags: [ avoid-version ]
 
 maintainer: [
   "Daniel Bünzli <daniel.buenzli@erratique.ch>"
@@ -44,24 +43,23 @@ depends: [
   "astring"
   "cmdliner" {>= "1.3.0"}
   "cppo" {build & >= "1.1.0"}
-  "dune" {>= "3.7.0"}
-  "fpath"
-  "ocaml" {>= "4.08.0" & < "5.4"}
-  "result"
+  "dune" {>= "3.21.0"}
+  "fpath" {>= "0.7.3"}
+  "ocaml" {>= "4.08.0" & < "5.7"}
   "tyxml" {>= "4.4.0"}
   "fmt"
   "crunch" {>= "1.4.1"}
-
   "ocamlfind" {with-test}
   "yojson" {>= "2.1.0" & with-test}
   "sexplib0" {with-test}
   "conf-jq" {with-test}
-  "ppx_expect" {with-test}
   "bos" {with-test}
-  "bisect_ppx" {with-test & > "2.5.0"}
 ]
 
-conflicts: [ "ocaml-option-bytecode-only" ]
+conflicts: [
+  "ocaml-option-bytecode-only"
+  "oxcaml-compiler" {< "5.2.0minus31"}
+]
 
 x-extra-doc-deps: [
   "odoc-driver" {= version}

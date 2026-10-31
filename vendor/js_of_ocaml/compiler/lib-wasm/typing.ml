@@ -1,3 +1,21 @@
+(* Wasm_of_ocaml compiler
+ * http://www.ocsigen.org/js_of_ocaml/
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, with linking exception;
+ * either version 2.1 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+ *)
+
 open! Stdlib
 open Code
 open Global_flow
@@ -183,7 +201,7 @@ module Domain = struct
 
   let bot = Bot
 
-  let depth_treshold = 4
+  let depth_threshold = 4
 
   let rec depth t =
     match t with
@@ -198,7 +216,7 @@ module Domain = struct
         then Top
         else Tuple (Array.map ~f:(fun t' -> truncate (depth - 1) t') l)
 
-  let limit t = if depth t > depth_treshold then truncate depth_treshold t else t
+  let limit t = if depth t > depth_threshold then truncate depth_threshold t else t
 
   let box t =
     match t with
@@ -357,7 +375,10 @@ let prim_type ~st ~approx prim args =
           | Expr (Block _) -> bigarray_type ~approx ba
           | _ -> Top)
       | [] | [ _ ] | _ :: Pc _ :: _ -> Top)
-  | _ -> ( try snd (String.Hashtbl.find primitive_types prim) with Not_found -> Top)
+  | _ -> (
+      match String.Hashtbl.find_opt primitive_types prim with
+      | Some (_, typ) -> typ
+      | None -> Top)
 
 let reset () = String.Hashtbl.reset primitive_types
 
@@ -476,7 +497,7 @@ module G = Dgraph.Make_Imperative (Var) (Var.ISet) (Var.Tbl)
 module Solver = G.Solver (Domain)
 
 let solver st =
-  let associated_list h x = try Var.Hashtbl.find h x with Not_found -> [] in
+  let associated_list h x = Var.Hashtbl.find_opt h x |> Option.value ~default:[] in
   let g =
     { G.domain = st.global_flow_state.vars
     ; G.iter_children =
@@ -622,13 +643,13 @@ type t =
   ; return_types : typ Var.Hashtbl.t
   }
 
-let f ~global_flow_state ~global_flow_info ~fun_info ~deadcode_sentinal p =
+let f ~global_flow_state ~global_flow_info ~fun_info ~deadcode_sentinel p =
   let t = Timer.make () in
   update_deps global_flow_state p;
   let boxed_function_parameters = mark_boxed_function_parameters ~fun_info p in
   let st = { global_flow_state; global_flow_info; boxed_function_parameters; fun_info } in
   let types = solver st in
-  Var.Tbl.set types deadcode_sentinal (Int Normalized);
+  Var.Tbl.set types deadcode_sentinel (Int Normalized);
   box_numbers p st types;
   if times () then Format.eprintf "  type analysis: %a@." Timer.print t;
   if debug ()
@@ -674,4 +695,5 @@ let f ~global_flow_state ~global_flow_info ~fun_info ~deadcode_sentinal p =
 
 let var_type info x = Var.Tbl.get info.types x
 
-let return_type info f = try Var.Hashtbl.find info.return_types f with Not_found -> Top
+let return_type info f =
+  Var.Hashtbl.find_opt info.return_types f |> Option.value ~default:Top

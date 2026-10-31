@@ -22,6 +22,7 @@ Reproduction case for https://github.com/ocaml/dune/issues/12250
 dune runtest should be able to run in a subdirectory and the arguments passed
 to it should be adjusted accordingly.
 
+
   $ (cd somelib && unset INSIDE_DUNE; dune runtest --diff-command=- my/path/)
   Entering directory '$TESTCASE_ROOT'
   File "somelib/my/path/test.t", line 1, characters 0-0:

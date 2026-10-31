@@ -1,0 +1,7 @@
+(library
+ (name hardcaml_paper_demo_rtl)
+ (public_name hardcaml_paper_demo.rtl)
+ (libraries core hardcaml hardcaml_axi hardcaml_computation_dsl
+   hardcaml_computation_dsl.standard_functions vec)
+ (preprocess
+  (pps ppx_hardcaml ppx_jane)))

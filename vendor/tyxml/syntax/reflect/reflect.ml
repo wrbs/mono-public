@@ -117,6 +117,9 @@ let rec to_attribute_parser lang name ~loc = function
   | [[%type: numbers_semicolon]] ->
     [%expr semicolons float]
 
+  | [[%type: semicolonstrings]] ->
+    [%expr semicolons string]
+
   | [[%type: numbers]] when lang = `Svg ->
     [%expr spaces_or_commas float]
 
@@ -174,6 +177,7 @@ let rec to_attribute_parser lang name ~loc = function
   | [[%type: shape]] ->
     [%expr variant]
 
+  | [[%type: Xml.uri list]]
   | [[%type: nmtokens]]
   | [[%type: idrefs]]
   | [[%type: charsets]]
@@ -193,6 +197,12 @@ let rec to_attribute_parser lang name ~loc = function
   | [[%type: referrerpolicy]] ->
     [%expr variant_or_empty "Empty"]
 
+  | [[%type: hidden_value]] ->
+    [%expr variant_or_empty "Hidden"]
+
+  | [[%type: contenteditable_value]] ->
+    [%expr variant_or_empty "True"]
+
   | [[%type: mediadesc]] ->
     [%expr commas (total_variant Html_types_reflected.mediadesc_token)]
 
@@ -200,7 +210,7 @@ let rec to_attribute_parser lang name ~loc = function
     [%expr spaces_or_commas svg_length]
 
   | [[%type: transforms]] ->
-    [%expr spaces_or_commas transform]
+    [%expr transform]
 
   | [[%type: paint]] ->
     [%expr paint]

@@ -1,0 +1,12 @@
+open Browser_js_types
+
+(* constants *)
+let string = Js.string "string"
+let boolean = Js.string "boolean"
+let number = Js.string "number"
+let constructor = Js.string "constructor"
+let object_ = Js.string "object"
+let function_ = Js.string "function"
+let max_int = Int.max_int |> Int.to_float |> Js.float
+let min_int = Int.min_int |> Int.to_float |> Js.float
+let true_ = Js.bool true

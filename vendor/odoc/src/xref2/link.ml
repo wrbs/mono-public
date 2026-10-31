@@ -481,7 +481,8 @@ let warn_on_hidden_representation (id : Id.Type.t)
           (id :> Id.any)
   | Record_unboxed_product fields ->
       if List.exists internal_unboxed_field fields then
-        Lookup_failures.report_warning "@[<2>Hidden unboxed fields in type '%a'@]"
+        Lookup_failures.report_warning
+          "@[<2>Hidden unboxed fields in type '%a'@]"
           Component.Fmt.(model_identifier fmt_cfg)
           (id :> Id.any)
   | Extensible -> ()
@@ -701,6 +702,7 @@ and include_decl : Env.t -> Id.Signature.t -> Include.decl -> Include.decl =
  fun env id decl ->
   let open Include in
   match decl with
+  | ModuleType expr when is_elidable_with_module_type_u expr -> ModuleType expr
   | ModuleType expr -> ModuleType (u_module_type_expr env id expr)
   | Alias p -> Alias (module_path env p)
 
@@ -772,7 +774,7 @@ and handle_fragments env id sg subs =
   List.fold_left
     (fun (sg_res, subs) lsub ->
       match (sg_res, lsub) with
-      | Result.Ok sg, ModuleEq (frag, decl) ->
+      | Ok sg, ModuleEq (frag, decl) ->
           let frag' =
             match frag with
             | `Resolved f ->
@@ -990,7 +992,7 @@ and type_decl_representation :
   | Variant cs -> Variant (List.map (type_decl_constructor env parent) cs)
   | Record fs -> Record (List.map (type_decl_field env parent) fs)
   | Record_unboxed_product fs ->
-    Record_unboxed_product (List.map (type_decl_unboxed_field env parent) fs)
+      Record_unboxed_product (List.map (type_decl_unboxed_field env parent) fs)
   | Extensible -> Extensible
 
 and type_decl : Env.t -> Id.Signature.t -> TypeDecl.t -> TypeDecl.t =
@@ -1104,6 +1106,11 @@ and type_expression_object env parent visited o =
   in
   { o with fields = List.map field o.fields }
 
+and type_expression_module_arg env parent visited m_arg =
+  let open TypeExpr.Module in
+  let package = type_expression_package env parent visited m_arg.package in
+  { m_arg with package }
+
 and type_expression_package env parent visited p =
   let open TypeExpr.Package in
   let substitution (frag, t) =
@@ -1132,9 +1139,14 @@ and type_expression : Env.t -> Id.Signature.t -> _ -> _ =
         ( lbl,
           type_expression env parent visited t1,
           type_expression env parent visited t2 )
-  | Tuple ts -> Tuple (List.map (fun (l, t) -> l, type_expression env parent visited t) ts)
+  | Tuple ts ->
+      Tuple
+        (List.map
+           (fun (lbl, ty) -> (lbl, type_expression env parent visited ty))
+           ts)
   | Unboxed_tuple ts ->
-    Unboxed_tuple (List.map (fun (l, t) -> l, type_expression env parent visited t) ts)
+      Unboxed_tuple
+        (List.map (fun (l, t) -> (l, type_expression env parent visited t)) ts)
   | Constr (path', ts') -> (
       let path = type_path env path' in
       let ts = List.map (type_expression env parent visited) ts' in
@@ -1169,8 +1181,7 @@ and type_expression : Env.t -> Id.Signature.t -> _ -> _ =
                   | e ->
                       Format.eprintf
                         "Caught unexpected exception when expanding type \
-                         declaration (%s)\n\
-                         %!"
+                         declaration (%s)@."
                         (Printexc.to_string e);
                       Constr (`Resolved p, ts))
               | _ -> Constr (`Resolved p, ts)
@@ -1198,7 +1209,15 @@ and type_expression : Env.t -> Id.Signature.t -> _ -> _ =
             Class (`Resolved p, ts)
         | _ -> Class (path', ts))
   | Poly (strs, t) -> Poly (strs, type_expression env parent visited t)
+  | Quote t -> Quote (type_expression env parent visited t)
+  | Splice t -> Splice (type_expression env parent visited t)
   | Package p -> Package (type_expression_package env parent visited p)
+  | Arrow_functor (lbl, m_arg, t) ->
+      let new_env = Env.add_module_arg m_arg env in
+      Arrow_functor
+        ( lbl,
+          type_expression_module_arg env parent visited m_arg,
+          type_expression new_env parent visited t )
 
 let link ~filename x y =
   Lookup_failures.catch_failures ~filename (fun () ->

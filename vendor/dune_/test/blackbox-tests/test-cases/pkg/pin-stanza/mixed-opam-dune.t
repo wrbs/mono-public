@@ -28,24 +28,22 @@ should favor the dune metadata in such a case.
   > build: [ "echo" "bar" ]
   > EOF
 
-  $ dune_pkg_lock_normalized
+  $ dune pkg lock
   Solution for dune.lock:
   - bar.dev
   - foo.dev
 
-  $ cat ${default_lock_dir}/bar.dev.pkg | sed "/source/,//d"
+  $  cat dune.lock/bar.pkg | sed "/source/,//d"
   (version dev)
   
-  (build
-   (all_platforms ((dune))))
+  (dune)
   
   
   (dev)
-  $ cat ${default_lock_dir}/foo.dev.pkg | sed "/source/,//d"
+  $  cat dune.lock/foo.pkg | sed "/source/,//d"
   (version dev)
   
-  (build
-   (all_platforms ((dune))))
+  (dune)
   
   
   (dev)

@@ -1,0 +1,37 @@
+opam-version: "2.0"
+maintainer: "Jane Street developers"
+authors: ["Jane Street Group, LLC"]
+homepage: "https://github.com/janestreet/hardcaml_lws"
+bug-reports: "https://github.com/janestreet/hardcaml_lws/issues"
+dev-repo: "git+https://github.com/janestreet/hardcaml_lws.git"
+doc: "https://ocaml.janestreet.com/ocaml-core/latest/doc/hardcaml_lws/index.html"
+license: "MIT"
+x-maintenance-intent: ["(latest)"]
+build: [
+  ["dune" "build" "-p" name "-j" jobs]
+]
+depends: [
+  "ocaml" {>= "5.2.0"}
+  "core"
+  "handled_effect"
+  "hardcaml"
+  "hardcaml_event_driven_sim"
+  "hardcaml_verilator"
+  "hardcaml_waveterm"
+  "ppx_jane"
+  "unique"
+  "vec"
+  "dune"                      {>= "3.17.0"}
+]
+available: arch != "x86_32"
+conflicts: [
+  "oxcaml-compiler" {< "5.2.0minus39"}
+]
+synopsis: "Lightweight scheduler for Hardcaml testbenches"
+description: "
+Hardcaml LWS (Lightweight Scheduler) provides a lightweight coroutine-based
+scheduler for writing testbenches for Hardcaml hardware simulations.
+
+It allows multiple concurrent tasks to be scheduled and run against a
+hardware simulation, with support for different clock domains and triggers.
+"

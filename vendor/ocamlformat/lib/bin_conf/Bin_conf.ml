@@ -1,13 +1,13 @@
-(**************************************************************************)
-(*                                                                        *)
-(*                              OCamlFormat                               *)
-(*                                                                        *)
-(*            Copyright (c) Facebook, Inc. and its affiliates.            *)
-(*                                                                        *)
-(*      This source code is licensed under the MIT license found in       *)
-(*      the LICENSE file in the root directory of this source tree.       *)
-(*                                                                        *)
-(**************************************************************************)
+(**************************************************************************
+ *                                                                        *
+ *                              OCamlFormat                               *
+ *                                                                        *
+ *            Copyright (c) Facebook, Inc. and its affiliates.            *
+ *                                                                        *
+ *      This source code is licensed under the MIT license found in       *
+ *      the LICENSE file in the root directory of this source tree.       *
+ *                                                                        *
+ **************************************************************************)
 
 open Ocamlformat_lib
 open Conf
@@ -156,17 +156,17 @@ let check =
 let inputs =
   let docv = "SRC" in
   let file_or_dash =
-    let parse, print = Arg.non_dir_file in
+    let parse = Arg.conv_parser Arg.non_dir_file in
+    let print = Arg.conv_printer Arg.non_dir_file in
     let print fmt = function
       | Stdin -> print fmt "<standard input>"
       | File x -> print fmt x
     in
     let parse = function
-      | "-" -> `Ok Stdin
-      | s -> (
-        match parse s with `Ok x -> `Ok (File x) | `Error x -> `Error x )
+      | "-" -> Ok Stdin
+      | s -> parse s |> Result.map ~f:(fun x -> File x)
     in
-    (parse, print)
+    Arg.conv (parse, print)
   in
   let doc =
     "Input files. At least one is required, and exactly one without \
@@ -529,7 +529,8 @@ let discard_formatter =
       ; out_flush= (fun () -> ())
       ; out_newline= (fun () -> ())
       ; out_spaces= (fun _ -> ())
-      ; out_indent= (fun _ -> ()) } )
+      ; out_indent= (fun _ -> ())
+      ; out_width= (fun _ ~pos:_ ~len -> len) } )
 
 let global_lib_term =
   Term.(

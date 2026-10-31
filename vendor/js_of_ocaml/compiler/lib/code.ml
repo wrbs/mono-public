@@ -60,11 +60,15 @@ module Var : sig
 
   val compare : t -> t -> int
 
-  val set_name : t -> string -> unit
+  val set_name : t -> ?generated:bool -> string -> unit
+
+  val generated_name : t -> bool
 
   val get_name : t -> string option
 
   val propagate_name : t -> t -> unit
+
+  val forget_generated_name : t -> unit
 
   val reset : unit -> unit
 
@@ -125,7 +129,13 @@ end = struct
   module Name = struct
     let names = Int.Hashtbl.create 100
 
-    let reset () = Int.Hashtbl.clear names
+    let user_defined = ref (BitSet.create' 16)
+
+    let generated v = not (BitSet.mem !user_defined v)
+
+    let reset () =
+      Int.Hashtbl.clear names;
+      user_defined := BitSet.create' 16
 
     let reserved = String.Hashtbl.create 100
 
@@ -133,30 +143,35 @@ end = struct
 
     let is_reserved s = String.Hashtbl.mem reserved s
 
-    let merge n1 n2 =
-      match n1, n2 with
-      | "", n2 -> n2
-      | n1, "" -> n1
-      | n1, n2 ->
-          if generated_name n1
-          then n2
-          else if generated_name n2
-          then n1
-          else if String.length n1 > String.length n2
-          then n1
-          else n2
+    let merge v1 v2 =
+      let n1_generated = generated v1 in
+      let n2_generated = generated v2 in
+      let n1_name = Int.Hashtbl.find names v1 in
+      let n2_name = Int.Hashtbl.find names v2 in
+      (* Prefer non-generated names over generated ones *)
+      if n1_generated && not n2_generated
+      then n2_name, n2_generated
+      else if n2_generated && not n1_generated
+      then n1_name, n1_generated
+      else if String.length n1_name > String.length n2_name
+      then n1_name, n1_generated
+      else n2_name, n2_generated
 
-    let set_raw v nm = Int.Hashtbl.replace names v nm
+    let set_raw v nm gen =
+      Int.Hashtbl.replace names v nm;
+      if gen then BitSet.unset !user_defined v else BitSet.set !user_defined v
 
     let propagate v v' =
       try
         let name = Int.Hashtbl.find names v in
         match Int.Hashtbl.find names v' with
-        | exception Not_found -> set_raw v' name
-        | name' -> set_raw v' (merge name name')
+        | exception Not_found -> set_raw v' name (generated v)
+        | _ ->
+            let name, gen = merge v v' in
+            set_raw v' name gen
       with Not_found -> ()
 
-    let set v nm_orig =
+    let set v ?(generated = false) nm_orig =
       let len = String.length nm_orig in
       if len > 0
       then (
@@ -192,9 +207,11 @@ end = struct
         let str =
           if String.length str > max_len then String.sub str ~pos:0 ~len:max_len else str
         in
-        set_raw v str)
+        set_raw v str generated)
 
-    let get v = try Some (Int.Hashtbl.find names v) with Not_found -> None
+    let get v = Int.Hashtbl.find_opt names v
+
+    let forget_generated_name v = if generated v then Int.Hashtbl.remove names v
   end
 
   let last_var = ref 0
@@ -212,7 +229,9 @@ end = struct
       | None -> ""
       | Some nm -> "{" ^ nm ^ "}")
 
-  let set_name i nm = Name.set i nm
+  let set_name = Name.set
+
+  let generated_name i = Name.generated i
 
   let fresh () =
     incr last_var;
@@ -220,7 +239,7 @@ end = struct
 
   let fresh_n nm =
     incr last_var;
-    set_name !last_var nm;
+    set_name !last_var ~generated:true nm;
     !last_var
 
   let count () = !last_var + 1
@@ -232,6 +251,8 @@ end = struct
   let get_name i = Name.get i
 
   let propagate_name i j = Name.propagate i j
+
+  let forget_generated_name = Name.forget_generated_name
 
   let fork o =
     let n = fresh () in
@@ -327,7 +348,7 @@ type constant =
   | Int of Targetint.t
   | Int32 of Int32.t
   | Int64 of Int64.t
-  | NativeInt of Int32.t (* Native int are 32bit on all known backend *)
+  | NativeInt of Int32.t (* Native ints are 32bit on all known backends *)
   | Tuple of int * constant array * array_or_not
   | Null_
 

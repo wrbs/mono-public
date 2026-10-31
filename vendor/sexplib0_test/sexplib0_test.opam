@@ -1,0 +1,40 @@
+opam-version: "2.0"
+maintainer: "Jane Street developers"
+authors: ["Jane Street Group, LLC"]
+homepage: "https://github.com/janestreet/sexplib0_test"
+bug-reports: "https://github.com/janestreet/sexplib0_test/issues"
+dev-repo: "git+https://github.com/janestreet/sexplib0_test.git"
+doc: "https://ocaml.janestreet.com/ocaml-core/latest/doc/sexplib0_test/index.html"
+license: "MIT"
+x-maintenance-intent: ["(latest)"]
+build: [
+  ["dune" "build" "-p" name "-j" jobs]
+]
+run-test: [
+  ["dune" "runtest" "-p" name "-j" jobs]
+]
+depends: [
+  "ocaml" {>= "5.1.0"}
+  "base"
+  "base_quickcheck"
+  "expect_test_helpers_base"
+  "parsexp"
+  "ppx_compare"
+  "ppx_expect"
+  "ppx_here"
+  "ppx_sexp_conv"
+  "ppx_sexp_value"
+  "ppx_template"
+  "sexplib"
+  "sexplib0"
+  "dune"                     {>= "3.17.0"}
+]
+available: arch != "x86_32"
+conflicts: [
+  "oxcaml-compiler" {< "5.2.0minus39"}
+]
+synopsis: "Tests for sexplib0"
+description: "
+Part of Jane Street's Core library
+Tests for the sexplib0 library.
+"

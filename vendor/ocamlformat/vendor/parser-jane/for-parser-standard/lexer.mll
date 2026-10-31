@@ -85,6 +85,7 @@ let keyword_table =
     "private", PRIVATE;
     "rec", REC;
     "sig", SIG;
+    "borrow_", BORROW;
     "stack_", STACK;
     "struct", STRUCT;
     "then", THEN;
@@ -487,7 +488,7 @@ let prepare_error loc = function
       Location.error ~loc ~sub msg
   | Keyword_as_label kwd ->
       Location.errorf ~loc
-        "%a is a keyword, it cannot be used as label name" Style.inline_code kwd
+        "%a is a keyword, it cannot be used as label name" (Format_doc.compat Style.inline_code) kwd
   | Invalid_literal s ->
       Location.errorf ~loc "Invalid literal %s" s
   | Invalid_directive (dir, explanation) ->
@@ -745,6 +746,7 @@ rule token = parse
   | "*"  { STAR }
   | ","  { COMMA }
   | "->" { MINUSGREATER }
+  | "$"  { DOLLAR }
   | "."  { DOT }
   | ".." { DOTDOT }
   | ".#" { DOTHASH }
@@ -756,6 +758,7 @@ rule token = parse
   | ";"  { SEMI }
   | ";;" { SEMISEMI }
   | "<"  { LESS }
+  | "<[" { LESSLBRACKET }
   | "<-" { LESSMINUS }
   | "="  { EQUAL }
   | "["  { LBRACKET }
@@ -764,6 +767,7 @@ rule token = parse
   | "[<" { LBRACKETLESS }
   | "[>" { LBRACKETGREATER }
   | "]"  { RBRACKET }
+  | "]>" { RBRACKETGREATER }
   | "{"  { LBRACE }
   | "{<" { LBRACELESS }
   | "|"  { BAR }

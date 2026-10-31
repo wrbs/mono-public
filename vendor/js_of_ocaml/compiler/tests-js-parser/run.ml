@@ -6,7 +6,8 @@ let exe =
   | "Cygwin" | "Win32" -> fun x -> x ^ ".exe"
   | "Unix" | _ -> fun x -> x
 
-let node = try Sys.getenv "NODE" with Not_found -> exe "node"
+let node =
+  try Sys.getenv "NODE" with Not_found -> Printf.sprintf "%s --check" (exe "node")
 
 let failure_expected = ref false
 
@@ -14,7 +15,9 @@ let progress = ref false
 
 let verbose = ref false
 
-let flags, files =
+let skip_negative = true
+
+let flags, roots =
   Sys.argv
   |> Array.to_list
   |> List.tl
@@ -30,7 +33,7 @@ let rec ls_files path =
   | { st_kind = S_CHR | S_BLK | S_LNK | S_FIFO | S_SOCK; _ } -> []
 
 let files =
-  List.concat_map files ~f:(fun path ->
+  List.concat_map roots ~f:(fun path ->
       let l = ls_files path in
       List.filter l ~f:(fun name -> Filename.check_suffix name ".js"))
 
@@ -53,8 +56,6 @@ type error =
 let unsupported = ref []
 
 let negative = ref []
-
-let noStrict = ref []
 
 let fail = ref []
 
@@ -100,28 +101,73 @@ let clean_loc = new clean_loc
 
 let clean_loc p = clean_loc#program p
 
+class normalize =
+  object (self)
+    inherit Js_traverse.map as super
+
+    method! expression e =
+      match e with
+      | EBin (Or, e1, e3) -> (
+          match self#expression e1 with
+          | EBin (Or, e1, e2) -> EBin (Or, e1, self#expression (EBin (Or, e2, e3)))
+          | e1 -> EBin (Or, e1, self#expression e3))
+      | EBin (And, e1, e3) -> (
+          match self#expression e1 with
+          | EBin (And, e1, e2) -> EBin (And, e1, self#expression (EBin (And, e2, e3)))
+          | e1 -> EBin (And, e1, self#expression e3))
+      | ESeq (e1, e3) -> (
+          match self#expression e1 with
+          | ESeq (e1, e2) -> ESeq (e1, self#expression (ESeq (e2, e3)))
+          | e1 -> ESeq (e1, self#expression e3))
+      | _ -> super#expression e
+  end
+
+let normalize = new normalize
+
+let normalize p = normalize#program p
+
 let p_to_string p =
   let buffer = Buffer.create 100 in
   let pp = Pretty_print.to_buffer buffer in
   let _ = Js_output.program pp p in
   Buffer.contents buffer
 
-let accepted_by_node file =
-  let ((ic, oc, ec) as ic_oc) =
-    Unix.open_process_full (Printf.sprintf "%s --check %s" node file) [||]
-  in
+let accepted_by_node ?(debug = false) file =
+  let cmd = Printf.sprintf "%s %s" node file in
+  let ((ic, oc, ec) as ic_oc) = Unix.open_process_full cmd (Unix.environment ()) in
   let pid = Unix.process_full_pid ic_oc in
+  (if false
+   then
+     try
+       while
+         print_endline (input_line ic);
+         true
+       do
+         ()
+       done
+     with _ -> ());
   let _pid, status = Unix.waitpid [] pid in
   close_in ic;
   close_out oc;
   close_in ec;
+  if debug
+  then (
+    Printf.eprintf
+      "+ %s (%s)\n%!"
+      cmd
+      (match status with
+      | WEXITED n -> Printf.sprintf "exit %d" n
+      | WSIGNALED n -> Printf.sprintf "signal %d" n
+      | WSTOPPED n -> Printf.sprintf "stop %d" n);
+    flush_all ());
   match status with
   | WEXITED 0 -> true
   | WEXITED _ -> false
   | WSIGNALED _ | WSTOPPED _ -> assert false
 
 let should_ignore_feature = function
-  | "import-assertions" | "import-attributes" | "decorators" -> true
+  | "import-source" -> true
+  | "import-assertions" -> true
   | _ -> false
 
 let should_ignore_flag = function
@@ -193,8 +239,10 @@ let to_file p =
   close_out oc;
   f
 
-let patdiff p1 p2 =
-  ignore (Sys.command (Printf.sprintf "patdiff %s %s" (to_file p1) (to_file p2)));
+let diff p1 p2 =
+  ignore
+    (Sys.command
+       (Printf.sprintf "git diff --no-index -- %s %s" (to_file p1) (to_file p2)));
   flush_all ()
 
 let print_loc_error (pi : Parse_info.t) c =
@@ -216,7 +264,16 @@ let () =
   let negative_r = Str.regexp_string "negative:" in
   let features_r = Str.regexp {|features: ?\[\([a-zA-Z. ,-]*\)\]|} in
   let flags_r = Str.regexp {|flags: ?\[\([a-zA-Z. ,-]*\)\]|} in
+  let import_source_r = Str.regexp {|import source|} in
   let total = List.length files in
+  let () =
+    if not (accepted_by_node ~debug:false "./simple.js")
+    then
+      failwith
+        (Printf.sprintf
+           "%S doesn't seem to be a valid command to check javascript files"
+           node)
+  in
   List.iteri files ~f:(fun i filename ->
       let () = if !progress then Printf.eprintf "%d/%d\r%!" i total in
       let ic = open_in_bin filename in
@@ -225,80 +282,118 @@ let () =
       let add r = r := (filename, content) :: !r in
       close_in ic;
       let mode =
-        match Str.search_forward negative_r content 0 with
-        | _ -> `Negative
-        | exception Not_found -> (
-            let features =
-              match Str.search_forward features_r content 0 with
-              | _ ->
-                  String.split_on_char ~sep:',' (Str.matched_group 1 content)
-                  |> List.map ~f:String.trim
-              | exception Not_found -> []
-            in
-            let flags =
-              match Str.search_forward flags_r content 0 with
-              | _ ->
-                  String.split_on_char ~sep:',' (Str.matched_group 1 content)
-                  |> List.map ~f:String.trim
-              | exception Not_found -> []
-            in
-            match List.find_opt ~f:should_ignore_feature features with
-            | Some f -> `Unsupported f
-            | None -> (
-                match List.find_opt ~f:should_ignore_flag flags with
+        match filename with
+        | "test262/test/language/import/import-attributes/text-javascript_FIXTURE.js" ->
+            `Negative
+        | _ -> (
+            match Str.search_forward negative_r content 0 with
+            | _ -> `Negative
+            | exception Not_found -> (
+                let features =
+                  match Str.search_forward features_r content 0 with
+                  | _ ->
+                      String.split_on_char ~sep:',' (Str.matched_group 1 content)
+                      |> List.map ~f:String.trim
+                  | exception Not_found -> []
+                in
+                let flags =
+                  match Str.search_forward flags_r content 0 with
+                  | _ ->
+                      String.split_on_char ~sep:',' (Str.matched_group 1 content)
+                      |> List.map ~f:String.trim
+                  | exception Not_found -> []
+                in
+                let features =
+                  match Str.search_forward import_source_r content 0 with
+                  | exception Not_found -> features
+                  | _ -> "import-source" :: features
+                in
+                match List.find_opt ~f:should_ignore_feature features with
                 | Some f -> `Unsupported f
-                | None -> `Ok))
+                | None -> (
+                    match List.find_opt ~f:should_ignore_flag flags with
+                    | Some f -> `Unsupported f
+                    | None -> `Ok)))
       in
       match mode with
-      | `Negative -> negative := filename :: !negative
-      | `Unsupported "noStrict" -> noStrict := filename :: !noStrict
+      | `Negative when skip_negative -> negative := filename :: !negative
       | `Unsupported _ -> unsupported := (filename, content) :: !unsupported
-      | `Ok -> (
+      | `Ok | `Negative -> (
           try
-            let p1, toks1 =
-              Parse_js.Lexer.of_string
-                ~report_error:(fun e -> errors := e :: !errors)
-                ~filename
-                content
-              |> Parse_js.parse'
-            in
-            let p1 = List.concat_map p1 ~f:snd in
-            match List.rev !errors with
-            | [] -> (
-                let s = p_to_string p1 in
-                try
-                  let p2, toks2 =
-                    Parse_js.Lexer.of_string
-                      ~report_error:(fun e -> errors := e :: !errors)
-                      ~filename
-                      s
-                    |> Parse_js.parse'
-                  in
-                  let p2 = List.concat_map p2 ~f:snd in
-                  match
-                    Poly.equal (clean_loc p1) (clean_loc p2), check_toks toks1 [] toks2 []
-                  with
-                  | true, Error s when false ->
-                      fail := (Tok_missmatch s, filename) :: !fail
-                  | true, _ -> add pass
-                  | false, _ -> fail := (Diff (p1, p2), filename) :: !fail
-                with Parse_js.Parsing_error loc ->
-                  if not (accepted_by_node filename)
-                  then add unsupported
-                  else fail := (Print_parse (loc, s), filename) :: !fail)
-            | l ->
-                if accepted_by_node filename
-                then fail := (Parse_warning l, filename) :: !fail
-          with
-          | Parse_js.Parsing_error loc ->
-              if not (accepted_by_node filename)
-              then add unsupported
-              else fail := (Parse (loc, content), filename) :: !fail
-          | e ->
-              Printf.eprintf "Unexpected error %s\n%s\n" filename (Printexc.to_string e)));
+            match
+              try
+                let lex =
+                  Parse_js.Lexer.of_string
+                    ~report_error:(fun e -> errors := e :: !errors)
+                    ~filename
+                    content
+                in
+                Parse_js.parse' `Module lex, `Module
+              with Parse_js.Parsing_error _ ->
+                errors := [];
+                let lex =
+                  Parse_js.Lexer.of_string
+                    ~report_error:(fun e -> errors := e :: !errors)
+                    ~filename
+                    content
+                in
+                Parse_js.parse' `Script lex, `Script
+            with
+            | exception Parse_js.Parsing_error loc ->
+                if
+                  Poly.equal mode `Negative
+                  || String.starts_with
+                       ~prefix:"syntax-error"
+                       (Filename.basename filename)
+                  || ((not (accepted_by_node filename)) && false)
+                then add unsupported
+                else fail := (Parse (loc, content), filename) :: !fail
+            | (p1, toks1), lexing_mode -> (
+                let p1 = List.concat_map p1 ~f:snd in
+                match List.rev !errors with
+                | [] -> (
+                    let s = p_to_string p1 in
+                    match
+                      let lex =
+                        Parse_js.Lexer.of_string
+                          ~report_error:(fun e -> errors := e :: !errors)
+                          ~filename
+                          s
+                      in
+                      Parse_js.parse' lexing_mode lex
+                    with
+                    | p2, toks2 -> (
+                        let p2 = List.concat_map p2 ~f:snd in
+                        match
+                          ( Poly.equal
+                              (clean_loc (normalize p1))
+                              (clean_loc (normalize p2))
+                          , check_toks toks1 [] toks2 [] )
+                        with
+                        | true, Error s when false ->
+                            fail := (Tok_missmatch s, filename) :: !fail
+                        | true, _ ->
+                            if false
+                            then (
+                              let new_name = filename ^ ".jsoo.js" in
+                              let oc = open_out_bin new_name in
+                              output_string oc s;
+                              close_out oc;
+                              let ok = accepted_by_node filename in
+                              if ok then Sys.remove new_name);
+                            add pass
+                        | false, _ -> fail := (Diff (p1, p2), filename) :: !fail)
+                    | exception Parse_js.Parsing_error loc ->
+                        fail := (Print_parse (loc, s), filename) :: !fail)
+                | l ->
+                    if Poly.equal mode `Negative
+                    then add unsupported
+                    else fail := (Parse_warning l, filename) :: !fail)
+          with e ->
+            Printf.eprintf "Unexpected error %s\n%s\n" filename (Printexc.to_string e)));
   Printf.printf "Summary:\n";
+  Printf.printf "  paths      : %s\n" (String.concat ~sep:", " roots);
   Printf.printf "  invalid    : %d\n" (List.length !negative);
-  Printf.printf "  not scrict : %d\n" (List.length !noStrict);
   Printf.printf "  skip       : %d\n" (List.length !unsupported);
   Printf.printf "  fail       : %d\n" (List.length !fail);
   Printf.printf "  pass       : %d\n" (List.length !pass);
@@ -323,7 +418,7 @@ let () =
             print_loc_error pi content
         | Diff (p1, p2) ->
             Printf.eprintf "<ERROR>: Diff: %s\n%!" f;
-            patdiff p1 p2
+            diff p1 p2
         | Parse_warning l ->
             Printf.eprintf "<ERROR>: Lexer warning: %s\n" f;
             List.iter l ~f:Parse_js.Lexer.print_error

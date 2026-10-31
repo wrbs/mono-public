@@ -7,9 +7,11 @@ module Fmt = Fmt
 module Hashtbl = Hashtbl
 module Identifiable = Identifiable
 module Int = Int
+module Int64 = Int64
 module List = List
 module Option = Option
 module Pretty_printer = Pretty_printer
 module String = String
+module Utf8 = Utf8
 include Grace_std0
 include Sexplib.Conv

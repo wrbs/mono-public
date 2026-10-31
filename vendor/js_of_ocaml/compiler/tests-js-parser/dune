@@ -6,17 +6,19 @@
  (alias runtest-parser)
  (deps
   (glob_files_rec pass/*.js)
+  simple.js
   package.json)
  (action
   (run ./run.exe pass)))
 
-;; git submodule add test262 https://github.com/tc39/test262.git
-;; git checkout 6cbb6da9473c56d95358d8e679c5a6d2b4574efb
+;; git submodule add https://github.com/tc39/test262.git test262
+;; git checkout 3a9ecbeab03930eb3600198a5dd0e9506ef1807a
 
 (rule
  (alias runtest-parser)
  (deps
   (glob_files_rec test262/test/language/*.js)
+  simple.js
   package.json)
  (action
   (run ./run.exe test262/test/language)))

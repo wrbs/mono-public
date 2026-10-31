@@ -26,11 +26,11 @@ let rec rev_take accu n xs =
   | _, x :: xs ->
       rev_take (x :: accu) (n - 1) xs
 
-module[@inline] Make (M : MINIMAL_IMPERATIVE_MAPS) = struct
+module Make (M : MINIMAL_IMPERATIVE_MAPS) = struct
 
   type key = M.key
 
-  let[@inline] add x y table =
+  let add x y table =
     M.add x y table;
     y
 
@@ -129,9 +129,6 @@ module[@inline] Make (M : MINIMAL_IMPERATIVE_MAPS) = struct
       curry (fix ff)
 
 end
-
-module ForNumberedType (T : NUMBERING) =
-  Make(Glue.ArraysAsImperativeMapsWithNumbering(T))
 
 module ForOrderedType (T : OrderedType) =
   Make(Glue.PersistentMapsToImperativeMaps(Map.Make(T)))

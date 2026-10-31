@@ -1,0 +1,7 @@
+(library
+ (name ppx_sexp_digest_expander)
+ (public_name ppx_sexp_digest.expander)
+ (libraries base ppx_sexp_conv.expander ppxlib)
+ (ppx_runtime_libraries ppx_sexp_digest.lib)
+ (preprocess
+  (pps ppxlib.metaquot)))

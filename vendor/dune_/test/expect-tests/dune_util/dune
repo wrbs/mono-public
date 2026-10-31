@@ -6,7 +6,7 @@
   (deps
    (sandbox always)))
  (libraries
-  unix
+  dune_util
   dyn
   stdune
   ;; This is because of the (implicit_transitive_deps false)

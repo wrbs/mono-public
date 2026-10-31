@@ -56,7 +56,8 @@ let rec of_id x =
   | `Field (parent, name) ->
       ret "Field" (FieldName.to_string name) :: of_id (parent :> t)
   | `UnboxedField (parent, name) ->
-      ret "UnboxedField" (UnboxedFieldName.to_string name) :: of_id (parent :> t)
+      ret "UnboxedField" (UnboxedFieldName.to_string name)
+      :: of_id (parent :> t)
   | `Extension (parent, name) ->
       ret "Extension" (ExtensionName.to_string name) :: of_id (parent :> t)
   | `ExtensionDecl (parent, _, name) ->
@@ -139,7 +140,7 @@ let of_doc (doc : Odoc_model.Comment.elements) =
   let txt = Text.of_doc doc in
   `String txt
 
-let of_entry ({ Entry.id; doc; kind ; source_loc = _} as entry) html occurrences =
+let of_entry ({ Entry.id; doc; kind } as entry) html occurrences =
   let j_id = of_id id in
   let doc = of_doc doc in
   let kind =
@@ -228,7 +229,7 @@ let of_entry ({ Entry.id; doc; kind ; source_loc = _} as entry) html occurrences
   in
   let occurrences =
     match occurrences with
-    | Some { Odoc_occurrences.Table.direct; indirect; impl_src = _ } ->
+    | Some { Odoc_occurrences.Table.direct; indirect } ->
         [
           ( "occurrences",
             `Object
@@ -271,7 +272,7 @@ let of_entry ~simplified ?occurrences entry =
     | Some occurrences -> (
         match Odoc_occurrences.Table.get occurrences id with
         | Some x -> Some x
-        | None -> Some { direct = 0; indirect = 0; impl_src = None })
+        | None -> Some { direct = 0; indirect = 0 })
   in
   let entry, html, occurrences =
     let occ = get_occ entry.Entry.id in

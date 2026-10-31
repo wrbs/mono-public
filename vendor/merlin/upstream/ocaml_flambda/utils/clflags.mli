@@ -59,6 +59,10 @@ type shape_format = Old_merlin | Debugging_shapes
 type gdwarf_fidelity =
   | Fidelity_low | Fidelity_medium | Fidelity_high
   | Fidelity_very_high | Fidelity_ultra_high | Fidelity_unlimited
+type visible_include =
+  { path : string;
+    cmx_guaranteed : bool;
+  }
 
 module Dwarf_config_defaults : sig
   val shape_reduce_depth : int option
@@ -77,7 +81,7 @@ val dllibs : string list ref
 val cmi_file : string option ref
 val compile_only : bool ref
 val output_name : string option ref
-val include_dirs : string list ref
+val include_dirs : visible_include list ref
 val hidden_include_dirs : string list ref
 val include_manifests : string list ref
 val hidden_include_manifests : string list ref
@@ -104,9 +108,12 @@ val set_gdwarf_fidelity : gdwarf_fidelity -> unit
 val unsafe : bool ref
 val use_linscan : bool ref
 val link_everything : bool ref
+val requires_metaprogramming : bool ref
+val uses_metaprogramming : bool ref
 val custom_runtime : bool ref
 val no_check_prims : bool ref
 val bytecode_compatible_32 : bool ref
+val thunkify_cu_init : bool ref
 val output_c_object : bool ref
 val output_complete_object : bool ref
 val output_complete_executable : bool ref
@@ -163,6 +170,7 @@ val dump_source : bool ref
 val dump_parsetree : bool ref
 val dump_typedtree : bool ref
 val dump_shape : bool ref
+val dump_tlambda : bool ref
 val dump_slambda : bool ref
 val dump_rawlambda : bool ref
 val dump_lambda : bool ref
@@ -246,10 +254,15 @@ val afl_instrument : bool ref
 val afl_inst_ratio : int ref
 val function_sections : bool ref
 val probes : bool ref
+val kind_verbosity : int ref
 val emit_optimized_probes : bool ref
 val supports_optimized_probes : bool
 
 val llvm_backend : bool ref
+
+(* Dedicated flag for the ikinds kind checker (enabled by default). *)
+val ikinds : bool ref
+val ikinds_debug : bool ref
 
 val all_passes : string list ref
 val dumped_pass : string -> bool
@@ -287,6 +300,7 @@ module Opt_flag_handler : sig
     set_oclassic : unit -> unit;
     set_o2 : unit -> unit;
     set_o3 : unit -> unit;
+    set_o4 : unit -> unit;
   }
 
   val default : t
@@ -297,6 +311,7 @@ end
 val set_oclassic : unit -> unit
 val set_o2 : unit -> unit
 val set_o3 : unit -> unit
+val set_o4 : unit -> unit
 
 module Compiler_ir : sig
   type t = Linear | Cfg | Llvmir
@@ -365,5 +380,14 @@ val zero_alloc_check : Zero_alloc_annotations.Check.t ref
 val zero_alloc_assert : Zero_alloc_annotations.Assert.t ref
 
 val no_auto_include_otherlibs : bool ref
+
+val dissector : bool ref
+val dissector_partition_size_default : float
+val dissector_partition_size : float option ref
+val ddissector : bool ref
+val ddissector_sizes : bool ref
+val ddissector_verbose : bool ref
+val ddissector_partitions : bool ref
+val ddissector_inputs : string option ref
 
 val prepend_directory : string -> string

@@ -66,6 +66,7 @@ val is_unboxed_version : t -> bool
 
 val same: t -> t -> bool
 val compare: t -> t -> int
+val hash: t -> int
 val compare_extra: extra_ty -> extra_ty -> int
 val find_free_opt: Ident.t list -> t -> Ident.t option
 val exists_free: Ident.t list -> t -> bool
@@ -76,7 +77,7 @@ val name: ?paren:(string -> bool) -> t -> string
     (* [paren] tells whether a path suffix needs parentheses *)
 val head: t -> Ident.t
 
-val print: Format.formatter -> t -> unit
+val print: t Format_doc.printer
 
 val heads: t -> Ident.t list
 
@@ -86,3 +87,4 @@ val is_constructor_typath: t -> bool
 
 module Map : Map.S with type key = t
 module Set : Set.S with type elt = t
+module Tbl : Hashtbl.S with type key = t

@@ -143,7 +143,7 @@ module Check = struct
     let freename = StringSet.remove Global_constant.global_object freename in
     let freename =
       if has_flags
-      then StringSet.(diff freename (of_list [ "FLAG"; "CONFIG" ]))
+      then StringSet.(diff freename (of_list [ "FLAG"; "CONFIG"; "BUILD_CONFIG" ]))
       else freename
     in
     if StringSet.mem Global_constant.old_global_object freename
@@ -205,13 +205,13 @@ module Fragment = struct
       ; ( "effects"
         , fun () ->
             match Config.effects () with
-            | `Disabled | `Jspi -> false
+            | `Disabled | `Jspi | `Native -> false
             | `Cps | `Double_translation -> true )
       ; ( "doubletranslate"
         , fun () ->
             match Config.effects () with
             | `Double_translation -> true
-            | `Jspi | `Cps | `Disabled -> false )
+            | `Jspi | `Cps | `Native | `Disabled -> false )
       ; ( "wasm"
         , fun () ->
             match Config.target () with
@@ -256,7 +256,7 @@ module Fragment = struct
 
   let parse_from_lex ~filename lex =
     let program, _ =
-      try Parse_js.parse' lex
+      try Parse_js.parse' `Script lex
       with Parse_js.Parsing_error pi ->
         let name =
           match pi with
@@ -323,7 +323,7 @@ module Fragment = struct
                         then Format.eprintf "Duplicated target_env in %s\n" (loc pi);
                         { fragment with fragment_target = Target_env.of_string name }
                     | (`Ifnot v | `If v) when not (StringMap.mem v allowed_flags) ->
-                        Format.eprintf "Unkown flag %S in %s\n" v (loc pi);
+                        Format.eprintf "Unknown flag %S in %s\n" v (loc pi);
                         fragment
                     | (`Ifnot v | `If v) as i ->
                         if StringMap.mem v fragment.conditions
@@ -534,7 +534,9 @@ let load_fragment ~target_env ~filename (f : Fragment.t) =
               Option.value ~default:Target_env.Isomorphic fragment_target
             in
             let exists =
-              try `Exists (String.Hashtbl.find provided name) with Not_found -> `New
+              match String.Hashtbl.find_opt provided name with
+              | Some v -> `Exists v
+              | None -> `New
             in
             let is_updating =
               match

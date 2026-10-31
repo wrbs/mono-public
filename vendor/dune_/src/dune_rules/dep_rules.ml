@@ -20,7 +20,7 @@ let ooi_deps
       (sourced_module : Modules.Sourced_module.t)
   =
   let m = Modules.Sourced_module.to_module sourced_module in
-  let* read =
+  let* write, read =
     let unit =
       let cm_kind =
         match ml_kind with
@@ -36,10 +36,7 @@ let ooi_deps
       let ctx = Super_context.context sctx in
       Context.ocaml ctx
     in
-    Ocamlobjinfo.rules ocaml ~sandbox ~dir ~units:[ unit ]
-    |> Action_builder.map ~f:(function
-      | [ x ] -> x
-      | [] | _ :: _ -> assert false)
+    Ocamlobjinfo.rules ocaml ~sandbox ~dir ~unit
   in
   let add_rule = Super_context.add_rule sctx ~dir in
   let read =
@@ -53,7 +50,8 @@ let ooi_deps
          then None
          else Module_name.Unique.Map.find vlib_obj_map dep))
   in
-  let+ () =
+  let+ () = add_rule write
+  and+ () =
     add_rule
       (let target =
          Obj_dir.Module.dep obj_dir (Transitive (m, ml_kind)) |> Option.value_exn
@@ -129,28 +127,25 @@ let deps_of_vlib_module ~obj_dir ~vimpl ~dir ~sctx ~ml_kind sourced_module =
     Ocamldep.read_deps_of ~obj_dir:vlib_obj_dir ~modules ~ml_kind m
 ;;
 
-(** Tests whether a set of modules is a singleton *)
-let has_single_file modules = Option.is_some @@ Modules.With_vlib.as_singleton modules
-
 let rec deps_of
           ~obj_dir
           ~modules
           ~sandbox
-          ~impl
+          ~vimpl
           ~dir
           ~sctx
           ~ml_kind
           (m : Modules.Sourced_module.t)
   =
-  let is_alias_or_root =
+  let is_alias =
     match m with
     | Impl_of_virtual_module _ -> false
     | Imported_from_vlib m | Normal m ->
       (match Module.kind m with
-       | Root | Alias _ -> true
+       | Alias _ -> true
        | _ -> false)
   in
-  if is_alias_or_root || has_single_file modules
+  if is_alias
   then Memo.return (Action_builder.return [])
   else (
     let skip_if_source_absent f sourced_module =
@@ -161,14 +156,14 @@ let rec deps_of
     in
     match m with
     | Imported_from_vlib _ ->
-      let vimpl = Virtual_rules.vimpl_exn impl in
+      let vimpl = Option.value_exn vimpl in
       skip_if_source_absent (deps_of_vlib_module ~obj_dir ~vimpl ~dir ~sctx ~ml_kind) m
     | Normal m ->
       skip_if_source_absent
         (deps_of_module ~modules ~sandbox ~sctx ~dir ~obj_dir ~ml_kind)
         m
     | Impl_of_virtual_module impl_or_vlib ->
-      deps_of ~obj_dir ~modules ~sandbox ~impl ~dir ~sctx ~ml_kind
+      deps_of ~obj_dir ~modules ~sandbox ~vimpl ~dir ~sctx ~ml_kind
       @@
       let m = Ml_kind.Dict.get impl_or_vlib ml_kind in
       (match ml_kind with
@@ -176,10 +171,12 @@ let rec deps_of
        | Impl -> Normal m))
 ;;
 
-let read_deps_of_module ~modules ~obj_dir dep =
-  let (Obj_dir.Module.Dep.Immediate (unit, _) | Transitive (unit, _)) = dep in
+(** Tests whether a set of modules is a singleton *)
+let has_single_file modules = Option.is_some @@ Modules.With_vlib.as_singleton modules
+
+let immediate_deps_of unit modules ~obj_dir ~ml_kind =
   match Module.kind unit with
-  | Root | Alias _ -> Action_builder.return []
+  | Alias _ -> Action_builder.return []
   | Wrapped_compat ->
     let interface_module =
       match Modules.With_vlib.lib_interface modules with
@@ -192,26 +189,7 @@ let read_deps_of_module ~modules ~obj_dir dep =
   | _ ->
     if has_single_file modules
     then Action_builder.return []
-    else (
-      match dep with
-      | Immediate (unit, ml_kind) ->
-        Ocamldep.read_immediate_deps_of ~obj_dir ~modules ~ml_kind unit
-      | Transitive (unit, ml_kind) ->
-        let open Action_builder.O in
-        let+ deps = Ocamldep.read_deps_of ~obj_dir ~modules ~ml_kind unit in
-        (match Modules.With_vlib.alias_for modules unit with
-         | [] -> deps
-         | aliases -> aliases @ deps))
-;;
-
-let read_immediate_deps_of ~obj_dir ~modules ~ml_kind m =
-  read_deps_of_module ~modules ~obj_dir (Immediate (m, ml_kind))
-;;
-
-let read_deps_of ~obj_dir ~modules ~ml_kind m =
-  if Module.has m ~ml_kind
-  then read_deps_of_module ~modules ~obj_dir (Transitive (m, ml_kind))
-  else Action_builder.return []
+    else Ocamldep.read_immediate_deps_of ~obj_dir ~modules ~ml_kind unit
 ;;
 
 let dict_of_func_concurrently f =
@@ -220,12 +198,12 @@ let dict_of_func_concurrently f =
   Ml_kind.Dict.make ~impl ~intf
 ;;
 
-let for_module ~obj_dir ~modules ~sandbox ~impl ~dir ~sctx module_ =
+let for_module ~obj_dir ~modules ~sandbox ~vimpl ~dir ~sctx module_ =
   dict_of_func_concurrently
-    (deps_of ~obj_dir ~modules ~sandbox ~impl ~dir ~sctx (Normal module_))
+    (deps_of ~obj_dir ~modules ~sandbox ~vimpl ~dir ~sctx (Normal module_))
 ;;
 
-let rules ~obj_dir ~modules ~sandbox ~impl ~sctx ~dir =
+let rules ~obj_dir ~modules ~sandbox ~vimpl ~sctx ~dir =
   match Modules.With_vlib.as_singleton modules with
   | Some m -> Memo.return (Dep_graph.Ml_kind.dummy m)
   | None ->
@@ -233,7 +211,7 @@ let rules ~obj_dir ~modules ~sandbox ~impl ~sctx ~dir =
       let+ per_module =
         Modules.With_vlib.obj_map modules
         |> Parallel_map.parallel_map ~f:(fun _obj_name m ->
-          deps_of ~obj_dir ~modules ~sandbox ~impl ~sctx ~dir ~ml_kind m)
+          deps_of ~obj_dir ~modules ~sandbox ~vimpl ~sctx ~dir ~ml_kind m)
       in
       Dep_graph.make ~dir ~per_module)
 ;;

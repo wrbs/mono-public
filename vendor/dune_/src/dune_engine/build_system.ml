@@ -307,15 +307,19 @@ end = struct
 
   let report_evaluated_rule_exn (t : Build_config.t) =
     Option.iter t.stats ~f:(fun stats ->
+      let module Event = Chrome_trace.Event in
       let event =
         let rule_total =
           match Fiber.Svar.read State.t with
           | Building progress -> progress.number_of_rules_discovered
           | _ -> assert false
         in
-        Dune_trace.Event.evalauted_rules ~rule_total
+        let args = [ "value", `Int rule_total ] in
+        let ts = Event.Timestamp.of_float_seconds (Unix.gettimeofday ()) in
+        let common = Event.common_fields ~name:"evaluated_rules" ~ts () in
+        Event.counter common args
       in
-      Dune_trace.emit stats event)
+      Dune_stats.emit stats event)
   ;;
 
   module Exec_result = struct
@@ -481,8 +485,8 @@ end = struct
     let head_target = Targets.Validated.head targets in
     let* execution_parameters =
       match Dpath.Target_dir.of_target targets.root with
-      | Regular (With_context (context, _)) | Anonymous_action (With_context (context, _))
-        -> (Build_config.get ()).execution_parameters context ~dir:targets.root
+      | Regular (With_context (_, _)) | Anonymous_action (With_context (_, _)) ->
+        (Build_config.get ()).execution_parameters ~dir:targets.root
       | Anonymous_action Root | Regular Root | Invalid _ ->
         Code_error.raise
           "invalid dir for rule execution"

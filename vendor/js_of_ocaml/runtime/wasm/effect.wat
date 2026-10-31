@@ -81,7 +81,7 @@
    (global $raise_unhandled (ref $closure)
       (struct.new $closure (ref.func $raise_unhandled)))
 
-   (global $effect_allowed (mut i32) (i32.const 1))
+   (global $effect_allowed (export "effect_allowed") (mut i32) (i32.const 1))
 
    (func $caml_continuation_use_noexc (export "caml_continuation_use_noexc")
       (param (ref eq)) (result (ref eq))
@@ -116,6 +116,28 @@
             (struct.set $generic_fiber $effect (local.get $tail)
                (local.get $heff))))
       (local.get $stack))
+
+   (func (export "caml_continuation_update_handler_noexc")
+      (param $cont (ref eq)) (param $hval (ref eq)) (param $hexn (ref eq))
+      (param $heff (ref eq)) (result (ref eq))
+      (local $tail (ref $generic_fiber))
+      ;; Peek at the stack without consuming the continuation. If it is null
+      ;; the continuation has already been taken, so we leave it untouched.
+      (if (ref.test (ref $generic_fiber)
+             (array.get $block
+                (ref.cast (ref $block) (local.get $cont)) (i32.const 1)))
+         (then
+            (local.set $tail
+               (ref.cast (ref $generic_fiber)
+                  (array.get $block
+                     (ref.cast (ref $block) (local.get $cont))
+                        (i32.const 2))))
+            (struct.set $generic_fiber $value (local.get $tail)
+               (local.get $hval))
+            (struct.set $generic_fiber $exn (local.get $tail) (local.get $hexn))
+            (struct.set $generic_fiber $effect (local.get $tail)
+               (local.get $heff))))
+      (local.get $cont))
 
    (func (export "caml_get_continuation_callstack")
       (param (ref eq) (ref eq)) (result (ref eq))
@@ -433,6 +455,39 @@
          (local.get $hv) (local.get $hx) (local.get $hf)
          (global.get $initial_cont)
          (ref.null $fiber)))
+
+   (func (export "%with_stack")
+      (param $hv (ref eq)) (param $hx (ref eq)) (param $hf (ref eq))
+      (param $f (ref eq)) (param $v (ref eq))
+      (result (ref eq))
+      (local $stack (ref $fiber))
+      (local.set $stack
+         (struct.new $fiber
+            (local.get $hv) (local.get $hx) (local.get $hf)
+            (global.get $initial_cont)
+            (ref.null $fiber)))
+      (return_call $capture_continuation
+         (ref.func $do_resume)
+         (struct.new $resume
+            (local.get $stack) (local.get $stack)
+            (struct.new $pair (local.get $f) (local.get $v)))))
+
+   (func (export "%with_stack_bind")
+      (param $hv (ref eq)) (param $hx (ref eq)) (param $hf (ref eq))
+      (param $dyn (ref eq)) (param $bind (ref eq))
+      (param $f (ref eq)) (param $v (ref eq))
+      (result (ref eq))
+      (local $stack (ref $fiber))
+      (local.set $stack
+         (struct.new $fiber
+            (local.get $hv) (local.get $hx) (local.get $hf)
+            (global.get $initial_cont)
+            (ref.null $fiber)))
+      (return_call $capture_continuation
+         (ref.func $do_resume)
+         (struct.new $resume
+            (local.get $stack) (local.get $stack)
+            (struct.new $pair (local.get $f) (local.get $v)))))
 ))
 
 (@if (= effects "cps")

@@ -1,6 +1,7 @@
 module Dune_config = struct
   open Stdune
   open Dune_lang.Decoder
+  module Spawn = Dune_spawn.Spawn
   module Display = Display
   module Scheduler = Dune_engine.Scheduler
   module Sandbox_mode = Dune_engine.Sandbox_mode
@@ -8,6 +9,7 @@ module Dune_config = struct
   module Stanza = Dune_lang.Stanza
   module String_with_vars = Dune_lang.String_with_vars
   module Pform = Dune_lang.Pform
+  module Log = Dune_util.Log
   module Config = Dune_config.Config
 
   (* the configuration file use the same version numbers as dune-project files for
@@ -24,9 +26,9 @@ module Dune_config = struct
 
     let equal t { authors; maintainers; maintenance_intent; license } =
       Option.equal (List.equal String.equal) t.authors authors
-      && Option.equal (List.equal String.equal) t.maintainers maintainers
-      && Option.equal (List.equal String.equal) t.maintenance_intent maintenance_intent
-      && Option.equal (List.equal String.equal) t.license license
+      && Option.equal (List.equal String.equal) t.authors maintainers
+      && Option.equal (List.equal String.equal) t.authors maintenance_intent
+      && Option.equal (List.equal String.equal) t.authors license
     ;;
 
     let decode =
@@ -51,29 +53,11 @@ module Dune_config = struct
   end
 
   module Pkg_enabled = struct
-    type t =
-      | Set of Loc.t * Dune_config.Config.Toggle.t
-      | Unset
+    type t = bool
 
-    let decode =
-      let open Dune_lang.Decoder in
-      let+ loc, value = located (enum [ "enabled", `Enabled; "disabled", `Disabled ]) in
-      Set (loc, value)
-    ;;
-
-    let equal x y =
-      match x, y with
-      | Set (x_loc, x_toggle), Set (y_loc, y_toggle) ->
-        Loc.equal x_loc y_loc && Dune_config.Config.Toggle.equal x_toggle y_toggle
-      | Set _, _ | _, Set _ -> false
-      | Unset, Unset -> true
-    ;;
-
-    let to_dyn = function
-      | Set (loc, toggle) ->
-        Dyn.variant "Set" [ Loc.to_dyn loc; Config.Toggle.to_dyn toggle ]
-      | Unset -> Dyn.variant "Unset" []
-    ;;
+    let decode = enum' [ "enabled", return true; "disabled", return false ]
+    let equal = Bool.equal
+    let to_dyn = Dyn.bool
   end
 
   module Terminal_persistence = struct
@@ -497,7 +481,7 @@ module Dune_config = struct
         ; maintenance_intent = None
         ; license = Some [ "LICENSE" ]
         }
-    ; pkg_enabled = Unset
+    ; pkg_enabled = false
     ; experimental = []
     }
   ;;
@@ -601,9 +585,8 @@ module Dune_config = struct
   let decode_fields_of_workspace_file = decode_generic ~min_dune_version:(3, 0)
 
   let user_config_file =
-    lazy
-      (let config_dir = Xdg.config_dir (Lazy.force Dune_util.xdg) in
-       Path.relative (Path.of_filename_relative_to_initial_cwd config_dir) "dune/config")
+    let config_dir = Xdg.config_dir (Lazy.force Dune_util.xdg) in
+    Path.relative (Path.of_filename_relative_to_initial_cwd config_dir) "dune/config"
   ;;
 
   include Dune_lang.Versioned_file.Make (struct
@@ -620,7 +603,6 @@ module Dune_config = struct
   ;;
 
   let load_user_config_file () =
-    let user_config_file = Lazy.force user_config_file in
     if Path.exists user_config_file
     then load_config_file user_config_file
     else Partial.empty
@@ -652,7 +634,6 @@ module Dune_config = struct
       | Preserve -> ()
       | Clear_on_rebuild -> Console.reset ()
       | Clear_on_rebuild_and_flush_history -> Console.reset_flush_history ());
-    Stdune.Io.set_copy_impl Config.(get copy_file);
     Log.verbose
     := match t.display with
        | Simple { verbosity = Verbose; _ } -> true

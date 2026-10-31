@@ -22,6 +22,7 @@
     - ocaml.deprecated_mutable
     - ocaml.explicit_arity
     - ocaml.flambda_o3
+    - ocaml.flambda_o4
     - ocaml.flambda_oclassic
     - ocaml.immediate
     - ocaml.immediate64
@@ -197,6 +198,8 @@ val explicit_arity: Parsetree.attributes -> bool
 
 val has_unboxed: Parsetree.attributes -> bool
 val has_boxed: Parsetree.attributes -> bool
+val has_flatten_floats: Parsetree.attributes -> bool
+val has_represent_as_float_array: Parsetree.attributes -> bool
 
 val has_unsafe_allow_any_mode_crossing : Parsetree.attributes -> bool
 
@@ -214,7 +217,9 @@ val curry_attr : Location.t -> Parsetree.attribute
 val has_local_opt: Parsetree.attributes -> bool
 val has_layout_poly: Parsetree.attributes -> bool
 val has_curry: Parsetree.attributes -> bool
+val has_or_null : Parsetree.attributes -> bool
 val has_or_null_reexport : Parsetree.attributes -> bool
+val has_magic_staged_modes : Parsetree.attributes -> bool
 
 val tailcall : Parsetree.attributes ->
     ([`Tail|`Nontail|`Tail_if_possible] option, [`Conflict]) result
@@ -240,6 +245,17 @@ val jkind : Parsetree.attributes -> jkind_attribute Location.loc option
     There should be at most one "error_message" attribute, additional ones are sliently
     ignored. **)
 val error_message_attr : Parsetree.attributes -> string option
+
+(** If the argument is an "implicit_kind" attribute, marks it as used,
+    and returns a list of variable name and jkind annotation pairs.
+    Returns an empty list otherwise.
+
+    Expected syntax:
+    [@@@implicit_kind: ('var : jkind)]
+    [@@@implicit_kind: ('var1 : jkind1) * ('var2 : jkind2) ...]
+*)
+val get_implicit_jkind_attr :
+  Parsetree.attribute -> (string * Parsetree.jkind_annotation) list
 
 (** [get_int_payload] is a helper for working with attribute payloads.
     Given a payload that consist of a structure containing exactly
@@ -345,11 +361,6 @@ type tracing_probe =
 val get_tracing_probe_payload :
   Parsetree.payload -> (tracing_probe, unit) result
 
-(** Gets the payload of a [eval] extension node which evaluates quotes,
-    for example: [%eval: int] *)
-val get_eval_payload :
-  Parsetree.payload -> (Parsetree.core_type, unit) result
-
 val has_atomic: Parsetree.attributes -> bool
 
 (* Merlin specific *)
@@ -357,4 +368,10 @@ val has_atomic: Parsetree.attributes -> bool
 (** The name of the attribute used to identify punned let expressions. When a let
     expression is punned, an attribute with this name is added to the pattern and
     expression nodes by the parser. *)
-val merlin_let_punned : string
+val merlin_punned_let : string
+
+(** The name of the attribute used to identify punned record patterns. When a record
+    pattern is punned, an attribute with this name is added to the pattern node by the
+    parser. (The label node doesn't have a place to insert an attribute, so it can't be
+    given one.) *)
+val merlin_punned_record_pattern : string

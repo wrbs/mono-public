@@ -28,38 +28,36 @@ opam-var-unsupported.t
   > solve testpkg
   Solution for dune.lock:
   - testpkg.0.0.1
-  $ cat ${default_lock_dir}/testpkg.0.0.1.pkg
+  $ cat dune.lock/testpkg.pkg
   (version 0.0.1)
   
   (build
-   (all_platforms
-    ((action
-      (progn
-       (run echo %{switch})
-       (run echo %{build})
-       (run echo %{prefix})
-       (run echo %{lib})
-       (run echo %{libexec})
-       (run echo %{bin})
-       (run echo %{sbin})
-       (run echo %{share})
-       (run echo %{doc})
-       (run echo %{etc})
-       (run echo %{man})
-       (run echo %{toplevel})
-       (run echo %{stublibs}))))))
+   (progn
+    (run echo %{switch})
+    (run echo %{build})
+    (run echo %{prefix})
+    (run echo %{lib})
+    (run echo %{libexec})
+    (run echo %{bin})
+    (run echo %{sbin})
+    (run echo %{share})
+    (run echo %{doc})
+    (run echo %{etc})
+    (run echo %{man})
+    (run echo %{toplevel})
+    (run echo %{stublibs})))
 
   $ build_pkg testpkg 2>&1 | sed -E 's#.*.sandbox/[^/]+#.sandbox/$SANDBOX#g'
   dune
-  .sandbox/$SANDBOX/_private/default/.pkg/testpkg.0.0.1-d349dc24837a78e7f391d386e4fcec8d/source
-  .sandbox/$SANDBOX/_private/default/.pkg/testpkg.0.0.1-d349dc24837a78e7f391d386e4fcec8d/target
-  .sandbox/$SANDBOX/_private/default/.pkg/testpkg.0.0.1-d349dc24837a78e7f391d386e4fcec8d/target/lib
-  .sandbox/$SANDBOX/_private/default/.pkg/testpkg.0.0.1-d349dc24837a78e7f391d386e4fcec8d/target/lib
-  .sandbox/$SANDBOX/_private/default/.pkg/testpkg.0.0.1-d349dc24837a78e7f391d386e4fcec8d/target/bin
-  .sandbox/$SANDBOX/_private/default/.pkg/testpkg.0.0.1-d349dc24837a78e7f391d386e4fcec8d/target/sbin
-  .sandbox/$SANDBOX/_private/default/.pkg/testpkg.0.0.1-d349dc24837a78e7f391d386e4fcec8d/target/share
-  .sandbox/$SANDBOX/_private/default/.pkg/testpkg.0.0.1-d349dc24837a78e7f391d386e4fcec8d/target/doc
-  .sandbox/$SANDBOX/_private/default/.pkg/testpkg.0.0.1-d349dc24837a78e7f391d386e4fcec8d/target/etc
-  .sandbox/$SANDBOX/_private/default/.pkg/testpkg.0.0.1-d349dc24837a78e7f391d386e4fcec8d/target/man
-  .sandbox/$SANDBOX/_private/default/.pkg/testpkg.0.0.1-d349dc24837a78e7f391d386e4fcec8d/target/lib/toplevel
-  .sandbox/$SANDBOX/_private/default/.pkg/testpkg.0.0.1-d349dc24837a78e7f391d386e4fcec8d/target/lib/stublibs
+  .sandbox/$SANDBOX/_private/default/.pkg/testpkg/source
+  .sandbox/$SANDBOX/_private/default/.pkg/testpkg/target
+  .sandbox/$SANDBOX/_private/default/.pkg/testpkg/target/lib
+  .sandbox/$SANDBOX/_private/default/.pkg/testpkg/target/lib
+  .sandbox/$SANDBOX/_private/default/.pkg/testpkg/target/bin
+  .sandbox/$SANDBOX/_private/default/.pkg/testpkg/target/sbin
+  .sandbox/$SANDBOX/_private/default/.pkg/testpkg/target/share
+  .sandbox/$SANDBOX/_private/default/.pkg/testpkg/target/doc
+  .sandbox/$SANDBOX/_private/default/.pkg/testpkg/target/etc
+  .sandbox/$SANDBOX/_private/default/.pkg/testpkg/target/man
+  .sandbox/$SANDBOX/_private/default/.pkg/testpkg/target/lib/toplevel
+  .sandbox/$SANDBOX/_private/default/.pkg/testpkg/target/lib/stublibs

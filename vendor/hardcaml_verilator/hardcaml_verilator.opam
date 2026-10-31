@@ -6,6 +6,7 @@ bug-reports: "https://github.com/janestreet/hardcaml_verilator/issues"
 dev-repo: "git+https://github.com/janestreet/hardcaml_verilator.git"
 doc: "https://ocaml.janestreet.com/ocaml-core/latest/doc/hardcaml_verilator/index.html"
 license: "MIT"
+x-maintenance-intent: ["(latest)"]
 build: [
   ["dune" "build" "-p" name "-j" jobs]
 ]
@@ -16,15 +17,19 @@ depends: [
   "core_unix"
   "dedent"
   "hardcaml"
+  "hardcaml_tools_config"
   "jane_rope"
   "ppx_hardcaml"
   "ppx_jane"
   "stdio"
-  "ctypes"         {= "0.23.0+ox"}
-  "ctypes-foreign" {= "0.23.0+ox"}
-  "dune"           {>= "3.17.0"}
+  "ctypes"                {>= "0.18.0"}
+  "ctypes-foreign"        {>= "0.18.0"}
+  "dune"                  {>= "3.17.0"}
 ]
-available: arch != "arm32" & arch != "x86_32"
+available: arch != "x86_32"
+conflicts: [
+  "oxcaml-compiler" {< "5.2.0minus39"}
+]
 synopsis: "Hardcaml Verilator Simulation Backend"
 description: "
 Very fast verilator-based simulations of Hardcaml circuits.

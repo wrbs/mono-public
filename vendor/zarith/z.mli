@@ -70,22 +70,22 @@ val minus_one: t
 external of_int: int -> t = "%identity"
 (** Converts from a base integer. *)
 
-external of_int32: local_ int32 -> t = "ml_z_of_int32"
+external of_int32: int32 @ local -> t = "ml_z_of_int32"
 (** Converts from a 32-bit integer. *)
 
-external of_int64: local_ int64 -> t = "ml_z_of_int64"
+external of_int64: int64 @ local -> t = "ml_z_of_int64"
 (** Converts from a 64-bit integer. *)
 
-external of_nativeint: local_ nativeint -> t = "ml_z_of_nativeint"
+external of_nativeint: nativeint @ local -> t = "ml_z_of_nativeint"
 (** Converts from a native integer. *)
 
-external of_float: local_ float -> t = "ml_z_of_float"
+external of_float: float @ local -> t = "ml_z_of_float"
 (** Converts from a floating-point value.
     The value is truncated (rounded towards zero).
     Raises [Overflow] on infinity and NaN arguments.
  *)
 
-val of_string: local_ string -> t
+val of_string: string @ local -> t
 (** Converts a string to an integer.
     An optional [-] prefix indicates a negative number, while a [+]
     prefix is ignored.
@@ -98,19 +98,19 @@ val of_string: local_ string -> t
     syntactically correct representation of an integer.
  *)
 
-val of_substring : local_ string -> pos:int -> len:int -> t
+val of_substring : string @ local -> pos:int -> len:int -> t
 (** [of_substring s ~pos ~len] is the same as [of_string (String.sub s
     pos len)]
  *)
 
-val of_string_base: int -> local_ string -> t
+val of_string_base: int -> string @ local -> t
 (** Parses a number represented as a string in the specified base,
     with optional [-] or [+] prefix.
     The base must be between 2 and 16.
  *)
 
 external of_substring_base
-  : int -> local_ string -> pos:int -> len:int -> t
+  : int -> string @ local -> pos:int -> len:int -> t
   = "ml_z_of_substring_base"
 (** [of_substring_base base s ~pos ~len] is the same as [of_string_base
     base (String.sub s pos len)]
@@ -613,7 +613,7 @@ external to_bits: t -> string = "ml_z_to_bits"
     The sign is not stored in the string.
  *)
 
-external of_bits: string -> t = "ml_z_of_bits"
+external of_bits: string @ local -> t = "ml_z_of_bits"
 (** Constructs a number from a binary string representation.
     The string is interpreted as a sequence of bytes in little endian order,
     and the result is always positive.

@@ -3,7 +3,7 @@
 (*  Copyright 2011 Jun Furuse                                             *)
 (*  Copyright 2013 OCamlPro                                               *)
 (*                                                                        *)
-(*  All rights reserved.This file is distributed under the terms of the   *)
+(*  All rights reserved. This file is distributed under the terms of the   *)
 (*  GNU Lesser General Public License version 2.1 with linking            *)
 (*  exception.                                                            *)
 (*                                                                        *)
@@ -32,6 +32,8 @@ type t = {
   indent_printer: out_channel -> unit IndentPrinter.output_kind;
   syntax_exts: string list;
   dynlink : [`Mod of string | `Pkg of string] list;
+  strict : bool;
+  check : bool;
 }
 
 let options =
@@ -99,8 +101,7 @@ let options =
   in
   let output =
     let doc = "Output to $(docv). The default is to print to stdout." in
-    Arg.(value & opt (some string) None
-         & info ["o";"output"] ~docv:"FILE" ~doc)
+    Arg.(value & opt (some filepath) None & info ["o";"output"] ~docv:"FILE" ~doc)
   in
   let print_config =
     let doc = "Print the current parameters to stdout and exit. \
@@ -129,19 +130,35 @@ let options =
     Term.(const List.flatten $ arg)
   in
   let files =
-    let arg = Arg.(value & pos_all file [] & info [] ~docv:"FILE") in
+    let arg = Arg.(value & pos_all non_dir_file [] & info [] ~docv:"FILE") in
     let f = function
       | [] -> [InChannel stdin]
       | l -> List.map (function "-" -> InChannel stdin | s -> File s) l
     in
     Term.(const f $ arg)
   in
+  let strict =
+    let doc = "Make warnings fatal and parsing stricter." in
+    Arg.(value & flag & info ["strict"] ~doc)
+  in
+  let check =
+    let doc =
+      "Checks whether the input is correctly indented instead of actually \
+       indenting it. Exit with 0 on success or 123 otherwise. The name of \
+       misindented files is printed on stderr. This option is incompatible \
+       with $(b,-i), $(b,-o)"
+    in
+    Arg.(value & flag & info ["check"] ~doc)
+  in
   let build_t
       indent_config debug inplace indent_empty lines
       numeric file_out print_config syntax_exts load_pkgs load_mods files
+      strict check
     =
     if inplace && (file_out <> None || numeric)
     then `Error (false, "incompatible options used with --inplace")
+    else if check && (inplace || file_out <> None || numeric)
+    then `Error (false, "incompatible options used with --check")
     else if print_config then
       (let conf, synt,dlink = IndentConfig.local_default () in
        let conf =
@@ -182,7 +199,9 @@ let options =
                      (fun s () -> output_string oc s)));
           syntax_exts;
           dynlink = (List.map (fun s -> `Mod s) load_mods) @
-                    (List.map (fun s -> `Pkg s) load_pkgs)
+                    (List.map (fun s -> `Pkg s) load_pkgs);
+          strict;
+          check;
         },
         files
       )
@@ -191,7 +210,7 @@ let options =
     Term.(const build_t
           $ config $ debug $ inplace $ indent_empty $ lines $ numeric
           $ output $ print_config $ syntax
-          $ load_pkgs $ load_mods $ files)
+          $ load_pkgs $ load_mods $ files $ strict $ check)
   in
   Term.ret t
 

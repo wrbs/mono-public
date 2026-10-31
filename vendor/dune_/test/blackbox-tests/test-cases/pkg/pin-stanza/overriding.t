@@ -35,7 +35,7 @@ We can override the sources set by packages we're fetching:
   > (package (name bar))
   > EOF
 
-  $ dune_pkg_lock_normalized
+  $ dune pkg lock
   Solution for dune.lock:
   - bar.dev
   - foo.dev

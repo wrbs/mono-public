@@ -84,6 +84,8 @@ module Typ = struct
   (* Jane Street extension *)
   let of_kind ?loc ?attrs a = mk ?loc ?attrs (Ptyp_of_kind a)
   let constr_unboxed ?loc ?attrs a b = mk ?loc ?attrs (Ptyp_constr_unboxed (a, b))
+  let quote ?loc ?attrs a = mk ?loc ?attrs (Ptyp_quote a)
+  let splice ?loc ?attrs a = mk ?loc ?attrs (Ptyp_splice a)
   (* End Jane Street extension *)
 end
 
@@ -102,6 +104,8 @@ module Pat = struct
   let interval ?loc ?attrs a b = mk ?loc ?attrs (Ppat_interval (a, b))
   let tuple ?loc ?attrs a b = mk ?loc ?attrs (Ppat_tuple (a, b))
   let unboxed_tuple ?loc ?attrs a b = mk ?loc ?attrs (Ppat_unboxed_tuple (a, b))
+  let unboxed_unit ?loc ?attrs () = mk ?loc ?attrs Ppat_unboxed_unit
+  let unboxed_bool ?loc ?attrs b = mk ?loc ?attrs (Ppat_unboxed_bool b)
   let construct ?loc ?attrs a b = mk ?loc ?attrs (Ppat_construct (a, b))
   let variant ?loc ?attrs a b = mk ?loc ?attrs (Ppat_variant (a, b))
   let record ?loc ?attrs a b = mk ?loc ?attrs (Ppat_record (a, b))
@@ -138,6 +142,8 @@ module Exp = struct
   let try_ ?loc ?attrs a b = mk ?loc ?attrs (Pexp_try (a, b))
   let tuple ?loc ?attrs a = mk ?loc ?attrs (Pexp_tuple a)
   let unboxed_tuple ?loc ?attrs a = mk ?loc ?attrs (Pexp_unboxed_tuple a)
+  let unboxed_unit ?loc ?attrs () = mk ?loc ?attrs Pexp_unboxed_unit
+  let unboxed_bool ?loc ?attrs b = mk ?loc ?attrs (Pexp_unboxed_bool b)
   let construct ?loc ?attrs a b = mk ?loc ?attrs (Pexp_construct (a, b))
   let variant ?loc ?attrs a b = mk ?loc ?attrs (Pexp_variant (a, b))
   let record ?loc ?attrs a b = mk ?loc ?attrs (Pexp_record (a, b))
@@ -147,6 +153,7 @@ module Exp = struct
   let unboxed_field ?loc ?attrs a b = mk ?loc ?attrs (Pexp_unboxed_field (a, b))
   let setfield ?loc ?attrs a b c = mk ?loc ?attrs (Pexp_setfield (a, b, c))
   let array ?loc ?attrs a b = mk ?loc ?attrs (Pexp_array (a, b))
+  let idx ?loc ?attrs a b = mk ?loc ?attrs (Pexp_idx (a, b))
   let list ?loc ?attrs a = mk ?loc ?attrs (Pexp_list a)
   let ifthenelse ?loc ?attrs a b = mk ?loc ?attrs (Pexp_ifthenelse (a, b))
   let sequence ?loc ?attrs a b = mk ?loc ?attrs (Pexp_sequence (a, b))
@@ -175,6 +182,7 @@ module Exp = struct
   let extension ?loc ?attrs a = mk ?loc ?attrs (Pexp_extension a)
   let unreachable ?loc ?attrs () = mk ?loc ?attrs Pexp_unreachable
   let stack ?loc ?attrs e = mk ?loc ?attrs (Pexp_stack e)
+  let borrow ?loc ?attrs e = mk ?loc ?attrs (Pexp_borrow e)
   let hole  ?loc ?attrs () = mk ?loc ?attrs Pexp_hole
   let beginend ?loc ?attrs a = mk ?loc ?attrs (Pexp_beginend a)
   let parens ?loc ?attrs a = mk ?loc ?attrs (Pexp_parens a)
@@ -183,6 +191,11 @@ module Exp = struct
   let infix ?loc ?attrs a b c = mk ?loc ?attrs (Pexp_infix (a, b, c))
   let list_comp ?loc ?attrs a = mk ?loc ?attrs (Pexp_list_comprehension a)
   let array_comp ?loc ?attrs a b = mk ?loc ?attrs (Pexp_array_comprehension (a, b))
+
+  (* Jane Street extension *)
+  let quote ?loc ?attrs a = mk ?loc ?attrs (Pexp_quote a)
+  let splice ?loc ?attrs a = mk ?loc ?attrs (Pexp_splice a)
+  (* End Jane Street extension *)
 
   let case lhs ?guard rhs =
     {

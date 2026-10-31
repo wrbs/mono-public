@@ -71,6 +71,9 @@ type pattern_variable =
     pv_as_var: bool;
     pv_attributes: Typedtree.attributes;
     pv_sort: Jkind.Sort.t;
+    pv_lpoly: Types.Lpoly.t;
+    (** Not yet determined; gets determined during generalization in
+        [type_let]. *)
   }
 
 val mk_expected:
@@ -202,12 +205,16 @@ type unsupported_stack_allocation =
   | List_comprehension
   | Array_comprehension
 
+type mode_mismatch_kind = Parameter | Return
+
 type error =
   | Constructor_arity_mismatch of Longident.t * int * int
   | Constructor_labeled_arg
   | Partial_tuple_pattern_bad_type
   | Extra_tuple_label of string option * type_expr
   | Missing_tuple_label of string option * type_expr
+  | Repeated_tuple_exp_label of string
+  | Repeated_tuple_pat_label of string
   | Label_mismatch of record_form_packed * Longident.t * Errortrace.unification_error
   | Pattern_type_clash :
       Errortrace.unification_error * Parsetree.pattern_desc option
@@ -301,11 +308,13 @@ type error =
   | Illegal_letrec_pat
   | Illegal_letrec_expr
   | Illegal_mutable_pat
+  | Mixed_poly_nonpoly_bindings
   | Illegal_class_expr
   | Letop_type_clash of string * Errortrace.unification_error
   | Andop_type_clash of string * Errortrace.unification_error
   | Bindings_type_clash of Errortrace.unification_error
   | Unbound_existential of Ident.t list * type_expr
+  | Existential_jkind_mismatch of Ident.t * Jkind.Violation.t
   | Missing_type_constraint
   | Wrong_expected_kind of wrong_kind_sort * wrong_kind_context * type_expr
   | Wrong_expected_record_boxing of wrong_kind_context * record_form_packed * type_expr
@@ -313,16 +322,14 @@ type error =
   | Expr_record_type_has_wrong_boxing of record_form_packed * type_expr
   | Invalid_unboxed_access of
       { prev_el_type : type_expr; ua : Parsetree.unboxed_access }
-  | Block_access_record_unboxed
-  | Block_access_private_record
-  | Block_index_flattened_record of type_expr
+  | Block_access_bad_record of string
   | Block_index_modality_mismatch of
       { mut : bool; err : Mode.Modality.equate_error }
   | Block_index_atomic_unsupported
   | Submode_failed of Mode.Value.error * submode_reason
   | Curried_application_complete of
       arg_label * Mode.Alloc.error * [`Prefix|`Single_arg|`Entire_apply]
-  | Param_mode_mismatch of Mode.Alloc.equate_error
+  | Mode_mismatch of mode_mismatch_kind * Mode.Alloc.equate_error
   | Uncurried_function_escapes of Mode.Alloc.error
   | Function_returns_local
   | Tail_call_local_returning
@@ -343,7 +350,12 @@ type error =
       { some_args_ok : bool; ty_fun : type_expr; jkind : jkind_lr }
   | Overwrite_of_invalid_term
   | Unexpected_hole
-  | Eval_format
+  | Let_poly_not_yet_implemented
+  | Let_poly_not_syntactic_value
+  | Layout_poly_inst_not_yet_supported of invalid_layout_poly_inst_context
+
+and invalid_layout_poly_inst_context =
+  | Binding_op
 
 exception Error of Location.t * Env.t * error
 exception Error_forward of Location.error

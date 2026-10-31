@@ -15,8 +15,9 @@ Error from an escape lock
 The error is reported
   $ $MERLIN single errors -filename escape.ml < escape.ml | revert-newlines \
   >   | jq .value[].message -r
-  The value x is local but is expected to be global
-  because it is used in a class (at File "escape.ml", line 4, characters 16-46).
+  The value x is local
+  but is expected to be global
+    because it is used in a class (at file "escape.ml", line 4, characters 16-46).
 
 We can locate the value that was used incorrectly
   $ $MERLIN single locate -position 5:15 -filename escape.ml < escape.ml | jq .value.pos -c
@@ -37,10 +38,12 @@ Error from a share lock
 The error is reported and f still has mode once
   $ $MERLIN single errors -filename share.ml < share.ml | revert-newlines \
   >   | jq .value[].message -r
-  The value f is once but is expected to be many
-  because it is used in a loop (at File "share.ml", line 3, characters 2-87).
-  The value g is once but is expected to be many
-  because it is used in a loop (at File "share.ml", line 5, characters 4-42).
+  The value f is once
+  but is expected to be many
+    because it is used in a loop (at file "share.ml", line 3, characters 2-87).
+  The value g is once
+  but is expected to be many
+    because it is used in a loop (at file "share.ml", line 5, characters 4-42).
 
 We can locate the values that were used incorrectly
   $ $MERLIN single locate -position 4:12 -filename share.ml < share.ml | jq .value.pos -c
@@ -65,9 +68,10 @@ The error is reported
   $ $MERLIN single errors -filename closure1.ml < closure1.ml \
   >   | revert-newlines \
   >   | jq .value[].message -r
-  The value count is local but is expected to be global
-  because it is used inside the function at File "closure1.ml", line 8, characters 18-40
-  which is expected to be global.
+  The value count is local
+  but is expected to be global
+    because it is used inside the function at file "closure1.ml", line 8, characters 18-40
+    which is expected to be global.
 
 We can locate the value that was used incorrectly
   $ $MERLIN single locate -position 8:37 -filename closure1.ml < closure1.ml | jq .value.pos -c
@@ -93,14 +97,15 @@ The error is reported and foo still has mode nonportable
   >   | revert-newlines \
   >   | jq .value[].message -r
   The value foo is nonportable
-  because it contains a usage (of the value y at File "closure2.ml", line 3, characters 2-3)
-  which is expected to be uncontended.
+    because it contains a usage (of the value y at file "closure2.ml", line 3, characters 2-3)
+    which is expected to be uncontended.
   However, the value foo highlighted is expected to be portable
-  because it is used inside the function at File "closure2.ml", line 6, characters 19-87
-  which is expected to be portable.
-  The value bar is nonportable but is expected to be portable
-  because it is used inside the function at File "closure2.ml", line 8, characters 21-34
-  which is expected to be portable.
+    because it is used inside the function at file "closure2.ml", line 6, characters 19-87
+    which is expected to be portable.
+  The value bar is nonportable
+  but is expected to be portable
+    because it is used inside the function at file "closure2.ml", line 8, characters 21-34
+    which is expected to be portable.
 
 We can locate the values that were used incorrectly
   $ $MERLIN single locate -position 7:13 -filename closrue2.ml < closure2.ml | jq .value.pos -c
@@ -153,7 +158,7 @@ The error is reported
         "message": "x must have a type of layout value because it is captured by an object.
   The layout of 'a is bits32
     because of the definition of x at file \"unboxed.ml\", line 3, characters 10-14.
-  But the layout of 'a must overlap with value
+  But the layout of 'a must be a value layout
     because it's the type of a variable captured in an object."
       }
     ],

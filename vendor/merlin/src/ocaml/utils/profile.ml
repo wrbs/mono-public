@@ -17,7 +17,8 @@
 
 type file = string
 
-module String = Misc.String
+module Int = Misc.Stdlib.Int
+module String = Misc.Stdlib.String
 
 module Counters = struct
   type t = int String.Map.t
@@ -440,6 +441,5 @@ let options_doc =
     (String.concat " " column_names)
 
 let generate = "generate"
-let static_eval = "static_eval"
 let transl = "transl"
 let typing = "typing"

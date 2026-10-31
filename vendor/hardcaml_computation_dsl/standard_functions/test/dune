@@ -1,0 +1,8 @@
+(library
+ (name hardcaml_computation_dsl_standard_functions_test)
+ (public_name hardcaml_computation_dsl.standard_functions_test)
+ (libraries bignum.bigint bignum core expect_test_helpers_base hardcaml
+   hardcaml_computation_dsl_standard_functions hardcaml_fixed_point
+   hardcaml_step_testbench hardcaml_waveterm)
+ (preprocess
+  (pps ppx_hardcaml ppx_jane)))

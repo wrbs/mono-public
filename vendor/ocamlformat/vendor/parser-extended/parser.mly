@@ -402,7 +402,8 @@ let erase_toplevel_phrases phrases =
     List.map
       (function
         | Ptop_def str -> Ptop_def (erase_str_items str)
-        | Ptop_dir _ as phrase -> phrase)
+        | Ptop_dir _ as phrase -> phrase
+        | Ptop_lex lex -> Ptop_lex lex)
       phrases
 
 (*
@@ -421,6 +422,9 @@ let syntax_error () =
 let unclosed opening_name opening_loc closing_name closing_loc =
   raise(Syntaxerr.Error(Syntaxerr.Unclosed(make_loc opening_loc, opening_name,
                                            make_loc closing_loc, closing_name)))
+
+let unspliceable loc =
+  raise(Syntaxerr.Error(Syntaxerr.Unspliceable (make_loc loc)))
 
 (* Normal mutable arrays and immutable arrays are parsed identically, just with
    different delimiters.  The parsing is done by the [array_exprs] rule, and the
@@ -771,6 +775,16 @@ let package_type_of_module_type pmty =
   | _ ->
       err pmty.pmty_loc Neither_identifier_nor_with_type
 
+let mk_hashsyntax ~loc mode toggle =
+  Ptop_lex {
+      plex_desc =
+        Plex_syntax {
+             psyn_mode = mode;
+             psyn_toggle = toggle;
+        };
+      plex_loc = make_loc loc;
+    }
+
 let mk_directive_arg ~loc k =
   { pdira_desc = k;
     pdira_loc = make_loc loc;
@@ -879,6 +893,8 @@ let erase_call_pos_type ~arg_label ~arg_type ~loc =
 %token GREATERRBRACKET        ">]"
 %token HASHLPAREN             "#("
 %token HASHLBRACE             "#{"
+%token HASHFALSE              "#false"
+%token HASHTRUE               "#true"
 %token IF                     "if"
 %token IN                     "in"
 %token INCLUDE                "include"
@@ -951,6 +967,7 @@ let erase_call_pos_type ~arg_label ~arg_type ~loc =
 %token <string> HASHOP        "##" (* just an example *)
 %token SIG                    "sig"
 %token SLASH                  "/"
+%token BORROW                 "borrow_"
 %token STACK                  "stack_"
 %token STAR                   "*"
 %token <string * Location.t * string option>
@@ -984,6 +1001,10 @@ let erase_call_pos_type ~arg_label ~arg_type ~loc =
 %token <string * char option> HASH_FLOAT "#42.0" (* just an example *)
 %token <string * char option> HASH_INT "#42l" (* just an example *)
 %token                        HASH_SUFFIX "# "
+%token                        LESSLBRACKET "<["
+%token                        RBRACKETGREATER "]>"
+%token                        DOLLAR "$"
+%token <string * bool>        HASH_SYNTAX "#syntax foo on" (* just an example *)
 (* End Jane Street extension *)
 
 /* Precedences and associativities.
@@ -1051,8 +1072,9 @@ The precedences must be listed from low to high.
 /* Finally, the first tokens of simple_expr are above everything else. */
 %nonassoc BACKQUOTE BANG BEGIN CHAR FALSE FLOAT HASH_FLOAT INT HASH_INT OBJECT
           LBRACE LBRACELESS LBRACKET LBRACKETBAR LBRACKETCOLON LIDENT LPAREN
-          NEW PREFIXOP STRING TRUE UIDENT UNDERSCORE
+          NEW PREFIXOP STRING TRUE UIDENT UNDERSCORE LESSLBRACKET DOLLAR
           LBRACKETPERCENT QUOTED_STRING_EXPR HASHLBRACE HASHLPAREN
+          HASHFALSE HASHTRUE
 
 
 /* Entry points */
@@ -2754,6 +2776,9 @@ expr:
   | simple_expr nonempty_llist(labeled_simple_expr)
       { mkexp ~loc:$sloc (Pexp_apply($1, $2)) }
   | stack(simple_expr) %prec below_HASH { $1 }
+  | BORROW simple_expr %prec below_HASH
+      { if Erase_jane_syntax.should_erase () then $2
+        else mkexp ~loc:$sloc (Pexp_borrow $2) }
   | labeled_tuple %prec below_COMMA
       { mkexp ~loc:$sloc (Pexp_tuple $1) }
   | maybe_stack(
@@ -2770,6 +2795,25 @@ expr:
       { mkexp ~loc:$sloc (mkuplus ~oploc:$loc($1) $1 $2) }
 ;
 
+spliceable_expr:
+  | LESSLBRACKET seq_expr RBRACKETGREATER
+      { mkexp ~loc:$sloc (Pexp_quote ($2)) }
+  | LPAREN seq_expr RPAREN
+      { reloc_exp ~loc:$sloc $2 }
+  | LPAREN seq_expr error
+      { unclosed "(" $loc($1) ")" $loc($3) }
+  | LPAREN seq_expr type_constraint_with_modes RPAREN
+      { let (t, m) = $3 in
+        mkexp_type_constraint_with_modes
+          ~ghost:true ~loc:$sloc ~modes:m $2 ~ty:t }
+  | LPAREN seq_expr COLON at_mode_expr RPAREN
+      { ghexp_constraint ~loc:$sloc ~modes:$4 $2 None }
+  | mkrhs(val_longident)
+      { mkexp ~loc:$sloc (Pexp_ident ($1)) }
+  | error
+      { unspliceable $sloc }
+;
+
 simple_expr:
   | LPAREN e = seq_expr RPAREN
       { match e.pexp_desc with
@@ -2781,6 +2825,8 @@ simple_expr:
   | LPAREN seq_expr type_constraint_with_modes RPAREN
       { let ty, modes = $3 in
         mkexp_type_constraint_with_modes ~ghost:true ~loc:$sloc ~modes $2 ~ty }
+  | LPAREN seq_expr COLON at_mode_expr RPAREN
+      { ghexp_constraint ~loc:$sloc ~modes:$4 $2 None }
   | indexop_expr(DOT, seq_expr, { None })
       { mk_builtin_indexop_expr ~loc:$sloc $1 }
   (* Immutable array indexing is a regular operator, so it doesn't need its own
@@ -2893,6 +2939,59 @@ comprehension_clause:
     | HASH { () }
     | HASH_SUFFIX { () }
 ;
+
+%inline unboxed_access:
+  | DOTHASH mkrhs(label_longident)
+      { Uaccess_unboxed_field $2 }
+;
+
+%inline indexop_block_access(dot, index):
+  | d=dot LPAREN i=index RPAREN
+    { d, Paren,   i }
+  | d=dot LBRACE i=index RBRACE
+    { d, Brace,   i }
+  | d=dot LBRACKET i=index RBRACKET
+    { d, Bracket, i }
+;
+
+block_access:
+  | DOT mkrhs(label_longident)
+    { Baccess_field $2 }
+  | DOT _p=LPAREN i=seq_expr RPAREN
+    { Baccess_array (Mutable Location.none, Index_int, i) }
+  | DOTOP _p=LPAREN i=seq_expr RPAREN
+    {
+      match $1 with
+      | ":" -> Baccess_array (Immutable, Index_int, i)
+      | _ -> raise Syntaxerr.(Error(Block_access_bad_paren(make_loc $loc(_p))))
+    }
+  | DOT ident _p=LPAREN i=seq_expr RPAREN
+    {
+      match $2 with
+      | "L" -> Baccess_array (Mutable Location.none, Index_unboxed_int64, i)
+      | "l" -> Baccess_array (Mutable Location.none, Index_unboxed_int32, i)
+      | "S" -> Baccess_array (Mutable Location.none, Index_unboxed_int16, i)
+      | "s" -> Baccess_array (Mutable Location.none, Index_unboxed_int8, i)
+      | "n" -> Baccess_array (Mutable Location.none, Index_unboxed_nativeint, i)
+      | "idx_imm" -> Baccess_block (Immutable, i)
+      | "idx_mut" -> Baccess_block (Mutable Location.none, i)
+      | _ ->
+        raise Syntaxerr.(Error(Block_access_bad_paren(make_loc $loc(_p))))
+    }
+  | DOTOP ident _p=LPAREN i=seq_expr RPAREN
+    {
+      match $1, $2 with
+      | ":", "L" -> Baccess_array (Immutable, Index_unboxed_int64, i)
+      | ":", "l" -> Baccess_array (Immutable, Index_unboxed_int32, i)
+      | ":", "S" -> Baccess_array (Immutable, Index_unboxed_int16, i)
+      | ":", "s" -> Baccess_array (Immutable, Index_unboxed_int8, i)
+      | ":", "n" -> Baccess_array (Immutable, Index_unboxed_nativeint, i)
+      | _ ->
+        raise Syntaxerr.(Error(Block_access_bad_paren(make_loc $loc(_p))))
+    }
+  | DOT ident _p=LPAREN seq_expr _e=error
+    { indexop_unclosed_error $loc(_p) Paren $loc(_e) }
+;
 (* End Jane Street extension *)
 
 %inline simple_expr_:
@@ -2920,6 +3019,8 @@ comprehension_clause:
       { if Erase_jane_syntax.should_erase ()
         then Pexp_field($1, $3)
         else Pexp_unboxed_field($1, $3) }
+  | LPAREN block_access llist(unboxed_access) RPAREN
+      { Pexp_idx ($2, $3) }
   | od=open_dot_declaration DOT LPAREN seq_expr RPAREN
       { Pexp_open(od, $4) }
   | od=open_dot_declaration DOT LBRACELESS object_expr_content GREATERRBRACE
@@ -3000,10 +3101,28 @@ comprehension_clause:
   | mod_longident DOT
     LPAREN MODULE ext_attributes module_expr COLON error
       { unclosed "(" $loc($3) ")" $loc($8) }
+  | HASHLPAREN RPAREN
+      { if Erase_jane_syntax.should_erase ()
+        then Pexp_construct (mkrhs (Lident "()") $sloc, None)
+        else Pexp_unboxed_unit }
+  | HASHFALSE
+      { if Erase_jane_syntax.should_erase ()
+        then Pexp_construct (mkrhs (Lident "false") $sloc, None)
+        else Pexp_unboxed_bool false }
+  | HASHTRUE
+      { if Erase_jane_syntax.should_erase ()
+        then Pexp_construct (mkrhs (Lident "true") $sloc, None)
+        else Pexp_unboxed_bool true }
   | HASHLPAREN labeled_tuple RPAREN
       { if Erase_jane_syntax.should_erase ()
         then Pexp_tuple $2
         else Pexp_unboxed_tuple $2 }
+  | DOLLAR spliceable_expr
+      { Pexp_splice $2 }
+  | LESSLBRACKET seq_expr RBRACKETGREATER
+      { Pexp_quote $2 }
+  | LESSLBRACKET seq_expr error
+      { unclosed "<[" $loc($1) "]>" $loc($3) }
 ;
 labeled_simple_expr:
     simple_expr %prec below_HASH
@@ -3542,6 +3661,18 @@ simple_pattern_not_ident:
       { Ppat_interval ($1, $3) }
   | mkrhs(constr_longident)
       { Ppat_construct($1, None) }
+  | HASHLPAREN RPAREN
+      { if Erase_jane_syntax.should_erase ()
+        then Ppat_construct (mkrhs (Lident "()") $sloc, None)
+        else Ppat_unboxed_unit }
+  | HASHFALSE
+      { if Erase_jane_syntax.should_erase ()
+        then Ppat_construct (mkrhs (Lident "false") $sloc, None)
+        else Ppat_unboxed_bool false }
+  | HASHTRUE
+      { if Erase_jane_syntax.should_erase ()
+        then Ppat_construct (mkrhs (Lident "true") $sloc, None)
+        else Ppat_unboxed_bool true }
   | name_tag
       { Ppat_variant($1, None) }
   | hash mkrhs(type_longident)
@@ -3864,7 +3995,10 @@ kind_abbreviation_decl:
   attrs=attributes
   COLON
   jkind=jkind_annotation
-  { let descr = Ptyp_var (name, jkind) in
+  { let descr = match name.txt, jkind with
+      | None, None -> Ptyp_any
+      | _ -> Ptyp_var (name, jkind)
+    in
     mktyp ~loc:$sloc ~attrs descr }
 ;
 
@@ -4541,6 +4675,19 @@ restricted to tail position by its %prec annotation. *)
      { let label = mkrhs label $loc(label) in
        Some label, ty }
 
+spliceable_type:
+ /* delimited_type_supporting_local_open does not exist */
+ | LPAREN core_type RPAREN
+     { $2 }
+ | mktyp( /* begin mktyp group */
+     tid = mkrhs(type_longident)
+       { Ptyp_constr (tid, []) }
+   | QUOTE mkrhs(ident {Some $1})
+       { Ptyp_var ($2, None) }
+ )
+ { $1 } /* end mktyp group */
+;
+
 (* Atomic types are the most basic level in the syntax of types.
    Atomic types include:
    - types between parentheses:           (int -> int)
@@ -4601,6 +4748,10 @@ atomic_type:
       { Ptyp_var ($2, jkind) }
     | LPAREN TYPE COLON jkind=jkind RPAREN
       { Ptyp_of_kind jkind }
+    | LESSLBRACKET core_type RBRACKETGREATER
+      { Ptyp_quote $2 }
+    | DOLLAR spliceable_type
+      { Ptyp_splice $2 }
 
   )
   { $1 } /* end mktyp group */
@@ -4634,7 +4785,10 @@ atomic_type:
 %inline one_type_parameter_of_several:
   | core_type { $1 }
   | name=mkrhs(tyvar_name_or_underscore) COLON jkind=jkind_annotation
-    { let descr = Ptyp_var (name, jkind) in
+    { let descr = match name.txt, jkind with
+        | None, None -> Ptyp_any
+        | _ -> Ptyp_var (name, jkind)
+      in
       mktyp ~loc:$sloc descr }
 
 %inline package_core_type: module_type
@@ -4904,9 +5058,12 @@ any_longident:
 /* Toplevel directives */
 
 toplevel_directive:
-  hash dir = mkrhs(ident)
-  arg = ioption(mk_directive_arg(toplevel_directive_argument))
-    { mk_directive ~loc:$sloc dir arg }
+  | HASH_SYNTAX
+      { let mode, toggle = $1 in
+        mk_hashsyntax ~loc:$sloc (mkloc mode (make_loc $sloc)) toggle }
+  | hash dir = mkrhs(ident)
+    arg = ioption(mk_directive_arg(toplevel_directive_argument))
+      { mk_directive ~loc:$sloc dir arg }
 ;
 
 %inline toplevel_directive_argument:

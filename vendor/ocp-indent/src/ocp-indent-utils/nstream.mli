@@ -3,7 +3,7 @@
 (*  Copyright 2011 Jun Furuse                                             *)
 (*  Copyright 2012-2013 OCamlPro                                          *)
 (*                                                                        *)
-(*  All rights reserved.This file is distributed under the terms of the   *)
+(*  All rights reserved. This file is distributed under the terms of the   *)
 (*  GNU Lesser General Public License version 2.1 with linking            *)
 (*  exception.                                                            *)
 (*                                                                        *)
@@ -32,11 +32,13 @@ type t
 
 (** Creates a stream from a string. Make sure you don't change the string
     in-place after calling [of_string], or anything could happen *)
-val of_string: ?start_pos:Position.t -> ?start_offset:int -> string -> t
+val of_string:
+  ?filename: string -> ?start_pos:Position.t ->
+  ?start_offset:int -> string -> t
 
 (** Creates a stream from a channel. Better if you don't want to block, but less
     efficient *)
-val of_channel: ?start_pos:Position.t -> in_channel -> t
+val of_channel: ?filename: string -> ?start_pos:Position.t -> in_channel -> t
 
 (** Get next token from the filter. Returns None after EOF *)
 val next: t -> (token * t) option

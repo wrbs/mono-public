@@ -200,9 +200,9 @@ let std_json_string_of_float x =
   Buffer.contents ob
 
 
-let write_intlit = Buffer.add_string
-let write_floatlit = Buffer.add_string
-let write_stringlit = Buffer.add_string
+let write_intlit ob s = Buffer.add_string ob s
+let write_floatlit ob s = Buffer.add_string ob s
+let write_stringlit ob s = Buffer.add_string ob s
 
 let rec iter2_aux f_elt f_sep x = function
     [] -> ()

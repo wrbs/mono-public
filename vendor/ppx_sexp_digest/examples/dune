@@ -1,0 +1,6 @@
+(library
+ (name ppx_sexp_digest_examples)
+ (public_name ppx_sexp_digest.examples)
+ (libraries base bin_prot expect_test_helpers_base stdio)
+ (preprocess
+  (pps ppx_jane ppx_sexp_digest -compare-require-explicit-locality)))

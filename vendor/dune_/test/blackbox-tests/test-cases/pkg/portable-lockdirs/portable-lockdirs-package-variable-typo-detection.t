@@ -6,7 +6,7 @@ Detect common typos with package variables when describing platforms to solve fo
 
 Create a workspace with some typos in package variable names
   $ cat > dune-workspace <<EOF
-  > (lang dune 3.20)
+  > (lang dune 3.18)
   > (repository
   >  (name mock)
   >  (url "file://$(pwd)/mock-opam-repository"))
@@ -17,7 +17,6 @@ Create a workspace with some typos in package variable names
   >    (os linux)
   >    (os_distribution debian)
   >    (os_family debian))))
-  > (pkg enabled)
   > EOF
 
   $ cat > dune-project <<EOF
@@ -27,7 +26,7 @@ Create a workspace with some typos in package variable names
   >  (allow_empty))
   > EOF
 
-  $ dune pkg lock
+  $ DUNE_CONFIG__PORTABLE_LOCK_DIR=enabled dune pkg lock
   File "dune-workspace", line 10, characters 4-19:
   10 |    (os_distribution debian)
            ^^^^^^^^^^^^^^^
@@ -38,7 +37,5 @@ Create a workspace with some typos in package variable names
            ^^^^^^^^^
   Warning: The package variable "os_family" looks like a typo. Did you mean
   "os-family"?
-  Solution for dune.lock
-  
-  Dependencies common to all supported platforms:
-  (none)
+  Solution for dune.lock:
+  (no dependencies to lock)

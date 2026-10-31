@@ -1,0 +1,6 @@
+(library
+ (name ppx_loc_runtime)
+ (public_name ppx_loc.runtime)
+ (libraries base)
+ (preprocess
+  (pps ppx_jane -compare-require-explicit-locality)))

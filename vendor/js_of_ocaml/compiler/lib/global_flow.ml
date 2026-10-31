@@ -34,12 +34,12 @@ open Code
 module VarPairTbl = Hashtbl.Make (struct
   type t = Var.t * Var.t
 
-  let hash (a, b) = Var.idx a + Var.idx b
+  let hash (a, b) = (Var.idx a * 65599) + Var.idx b
 
   let equal (a, b) (c, d) = Var.equal a c && Var.equal b d
 end)
 
-let associated_list h x = try Var.Hashtbl.find h x with Not_found -> []
+let associated_list h x = Var.Hashtbl.find_opt h x |> Option.value ~default:[]
 
 let add_to_list h x v = Var.Hashtbl.replace h x (v :: associated_list h x)
 
@@ -149,7 +149,12 @@ let cont_deps blocks st ?ignore (pc, args) =
   let block = Addr.Map.find pc blocks in
   arg_deps st ?ignore block.params args
 
-let do_escape st level x = st.variable_may_escape.(Var.idx x) <- level
+let do_escape st level x =
+  let idx = Var.idx x in
+  match level, st.variable_may_escape.(idx) with
+  | Escape, (Escape_constant | No) | Escape_constant, No ->
+      st.variable_may_escape.(idx) <- level
+  | Escape, Escape | Escape_constant, (Escape | Escape_constant) | No, _ -> ()
 
 let possibly_mutable st x = st.variable_mutable_fields.(Var.idx x) <- All_fields
 
@@ -292,7 +297,7 @@ let program_deps st { start; blocks; _ } =
                     Addr.Hashtbl.replace
                       h
                       pc
-                      (i :: (try Addr.Hashtbl.find h pc with Not_found -> [])));
+                      (i :: (Addr.Hashtbl.find_opt h pc |> Option.value ~default:[])));
                 Addr.Hashtbl.iter
                   (fun pc tags ->
                     let block = Addr.Map.find pc blocks in
@@ -446,9 +451,7 @@ let propagate st ~update approx x =
       | Field (y, n, _) -> (
           match Var.Tbl.get approx y with
           | Values { known; others } ->
-              let tags =
-                try Some (Var.Hashtbl.find st.known_cases x) with Not_found -> None
-              in
+              let tags = Var.Hashtbl.find_opt st.known_cases x in
               Domain.join_set
                 ~others
                 ~update
@@ -581,7 +584,7 @@ let propagate st ~update approx x =
 let propagate st ~update approx x =
   let res = propagate st ~update approx x in
   match res with
-  | Values { known; _ } when Var.Set.cardinal known >= 200 ->
+  | Values { known; _ } when Var.Set.compare_cardinal_with known 200 >= 0 ->
       (* When the set of possible values get to large, we give up and
          just forget about it. This is crucial to make the analysis
          terminates in a reasonable amount of time. This happens when

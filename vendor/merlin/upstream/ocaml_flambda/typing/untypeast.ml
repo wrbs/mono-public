@@ -44,6 +44,7 @@ type mapper = {
                          -> extension_constructor;
   include_declaration: mapper -> T.include_declaration -> include_declaration;
   include_description: mapper -> T.include_description -> include_description;
+  jkind_declaration: mapper -> T.jkind_declaration -> jkind_declaration;
   label_declaration: mapper -> T.label_declaration -> label_declaration;
   location: mapper -> Location.t -> Location.t;
   module_binding: mapper -> T.module_binding -> module_binding;
@@ -209,14 +210,26 @@ let structure_item sub item =
         Pstr_include (sub.include_declaration sub incl)
     | Tstr_attribute x ->
         Pstr_attribute x
+    | Tstr_jkind x ->
+        Pstr_jkind (sub.jkind_declaration sub x)
   in
   Str.mk ~loc desc
+
+let modalities_of_val_modal_info = function
+  | Valmi_sig_value modalities -> Typemode.untransl_modalities modalities
+  | Valmi_str_primitive modes ->
+      let modality_of_mode { txt = Mode mode; loc } =
+        { txt = Modality mode; loc }
+      in
+      List.map modality_of_mode (Typemode.untransl_mode modes)
 
 let value_description sub v =
   let loc = sub.location sub v.val_loc in
   let attrs = sub.attributes sub v.val_attributes in
+  let modalities = modalities_of_val_modal_info v.val_modal_info in
   Val.mk ~loc ~attrs
     ~prim:v.val_prim
+    ~modalities
     (map_loc sub v.val_name)
     (sub.typ sub v.val_desc)
 
@@ -259,7 +272,7 @@ let type_kind sub tk = match tk with
 
 let constructor_argument sub {ca_loc; ca_type; ca_modalities} =
   let loc = sub.location sub ca_loc in
-  let pca_modalities = Typemode.untransl_modalities Immutable ca_modalities in
+  let pca_modalities = Typemode.untransl_modalities ca_modalities in
   { pca_loc = loc; pca_type = sub.typ sub ca_type; pca_modalities }
 
 let constructor_arguments sub = function
@@ -288,9 +301,7 @@ let label_declaration sub ld =
   let loc = sub.location sub ld.ld_loc in
   let attrs = sub.attributes sub ld.ld_attributes in
   let mut = mutable_ ld.ld_mutable in
-  let modalities =
-    Typemode.untransl_modalities ld.ld_mutable ld.ld_modalities
-  in
+  let modalities = Typemode.untransl_modalities ld.ld_modalities in
   Type.field ~loc ~attrs ~mut ~modalities
     (map_loc sub ld.ld_name)
     (sub.typ sub ld.ld_type)
@@ -321,6 +332,12 @@ let extension_constructor sub ext =
   | Text_rebind (_p, lid) ->
     Te.constructor ~loc ~attrs name (Pext_rebind (map_loc sub lid))
 
+let jkind_declaration _sub decl =
+  { pjkind_name = decl.jkind_name;
+    pjkind_manifest = decl.jkind_annotation;
+    pjkind_attributes = decl.jkind_attributes;
+    pjkind_loc = decl.jkind_jkind.jkind_loc }
+
 let pattern : type k . _ -> k T.general_pattern -> _ = fun sub pat ->
   let loc = sub.location sub pat.pat_loc in
   (* todo: fix attributes on extras *)
@@ -330,18 +347,20 @@ let pattern : type k . _ -> k T.general_pattern -> _ = fun sub pat ->
       { pat_extra=[Tpat_unpack, loc, _attrs]; pat_desc = Tpat_any; _ } ->
         Ppat_unpack { txt = None; loc  }
     | { pat_extra=[Tpat_unpack, _, _attrs];
-        pat_desc = Tpat_var (_,name, _, _, _); _ } ->
+        pat_desc = Tpat_var { name; _ }; _ } ->
         Ppat_unpack { name with txt = Some name.txt }
     | { pat_extra=[Tpat_type (_path, lid), _, _attrs]; _ } ->
         Ppat_type (map_loc sub lid)
-    | { pat_extra= (Tpat_constraint ct, _, _attrs) :: rem; _ } ->
-        (* CR cgunn: recover mode constraint info here *)
+    | { pat_extra= (Tpat_constraint (ct, modes), _, _attrs) :: rem; _ } ->
+        let modes = Typemode.untransl_mode modes in
         Ppat_constraint (sub.pat sub { pat with pat_extra=rem },
-                         Some (sub.typ sub ct), [])
+                         Some (sub.typ sub ct), modes)
+    | { pat_extra = (Tpat_open (_path, lid, _env), _, _attrs) :: rem; _ } ->
+        Ppat_open (lid, sub.pat sub { pat with pat_extra=rem })
     | _ ->
     match pat.pat_desc with
       Tpat_any -> Ppat_any
-    | Tpat_var (id, name,_,_,_) ->
+    | Tpat_var { id; name; _ } ->
         begin
           match (Ident.name id).[0] with
             'A'..'Z' ->
@@ -355,13 +374,16 @@ let pattern : type k . _ -> k T.general_pattern -> _ = fun sub pat ->
        This avoids transforming a warning 27 into a 26.
      *)
     | Tpat_alias
-      ({pat_desc = Tpat_any; pat_loc}, _id, name, _uid, _sort, _mode, _ty)
+      { pattern = {pat_desc = Tpat_any; pat_loc};
+        name; _ }
          when pat_loc = pat.pat_loc ->
        Ppat_var name
 
-    | Tpat_alias (pat, _id, name, _uid, _sort, _mode, _ty) ->
+    | Tpat_alias { pattern = pat; name; _ } ->
         Ppat_alias (sub.pat sub pat, name)
     | Tpat_constant cst -> Ppat_constant (constant cst)
+    | Tpat_unboxed_unit -> Ppat_unboxed_unit
+    | Tpat_unboxed_bool b -> Ppat_unboxed_bool b
     | Tpat_tuple list ->
         Ppat_tuple
           ( List.map (fun (label, p) -> label, sub.pat sub p) list
@@ -408,6 +430,8 @@ let pattern : type k . _ -> k T.general_pattern -> _ = fun sub pat ->
     | Tpat_exception p -> Ppat_exception (sub.pat sub p)
     | Tpat_value p -> (sub.pat sub (p :> pattern)).ppat_desc
     | Tpat_or (p1, p2, _) -> Ppat_or (sub.pat sub p1, sub.pat sub p2)
+    | Tpat_fun_layout { id; name; _ } ->
+        Ppat_var { name with txt = Ident.name id }
   in
   Pat.mk ~loc ~attrs desc
 
@@ -427,7 +451,13 @@ let exp_extra sub (extra, loc, attrs) sexp =
         Pexp_newtype (label_loc, jkind, sexp)
     | Texp_stack -> Pexp_stack sexp
     | Texp_mode modes ->
-        Pexp_constraint (sexp, None, Typemode.untransl_mode_annots modes)
+        Pexp_constraint (sexp, None, Typemode.untransl_mode modes)
+    | Texp_inspected_type _ ->
+        (* Type inspections are unnecessary in a Parsetree,
+           as type inference reproduces them *)
+        sexp.pexp_desc
+    | Texp_borrowed -> Pexp_borrow sexp
+    | Texp_ghost_region ->sexp.pexp_desc
   in
   Exp.mk ~loc ~attrs desc
 
@@ -455,10 +485,6 @@ let value_binding sub vb =
 let block_access sub : block_access -> Parsetree.block_access = function
   | Baccess_field (lid, _) ->
     Baccess_field (map_loc sub lid)
-  | Baccess_array
-      { mut; index_kind; index; base_ty = _; elt_ty = _; elt_sort = _ } ->
-    let index = sub.expr sub index in
-    Baccess_array (mut, index_kind, index)
   | Baccess_block (mut, idx) ->
     Baccess_block (mut, sub.expr sub idx)
 
@@ -509,7 +535,8 @@ let expression sub exp =
   let attrs = sub.attributes sub exp.exp_attributes in
   let desc =
     match exp.exp_desc with
-      Texp_ident (_path, lid, _, _, _) -> Pexp_ident (map_loc sub lid)
+      Texp_ident { lid; _ } -> Pexp_ident (map_loc sub lid)
+    | Texp_apply_layout (exp, _) -> (sub.expr sub exp).pexp_desc
     | Texp_constant cst -> Pexp_constant (constant cst)
     | Texp_let (rec_flag, list, exp) ->
         Pexp_let (Immutable, rec_flag,
@@ -532,20 +559,43 @@ let expression sub exp =
                 fc_attributes = attributes; _ }
             ->
               let cases = List.map (sub.case sub) cases in
+              let ret_type_constraints, ret_mode_annotations =
+                List.fold_right
+                  (fun extra (ret_type_constraints, ret_mode_annotations) ->
+                    let new_type_constraints, new_mode_annotations =
+                      match extra with
+                      | Texp_coerce (ty1, ty2) ->
+                        let ty1 = Option.map (sub.typ sub) ty1 in
+                        let ty2 = sub.typ sub ty2 in
+                        let coercion = Pcoerce (ty1, ty2) in
+                        [ coercion ], []
+                      | Texp_constraint ty ->
+                        [ Pconstraint (sub.typ sub ty) ], []
+                      | Texp_mode modes ->
+                        let modes = Typemode.untransl_mode modes in
+                        [], modes
+                      | Texp_poly _ | Texp_newtype _ | Texp_stack
+                      | Texp_inspected_type _ -> [], []
+                      | Texp_ghost_region | Texp_borrowed -> [], []
+                    in
+                    new_type_constraints @ ret_type_constraints,
+                    new_mode_annotations @ ret_mode_annotations)
+                  exp_extra
+                  ([], [])
+              in
               let ret_type_constraint =
-                match exp_extra with
-                | Some (Texp_coerce (ty1, ty2)) ->
-                    Some
-                      (Pcoerce (Option.map (sub.typ sub) ty1, sub.typ sub ty2))
-                | Some (Texp_constraint ty) ->
-                  Some (Pconstraint (sub.typ sub ty))
-                | Some (Texp_mode _) (* CR zqian: [Texp_mode] should be possible here *)
-                | Some (Texp_poly _ | Texp_newtype _)
-                | Some Texp_stack
-                | None -> None
+                match ret_type_constraints with
+                | [] -> None
+                | hd :: _ ->
+                  (* In practice, typecore never puts two type constraints in
+                     this list. *)
+                  Some hd
               in
               let constraint_ =
-                { ret_type_constraint; mode_annotations=[]; ret_mode_annotations = [] }
+                { ret_type_constraint
+                ; mode_annotations=[]
+                ; ret_mode_annotations
+                }
               in
               Pfunction_cases (cases, loc, attributes), constraint_
         in
@@ -587,6 +637,8 @@ let expression sub exp =
       Pexp_match (sub.expr sub exp, List.map (sub.case sub) cases)
     | Texp_try (exp, cases) ->
         Pexp_try (sub.expr sub exp, List.map (sub.case sub) cases)
+    | Texp_unboxed_unit -> Pexp_unboxed_unit
+    | Texp_unboxed_bool b -> Pexp_unboxed_bool b
     | Texp_tuple (list, _) ->
         Pexp_tuple (List.map (fun (lbl, e) -> lbl, sub.expr sub e) list)
     | Texp_unboxed_tuple list ->
@@ -758,8 +810,6 @@ let expression sub exp =
     | Texp_hole _ -> Pexp_hole
     | Texp_quotation exp -> Pexp_quote (sub.expr sub exp)
     | Texp_antiquotation exp -> Pexp_splice (sub.expr sub exp)
-    | Texp_eval (typ, _) ->
-        Pexp_extension ({ txt = "ocaml.eval"; loc}, PTyp (sub.typ sub typ))
   in
   List.fold_right (exp_extra sub) exp.exp_extra
     (Exp.mk ~loc ~attrs desc)
@@ -785,7 +835,7 @@ let module_type_declaration sub mtd =
 
 let signature sub {sig_items; sig_modalities; sig_sloc} =
   let psg_items = List.map (sub.signature_item sub) sig_items in
-  let psg_modalities = Typemode.untransl_modalities Immutable sig_modalities in
+  let psg_modalities = Typemode.untransl_modalities sig_modalities in
   let psg_loc = sub.location sub sig_sloc in
   {psg_items; psg_modalities; psg_loc}
 
@@ -816,7 +866,7 @@ let signature_item sub item =
     | Tsig_open od ->
         Psig_open (sub.open_description sub od)
     | Tsig_include (incl, moda) ->
-        let pmoda = Typemode.untransl_modalities Immutable moda in
+        let pmoda = Typemode.untransl_modalities moda in
         Psig_include (sub.include_description sub incl, pmoda)
     | Tsig_class list ->
         Psig_class (List.map (sub.class_description sub) list)
@@ -824,6 +874,8 @@ let signature_item sub item =
         Psig_class_type (List.map (sub.class_type_declaration sub) list)
     | Tsig_attribute x ->
         Psig_attribute x
+    | Tsig_jkind x ->
+        Psig_jkind (sub.jkind_declaration sub x)
   in
   Sig.mk ~loc desc
 
@@ -870,7 +922,8 @@ let class_type_declaration sub = class_infos sub.class_type sub
 let functor_parameter sub : functor_parameter -> Parsetree.functor_parameter =
   function
   | Unit -> Unit
-  | Named (_, name, mtype) -> Named (name, sub.module_type sub mtype, [])
+  | Named (_, name, mtype, mmode) ->
+    Named (name, sub.module_type sub mtype, Typemode.untransl_mode mmode)
 
 let module_type (sub : mapper) mty =
   let loc = sub.location sub mty.mty_loc in
@@ -882,10 +935,11 @@ let module_type (sub : mapper) mty =
       Mty.mk ~loc ~attrs (Pmty_alias (map_loc sub lid))
   | Tmty_signature sg ->
       Mty.mk ~loc ~attrs (Pmty_signature (sub.signature sub sg))
-  | Tmty_functor (arg, mtype2) ->
+  | Tmty_functor (arg, mtype2, mmode2) ->
+      let modes = Typemode.untransl_mode mmode2 in
       Mty.mk ~loc ~attrs
         (Pmty_functor
-          (functor_parameter sub arg, sub.module_type sub mtype2, []))
+          (functor_parameter sub arg, sub.module_type sub mtype2, modes))
   | Tmty_with (mtype, list) ->
       Mty.mk ~loc ~attrs
         (Pmty_with (sub.module_type sub mtype,
@@ -905,6 +959,8 @@ let with_constraint sub (_path, lid, cstr) =
   | Twith_modtype mty ->
       let mty = sub.module_type sub mty in
       Pwith_modtype (map_loc sub lid,mty)
+  | Twith_jkind jd ->
+      Pwith_jkind (map_loc sub lid, sub.jkind_declaration sub jd)
   | Twith_typesubst decl ->
      Pwith_typesubst (map_loc sub lid, sub.type_declaration sub decl)
   | Twith_modsubst (_path, lid2) ->
@@ -912,6 +968,8 @@ let with_constraint sub (_path, lid, cstr) =
   | Twith_modtypesubst mty ->
       let mty = sub.module_type sub mty in
       Pwith_modtypesubst (map_loc sub lid, mty)
+  | Twith_jkindsubst jd ->
+     Pwith_jkindsubst (map_loc sub lid, sub.jkind_declaration sub jd)
 
 let module_expr (sub : mapper) mexpr =
   let loc = sub.location sub mexpr.mod_loc in
@@ -931,9 +989,10 @@ let module_expr (sub : mapper) mexpr =
                           sub.module_expr sub mexp2)
           | Tmod_apply_unit mexp1 ->
               Pmod_apply_unit (sub.module_expr sub mexp1)
-          | Tmod_constraint (mexpr, _, Tmodtype_explicit mtype, _) ->
+          | Tmod_constraint (mexpr, _, Tmodtype_explicit (mtype, modes), _) ->
+              let modes = Typemode.untransl_mode modes in
               Pmod_constraint (sub.module_expr sub mexpr,
-                Some (sub.module_type sub mtype), [])
+                Some (sub.module_type sub mtype), modes)
           | Tmod_constraint (_mexpr, _, Tmodtype_implicit, _) ->
               assert false
           | Tmod_unpack (exp, _pack) ->
@@ -1021,9 +1080,11 @@ let core_type sub ct =
   let desc = match ct.ctyp_desc with
     | Ttyp_var (None, jkind) -> Ptyp_any jkind
     | Ttyp_var (Some s, jkind) -> Ptyp_var (s, jkind)
-    | Ttyp_arrow (arg_label, ct1, ct2) ->
-        (* CR cgunn: recover mode annotation here *)
-        Ptyp_arrow (label arg_label, sub.typ sub ct1, sub.typ sub ct2, [], [])
+    | Ttyp_arrow (arg_label, ct1, modes1, ct2, modes2) ->
+        let modes1 = Typemode.untransl_mode modes1 in
+        let modes2 = Typemode.untransl_mode modes2 in
+        Ptyp_arrow
+          (label arg_label, sub.typ sub ct1, sub.typ sub ct2, modes1, modes2)
     | Ttyp_tuple list ->
         Ptyp_tuple (List.map (fun (lbl, t) -> lbl, sub.typ sub t) list)
     | Ttyp_unboxed_tuple list ->
@@ -1050,6 +1111,11 @@ let core_type sub ct =
     | Ttyp_open (_path, mod_ident, t) -> Ptyp_open (mod_ident, sub.typ sub t)
     | Ttyp_quote t -> Ptyp_quote (sub.typ sub t)
     | Ttyp_splice t -> Ptyp_splice (sub.typ sub t)
+    | Ttyp_repr (list, ct) ->
+        let bound_vars = List.map (fun v -> mkloc v loc) list in
+        Ptyp_repr (bound_vars, sub.typ sub ct)
+    | Ttyp_newlayout (list, ct) ->
+        Ptyp_newlayout (list, sub.typ sub ct)
     | Ttyp_of_kind jkind -> Ptyp_of_kind jkind
     | Ttyp_call_pos ->
         Ptyp_extension call_pos_extension
@@ -1058,7 +1124,7 @@ let core_type sub ct =
 
 let class_structure sub cs =
   let rec remove_self = function
-    | { pat_desc = Tpat_alias (p, id, _s, _uid, _sort, _mode, _ty) }
+    | { pat_desc = Tpat_alias { pattern = p; id; _ } }
       when string_is_prefix "selfpat-" (Ident.name id) ->
         remove_self p
     | p -> p
@@ -1088,7 +1154,7 @@ let object_field sub {of_loc; of_desc; of_attributes;} =
   Of.mk ~loc ~attrs desc
 
 and is_self_pat = function
-  | { pat_desc = Tpat_alias(_pat, id, _, _uid, _sort, _mode, _ty) } ->
+  | { pat_desc = Tpat_alias { id; _ } } ->
       string_is_prefix "self-" (Ident.name id)
   | _ -> false
 
@@ -1183,6 +1249,7 @@ let default_mapper =
     location = location;
     row_field = row_field ;
     object_field = object_field ;
+    jkind_declaration = jkind_declaration;
   }
 
 let untype_structure ?(mapper : mapper = default_mapper) structure =

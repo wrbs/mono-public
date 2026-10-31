@@ -16,18 +16,15 @@ include Stanza.Make (struct
     include Poly
   end)
 
-let decode ~qualified =
+let decode ~enable_qualified =
   let open Decoder in
-  let* () = Syntax.since Stanza.syntax (1, 1) in
-  let* loc = loc in
-  let+ t =
-    sum
-      [ "no", return No
-      ; "unqualified", return (Include Unqualified)
-      ; ( "qualified"
-        , let+ () = qualified in
-          Include Qualified )
-      ]
-  in
-  loc, t
+  sum
+    [ "no", return No
+    ; "unqualified", return (Include Unqualified)
+    ; ( "qualified"
+      , let+ () =
+          if enable_qualified then return () else Syntax.since Stanza.syntax (3, 7)
+        in
+        Include Qualified )
+    ]
 ;;

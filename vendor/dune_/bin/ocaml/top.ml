@@ -9,11 +9,8 @@ let man =
   ; `P
       {|Print a list of toplevel directives for including directories and loading cma files.|}
   ; `P
-      {|The output of $(b,dune ocaml top) should be evaluated in a toplevel
-        to make the libraries available there.|}
-  ; `P
-      {|In many toplevels this can be achieved by using the $(b,#use_output) command,
-        e.g. $(b,#use_output "dune ocaml top").|}
+      {|The output of $(b,dune top) should be evaluated in a toplevel
+          to make a library available there.|}
   ; `Blocks Common.help_secs
   ]
 ;;
@@ -37,16 +34,13 @@ let files_to_load_of_requires sctx requires =
   let+ () = Memo.parallel_iter files ~f:Build_system.build_file in
   List.filter files ~f:(fun p ->
     let ext = Path.extension p in
-    ext = Root.Ocaml.Mode.compiled_lib_ext Byte || ext = Root.Ocaml.Cm_kind.ext Cmo)
+    ext = Ocaml.Mode.compiled_lib_ext Byte || ext = Ocaml.Cm_kind.ext Cmo)
 ;;
 
 let term =
   let+ builder = Common.Builder.term
-  (* CR-someday Alizter: document this option *)
-  and+ dir = Arg.(value & pos 0 string "" & Arg.info [] ~docv:"DIR" ~doc:None)
-  and+ ctx_name =
-    Common.context_arg ~doc:(Some {|Select context where to build/run top.|})
-  in
+  and+ dir = Arg.(value & pos 0 string "" & Arg.info [] ~docv:"DIR")
+  and+ ctx_name = Common.context_arg ~doc:{|Select context where to build/run utop.|} in
   let common, config = Common.init builder in
   Scheduler.go_with_rpc_server ~common ~config (fun () ->
     let open Fiber.O in
@@ -79,8 +73,6 @@ let term =
       in
       let include_paths =
         Dune_rules.Lib_flags.L.toplevel_include_paths requires lib_config
-        |> Dune_rules.Lib_flags.L.include_only
-        |> Path.Set.of_list
       in
       let+ files_to_load = files_to_load_of_requires sctx requires in
       Dune_rules.Toplevel.print_toplevel_init_file
@@ -99,7 +91,7 @@ module Module = struct
         "The module's source is evaluated in the toplevel without being sealed by the \
          mli."
     ; `P
-        {|The output of $(b,dune ocaml top) should be evaluated in a toplevel
+        {|The output of $(b,dune top) should be evaluated in a toplevel
           to make the module available there.|}
     ; `Blocks Common.help_secs
     ]
@@ -117,7 +109,7 @@ module Module = struct
     let open Memo.O in
     let module_name =
       let name = Filename.remove_extension filename in
-      Dune_lang.Module_name.of_string_user_error (Loc.none, name) |> User_error.ok_exn
+      Dune_rules.Module_name.of_string_user_error (Loc.none, name) |> User_error.ok_exn
     in
     let* expander = Super_context.expander sctx ~dir in
     let* top_module_info = Dune_rules.Top_module.find_module sctx mod_ in
@@ -139,9 +131,7 @@ module Module = struct
           let lib_config = (Compilation_context.ocaml cctx).lib_config in
           Dune_rules.Lib_flags.L.toplevel_include_paths requires lib_config
         in
-        Path.Map.set libs (Path.build (Obj_dir.byte_dir private_obj_dir)) Include
-        |> Dune_rules.Lib_flags.L.include_only
-        |> Path.Set.of_list
+        Path.Set.add libs (Path.build (Obj_dir.byte_dir private_obj_dir))
       in
       let files_to_load () =
         let+ libs, modules =
@@ -171,7 +161,7 @@ module Module = struct
                  in
                  let cmos =
                    let module Module = Dune_rules.Module in
-                   let module Module_name = Dune_lang.Module_name in
+                   let module Module_name = Dune_rules.Module_name in
                    let module_obj_name = Module.obj_name module_ in
                    List.filter_map modules ~f:(fun m ->
                      let obj_dir =
@@ -195,7 +185,7 @@ module Module = struct
         let module Merlin = Dune_rules.Merlin in
         let pps = Merlin.pp_config merlin ctx ~expander in
         let+ pps, _ = Action_builder.evaluate_and_collect_facts pps in
-        let pp = Dune_lang.Module_name.Per_item.get pps module_name in
+        let pp = Dune_rules.Module_name.Per_item.get pps module_name in
         match pp with
         | None -> None, None
         | Some pp_flags ->
@@ -209,7 +199,7 @@ module Module = struct
         let modules = Dune_rules.Compilation_context.modules cctx in
         let opens_ = Dune_rules.Modules.With_vlib.local_open modules module_ in
         List.map opens_ ~f:(fun name ->
-          sprintf "open %s" (Dune_lang.Module_name.to_string name))
+          sprintf "open %s" (Dune_rules.Module_name.to_string name))
       in
       { Dune_rules.Toplevel.files_to_load; pp; ppx; include_paths; uses = []; code }
   ;;
@@ -220,10 +210,8 @@ module Module = struct
       Arg.(
         required
         & pos 0 (some string) None
-        & Arg.info [] ~docv:"MODULE" ~doc:(Some "Path to an OCaml module."))
-    and+ ctx_name =
-      Common.context_arg ~doc:(Some {|Select context where to build/run top.|})
-    in
+        & Arg.info [] ~docv:"MODULE" ~doc:"Path to an OCaml module.")
+    and+ ctx_name = Common.context_arg ~doc:{|Select context where to build/run utop.|} in
     let common, config = Common.init builder in
     Scheduler.go_with_rpc_server ~common ~config (fun () ->
       let open Fiber.O in

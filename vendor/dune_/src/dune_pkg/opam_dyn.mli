@@ -1,3 +1,5 @@
+open! Import
+
 val package_name : OpamTypes.name -> Dyn.t
 val package : OpamPackage.t -> Dyn.t
 val relop : OpamTypes.relop -> Dyn.t

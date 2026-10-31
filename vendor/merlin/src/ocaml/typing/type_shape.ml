@@ -28,14 +28,12 @@
 
 [@@@warning "+4"]
 
-(* Merlin-specific: change some module paths to match the compiler *)
-module Misc = struct
-  include Misc
-  module Stdlib = Misc_stdlib
-  include Misc_stdlib
-end
-
 module Uid = Shape.Uid
+
+(* CR layouts-scannable: As noted on the CR on [Sort] in [jkind_intf.ml], a
+   sort no longer contains sufficient information to compile: it's missing the
+   scannable axes! Once a better data definition for tracking this is added,
+   the meaning of [Layout] below perhaps should change as well. *)
 module Layout = Jkind_types.Sort.Const
 
 type base_layout = Jkind_types.Sort.base
@@ -100,6 +98,8 @@ end = struct
         { name; variant_uid; arg_name; arg_uid; arg_shape; arg_layout } ->
       Shape.variant_unboxed ?uid:outer.uid ~variant_uid ~arg_uid name arg_name
         (subst arg_shape) arg_layout
+    | Unknown_type -> Shape.unknown_type ?uid:outer.uid ()
+    | At_layout (shape, layout) -> Shape.at_layout ?uid:outer.uid shape layout
 
   type t =
     { uid : Uid.t;
@@ -233,6 +233,17 @@ module Type_shape = struct
     | None -> false
     | Some max_depth -> depth > max_depth
 
+  let unknown_shape_from_jkind jkind =
+    let layout =
+      match jkind.Types.jkind.base with
+      | Kconstr _ -> None
+      | Layout l -> Jkind_types.Layout.get_const l
+    in
+    let sort_opt = Option.bind layout Jkind_types.Layout.Const.get_sort in
+    match sort_opt with
+    | None -> Shape.unknown_type ()
+    | Some layout -> Shape.at_layout (Shape.unknown_type ()) layout
+
   (* Similarly to [value_kind], we track a set of visited types to avoid cycles
      in the lookup and we, additionally, carry a maximal depth for the recursion.
      We allow a deeper bound than [value_kind]. *)
@@ -242,7 +253,10 @@ module Type_shape = struct
   let rec of_type_expr_go ~visited ~depth (expr : Types.type_expr)
       (subst : (Types.type_expr * Shape.t) list) shape_for_constr : Shape.t =
     let open Shape in
-    let unknown_shape = Shape.leaf' None in
+    let unknown_shape_any = Shape.unknown_type () in
+    let unknown_shape_value =
+      Shape.at_layout (Shape.unknown_type ()) (Base Scannable)
+    in
     (* Leaves indicate we do not know. *)
     let[@inline] cannot_proceed () =
       Numbers.Int.Map.mem (Types.get_id expr) visited
@@ -252,7 +266,7 @@ module Type_shape = struct
     then
       match Numbers.Int.Map.find_opt (Types.get_id expr) visited with
       | Some db -> Recursive_binder.mark_as_used db
-      | None -> unknown_shape
+      | None -> unknown_shape_any
     else
       match List.find_opt (fun (p, _) -> Types.eq_type p expr) subst with
       | Some (_, replace_by) -> replace_by
@@ -274,24 +288,25 @@ module Type_shape = struct
           | Tconstr (path, constrs, _) ->
             let args = of_expr_list constrs in
             let shape = shape_for_constr path ~args in
-            Option.value shape ~default:unknown_shape
+            Option.value shape ~default:unknown_shape_any
+            (* CR sspies: We could ask the environment here for extra layout
+               information about the type. *)
           | Ttuple exprs -> Shape.tuple (of_expr_list (List.map snd exprs))
-          | Tvar { name = Some x; _ } -> Shape.var' None (Ident.create_local x)
-          | Tvar { name = None; _ } -> unknown_shape
-          (* CR sspies: This is not a great way of handling type variables. This
-             case should only be triggered for free variables. We should compute
-             a layout from the jkind and produce a shape with this layout.
-             Revisit this when revisiting the layout generation. *)
+          | Tvar { name = _; jkind } -> unknown_shape_from_jkind jkind
           | Tpoly (type_expr, _type_vars) ->
             (* CR sspies: At the moment, we simply ignore the polymorphic
                variables.
                This code used to only work for [_type_vars = []]. Consider
                alternatively introducing abstractions here? *)
             of_type_expr_go ~depth ~visited type_expr subst shape_for_constr
+          | Trepr (type_expr, _sort_vars) ->
+            (* CR layout-polymorphism aivaskovic: sort variables do not
+               influence the type shape. *)
+            of_type_expr_go ~depth ~visited type_expr subst shape_for_constr
           | Tunboxed_tuple exprs ->
             Shape.unboxed_tuple (of_expr_list (List.map snd exprs))
           | Tobject _ | Tnil | Tfield _ ->
-            unknown_shape
+            unknown_shape_value
             (* Objects are currently not supported in the debugger. *)
           | Tlink _ | Tsubst _ ->
             if !Clflags.dwarf_pedantic
@@ -308,8 +323,9 @@ module Type_shape = struct
                 | Tfield (_, _, _, _)
                 | Tvariant _ | Tunivar _
                 | Tpoly (_, _)
+                | Trepr (_, _)
                 | Tpackage (_, _)
-                | Tquote _ | Tsplice _ | Tof_kind _ ->
+                | Tquote _ | Tsplice _ | Tquote_eval _ | Tof_kind _ ->
                   assert false
               in
               Misc.fatal_errorf
@@ -321,7 +337,7 @@ module Type_shape = struct
                 | Some cu -> Compilation_unit.full_path_as_string cu)
               (* We cannot access the type printer here, so this
                  is the best we can do for now. *)
-            else unknown_shape
+            else unknown_shape_any
           | Tvariant rd ->
             let row_fields = Types.row_fields rd in
             let row_fields =
@@ -345,11 +361,12 @@ module Type_shape = struct
             in
             Shape.poly_variant row_fields
           | Tarrow (_, _, _, _) -> Shape.arrow ()
-          | Tquote _ -> unknown_shape
-          | Tsplice _ -> unknown_shape
-          | Tunivar _ -> unknown_shape
-          | Tof_kind _ -> unknown_shape
-          | Tpackage _ -> unknown_shape
+          | Tquote _ -> unknown_shape_any
+          | Tsplice _ -> unknown_shape_any
+          | Tquote_eval _ -> unknown_shape_any
+          | Tunivar _ -> unknown_shape_any
+          | Tof_kind _ -> unknown_shape_any
+          | Tpackage _ -> unknown_shape_value
           (* CR sspies: Support first-class modules. *)
         in
         Recursive_binder.close_term_if_binder_is_used ~preserve_uid:false
@@ -367,7 +384,10 @@ end
 
 module Type_decl_shape = struct
   let rec mixed_block_shape_to_layout = function
-    | Types.Value -> Layout.Base Value
+    (* CR layouts-scannable: We forget about the stored scannable axes when
+       converting, since a [Layout.t] (which is a [Sort.Const.t]) doesn't have
+       a place to put them. See the CR on [Layout] at the top of this file. *)
+    | Types.Scannable _ -> Layout.Base Scannable
     | Types.Float_boxed ->
       Layout.Base Float64
       (* [Float_boxed] records are unboxed in the variant at runtime,
@@ -428,7 +448,7 @@ module Type_decl_shape = struct
             then
               if !Clflags.dwarf_pedantic
               then
-                Misc.fatal_errorf
+                Misc.fatal_errorf_doc
                   "Type_shape: variant constructor with mismatched layout, has \
                    %a but expected %a"
                   Layout.format ly Layout.format ly2
@@ -439,17 +459,18 @@ module Type_decl_shape = struct
         let lys =
           List.map
             (fun { Shape.field_name = _; field_value = _, ly } ->
-              if not
-                   (Layout.equal ly (Layout.Base Value)
-                   || Layout.equal ly (Layout.Base Void))
+              if
+                not
+                  (Layout.equal ly (Layout.Base Scannable)
+                  || Layout.equal ly (Layout.Base Void))
               then
                 if !Clflags.dwarf_pedantic
                 then
-                  Misc.fatal_errorf
+                  Misc.fatal_errorf_doc
                     "Type_shape: variant constructor with mismatched layout, \
                      has %a but expected value or void."
                     Layout.format ly
-                else Layout.Base Value
+                else Layout.Base Scannable
               else ly)
             args
         in
@@ -486,7 +507,9 @@ module Type_decl_shape = struct
       type_param_shapes shape_for_constr =
     let module Types_predef = Predef in
     let open Shape in
-    let unknown_shape = Shape.leaf' None in
+    let unknown_shape () =
+      Type_shape.unknown_shape_from_jkind type_declaration.type_jkind
+    in
     let type_params = type_declaration.type_params in
     let type_subst = List.combine type_params type_param_shapes in
     (* Duplicates are fine, the constraint system makes sure they are
@@ -536,10 +559,11 @@ module Type_decl_shape = struct
         | Type_variant
             (_, (Variant_extensible | Variant_with_null), _unsafe_mode_crossing)
           ->
-          unknown_shape (* CR sspies: These variants are not yet supported. *)
+          unknown_shape ()
+          (* CR sspies: These variants are not yet supported. *)
         | Type_record (lbl_list, record_repr, _unsafe_mode_crossing) -> (
           match record_repr with
-          | Record_boxed _ ->
+          | Record_boxed ->
             record_of_labels ~shape_for_constr ~type_subst Record_boxed lbl_list
           | Record_mixed fields ->
             record_of_labels ~shape_for_constr ~type_subst
@@ -572,9 +596,11 @@ module Type_decl_shape = struct
                  inside of a match. For example, if [Foo] is the constructor \
                  [Foo { a : int; b : int }], then [r] is an inline record in \
                  [match e with Foo r -> ...]."
-            else unknown_shape)
-        | Type_abstract _ -> unknown_shape
-        | Type_open -> unknown_shape
+            else unknown_shape ()
+          | Record_dummy _ -> Misc.fatal_error "unexpected dummy representation"
+          )
+        | Type_abstract _ -> unknown_shape ()
+        | Type_open -> unknown_shape ()
         | Type_record_unboxed_product (lbl_list, _, _) ->
           record_of_labels ~shape_for_constr ~type_subst Record_unboxed_product
             lbl_list)
@@ -618,6 +644,7 @@ module Type_decl_shape = struct
     | Predef (_, args) | Constr (_, args) ->
       List.for_all is_closed_type_shape args
     | Alias sh -> is_closed_type_shape sh
+    | At_layout (sh, _) -> is_closed_type_shape sh
     | Tuple shapes | Unboxed_tuple shapes ->
       List.for_all is_closed_type_shape shapes
     | Arrow -> true
@@ -645,6 +672,7 @@ module Type_decl_shape = struct
       is_closed_type_shape sh
     | Record { fields; kind = _ } ->
       List.for_all (fun (_, _, sh, _) -> is_closed_type_shape sh) fields
+    | Unknown_type -> true
     | Var _
     | App (_, _)
     | Struct _
@@ -675,11 +703,9 @@ module Type_decl_shape = struct
           (* We are applying the declaration to different arguments
              that are not closed. In this case, we create a version of the type
              that can have anything for its arguments. *)
-          (* CR sspies: Revisit this case when revisiting the layouts and their
-             interactions with type shapes. *)
           Some
-            (Shape.constr id' (List.map (fun _ -> Shape.leaf' None) inner_args))
-        )
+            (Shape.constr id'
+               (List.map (fun _ -> Shape.unknown_type ()) inner_args)))
       | Pdot _ | Papply _ | Pextra_ty _ -> None)
 
   let of_type_declaration_with_variables (id : Ident.t)
@@ -785,7 +811,8 @@ let rec decompose_application (t : Shape.t) =
   | Predef (_, _)
   | Arrow | Poly_variant _ | Mu _ | Rec_var _ | Variant _ | Variant_unboxed _
   | Record _ | Mutrec _
-  | Proj_decl (_, _) ->
+  | Proj_decl (_, _)
+  | Unknown_type | At_layout _ ->
     t, []
 
 let find_constr_id_with_args (subst_constr, _) id args =
@@ -803,7 +830,9 @@ let update_subst_with_id_arg_binder (subst_constr, subst_constr_mut) id args
   let new_list =
     (args, rec_binder)
     ::
-    (match Ident.Map.find_opt id subst_constr with Some t -> t | None -> [])
+    (match Ident.Map.find_opt id subst_constr with
+    | Some t -> t
+    | None -> [])
   in
   Ident.Map.add id new_list subst_constr, subst_constr_mut
 
@@ -855,17 +884,19 @@ let add_to_cache t res subst_type (subst_constr_mut, subst_constr) =
      - [subst_constr] is empty, meaning there are no recursive occurrences
        of a particular [Constr (id, args)] to be substituted with a recursive
        variable. *)
-  if Ident.Map.is_empty subst_type
-     && Ident.Map.is_empty subst_constr_mut
-     && Ident.Map.is_empty subst_constr
+  if
+    Ident.Map.is_empty subst_type
+    && Ident.Map.is_empty subst_constr_mut
+    && Ident.Map.is_empty subst_constr
   then Shape.Cache.add eval_cache t res
 
 let find_in_cache t subst_type (subst_constr_mut, subst_constr) =
   (* We perform the same emptiness check as in [add_to_cache] when looking up a
      value. *)
-  if Ident.Map.is_empty subst_type
-     && Ident.Map.is_empty subst_constr_mut
-     && Ident.Map.is_empty subst_constr
+  if
+    Ident.Map.is_empty subst_type
+    && Ident.Map.is_empty subst_constr_mut
+    && Ident.Map.is_empty subst_constr
   then Shape.Cache.find_opt eval_cache t
   else None
 
@@ -880,9 +911,9 @@ let rec unfold_and_evaluate ~diagnostics ~depth ~steps_remaining subst_type
     subst_constr (t : Shape.t) =
   D.count_evaluation_step diagnostics;
   if Misc.Maybe_bounded.is_depleted steps_remaining
-  then Shape.leaf' None
+  then Shape.unknown_type ()
   else if is_above_unfold_and_evaluate_max_depth depth
-  then Shape.leaf' None
+  then Shape.unknown_type ()
   else (
     Misc.Maybe_bounded.decr steps_remaining;
     match find_in_cache t subst_type subst_constr with
@@ -920,7 +951,7 @@ and unfold_and_evaluate0 ~diagnostics ~depth ~steps_remaining subst_type
         |> Recursive_binder.close_term_if_binder_is_used ~preserve_uid:false
              rec_binder
         |> Option.some
-      | Leaf | Error _ -> None
+      | Unknown_type | At_layout _ | Error _ -> None
       | Var _
       | Abs (_, _)
       | App (_, _)
@@ -932,15 +963,17 @@ and unfold_and_evaluate0 ~diagnostics ~depth ~steps_remaining subst_type
       | Predef (_, _)
       | Arrow | Poly_variant _ | Mu _ | Rec_var _ | Variant _
       | Variant_unboxed _ | Record _
-      | Proj_decl (_, _) ->
+      | Proj_decl (_, _)
+      | Leaf ->
         if !Clflags.dwarf_pedantic
         then
           Misc.fatal_errorf
             "Found %a in declaration projection %a. Expected either a mutrec \
-             declaration, an error, or a leaf."
+             declaration, an error, or an unknown type."
             Shape.print str Ident.print id
           (* Projections are always directly applied to the mutrec. In the case of
-             imprecisions, the cases [Leaf] and [Error] can potentially occur. *)
+             imprecisions, the cases [Unknown_type] and [Error] can potentially
+             occur. *)
         else None)
     | Var _
     | Abs (_, _)
@@ -952,7 +985,8 @@ and unfold_and_evaluate0 ~diagnostics ~depth ~steps_remaining subst_type
     | Tuple _ | Unboxed_tuple _
     | Predef (_, _)
     | Arrow | Poly_variant _ | Mu _ | Rec_var _ | Variant _ | Variant_unboxed _
-    | Record _ | Mutrec _ ->
+    | Record _ | Mutrec _ | Unknown_type
+    | At_layout (_, _) ->
       None
   in
   let result =
@@ -971,7 +1005,7 @@ and unfold_and_evaluate0 ~diagnostics ~depth ~steps_remaining subst_type
         | None -> (
           match find_mut_rec_shape subst_constr id with
           | Some t -> unfold_and_eval (Shape.app_list t constr_args)
-          | None -> Shape.leaf' None))
+          | None -> Shape.unknown_type ()))
       | App (f, arg) -> (
         let f = unfold_and_eval f in
         let arg = unfold_and_eval arg in
@@ -990,14 +1024,15 @@ and unfold_and_evaluate0 ~diagnostics ~depth ~steps_remaining subst_type
         | Predef (_, _)
         | Arrow | Poly_variant _ | Mu _ | Rec_var _ | Variant _
         | Variant_unboxed _ | Record _ | Mutrec _
-        | Proj_decl (_, _) ->
+        | Proj_decl (_, _)
+        | Unknown_type | At_layout _ ->
           Shape.app f ~arg)
       | Proj_decl _ ->
-        Shape.leaf' None
-        (* Only possible for the [Leaf] and [Error] cases in pedantic mode, see
-           [maybe_evaluated_shape] above. Mapping an error or other cases to a
-           leaf should not be a problem for DWARF emission, since it's the
-           default fallback. *)
+        Shape.unknown_type ()
+        (* Only possible for the [Unknown_type] and [Error] cases in pedantic
+           mode, see [maybe_evaluated_shape] above. Mapping an error or other
+           cases to an unknown type should not be a problem for DWARF emission,
+           since it's the default fallback. *)
       | Variant constructors ->
         let constructors =
           Shape.complex_constructors_map
@@ -1036,9 +1071,12 @@ and unfold_and_evaluate0 ~diagnostics ~depth ~steps_remaining subst_type
         Shape.alias
           (unfold_and_evaluate ~diagnostics ~depth ~steps_remaining subst_type
              subst_constr t)
+      | At_layout (t, layout) -> Shape.at_layout (unfold_and_eval t) layout
       | Struct items -> Shape.str (Shape.Item.Map.map unfold_and_eval items)
       (* normal forms for CBV evaluation *)
-      | Mutrec _ | Abs _ | Error _ | Comp_unit _ | Rec_var _ | Leaf -> t)
+      | Mutrec _ | Abs _ | Error _ | Comp_unit _ | Rec_var _ | Leaf
+      | Unknown_type ->
+        t)
   in
   add_to_cache t result subst_type subst_constr;
   result
@@ -1052,6 +1090,18 @@ let unfold_and_evaluate ?(diagnostics = Evaluation_diagnostics.no_diagnostics) t
   unfold_and_evaluate ~diagnostics ~depth:0 ~steps_remaining Ident.Map.empty
     (Ident.Map.empty, Ident.Map.empty)
     t
+
+(** Instead of exposing [unfold_and_evaluate] directly, we expose the module
+    [Evaluated_shape] such that subsequent translations can, using types,
+    require evaluation to occur first. See
+    [Complex_shape.type_shape_to_complex_shape]. *)
+module Evaluated_shape = struct
+  type t = Shape.t
+
+  let unfold_and_evaluate = unfold_and_evaluate
+
+  let shape shape = shape
+end
 
 type shape_with_layout =
   { type_shape : Shape.t;
@@ -1077,30 +1127,6 @@ let add_to_type_shapes var_uid type_expr type_layout ~name:type_name uid_of_path
   let type_shape = Type_shape.of_type_expr type_expr uid_of_path in
   Uid.Tbl.add all_type_shapes var_uid { type_shape; type_name; type_layout }
 
-let rec estimate_layout_from_type_shape (t : Shape.t) : Layout.t option =
-  match t.desc with
-  | Predef (t, _) -> Some (Shape.Predef.to_layout t)
-  | Constr (_, _) ->
-    None (* recursive occurrence, conservatively not handled for now *)
-  | Unboxed_tuple fields ->
-    let field_layouts = List.map estimate_layout_from_type_shape fields in
-    if List.for_all Option.is_some field_layouts
-    then Some (Layout.Product (List.map Option.get field_layouts))
-    else None
-  | Var _ -> None (* CR sspies: Find out what happens to type variables. *)
-  | Variant_unboxed { arg_layout; _ } ->
-    Some arg_layout
-    (* CR sspies: [arg_layout] could become unreliable in the future. Consider
-       recursively descending in that case. *)
-  | Tuple _ | Arrow | Variant _ | Poly_variant _ | Record _ ->
-    Some (Layout.Base Value)
-  | Alias t -> estimate_layout_from_type_shape t
-  | Mu t ->
-    estimate_layout_from_type_shape t
-    (* Simple treatment of recursion, we simply look inside. *)
-  | Leaf | Abs _ | Mutrec _ | Error _ | Comp_unit _ | Rec_var _ | App _ | Proj _
-  | Struct _ | Proj_decl _ ->
-    None
 
 (* Merlin-only: The below functions are only used for printing when the compiler is passed
    the -ddebug-uids flag, which isn't relevant to Merlin *)
@@ -1126,7 +1152,7 @@ let print_table_all_type_shapes ppf =
         ( Format.asprintf "%a" Uid.print k,
           ( type_name,
             ( Format.asprintf "%a" Shape.print type_shape,
-              Format.asprintf "%a" Layout.format type_layout ) ) ))
+              Format_doc.asprintf "%a" Layout.format type_layout ) ) ))
       entries
   in
   let uids, rest = List.split entries in

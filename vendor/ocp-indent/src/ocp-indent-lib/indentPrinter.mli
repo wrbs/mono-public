@@ -2,7 +2,7 @@
 (*                                                                        *)
 (*  Copyright 2013 OCamlPro                                               *)
 (*                                                                        *)
-(*  All rights reserved.This file is distributed under the terms of the   *)
+(*  All rights reserved. This file is distributed under the terms of the   *)
 (*  GNU Lesser General Public License version 2.1 with linking            *)
 (*  exception.                                                            *)
 (*                                                                        *)
@@ -45,3 +45,7 @@ type 'a output = {
 val std_output : unit output
 
 val proceed : 'a output -> Nstream.t -> IndentBlock.t -> 'a -> 'a
+
+(* [check] does not print out but instead returns [true] if the input was
+   correctly indented and [false] otherwise. *)
+val check : _ output -> Nstream.t -> IndentBlock.t -> bool

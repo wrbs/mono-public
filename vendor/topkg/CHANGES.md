@@ -1,3 +1,29 @@
+v1.1.1 2025-11-03 Zagreb
+-------------------------
+
+- Support for large package builds. On build, generate a `pkg.itarget`
+  at the root with the files to build and invoke `ocamlbuild` with
+  `pkg.otarget` rather than the explicit list of files. The
+  `pkg.itarget` file can be ignored by your VCS, it is generated on
+  the fly on each build. As a side effect, improves error reporting on
+  build failures.
+
+v1.1.0 2025-07-23 Zagreb
+------------------------
+
+- Change the default of `Topkg.Conf.debugger_support` from `false` to
+  `true`. This enables the install of `.ml` and `.cmt` files by
+  default which is expected for a good experience on `ocaml.org`.  The
+  previous behaviour can be recovered by setting
+  `TOPKG_CONF_DEBUGGER_SUPPORT=false` in your environment (#143).
+
+- Fix install of hidden library modules when `Topkg.Conf.debugger_support` is
+  `true`:
+  1. When the hidden module has an `.mli`, the `.cmi` files was being installed
+     instead of the `.cmti` and the `.mli` was missing (#143).
+  2. When the hidden module had no `.mli` the installation would fail
+     by requiring one.
+
 v1.0.8 2025-03-10 La Forclaz (VS)
 ---------------------------------
 

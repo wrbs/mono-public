@@ -16,6 +16,7 @@ let%expect_test _ =
     +bigarray.js
     +bigstring.js
     +blake2.js
+    +block_index.js
     +compare.js
     +domain.js
     +dynlink.js
@@ -26,6 +27,7 @@ let%expect_test _ =
     +fs.js
     +fs_fake.js
     +fs_node.js
+    +fs_quickjs.js
     +gc.js
     +graphics.js
     +hash.js
@@ -43,6 +45,7 @@ let%expect_test _ =
     +obj.js
     +parsing.js
     +prng.js
+    +promise.js
     +runtime_events.js
     +stdlib.js
     +str.js
@@ -61,6 +64,7 @@ let%expect_test _ =
     +bigarray.js
     +bigstring.js
     +blake2.js
+    +block_index.js
     +compare.js
     +domain.js
     +effect.js
@@ -87,6 +91,7 @@ let%expect_test _ =
     +obj.js
     +parsing.js
     +prng.js
+    +promise.js
     +runtime_events.js
     +stdlib.js
     +str.js
@@ -99,4 +104,6 @@ let%expect_test _ =
   printl extra;
   [%expect {|
     +dynlink.js
-    +toplevel.js |}]
+    +fs_quickjs.js
+    +toplevel.js
+    |}]

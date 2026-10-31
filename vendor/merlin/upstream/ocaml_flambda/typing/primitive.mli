@@ -45,6 +45,7 @@ type native_repr =
   | Unboxed_float of boxed_float
   | Unboxed_vector of boxed_vector
   | Unboxed_or_untagged_integer of unboxed_or_untagged_integer
+  | Unpacked_product of Jkind_types.Sort.Const.t
 (* CR mshinwell/ccasinghino: should we actually use
    "any_locality_mode Scalar.Integral.Width.t" here rather than defining an
    additional unboxed_or_untagged_integer type? *)
@@ -150,6 +151,13 @@ val prim_has_valid_reprs : loc:Location.t -> description -> unit
     the layout of type parameters ([%array_length] for example). *)
 val prim_can_contain_layout_any : description -> bool
 
+type wrong_repr_error =
+  | Product_arg
+  | Expected_value_prim
+  | Product_return
+  | Unpacked_product_return
+  | Repr_mismatch
+
 type error =
   | Old_style_float_with_native_repr_attribute
   | Old_style_float_with_non_value
@@ -159,6 +167,7 @@ type error =
   | Inconsistent_attributes_for_effects
   | Inconsistent_noalloc_attributes_for_effects
   | Invalid_representation_polymorphic_attribute
-  | Invalid_native_repr_for_primitive of string
+  | Invalid_native_repr_for_primitive of
+      { prim_name : string; errors : wrong_repr_error list }
 
 exception Error of Location.t * error

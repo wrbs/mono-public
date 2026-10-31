@@ -1,13 +1,13 @@
-(**************************************************************************)
-(*                                                                        *)
-(*                              OCamlFormat                               *)
-(*                                                                        *)
-(*            Copyright (c) Facebook, Inc. and its affiliates.            *)
-(*                                                                        *)
-(*      This source code is licensed under the MIT license found in       *)
-(*      the LICENSE file in the root directory of this source tree.       *)
-(*                                                                        *)
-(**************************************************************************)
+(**************************************************************************
+ *                                                                        *
+ *                              OCamlFormat                               *
+ *                                                                        *
+ *            Copyright (c) Facebook, Inc. and its affiliates.            *
+ *                                                                        *
+ *      This source code is licensed under the MIT license found in       *
+ *      the LICENSE file in the root directory of this source tree.       *
+ *                                                                        *
+ **************************************************************************)
 
 open Extended_ast
 
@@ -21,6 +21,7 @@ module Left_angle = struct
       | None, typ -> core_type typ )
     | Ptyp_object _ -> true
     | Ptyp_alias (typ, _) -> core_type typ
+    | Ptyp_quote _ -> true
     | _ -> false
 end
 
@@ -37,6 +38,7 @@ module Right_angle = struct
         | Some _, _ -> false
         | None, typ -> core_type typ )
       | Ptyp_object _ -> true
+      | Ptyp_quote _ -> true
       | _ -> false )
 
   let constructor_arguments = function

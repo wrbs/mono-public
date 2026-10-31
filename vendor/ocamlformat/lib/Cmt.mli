@@ -1,13 +1,13 @@
-(**************************************************************************)
-(*                                                                        *)
-(*                              OCamlFormat                               *)
-(*                                                                        *)
-(*            Copyright (c) Facebook, Inc. and its affiliates.            *)
-(*                                                                        *)
-(*      This source code is licensed under the MIT license found in       *)
-(*      the LICENSE file in the root directory of this source tree.       *)
-(*                                                                        *)
-(**************************************************************************)
+(**************************************************************************
+ *                                                                        *
+ *                              OCamlFormat                               *
+ *                                                                        *
+ *            Copyright (c) Facebook, Inc. and its affiliates.            *
+ *                                                                        *
+ *      This source code is licensed under the MIT license found in       *
+ *      the LICENSE file in the root directory of this source tree.       *
+ *                                                                        *
+ **************************************************************************)
 
 open Migrate_ast
 
@@ -48,4 +48,8 @@ type decoded =
   ; suffix: string  (** Just before the closing. *)
   ; kind: decoded_kind }
 
-val decode : parse_comments_as_doc:bool -> t -> decoded
+val decode :
+     parse_comments_as_doc:bool
+  -> preserve_ambiguous_line_comments:bool
+  -> t
+  -> decoded

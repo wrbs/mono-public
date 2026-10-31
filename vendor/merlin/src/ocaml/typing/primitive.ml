@@ -18,7 +18,7 @@
 open Misc
 open Parsetree
 
-module String = Misc_stdlib.String
+module String = Misc.Stdlib.String
 
 type unboxed_or_untagged_integer =
   | Unboxed_int64
@@ -41,6 +41,7 @@ type native_repr =
   | Unboxed_float of boxed_float
   | Unboxed_vector of boxed_vector
   | Unboxed_or_untagged_integer of unboxed_or_untagged_integer
+  | Unpacked_product of Jkind_types.Sort.Const.t
 
 type effects = No_effects | Only_generative_effects | Arbitrary_effects
 type coeffects = No_coeffects | Has_coeffects
@@ -64,6 +65,20 @@ type 'repr description_gen =
 
 type description = native_repr description_gen
 
+(* Is [[@@immediate]], so poly-compare can be used to de-dup errors. If a [loc]
+   is added, then errors will always be unique and de-duping will no longer be
+   necessary. *)
+type wrong_repr_error =
+  | Product_arg
+  | Expected_value_prim
+  | Product_return
+  | Unpacked_product_return
+  | Repr_mismatch
+[@@immediate]
+
+let compare_wrong_repr_error (a : wrong_repr_error) (b : wrong_repr_error) =
+  Stdlib.compare a b
+
 type error =
   | Old_style_float_with_native_repr_attribute
   | Old_style_float_with_non_value
@@ -73,19 +88,21 @@ type error =
   | Inconsistent_attributes_for_effects
   | Inconsistent_noalloc_attributes_for_effects
   | Invalid_representation_polymorphic_attribute
-  | Invalid_native_repr_for_primitive of string
+  | Invalid_native_repr_for_primitive of
+      { prim_name : string; errors : wrong_repr_error list }
 
 exception Error of Location.t * error
 
 type value_check = Bad_attribute | Bad_layout | Ok_value
 
 let check_ocaml_value = function
-  | _, Same_as_ocaml_repr (Base Value) -> Ok_value
+  | _, Same_as_ocaml_repr (Base Scannable) -> Ok_value
   | _, Same_as_ocaml_repr _
   | _, Repr_poly -> Bad_layout
   | _, Unboxed_float _
   | _, Unboxed_vector _
-  | _, Unboxed_or_untagged_integer _ -> Bad_attribute
+  | _, Unboxed_or_untagged_integer _
+  | _, Unpacked_product _ -> Bad_attribute
 
 let is_builtin_prim_name name = String.length name > 0 && name.[0] = '%'
 
@@ -223,8 +240,11 @@ let add_attribute_list ty attrs =
 
 let rec add_native_repr_attributes ty attrs =
   match ty, attrs with
-    (* Otyp_poly case might have been added in e.g. tree_of_value_description *)
+    (* Otyp_poly and Otyp_newlayout case might have been added in e.g.
+       tree_of_value_description *)
   | Otyp_poly (vars, ty), _ -> Otyp_poly (vars, add_native_repr_attributes ty attrs)
+  | Otyp_newlayout (vars, ty), _ ->
+    Otyp_newlayout (vars, add_native_repr_attributes ty attrs)
   | Otyp_arrow (label, am, a, Otyp_ret (rm, r)), attr_l :: rest ->
     let r = add_native_repr_attributes r rest in
     let a = add_attribute_list a attr_l in
@@ -236,6 +256,7 @@ let rec add_native_repr_attributes ty attrs =
 
 let oattr_unboxed = { oattr_name = "unboxed" }
 let oattr_untagged = { oattr_name = "untagged" }
+let oattr_unpacked = { oattr_name = "unpacked" }
 let oattr_noalloc = { oattr_name = "noalloc" }
 let oattr_builtin = { oattr_name = "builtin" }
 let oattr_no_effects = { oattr_name = "no_effects" }
@@ -255,8 +276,9 @@ let print p osig_val_decl =
     List.for_all f p.prim_native_repr_args && f p.prim_native_repr_res
   in
   let needs_unboxed_attribute = function
-    | _, Same_as_ocaml_repr (Base Value)
+    | _, Same_as_ocaml_repr (Base Scannable)
     | _, Repr_poly
+    | _, Unpacked_product _
     | _, Unboxed_or_untagged_integer (Untagged_int | Untagged_int8
                                     | Untagged_int16) -> false
     | _, Unboxed_float _
@@ -283,6 +305,7 @@ let print p osig_val_decl =
     | _, Unboxed_vector _
     | _, Unboxed_or_untagged_integer (Unboxed_int64 | Unboxed_int32
                                     | Unboxed_nativeint)
+    | _, Unpacked_product _
     | _, Repr_poly -> false
   in
   let all_unboxed = for_all needs_unboxed_attribute in
@@ -318,7 +341,7 @@ let print p osig_val_decl =
      | Prim_poly -> [oattr_local_opt])
     @
     (match repr with
-     | Same_as_ocaml_repr (Base Value)
+     | Same_as_ocaml_repr (Base Scannable)
      | Repr_poly -> []
      | Unboxed_float _
      | Unboxed_vector _
@@ -328,6 +351,7 @@ let print p osig_val_decl =
      | Unboxed_or_untagged_integer (Untagged_int | Untagged_int8
                                    | Untagged_int16) ->
        if all_untagged then [] else [oattr_untagged]
+     | Unpacked_product _ -> [oattr_unpacked]
      | Same_as_ocaml_repr _->
        if all_unboxed || not (needs_unboxed_attribute (m, repr))
        then []
@@ -406,29 +430,36 @@ let equal_native_repr nr1 nr2 =
   match nr1, nr2 with
   | Repr_poly, Repr_poly -> true
   | Repr_poly, (Unboxed_float _ | Unboxed_or_untagged_integer _
-               | Unboxed_vector _ | Same_as_ocaml_repr _)
+               | Unboxed_vector _ | Same_as_ocaml_repr _
+               | Unpacked_product _)
   | (Unboxed_float _ | Unboxed_or_untagged_integer _
-    | Unboxed_vector _ | Same_as_ocaml_repr _), Repr_poly
+    | Unboxed_vector _ | Same_as_ocaml_repr _
+    | Unpacked_product _), Repr_poly
     -> false
   | Same_as_ocaml_repr s1, Same_as_ocaml_repr s2 ->
     Jkind_types.Sort.Const.equal s1 s2
   | Same_as_ocaml_repr _,
     (Unboxed_float _ | Unboxed_or_untagged_integer _ |
-     Unboxed_vector _) -> false
+     Unboxed_vector _ | Unpacked_product _) -> false
   | Unboxed_float f1, Unboxed_float f2 -> equal_boxed_float f1 f2
   | Unboxed_float _,
     (Same_as_ocaml_repr _ | Unboxed_or_untagged_integer _ |
-     Unboxed_vector _) -> false
+     Unboxed_vector _ | Unpacked_product _) -> false
   | Unboxed_vector vi1, Unboxed_vector vi2 ->
     equal_unboxed_vector_size (unboxed_vector vi1) (unboxed_vector vi2)
   | Unboxed_vector _,
     (Same_as_ocaml_repr _ | Unboxed_float _ |
-     Unboxed_or_untagged_integer _) -> false
+     Unboxed_or_untagged_integer _ | Unpacked_product _) -> false
   | Unboxed_or_untagged_integer bi1, Unboxed_or_untagged_integer bi2 ->
     equal_unboxed_or_untagged_integer bi1 bi2
   | Unboxed_or_untagged_integer _,
     (Same_as_ocaml_repr _ | Unboxed_float _ |
-     Unboxed_vector _) -> false
+     Unboxed_vector _ | Unpacked_product _) -> false
+  | Unpacked_product s1, Unpacked_product s2 ->
+    Jkind_types.Sort.Const.equal s1 s2
+  | Unpacked_product _,
+    (Same_as_ocaml_repr _ | Unboxed_float _ |
+     Unboxed_vector _ | Unboxed_or_untagged_integer _) -> false
 
 let equal_effects ef1 ef2 =
   match ef1, ef2 with
@@ -454,49 +485,71 @@ module Repr_check = struct
 
   type result =
     | Wrong_arity
-    | Wrong_repr
+    | Wrong_repr of wrong_repr_error list (* non-empty list *)
     | Success
 
   let args_res_reprs prim =
     (prim.prim_native_repr_args @ [prim.prim_native_repr_res])
     |> List.map snd
 
-  let is repr = equal_native_repr repr
+  let is expected_repr repr : wrong_repr_error list =
+    if equal_native_repr expected_repr repr
+    then []
+    else [Repr_mismatch]
 
-  let any = fun _ -> true
+  let any = fun _ -> []
 
   let value_or_unboxed_or_untagged = function
-    | Same_as_ocaml_repr (Base Value)
+    | Same_as_ocaml_repr (Base Scannable)
     | Unboxed_float _ | Unboxed_or_untagged_integer _ | Unboxed_vector _ -> true
-    | Same_as_ocaml_repr _ | Repr_poly -> false
+    | Same_as_ocaml_repr _ | Repr_poly | Unpacked_product _ -> false
 
   let sort_is_product : Jkind_types.Sort.Const.t -> bool = function
     | Product _ -> true
     | Base _ -> false
+    | Univar _ -> Misc.fatal_error "sort_is_product: univar"
+    | Genvar _ -> Misc.fatal_error "sort_is_product: genvar"
 
-  let valid_c_stub_arg = function
+  let c_stub_arg_errors = function
     | Same_as_ocaml_repr s ->
-      not (sort_is_product s)
+      if sort_is_product s then [Product_arg] else []
     | Unboxed_float _ | Unboxed_or_untagged_integer _ | Unboxed_vector _
-    | Repr_poly -> true
+    | Unpacked_product _ | Repr_poly -> []
 
-  let valid_c_stub_return = function
+  let c_stub_return_errors = function
     | Same_as_ocaml_repr (Base _)
     | Unboxed_float _ | Unboxed_or_untagged_integer _ | Unboxed_vector _
-    | Repr_poly -> true
+    | Repr_poly -> []
+    | Unpacked_product _ -> [Unpacked_product_return]
     | Same_as_ocaml_repr (Product [s1; s2]) ->
-      not (sort_is_product s1) &&
-      not (sort_is_product s2)
-    | Same_as_ocaml_repr (Product _) -> false
+      if (sort_is_product s1) ||
+         (sort_is_product s2)
+      then [Product_return]
+      else []
+    | Same_as_ocaml_repr (Product _) -> [Product_return]
+    | Same_as_ocaml_repr (Univar _) ->
+      Misc.fatal_error "c_stub_return_errors: univar"
+    | Same_as_ocaml_repr (Genvar _) ->
+      Misc.fatal_error "c_stub_return_errors: genvar"
 
+  (* [checks = [check_arg1; check_arg2; ..; check_argn; check_ret]], where for
+     each check, [check (repr : native_repr)] returns a [wrong_repr_error list].
+     If the returned list is empty, then the check succeeded. For example,
+     [check [any; is (Same_as_ocaml_repr C.scannable)] prim_desc] checks that
+     [prim_desc] accepts a single argument of any layout and returns a
+     scannable value. *)
   let check checks prim =
     let reprs = args_res_reprs prim in
     if List.length reprs <> List.length checks
     then Wrong_arity
-    else
-    if not (List.for_all2 (fun f x -> f x) checks reprs)
-    then Wrong_repr
-    else Success
+    else begin
+      let repr_errors =
+        List.concat (List.map2 (fun f x -> f x) checks reprs)
+      in
+      if List.is_empty repr_errors
+      then Success
+      else Wrong_repr repr_errors
+    end
 
   let exactly required =
     check (List.map is required)
@@ -510,7 +563,11 @@ module Repr_check = struct
   let no_non_value_repr prim =
     let arity = List.length prim.prim_native_repr_args in
     check
-      (List.init (arity+1) (fun _ -> value_or_unboxed_or_untagged))
+      (List.init (arity+1)
+         (fun _ repr ->
+            if value_or_unboxed_or_untagged repr
+            then []
+            else [Expected_value_prim]))
       prim
 
   let check_c_stub prim =
@@ -518,7 +575,8 @@ module Repr_check = struct
        arguments or return products with more than two elements. *)
     let arity = List.length prim.prim_native_repr_args in
     let checks =
-      (List.init arity (fun _ -> valid_c_stub_arg)) @ [valid_c_stub_return]
+      (List.init arity (fun _ -> c_stub_arg_errors))
+      @ [c_stub_return_errors]
     in
     check checks prim
 end
@@ -539,16 +597,23 @@ let prim_has_valid_reprs ~loc prim =
     let stringlike_indexing_primitives =
       let widths : (_ * _ * Jkind_types.Sort.Const.t) list =
         [
-          ("16", "", C.value);
-          ("32", "", C.value);
-          ("f32", "", C.value);
-          ("64", "", C.value);
-          ("a128", "", C.value);
-          ("u128", "", C.value);
-          ("a256", "", C.value);
-          ("u256", "", C.value);
-          ("a512", "", C.value);
-          ("u512", "", C.value);
+          ("8", "", C.scannable);
+          ("i8", "", C.scannable);
+          ("16", "", C.scannable);
+          ("i16", "", C.scannable);
+          ("32", "", C.scannable);
+          ("f32", "", C.scannable);
+          ("64", "", C.scannable);
+          ("a128", "", C.scannable);
+          ("u128", "", C.scannable);
+          ("a256", "", C.scannable);
+          ("u256", "", C.scannable);
+          ("a512", "", C.scannable);
+          ("u512", "", C.scannable);
+          ("8", "#", C.bits8);
+          ("i8", "#", C.bits8);
+          ("16", "#", C.bits16);
+          ("i16", "#", C.bits16);
           ("32", "#", C.bits32);
           ("f32", "#", C.float32);
           ("64", "#", C.bits64);
@@ -562,8 +627,10 @@ let prim_has_valid_reprs ~loc prim =
       in
       let indices : (_ * Jkind_types.Sort.Const.t) list =
         [
-          ("", C.value);
+          ("", C.scannable);
           ("_indexed_by_nativeint#", C.word);
+          ("_indexed_by_int8#", C.bits8);
+          ("_indexed_by_int16#", C.bits16);
           ("_indexed_by_int32#", C.bits32);
           ("_indexed_by_int64#", C.bits64);
         ]
@@ -573,17 +640,17 @@ let prim_has_valid_reprs ~loc prim =
           ( Printf.sprintf "%%caml_%s_get%s%s%s%s",
             fun index_kind width_kind ->
               [
-                Same_as_ocaml_repr C.value;
+                Same_as_ocaml_repr C.scannable;
                 Same_as_ocaml_repr index_kind;
                 Same_as_ocaml_repr width_kind;
               ] );
           ( Printf.sprintf "%%caml_%s_set%s%s%s%s",
             fun index_kind width_kind ->
               [
-                Same_as_ocaml_repr C.value;
+                Same_as_ocaml_repr C.scannable;
                 Same_as_ocaml_repr index_kind;
                 Same_as_ocaml_repr width_kind;
-                Same_as_ocaml_repr C.value;
+                Same_as_ocaml_repr C.scannable;
               ] );
         ]
       in
@@ -605,11 +672,11 @@ let prim_has_valid_reprs ~loc prim =
     (* Corresponds to [array_vec_primitives] in [translprim.ml]. *)
     let vector_array_indexing_primitives =
       let vector_sizes = [
-        ("128", "", C.value);
+        ("128", "", C.scannable);
         ("128", "#", C.vec128);
-        ("256", "", C.value);
+        ("256", "", C.scannable);
         ("256", "#", C.vec256);
-        ("512", "", C.value);
+        ("512", "", C.scannable);
         ("512", "#", C.vec512);
       ] in
       let array_types = [
@@ -620,12 +687,16 @@ let prim_has_valid_reprs ~loc prim =
         "int_array";
         "unboxed_int64_array";
         "unboxed_int32_array";
+        "untagged_int16_array";
+        "untagged_int8_array";
         "unboxed_nativeint_array";
       ] in
       let safe_sigils = [""; "u"] in
       let indices = [
-        ("", C.value);
+        ("", C.scannable);
         ("_indexed_by_nativeint#", C.word);
+        ("_indexed_by_int8#", C.bits8);
+        ("_indexed_by_int16#", C.bits16);
         ("_indexed_by_int32#", C.bits32);
         ("_indexed_by_int64#", C.bits64);
       ] in
@@ -634,17 +705,17 @@ let prim_has_valid_reprs ~loc prim =
           ( Printf.sprintf "%%caml_%s_get%s%s%s%s",
             fun index_kind vector_kind ->
               [
-                Same_as_ocaml_repr C.value;
+                Same_as_ocaml_repr C.scannable;
                 Same_as_ocaml_repr index_kind;
                 Same_as_ocaml_repr vector_kind;
               ] );
           ( Printf.sprintf "%%caml_%s_set%s%s%s%s",
             fun index_kind vector_kind ->
               [
-                Same_as_ocaml_repr C.value;
+                Same_as_ocaml_repr C.scannable;
                 Same_as_ocaml_repr index_kind;
                 Same_as_ocaml_repr vector_kind;
-                Same_as_ocaml_repr C.value;
+                Same_as_ocaml_repr C.scannable;
               ] );
         ]
       in
@@ -670,11 +741,11 @@ let prim_has_valid_reprs ~loc prim =
       same_arg_res_repr_with_arity 1
 
     | "%ignore" ->
-      check [any; is (Same_as_ocaml_repr C.value)]
+      check [any; is (Same_as_ocaml_repr C.scannable)]
     | "%revapply" ->
-      check [any; is (Same_as_ocaml_repr C.value); any]
+      check [any; is (Same_as_ocaml_repr C.scannable); any]
     | "%apply" ->
-      check [is (Same_as_ocaml_repr C.value); any; any]
+      check [is (Same_as_ocaml_repr C.scannable); any; any]
 
     (* This doesn't prevent
 
@@ -692,245 +763,287 @@ let prim_has_valid_reprs ~loc prim =
     *)
     | "%array_safe_get" ->
       check [
-        is (Same_as_ocaml_repr C.value);
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
+        is (Same_as_ocaml_repr C.scannable);
         any]
     | "%array_safe_set" ->
       check [
-        is (Same_as_ocaml_repr C.value);
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
+        is (Same_as_ocaml_repr C.scannable);
         any;
-        is (Same_as_ocaml_repr C.value)]
+        is (Same_as_ocaml_repr C.scannable)]
     | "%array_unsafe_get" ->
       check [
-        is (Same_as_ocaml_repr C.value);
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
+        is (Same_as_ocaml_repr C.scannable);
         any]
     | "%array_unsafe_set" ->
       check [
-        is (Same_as_ocaml_repr C.value);
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
+        is (Same_as_ocaml_repr C.scannable);
         any;
-        is (Same_as_ocaml_repr C.value)]
+        is (Same_as_ocaml_repr C.scannable)]
 
     | "%array_safe_get_indexed_by_int64#" ->
       check [
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
         is (Same_as_ocaml_repr C.bits64);
         any]
     | "%array_safe_set_indexed_by_int64#" ->
       check [
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
         is (Same_as_ocaml_repr C.bits64);
         any;
-        is (Same_as_ocaml_repr C.value)]
+        is (Same_as_ocaml_repr C.scannable)]
     | "%array_unsafe_get_indexed_by_int64#" ->
       check [
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
         is (Same_as_ocaml_repr C.bits64);
         any]
     | "%array_unsafe_set_indexed_by_int64#" ->
       check [
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
         is (Same_as_ocaml_repr C.bits64);
         any;
-        is (Same_as_ocaml_repr C.value)]
+        is (Same_as_ocaml_repr C.scannable)]
     | "%array_safe_get_indexed_by_int32#" ->
       check [
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
         is (Same_as_ocaml_repr C.bits32);
         any]
     | "%array_safe_set_indexed_by_int32#" ->
       check [
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
         is (Same_as_ocaml_repr C.bits32);
         any;
-        is (Same_as_ocaml_repr C.value)]
+        is (Same_as_ocaml_repr C.scannable)]
     | "%array_unsafe_get_indexed_by_int32#" ->
       check [
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
         is (Same_as_ocaml_repr C.bits32);
         any]
     | "%array_unsafe_set_indexed_by_int32#" ->
       check [
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
         is (Same_as_ocaml_repr C.bits32);
         any;
-        is (Same_as_ocaml_repr C.value)]
+        is (Same_as_ocaml_repr C.scannable)]
     | "%array_safe_get_indexed_by_int16#" ->
       check [
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
         is (Same_as_ocaml_repr C.bits16);
         any]
     | "%array_safe_set_indexed_by_int16#" ->
       check [
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
         is (Same_as_ocaml_repr C.bits16);
         any;
-        is (Same_as_ocaml_repr C.value)]
+        is (Same_as_ocaml_repr C.scannable)]
     | "%array_unsafe_get_indexed_by_int16#" ->
       check [
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
         is (Same_as_ocaml_repr C.bits16);
         any]
     | "%array_unsafe_set_indexed_by_int16#" ->
       check [
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
         is (Same_as_ocaml_repr C.bits16);
         any;
-        is (Same_as_ocaml_repr C.value)]
+        is (Same_as_ocaml_repr C.scannable)]
     | "%array_safe_get_indexed_by_int8#" ->
       check [
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
         is (Same_as_ocaml_repr C.bits8);
         any]
     | "%array_safe_set_indexed_by_int8#" ->
       check [
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
         is (Same_as_ocaml_repr C.bits8);
         any;
-        is (Same_as_ocaml_repr C.value)]
+        is (Same_as_ocaml_repr C.scannable)]
     | "%array_unsafe_get_indexed_by_int8#" ->
       check [
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
         is (Same_as_ocaml_repr C.bits8);
         any]
     | "%array_unsafe_set_indexed_by_int8#" ->
       check [
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
         is (Same_as_ocaml_repr C.bits8);
         any;
-        is (Same_as_ocaml_repr C.value)]
+        is (Same_as_ocaml_repr C.scannable)]
     | "%array_safe_get_indexed_by_nativeint#" ->
       check [
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
         is (Same_as_ocaml_repr C.word);
         any]
     | "%array_safe_set_indexed_by_nativeint#" ->
       check [
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
         is (Same_as_ocaml_repr C.word);
         any;
-        is (Same_as_ocaml_repr C.value)]
+        is (Same_as_ocaml_repr C.scannable)]
     | "%array_unsafe_get_indexed_by_nativeint#" ->
       check [
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
         is (Same_as_ocaml_repr C.word);
         any]
     | "%array_unsafe_set_indexed_by_nativeint#" ->
       check [
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
         is (Same_as_ocaml_repr C.word);
         any;
-        is (Same_as_ocaml_repr C.value)]
+        is (Same_as_ocaml_repr C.scannable)]
     | "%makearray_dynamic" ->
       check [
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
         any;
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
       ]
     | "%makearray_dynamic_uninit" ->
       (* Restrictions on this primitive are checked in [Translprim] *)
       check [
-        is (Same_as_ocaml_repr C.value);
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
+        is (Same_as_ocaml_repr C.scannable);
       ]
     | "%array_element_size_in_bytes" ->
       check [
-        is (Same_as_ocaml_repr C.value);
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
+        is (Same_as_ocaml_repr C.scannable);
       ]
     | "%peek" | "%poke" ->
       (* Arities and layouts of these primitives are checked in [Translprim] *)
       fun _ -> Success
-    | "%unsafe_get_idx" ->
+    | "%get_idx" ->
       check [
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
         is (Same_as_ocaml_repr C.bits64);
         any
       ]
-    | "%unsafe_get_idx_imm" ->
+    | "%get_idx_imm" ->
       check [
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
         is (Same_as_ocaml_repr C.bits64);
         any
       ]
-    | "%unsafe_set_idx" ->
+    | "%set_idx" ->
       check [
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
         is (Same_as_ocaml_repr C.bits64);
         any;
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
+      ]
+    | "%unsafe_array_idx" ->
+      check [
+        is (Same_as_ocaml_repr C.scannable);
+        is (Same_as_ocaml_repr C.bits64);
+      ]
+    | "%unsafe_array_idx_indexed_by_int8#" ->
+      check [
+        is (Same_as_ocaml_repr C.bits8);
+        is (Same_as_ocaml_repr C.bits64);
+      ]
+    | "%unsafe_array_idx_indexed_by_int16#" ->
+      check [
+        is (Same_as_ocaml_repr C.bits16);
+        is (Same_as_ocaml_repr C.bits64);
+      ]
+    | "%unsafe_array_idx_indexed_by_int32#" ->
+      check [
+        is (Same_as_ocaml_repr C.bits32);
+        is (Same_as_ocaml_repr C.bits64);
+      ]
+    | "%unsafe_array_idx_indexed_by_int64#" ->
+      check [
+        is (Same_as_ocaml_repr C.bits64);
+        is (Same_as_ocaml_repr C.bits64);
+      ]
+    | "%unsafe_array_idx_indexed_by_nativeint#" ->
+      check [
+        is (Same_as_ocaml_repr C.word);
+        is (Same_as_ocaml_repr C.bits64);
       ]
     | "%unsafe_get_ptr" ->
       check [
-        is (Same_as_ocaml_repr (C.Product [C.value; C.bits64]));
+        is (Same_as_ocaml_repr (C.Product [C.scannable; C.bits64]));
         any
       ]
     | "%unsafe_get_ptr_imm" ->
       check [
-        is (Same_as_ocaml_repr (C.Product [C.value; C.bits64]));
+        is (Same_as_ocaml_repr (C.Product [C.scannable; C.bits64]));
         any
       ]
     | "%unsafe_set_ptr" ->
       check [
-        is (Same_as_ocaml_repr (C.Product [C.value; C.bits64]));
+        is (Same_as_ocaml_repr (C.Product [C.scannable; C.bits64]));
         any;
-        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.scannable);
       ]
     | "%box_float" ->
-      exactly [Same_as_ocaml_repr C.float64; Same_as_ocaml_repr C.value]
+      exactly [Same_as_ocaml_repr C.float64; Same_as_ocaml_repr C.scannable]
     | "%unbox_float" ->
-      exactly [Same_as_ocaml_repr C.value; Same_as_ocaml_repr C.float64]
+      exactly [Same_as_ocaml_repr C.scannable; Same_as_ocaml_repr C.float64]
     | "%box_float32" ->
-      exactly [Same_as_ocaml_repr C.float32; Same_as_ocaml_repr C.value]
+      exactly [Same_as_ocaml_repr C.float32; Same_as_ocaml_repr C.scannable]
     | "%unbox_float32" ->
-      exactly [Same_as_ocaml_repr C.value; Same_as_ocaml_repr C.float32]
+      exactly [Same_as_ocaml_repr C.scannable; Same_as_ocaml_repr C.float32]
     | "%box_nativeint" ->
-      exactly [Same_as_ocaml_repr C.word; Same_as_ocaml_repr C.value]
+      exactly [Same_as_ocaml_repr C.word; Same_as_ocaml_repr C.scannable]
     | "%unbox_nativeint" ->
-      exactly [Same_as_ocaml_repr C.value; Same_as_ocaml_repr C.word]
+      exactly [Same_as_ocaml_repr C.scannable; Same_as_ocaml_repr C.word]
+    | "%domain_index" ->
+      exactly
+        [ Same_as_ocaml_repr C.scannable;
+          Same_as_ocaml_repr C.untagged_immediate ]
     | "%tag_int" ->
       exactly
-        [Same_as_ocaml_repr C.untagged_immediate; Same_as_ocaml_repr C.value]
+        [ Same_as_ocaml_repr C.untagged_immediate;
+          Same_as_ocaml_repr C.scannable ]
     | "%untag_int" ->
       exactly
-        [Same_as_ocaml_repr C.value; Same_as_ocaml_repr C.untagged_immediate]
+        [ Same_as_ocaml_repr C.scannable;
+          Same_as_ocaml_repr C.untagged_immediate ]
     | "%tag_int8" ->
-      exactly [Same_as_ocaml_repr C.bits8; Same_as_ocaml_repr C.value]
+      exactly [Same_as_ocaml_repr C.bits8; Same_as_ocaml_repr C.scannable]
     | "%untag_int8" ->
-      exactly [Same_as_ocaml_repr C.value; Same_as_ocaml_repr C.bits8]
+      exactly [Same_as_ocaml_repr C.scannable; Same_as_ocaml_repr C.bits8]
     | "%tag_int16" ->
-      exactly [Same_as_ocaml_repr C.bits16; Same_as_ocaml_repr C.value]
+      exactly [Same_as_ocaml_repr C.bits16; Same_as_ocaml_repr C.scannable]
     | "%untag_int16" ->
-      exactly [Same_as_ocaml_repr C.value; Same_as_ocaml_repr C.bits16]
+      exactly [Same_as_ocaml_repr C.scannable; Same_as_ocaml_repr C.bits16]
     | "%box_int32" ->
-      exactly [Same_as_ocaml_repr C.bits32; Same_as_ocaml_repr C.value]
+      exactly [Same_as_ocaml_repr C.bits32; Same_as_ocaml_repr C.scannable]
     | "%unbox_int32" ->
-      exactly [Same_as_ocaml_repr C.value; Same_as_ocaml_repr C.bits32]
+      exactly [Same_as_ocaml_repr C.scannable; Same_as_ocaml_repr C.bits32]
     | "%box_int64" ->
-      exactly [Same_as_ocaml_repr C.bits64; Same_as_ocaml_repr C.value]
+      exactly [Same_as_ocaml_repr C.bits64; Same_as_ocaml_repr C.scannable]
     | "%unbox_int64" ->
-      exactly [Same_as_ocaml_repr C.value; Same_as_ocaml_repr C.bits64]
+      exactly [Same_as_ocaml_repr C.scannable; Same_as_ocaml_repr C.bits64]
     | "%unbox_unit" ->
-      exactly [Same_as_ocaml_repr C.value; Same_as_ocaml_repr C.void]
+      exactly [Same_as_ocaml_repr C.scannable; Same_as_ocaml_repr C.void]
     | "%box_vec128" ->
-      exactly [Same_as_ocaml_repr C.vec128; Same_as_ocaml_repr C.value]
+      exactly [Same_as_ocaml_repr C.vec128; Same_as_ocaml_repr C.scannable]
     | "%unbox_vec128" ->
-      exactly [Same_as_ocaml_repr C.value; Same_as_ocaml_repr C.vec128]
+      exactly [Same_as_ocaml_repr C.scannable; Same_as_ocaml_repr C.vec128]
     | "%box_vec256" ->
-      exactly [Same_as_ocaml_repr C.vec256; Same_as_ocaml_repr C.value]
+      exactly [Same_as_ocaml_repr C.vec256; Same_as_ocaml_repr C.scannable]
     | "%unbox_vec256" ->
-      exactly [Same_as_ocaml_repr C.value; Same_as_ocaml_repr C.vec256]
+      exactly [Same_as_ocaml_repr C.scannable; Same_as_ocaml_repr C.vec256]
+    | "%join_vec256" ->
+      exactly [Same_as_ocaml_repr C.vec128; Same_as_ocaml_repr C.vec128;
+               Same_as_ocaml_repr C.vec256]
+    | "%split_vec256" ->
+      exactly [Same_as_ocaml_repr C.vec256;
+               Same_as_ocaml_repr (Product [C.vec128; C.vec128])]
     | "%box_vec512" ->
-      exactly [Same_as_ocaml_repr C.vec512; Same_as_ocaml_repr C.value]
+      exactly [Same_as_ocaml_repr C.vec512; Same_as_ocaml_repr C.scannable]
     | "%unbox_vec512" ->
-      exactly [Same_as_ocaml_repr C.value; Same_as_ocaml_repr C.vec512]
+      exactly [Same_as_ocaml_repr C.scannable; Same_as_ocaml_repr C.vec512]
 
     | "%reinterpret_tagged_int63_as_unboxed_int64" ->
-      exactly [Same_as_ocaml_repr C.value; Same_as_ocaml_repr C.bits64]
+      exactly [Same_as_ocaml_repr C.scannable; Same_as_ocaml_repr C.bits64]
     | "%reinterpret_unboxed_int64_as_tagged_int63" ->
-      exactly [Same_as_ocaml_repr C.bits64; Same_as_ocaml_repr C.value]
+      exactly [Same_as_ocaml_repr C.bits64; Same_as_ocaml_repr C.scannable]
 
     | name -> (
         match String.Map.find_opt name stringlike_indexing_primitives with
@@ -965,9 +1078,10 @@ let prim_has_valid_reprs ~loc prim =
        primitives here but not all, and it would be weird to raise different
        errors dependent on the [prim_name]. *)
     ()
-  | Wrong_repr ->
+  | Wrong_repr errors ->
     raise (Error (loc,
-            Invalid_native_repr_for_primitive (prim.prim_name)))
+            Invalid_native_repr_for_primitive
+              { prim_name = prim.prim_name; errors }))
 
 let prim_can_contain_layout_any prim =
   match prim.prim_name with
@@ -996,46 +1110,73 @@ module Style = Misc.Style
 let report_error ppf err =
   match err with
   | Old_style_float_with_native_repr_attribute ->
-    Format.fprintf ppf "Cannot use %a in conjunction with %a/%a."
+    Format_doc.fprintf ppf "Cannot use %a in conjunction with %a/%a."
       Style.inline_code "float"
       Style.inline_code "[@unboxed]"
       Style.inline_code  "[@untagged]"
   | Old_style_float_with_non_value ->
-    Format.fprintf ppf "Cannot use %a in conjunction with \
+    Format_doc.fprintf ppf "Cannot use %a in conjunction with \
                         types of non-value layouts."
       Style.inline_code "float"
   | Old_style_noalloc_with_noalloc_attribute ->
-    Format.fprintf ppf "Cannot use %a in conjunction with %a."
+    Format_doc.fprintf ppf "Cannot use %a in conjunction with %a."
       Style.inline_code "noalloc"
       Style.inline_code "[@@noalloc]"
   | No_native_primitive_with_repr_attribute ->
-    Format.fprintf ppf
+    Format_doc.fprintf ppf
       "@[The native code version of the primitive is mandatory@ \
       when attributes %a or %a are present.@]"
       Style.inline_code "[@untagged]"
       Style.inline_code "[@unboxed]"
   | No_native_primitive_with_non_value ->
-    Format.fprintf ppf
+    Format_doc.fprintf ppf
       "@[The native code version of the primitive is mandatory@ \
        for types with non-value layouts.@]"
   | Inconsistent_attributes_for_effects ->
-    Format.fprintf ppf "At most one of %a and %a can be specified."
+    Format_doc.fprintf ppf "At most one of %a and %a can be specified."
       Style.inline_code "[@no_effects]"
       Style.inline_code "[@only_generative_effects]"
   | Inconsistent_noalloc_attributes_for_effects ->
-    Format.fprintf ppf "Cannot use %a in conjunction with %a."
+    Format_doc.fprintf ppf "Cannot use %a in conjunction with %a."
       Style.inline_code "[@@no_generative_effects]"
       Style.inline_code "[@@noalloc]"
   | Invalid_representation_polymorphic_attribute ->
-    Format.fprintf ppf "Attribute %a can only be used \
+    Format_doc.fprintf ppf "Attribute %a can only be used \
                         on built-in primitives."
       Style.inline_code "[@layout_poly]"
-  | Invalid_native_repr_for_primitive name ->
-    Format.fprintf ppf
+  | Invalid_native_repr_for_primitive { prim_name; errors } ->
+    Format_doc.fprintf ppf
       "The primitive [%s] is used in an invalid declaration.@ \
        The declaration contains argument/return types with the@ \
        wrong layout."
-      name
+      prim_name;
+    let errors = List.sort_uniq compare_wrong_repr_error errors in
+    List.iter
+      (function
+      | Product_arg ->
+        Format_doc.fprintf ppf
+          "@.@{<hint>Hint@}: @[<v>\
+           Types with product layouts in C stub arguments require the@ \
+           %a attribute.@]"
+          Style.inline_code "[@unpacked]"
+      | Expected_value_prim ->
+        Format_doc.fprintf ppf
+          "@.@{<hint>Hint@}: @[<v>\
+           This was expected to be a value-only primitive. You might've@ \
+           misspelled the primitive name.@]"
+      | Product_return ->
+        Format_doc.fprintf ppf
+          "@.@{<hint>Hint@}: @[<v>\
+           Unboxed products in C stub returns must be a pair of non-products.@]"
+      | Unpacked_product_return ->
+        Format_doc.fprintf ppf
+          "@.@{<hint>Hint@}: @[<v>\
+           The %a attribute is not allowed on C stub returns.@]"
+          Style.inline_code "[@unpacked]"
+      | Repr_mismatch -> ()
+        (* The error message already says "wrong layout", so a hint here would
+           be redundant. *))
+      errors
 
 let () =
   Location.register_error_of_exn

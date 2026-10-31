@@ -9,6 +9,6 @@ with ocamlPackages;
 
     src = lib.cleanSource ../.;
 
-    propagatedBuildInputs = [fmt dedent iter uutf];
-    checkInputs = [core ppx_jane dedent];
+    propagatedBuildInputs = [fmt dedent iter yojson];
+    checkInputs = [core core_unix ppx_jane dedent];
   }

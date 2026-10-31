@@ -1,3 +1,4 @@
+open! Stdune
 include Dune_lang.Package_name
 
 let of_opam_package_name opam_package_name =

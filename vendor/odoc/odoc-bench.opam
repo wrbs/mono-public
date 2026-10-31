@@ -1,6 +1,6 @@
+version: "3.2.2"
 opam-version: "2.0"
 
-version: "dev"
 homepage: "https://github.com/ocaml/odoc"
 doc: "https://ocaml.github.io/odoc/"
 bug-reports: "https://github.com/ocaml/odoc/issues"
@@ -25,13 +25,13 @@ authors: [
 ]
 dev-repo: "git+https://github.com/ocaml/odoc.git"
 
-synopsis: "Meta package defining dependencies for the benchmark rule. Not released."
+synopsis: "Meta package defining dependencies for the benchmark rule. Not released"
 
 depends: [
   "astring"
   "cmdliner" {>= "1.3.0"}
   "cppo" {build & >= "1.1.0"}
-  "dune" {>= "3.7.0"}
+  "dune" {>= "3.21.0"}
   "fpath"
   "ocaml" {>= "4.02.0"}
   "result"
@@ -41,8 +41,8 @@ depends: [
   "bos"
   "yojson" {>= "1.6.0"}
   "mdx" {>= "2.3.0"}
-  "core" {= "v0.16.2"}
-  "core_kernel" {= "v0.16.0"}
+  "core" {= "v0.17.2"}
+  "core_kernel" {= "v0.17.0"}
   "crunch"
   "odig"
   "base"

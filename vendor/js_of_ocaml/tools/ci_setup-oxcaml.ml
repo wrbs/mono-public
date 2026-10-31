@@ -23,20 +23,23 @@ let additional_others = StringSet.of_list [ "spawn" ]
 
 let omitted_others = StringSet.of_list [ "odoc" ]
 
-let omitted_js = StringSet.of_list [ "basement"; "sexplib0"; "ppxlib_jane"; "spawn" ]
+let omitted_js =
+  StringSet.of_list [ "basement"; "sexplib0"; "ppxlib_jane"; "spawn"; "sexp_type" ]
 
 let do_pin = StringSet.of_list [ "bigstringaf" ]
 
 let forked_packages =
   StringSet.of_list
-    [ "ocaml_intrinsics_kernel"
-    ; "base"
+    [ "base"
     ; "core"
     ; "bonsai_test"
     ; "bonsai_web_components"
     ; "bonsai_web_test"
     ; "virtual_dom"
     ]
+
+let fixed_packages =
+  StringSet.of_list [ "bonsai_web"; "bonsai_web_components"; "virtual_dom" ]
 
 let dune_workspace =
   {|(lang dune 3.17)
@@ -134,21 +137,19 @@ index 5a53c69..571e52e 100644
 -    "diff <(\necho '869e6b3143f14201f406eac9c05c4cdb  core/blob_stability_tests.ml'\necho 'a9ed028fa16f307982c196f647d05afa  integers_repr_tests_64bit.ml'\necho 'a17ffcd3bf1e15dbca0ee54ec5b95c58  integers_repr_tests_js.ml'\necho 'e747bd85320575c771fc62a0d3085d29  integers_repr_tests_wasm.ml'\n  ) <(md5sum %{deps})"))
 - (alias runtest))
 diff --git a/test/non_integers_repr.ml b/test/non_integers_repr.ml
-index cbb9bd5..b5b5a03 100644
+index e59e237..30740fc 100644
 --- a/test/non_integers_repr.ml
 +++ b/test/non_integers_repr.ml
-@@ -811,11 +811,12 @@ let%expect_test "Non-integer bin_prot size tests" =
+@@ -831,11 +831,13 @@ let%expect_test "Non-integer bin_prot size tests" =
+     3e 7a d7 f2 9a bc af 48 -> 1E-07
      00 00 00 00 00 00 00 00 -> 0
      |}];
-   gen_tests Tests.float_nan;
-+  [%expect
-+    {| 7f f8 00 00 00 00 00 01 -> NAN |}];
 +(*
+   gen_tests Tests.float_nan;
    Expect_test_patterns.require_match
-     [%here]
--    {|
--    7f f{8,0} 00 00 00 00 00 01 -> NAN (glob)
--    |};
+     {|
+     7f f{8,0} 00 00 00 00 00 01 -> NAN (glob)
+     |};
 +*)
    gen_tests Tests.vec;
    [%expect
@@ -193,8 +194,8 @@ index 5fd0ddc..4833923 100644
 +++ b/test/bitwise.ml
 @@ -86,7 +86,7 @@ module Ml_z_popcount = struct
      Static.quickcheck ~f:(fun x -> [%message (x : t) (popcount x : int)]) ();
-     (* Compression rate is low because our quickcheck implementation generates
-        integers with a bounded bitcount. *)
+     (* Compression rate is low because our quickcheck implementation generates integers
+        with a bounded bitcount. *)
 -    [%expect {| ((hash 1e429706c701b111d98b6e6e858bbea4) (uniqueness_rate 42.96875)) |}]
 +    [%expect {| ((hash d937e61f530ab9c27544e392922d286d) (uniqueness_rate 42.96875)) |}]
    ;;
@@ -202,8 +203,8 @@ index 5fd0ddc..4833923 100644
  
 @@ -102,7 +102,7 @@ module Ml_z_hamdist = struct
        ();
-     (* Compression rate is low because our quickcheck implementation generates
-        integers with a bounded bitcount. *)
+     (* Compression rate is low because our quickcheck implementation generates integers
+        with a bounded bitcount. *)
 -    [%expect {| ((hash 0a270232628736ee7d47c8b403250989) (uniqueness_rate 33.284457)) |}]
 +    [%expect {| ((hash 0d36530b39292e2c31f13d10ec004a38) (uniqueness_rate 33.284457)) |}]
    ;;
@@ -216,7 +217,7 @@ index 7996514..d0b463a 100644
 @@ -1,7 +1,9 @@
  (library
   (name zarith_stubs_js_test)
-- (libraries zarith core base.md5 zarith_stubs_js)
+- (libraries zarith_stubs_js core base.md5 zarith)
 + (libraries zarith_wrapper core base.md5 zarith_stubs_js)
   (flags :standard -w -60)
 + (inline_tests (flags -drop-tag no-js -drop-tag 64-bits-only -drop-tag no-wasm) (modes js wasm))
@@ -281,8 +282,27 @@ let dependencies (_, { OpamFile.OPAM.depends; _ }) =
   |> List.map OpamPackage.Name.to_string
 
 let is_jane_street_package (_, (_, opam)) =
-  let url = OpamUrl.to_string (Option.get (OpamFile.OPAM.get_url opam)) in
-  String.starts_with ~prefix:"https://github.com/janestreet/" url
+  match OpamFile.OPAM.get_url opam with
+  | None -> false
+  | Some url ->
+      let url = OpamUrl.to_string url in
+      String.starts_with ~prefix:"https://github.com/janestreet/" url
+
+let latest_version pkg =
+  let dir = Filename.concat repo pkg in
+  let prefix = pkg ^ "." in
+  Sys.readdir dir
+  |> Array.to_list
+  |> List.filter (String.starts_with ~prefix)
+  |> List.sort (fun a b ->
+      let va =
+        String.sub a (String.length prefix) (String.length a - String.length prefix)
+      in
+      let vb =
+        String.sub b (String.length prefix) (String.length b - String.length prefix)
+      in
+      OpamVersionCompare.compare vb va)
+  |> List.hd
 
 let packages =
   repo
@@ -291,14 +311,7 @@ let packages =
   |> List.map (fun s ->
       if String.contains s '.'
       then String.sub s 0 (String.index s '.'), read_opam_file s
-      else
-        ( s
-        , read_opam_file
-            (Filename.concat
-               s
-               (List.find
-                  (fun f -> String.starts_with ~prefix:s f)
-                  (Array.to_list (Sys.readdir (Filename.concat repo s))))) ))
+      else s, read_opam_file (Filename.concat s (latest_version s)))
   |> List.filter is_jane_street_package
 
 let rec traverse visited p =
@@ -313,6 +326,8 @@ let rec traverse visited p =
         List.fold_left traverse visited l
 
 let is_forked p = StringSet.mem p forked_packages
+
+let is_fixed p = StringSet.mem p fixed_packages
 
 let exec_async cmd =
   let p = Unix.open_process_out cmd in
@@ -388,16 +403,25 @@ let () =
   sync_exec (fun () -> exec_async "opam install uri --deps-only") [ () ];
   sync_exec
     (fun nm ->
-      let branch = if is_forked nm then Some "wasm-oxcaml" else Some "with-extensions" in
+      let branch =
+        if is_fixed nm
+        then Some "wasm-oxcaml-31-fixed"
+        else if is_forked nm
+        then Some "wasm-oxcaml-31"
+        else Some "oxcaml"
+      in
       let commit =
-        if is_forked nm
+        if is_fixed nm || is_forked nm
         then None
         else
-          Some
-            (let _, opam = List.assoc nm packages in
-             let url = OpamUrl.to_string (Option.get (OpamFile.OPAM.get_url opam)) in
-             let tar_file = Filename.basename url in
-             String.sub tar_file 0 (String.index tar_file '.'))
+          let commit =
+            let _, opam = List.assoc nm packages in
+            let url = OpamUrl.to_string (Option.get (OpamFile.OPAM.get_url opam)) in
+            let tar_file = Filename.basename url in
+            String.sub tar_file 0 (String.index tar_file '.')
+          in
+          Format.eprintf "Cloning %s#%s@." nm commit;
+          Some commit
       in
       clone'
         ?branch
@@ -405,7 +429,7 @@ let () =
         nm
         (Printf.sprintf
            "https://github.com/%s/%s"
-           (if is_forked nm then "ocaml-wasm" else "janestreet")
+           (if is_fixed nm || is_forked nm then "ocaml-wasm" else "janestreet")
            nm))
     (StringSet.elements (StringSet.diff js omitted_js))
 

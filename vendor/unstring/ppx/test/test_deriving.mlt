@@ -1,0 +1,736 @@
+#print_line_numbers true
+
+#reset_line_numbers_after_expect true
+
+open! Core
+open! Unstring.Export
+
+let test (type a) (sexp_of_a : a -> Sexp.t) ~input parser =
+  let compiled = Unstring.compile parser in
+  match Unstring.Compiled.run_unambiguous sexp_of_a compiled input with
+  | Some (Ok value) -> print_s (sexp_of_a value)
+  | Some (Error error) -> print_s [%sexp (error : Error.t)]
+  | None -> print_endline "No parse found"
+;;
+
+(* ============================================================ *)
+(* Record deriving *)
+(* *)
+(* Records require [@@format "..."] with %{field} placeholders. *)
+(* The generated [unstring] value parses according to the *)
+(* format and constructs the record. *)
+(* ============================================================ *)
+
+(* Two-field record: shape and parsing (including negative values) *)
+
+module Point = struct
+  type t =
+    { x : int
+    ; y : int
+    }
+  [@@deriving unstring ~restring, sexp_of] [@@format "(%{x},%{y})"]
+end
+;;
+
+Unstring.print_shape Point.unstring;;
+Point.unstring |> test [%sexp_of: Point.t] ~input:"(10,20)";;
+Point.unstring |> test [%sexp_of: Point.t] ~input:"(0,-5)";;
+print_endline (Point.restring { x = 10; y = 20 });;
+print_endline (Point.restring { x = 0; y = -5 })
+
+[%%expect
+  {|
+"(" «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧» , «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧» ")"
+((x 10) (y 20))
+((x 0) (y -5))
+(10,20)
+(0,-5)
+|}]
+
+(* Single-field record *)
+
+module Tag = struct
+  type t = { name : string }
+  [@@deriving unstring ~restring, sexp_of] [@@format "tag:%{name}"]
+end
+;;
+
+Unstring.print_shape Tag.unstring;;
+Tag.unstring |> test [%sexp_of: Tag.t] ~input:"tag:hello";;
+print_endline (Tag.restring { name = "hello" })
+
+[%%expect
+  {|
+tag: «·⋆»
+((name hello))
+tag:hello
+|}]
+
+(* Three-field record *)
+
+module Rgb = struct
+  type t =
+    { r : int
+    ; g : int
+    ; b : int
+    }
+  [@@deriving unstring ~restring, sexp_of] [@@format "rgb(%{r},%{g},%{b})"]
+end
+;;
+
+Unstring.print_shape Rgb.unstring;;
+Rgb.unstring |> test [%sexp_of: Rgb.t] ~input:"rgb(255,128,0)";;
+print_endline (Rgb.restring { r = 255; g = 128; b = 0 })
+
+[%%expect
+  {|
+"rgb("
+«(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧»
+,
+«(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧»
+,
+«(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧»
+")"
+((r 255) (g 128) (b 0))
+rgb(255,128,0)
+|}]
+
+(* Record with [@custom] on a field type *)
+
+module With_custom_field = struct
+  let my_bool =
+    Unstring.choice
+      [ Unstring.(lit "yes" |> map ~f:(fun () -> true))
+      ; Unstring.(lit "no" |> map ~f:(fun () -> false))
+      ]
+  ;;
+
+  let my_bool_restring = function
+    | true -> "yes"
+    | false -> "no"
+  ;;
+
+  type t =
+    { flag : (bool[@custom my_bool] [@custom_restring my_bool_restring])
+    ; label : string
+    }
+  [@@deriving unstring ~restring, sexp_of] [@@format "%{flag}:%{label}"]
+end
+;;
+
+Unstring.print_shape With_custom_field.unstring;;
+With_custom_field.unstring |> test [%sexp_of: With_custom_field.t] ~input:"yes:important"
+;;
+print_endline (With_custom_field.restring { flag = true; label = "important" });;
+print_endline (With_custom_field.restring { flag = false; label = "trivial" })
+
+[%%expect
+  {|
+(yes ‖ no) : «·⋆»
+((flag true) (label important))
+yes:important
+no:trivial
+|}]
+
+(* ============================================================ *)
+(* Variant deriving *)
+(* *)
+(* Each constructor requires [@format "..."].                   *)
+(* - No payload: literal match *)
+(* - Single payload: %{_}                                       *)
+(* - Tuple payload: %{1}, %{2}, ...                             *)
+(* - Inline record payload: %{field}                            *)
+(* ============================================================ *)
+
+(* Variant with no payload *)
+
+module Direction = struct
+  type t =
+    | North [@format "N"]
+    | South [@format "S"]
+    | East [@format "E"]
+    | West [@format "W"]
+  [@@deriving unstring ~restring, sexp_of]
+end
+;;
+
+Unstring.print_shape Direction.unstring;;
+Direction.unstring |> test [%sexp_of: Direction.t] ~input:"N";;
+Direction.unstring |> test [%sexp_of: Direction.t] ~input:"W";;
+print_endline (Direction.restring North);;
+print_endline (Direction.restring West)
+
+[%%expect
+  {|
+N ‖ S ‖ E ‖ W
+North
+West
+N
+W
+|}]
+
+(* Variant with single-element tuple payload *)
+
+module Command = struct
+  type t =
+    | Move of int [@format "move %{_}"]
+    | Stop [@format "stop"]
+  [@@deriving unstring ~restring, sexp_of]
+end
+;;
+
+Unstring.print_shape Command.unstring;;
+Command.unstring |> test [%sexp_of: Command.t] ~input:"move 5";;
+Command.unstring |> test [%sexp_of: Command.t] ~input:"stop";;
+print_endline (Command.restring (Move 5));;
+print_endline (Command.restring Stop)
+
+[%%expect
+  {|
+"move " «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧» ‖ stop
+(Move 5)
+Stop
+move 5
+stop
+|}]
+
+(* Variant with two-element tuple payload *)
+
+module Range = struct
+  type t =
+    | Between of int * int [@format "%{1} to %{2}"]
+    | Exactly of int [@format "exactly %{_}"]
+  [@@deriving unstring ~restring, sexp_of]
+end
+;;
+
+Unstring.print_shape Range.unstring;;
+Range.unstring |> test [%sexp_of: Range.t] ~input:"1 to 10";;
+Range.unstring |> test [%sexp_of: Range.t] ~input:"exactly 42";;
+print_endline (Range.restring (Between (1, 10)));;
+print_endline (Range.restring (Exactly 42))
+
+[%%expect
+  {|
+«(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧» " to " «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧»
+‖ "exactly " «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧»
+(Between 1 10)
+(Exactly 42)
+1 to 10
+exactly 42
+|}]
+
+(* Variant with 3-element tuple payload *)
+
+module Triple_variant = struct
+  type t =
+    | Data of int * string * float [@format "%{1}/%{2}/%{3}"]
+    | Empty [@format "empty"]
+  [@@deriving unstring ~restring, sexp_of]
+end
+;;
+
+Unstring.print_shape Triple_variant.unstring;;
+Triple_variant.unstring |> test [%sexp_of: Triple_variant.t] ~input:"42/hello/3.14";;
+print_endline (Triple_variant.restring (Data (42, "hello", 3.14)));;
+print_endline (Triple_variant.restring Empty)
+
+[%%expect
+  {|
+«(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧»
+/
+«·⋆»
+/
+«(- ‖ + ‖ "")
+ (⟦.0-9⟧⋆ ⟦.0-9⟧ ("" ‖ ⟦Ee⟧ (- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧) ‖ nan ‖ inf)»
+‖ empty
+(Data 42 hello 3.14)
+42/hello/3.14
+empty
+|}]
+
+(* Variant with inline record payload — multi-field *)
+
+module Event = struct
+  type t =
+    | Click of
+        { x : int
+        ; y : int
+        } [@format "click(%{x},%{y})"]
+    | KeyPress of { key : string } [@format "key:%{key}"]
+  [@@deriving unstring ~restring, sexp_of]
+end
+;;
+
+Unstring.print_shape Event.unstring;;
+Event.unstring |> test [%sexp_of: Event.t] ~input:"click(100,200)";;
+Event.unstring |> test [%sexp_of: Event.t] ~input:"key:Enter";;
+print_endline (Event.restring (Click { x = 100; y = 200 }));;
+print_endline (Event.restring (KeyPress { key = "Enter" }))
+
+[%%expect
+  {|
+"click(" «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧» , «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧» ")"
+‖ key: «·⋆»
+(Click (x 100) (y 200))
+(KeyPress (key Enter))
+click(100,200)
+key:Enter
+|}]
+
+(* Variant with inline record payload — single field *)
+
+module Labeled = struct
+  type t =
+    | Item of { name : string } [@format "item:%{name}"]
+    | None [@format "none"]
+  [@@deriving unstring ~restring, sexp_of]
+end
+;;
+
+Unstring.print_shape Labeled.unstring;;
+Labeled.unstring |> test [%sexp_of: Labeled.t] ~input:"item:widget";;
+print_endline (Labeled.restring (Item { name = "widget" }));;
+print_endline (Labeled.restring None)
+
+[%%expect
+  {|
+item: «·⋆» ‖ none
+(Item (name widget))
+item:widget
+none
+|}]
+
+(* ============================================================ *)
+(* Polymorphic variant deriving *)
+(* *)
+(* Same syntax as inline polymorphic variants, but as a type *)
+(* definition. The generated binding is [unstring_<name>]. *)
+(* ============================================================ *)
+
+(* Nullary rows *)
+
+type toggle =
+  [ `On [@format "on"]
+  | `Off [@format "off"]
+  ]
+[@@deriving unstring ~restring, sexp_of]
+;;
+
+Unstring.print_shape unstring_toggle;;
+unstring_toggle |> test [%sexp_of: toggle] ~input:"on";;
+print_endline (restring_toggle `On);;
+print_endline (restring_toggle `Off)
+
+[%%expect
+  {|
+on ‖ off
+On
+on
+off
+|}]
+
+(* Rows with payload *)
+
+type tagged =
+  [ `Int of (int[@format "int:%{_}"])
+  | `Str of (string[@format "str:%{_}"])
+  ]
+[@@deriving unstring ~restring, sexp_of]
+;;
+
+Unstring.print_shape unstring_tagged;;
+unstring_tagged |> test [%sexp_of: tagged] ~input:"int:7";;
+unstring_tagged |> test [%sexp_of: tagged] ~input:"str:hello";;
+print_endline (restring_tagged (`Int 7));;
+print_endline (restring_tagged (`Str "hello"))
+
+[%%expect
+  {|
+int: «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧» ‖ str: «·⋆»
+(Int 7)
+(Str hello)
+int:7
+str:hello
+|}]
+
+(* ============================================================ *)
+(* Type alias deriving *)
+(* *)
+(* For type aliases the ppx delegates to the underlying type. *)
+(* ============================================================ *)
+
+type my_int = int [@@deriving unstring ~restring, sexp_of];;
+
+Unstring.print_shape [%unstring: my_int];;
+[%unstring: my_int] |> test [%sexp_of: my_int] ~input:"42";;
+print_endline (restring_my_int 42)
+
+[%%expect
+  {|
+«(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧»
+42
+42
+|}]
+
+(* ============================================================ *)
+(* Signature generation: [@@deriving unstring] in .mli *)
+(* *)
+(* In signatures, [@@deriving unstring] generates val *)
+(* declarations with the appropriate type. *)
+(* - [type t] -> [val unstring : t Unstring.t] *)
+(* - [type foo] -> [val unstring_foo : foo Unstring.t] *)
+(* - [type 'a t] -> [val unstring : 'a Unstring.t -> ...] *)
+(* ============================================================ *)
+
+(* Basic type t *)
+
+module type Simple_sig = sig
+  type t [@@deriving unstring ~restring]
+end
+
+module Simple_impl : Simple_sig = struct
+  type t = int [@@deriving unstring ~restring]
+end
+
+[%%expect {| |}]
+
+(* Non-t type name: generates [unstring_<name>] / [restring_<name>] *)
+
+module type Named_sig = sig
+  type direction [@@deriving unstring ~restring]
+end
+
+module Named_impl : Named_sig = struct
+  type direction =
+    | North [@format "N"]
+    | South [@format "S"]
+  [@@deriving unstring ~restring]
+end
+
+[%%expect {| |}]
+
+(* One type parameter *)
+
+module type Param_sig = sig
+  type 'a wrapper = { value : 'a } [@@deriving unstring ~restring]
+end
+
+module Param_impl : Param_sig = struct
+  type 'a wrapper = { value : 'a }
+  [@@deriving unstring ~restring, sexp_of] [@@format "%{value}"]
+end
+
+[%%expect {| |}]
+
+(* Two type parameters *)
+
+module type Two_param_sig = sig
+  type ('a, 'b) pair =
+    { first : 'a
+    ; second : 'b
+    }
+  [@@deriving unstring ~restring]
+end
+
+module Two_param_impl : Two_param_sig = struct
+  type ('a, 'b) pair =
+    { first : 'a
+    ; second : 'b
+    }
+  [@@deriving unstring ~restring, sexp_of] [@@format "(%{first},%{second})"]
+end
+
+[%%expect {| |}]
+
+(* Verify the generated signatures have the right types *)
+
+let (_ : Simple_impl.t Unstring.t) = Simple_impl.unstring
+let (_ : Simple_impl.t -> string) = Simple_impl.restring
+let (_ : Named_impl.direction Unstring.t) = Named_impl.unstring_direction
+let (_ : Named_impl.direction -> string) = Named_impl.restring_direction
+let (_ : int Param_impl.wrapper Unstring.t) = Param_impl.unstring_wrapper Unstring.int
+let (_ : ('a -> string) -> 'a Param_impl.wrapper -> string) = Param_impl.restring_wrapper
+
+let (_ : (int, string) Two_param_impl.pair Unstring.t) =
+  Two_param_impl.unstring_pair Unstring.int (Unstring.string ())
+;;
+
+let (_ : ('a -> string) -> ('b -> string) -> ('a, 'b) Two_param_impl.pair -> string) =
+  Two_param_impl.restring_pair
+;;
+
+[%%expect {| |}];;
+
+print_endline (Param_impl.restring_wrapper Int.to_string { value = 42 })
+
+[%%expect
+  {|
+42
+|}]
+;;
+
+print_endline
+  (Two_param_impl.restring_pair Int.to_string Fn.id { first = 1; second = "abc" })
+
+[%%expect
+  {|
+(1,abc)
+|}]
+
+(* ============================================================ *)
+(* [@@deriving unstring ~of_string]: of_string function *)
+(* *)
+(* Derives an [of_string : (string -> t) Staged.t] in addition *)
+(* to the [unstring] value. Requires [~on_ambiguity] to *)
+(* specify behavior when multiple parses exist. *)
+(* - `Raise: raise with sexp (requires sexp_of before unstring) *)
+(* - `Raise_opaque: raise with opaque sexp *)
+(* - `Pick_first: silently pick the first parse *)
+(* ============================================================ *)
+
+(* Basic of_string with ~on_ambiguity:`Raise *)
+
+module With_of_string = struct
+  type t =
+    | Yes [@format "yes"]
+    | No [@format "no"]
+  [@@deriving sexp_of, unstring ~of_string ~on_ambiguity:`Raise ~restring]
+end
+;;
+
+Unstring.print_shape With_of_string.unstring;;
+print_s [%sexp (With_of_string.of_string "yes" : With_of_string.t)];;
+print_s [%sexp (With_of_string.of_string "no" : With_of_string.t)];;
+print_endline (With_of_string.restring Yes);;
+print_endline (With_of_string.restring (With_of_string.of_string "no"))
+
+[%%expect
+  {|
+yes ‖ no
+Yes
+No
+yes
+no
+|}]
+
+(* Non-t type name: generates [of_string_<name>] *)
+
+module Named_of_string = struct
+  type answer =
+    | Y [@format "y"]
+    | N [@format "n"]
+  [@@deriving sexp_of, unstring ~of_string ~on_ambiguity:`Raise]
+end
+;;
+
+print_s [%sexp (Named_of_string.answer_of_string "y" : Named_of_string.answer)]
+
+[%%expect
+  {|
+Y
+|}]
+
+(* of_string with ~on_ambiguity:`Raise_opaque *)
+
+module With_raise_opaque = struct
+  type t =
+    | A [@format "a"]
+    | B [@format "b"]
+  [@@deriving unstring ~of_string ~on_ambiguity:`Raise_opaque]
+end
+;;
+
+let (_ : With_raise_opaque.t) = With_raise_opaque.of_string "a" in
+print_endline "ok"
+
+[%%expect
+  {|
+ok
+|}]
+
+(* of_string with ~on_ambiguity:`Pick_first *)
+
+module With_pick_first = struct
+  type t =
+    | X [@format "x"]
+    | Y [@format "y"]
+  [@@deriving unstring ~of_string ~on_ambiguity:`Pick_first]
+end
+;;
+
+let (_ : With_pick_first.t) = With_pick_first.of_string "x" in
+print_endline "ok"
+
+[%%expect
+  {|
+ok
+|}]
+
+(* of_string on invalid input: raises *)
+;;
+
+try
+  let (_ : With_of_string.t) = With_of_string.of_string "invalid" in
+  ()
+with
+| exn -> print_s [%sexp (exn : Exn.t)]
+
+[%%expect
+  {|
+"Unstring: no parse found"
+|}]
+
+(* of_string signature generation *)
+
+module type Of_string_sig = sig
+  type t [@@deriving unstring ~of_string ~restring]
+end
+
+module Of_string_impl : Of_string_sig = struct
+  type t = int [@@deriving sexp_of, unstring ~of_string ~on_ambiguity:`Raise ~restring]
+end
+
+[%%expect {| |}]
+
+(* Verify signature types *)
+
+let (_ : string -> Of_string_impl.t) = Of_string_impl.of_string
+let (_ : Of_string_impl.t -> string) = Of_string_impl.restring
+
+[%%expect {| |}]
+
+(* ============================================================ *)
+(* Error cases *)
+(* *)
+(* Missing attributes, unsupported type shapes, and mismatched *)
+(* format strings. *)
+(* ============================================================ *)
+
+(* Record without [@@format] *)
+
+type missing_format =
+  { a : int
+  ; b : string
+  }
+[@@deriving unstring]
+
+[%%expect
+  {|
+Line 1, characters 0-74:
+Error: Record types require [@@format "..."]
+|}]
+
+(* Variant constructor missing [@format] *)
+
+type missing_format_attr =
+  | HasIt [@format "has"]
+  | MissingIt
+[@@deriving unstring]
+
+[%%expect
+  {|
+Line 3, characters 2-13:
+Error: Missing [@format "..."] attribute on constructor MissingIt
+|}]
+
+(* Abstract type without manifest *)
+
+type abstract [@@deriving unstring]
+
+[%%expect
+  {|
+Line 1, characters 0-35:
+Error: Abstract types without manifest cannot derive unstring
+|}]
+
+(* Open type *)
+
+type open_type = .. [@@deriving unstring]
+
+[%%expect
+  {|
+Line 1, characters 0-41:
+Error: Open types are not supported
+|}]
+
+(* Deriving for multiple types at once *)
+
+type a = int
+and b = string [@@deriving unstring]
+
+[%%expect
+  {|
+Line 1, characters 0-49:
+Error: unstring deriving expects exactly one type
+|}]
+
+(* ~of_string rejects parameterized types *)
+
+type 'a box = { contents : 'a }
+[@@deriving unstring ~of_string ~on_ambiguity:`Raise] [@@format "[%{contents}]"]
+
+[%%expect
+  {|
+Line 1, characters 0-112:
+Error: ~of_string is not supported for parameterized types
+|}]
+
+(* Unknown field in record format *)
+
+type bad_record = { a : int } [@@deriving unstring] [@@format "%{b}"]
+
+[%%expect
+  {|
+Line 1, characters 63-67:
+Error: The format string is expected to contain the hole %{a} but no such hole found
+|}]
+
+(* Tuple payload with wrong placeholder: %{_} instead of %{1},%{2} *)
+
+type bad_tuple_payload = Pair of int * int [@format "%{_}"] [@@deriving unstring]
+
+[%%expect
+  {|
+Line 1, characters 53-57:
+Error: The format string is expected to contain the hole %{2} but no such hole found
+|}]
+
+(* Testing the M(_).t syntax *)
+
+module Set = struct
+  include Core.Set
+
+  module type Unstringable_comparable = sig
+    type t [@@deriving unstring]
+
+    include Comparator.S with type t := t
+  end
+
+  let unstring_m__t
+    (type a comparator_witness)
+    (module M : Unstringable_comparable
+      with type t = a
+       and type comparator_witness = comparator_witness)
+    ~sep
+    =
+    Unstring.map (Unstring.list ~sep M.unstring) ~f:(Set.of_list (module M))
+  ;;
+end
+
+module Number = struct
+  type t = int [@@deriving unstring, sexp_of]
+
+  include (Int : Comparator.S with type t := t)
+end
+
+type set_of_numbers = (Set.M(Number).t[@sep ","]) [@@deriving unstring, sexp_of];;
+
+Unstring.print_shape unstring_set_of_numbers;;
+unstring_set_of_numbers |> test [%sexp_of: set_of_numbers] ~input:"12,15,17,1,12"
+
+[%%expect
+  {|
+(«(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧» ,)⋆ «(- ‖ + ‖ "") ⟦\d⟧⋆ ⟦\d⟧» ‖ ""
+(1 12 15 17)
+|}]

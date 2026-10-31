@@ -16,7 +16,7 @@ let cmarkit =
     `P "$(mname) processes CommonMark files";
     `Blocks Cli.common_man; ]
   in
-  Cmd.group (Cmd.info "cmarkit" ~version:"v0.3.0+dune" ~doc ~exits ~man) @@
+  Cmd.group (Cmd.info "cmarkit" ~version:"v0.3.0" ~doc ~exits ~man) @@
   cmds
 
 let main () = exit (Cmd.eval' cmarkit)

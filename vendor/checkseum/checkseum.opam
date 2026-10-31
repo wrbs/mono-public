@@ -1,4 +1,4 @@
-version: "0.5.2"
+version: "0.5.4"
 opam-version: "2.0"
 name:         "checkseum"
 maintainer:   [ "Romain Calascibetta <romain.calascibetta@gmail.com>" ]
@@ -22,11 +22,6 @@ build: [
   [ "dune" "runtest" "-p" name "-j" jobs ] {with-test}
 ]
 
-install: [
-  [ "dune" "install" "-p" name ] {with-test}
-  [ "ocaml" "./test/test_runes.ml" ] {with-test}
-]
-
 depends: [
   "ocaml"         {>= "4.07.0"}
   "dune"          {>= "2.6.0"}
@@ -45,3 +40,4 @@ conflicts: [
   "mirage-xen" {< "6.0.0"}
   "ocaml-freestanding"
 ]
+x-maintenance-intent: [ "(latest)" ]

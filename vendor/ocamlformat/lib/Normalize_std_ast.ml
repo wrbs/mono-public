@@ -1,13 +1,13 @@
-(**************************************************************************)
-(*                                                                        *)
-(*                              OCamlFormat                               *)
-(*                                                                        *)
-(*            Copyright (c) Facebook, Inc. and its affiliates.            *)
-(*                                                                        *)
-(*      This source code is licensed under the MIT license found in       *)
-(*      the LICENSE file in the root directory of this source tree.       *)
-(*                                                                        *)
-(**************************************************************************)
+(**************************************************************************
+ *                                                                        *
+ *                              OCamlFormat                               *
+ *                                                                        *
+ *            Copyright (c) Facebook, Inc. and its affiliates.            *
+ *                                                                        *
+ *      This source code is licensed under the MIT license found in       *
+ *      the LICENSE file in the root directory of this source tree.       *
+ *                                                                        *
+ **************************************************************************)
 
 open Parser_standard
 open Std_ast
@@ -271,6 +271,7 @@ let make_mapper conf ~ignore_doc_comments ~erase_jane_syntax =
     | Pexp_extension ({txt= "src_pos"; loc}, _) when erase_jane_syntax ->
         m.expr m (dummy_position ~loc)
     | Pexp_stack expr when erase_jane_syntax -> m.expr m expr
+    | Pexp_borrow expr when erase_jane_syntax -> m.expr m expr
     | Pexp_unboxed_tuple es when erase_jane_syntax ->
         Ast_mapper.default_mapper.expr m {exp with pexp_desc= Pexp_tuple es}
     | Pexp_record_unboxed_product (es, e) when erase_jane_syntax ->
@@ -279,6 +280,20 @@ let make_mapper conf ~ignore_doc_comments ~erase_jane_syntax =
     | Pexp_unboxed_field (e, l) when erase_jane_syntax ->
         Ast_mapper.default_mapper.expr m
           {exp with pexp_desc= Pexp_field (e, l)}
+    | Pexp_unboxed_unit when erase_jane_syntax ->
+        Ast_mapper.default_mapper.expr m
+          { exp with
+            pexp_desc=
+              Pexp_construct (Location.mknoloc (Longident.Lident "()"), None)
+          }
+    | Pexp_unboxed_bool b when erase_jane_syntax ->
+        Ast_mapper.default_mapper.expr m
+          { exp with
+            pexp_desc=
+              Pexp_construct
+                ( Location.mknoloc
+                    (Longident.Lident (if b then "true" else "false"))
+                , None ) }
     | _ -> Ast_mapper.default_mapper.expr m exp
   in
   let pat (m : Ast_mapper.mapper) pat =
@@ -309,6 +324,20 @@ let make_mapper conf ~ignore_doc_comments ~erase_jane_syntax =
     | Ppat_record_unboxed_product (ps, oc) when erase_jane_syntax ->
         Ast_mapper.default_mapper.pat m
           {pat with ppat_desc= Ppat_record (ps, oc)}
+    | Ppat_unboxed_unit when erase_jane_syntax ->
+        Ast_mapper.default_mapper.pat m
+          { pat with
+            ppat_desc=
+              Ppat_construct (Location.mknoloc (Longident.Lident "()"), None)
+          }
+    | Ppat_unboxed_bool b when erase_jane_syntax ->
+        Ast_mapper.default_mapper.pat m
+          { pat with
+            ppat_desc=
+              Ppat_construct
+                ( Location.mknoloc
+                    (Longident.Lident (if b then "true" else "false"))
+                , None ) }
     | _ -> Ast_mapper.default_mapper.pat m pat
   in
   let typ (m : Ast_mapper.mapper) typ =

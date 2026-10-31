@@ -10,37 +10,29 @@ How Dune Knows About Packages
 
 Packages can be defined in two ways:
 
-- If a ``<package-name>.opam`` file is found, it signals the existence of the
-  ``<package-name>`` package to Dune. The contents of the opam file are not
-  interpreted by Dune, unless :doc:`package management
-  <../explanation/package-management>` is :doc:`enabled <config/pkg>`.
-
-- In ``dune-project``, a :doc:`(package) <dune-project/package>` stanza with
-  ``(name <package-name>)`` defines the ``<package-name>`` package.
+- If a ``pkg.opam`` file is found, it signals the existence of the ``pkg``
+  package to Dune. The contents of the opam file are not interpreted by Dune.
+- In ``dune-project``, a ``(package)`` stanza with ``(name pkg)`` defines the
+  ``pkg`` package.
 
 .. note::
 
    If you want to define public elements but are not interested in publishing
    to opam, it is not necessary to write empty ``*.opam`` files. Instead,
-   prefer declaring it in ``dune-project`` as a :doc:`(package)
-   <dune-project/package>` with just a ``(name)``.
+   prefer declaring it in ``dune-project`` as a ``(package)`` with just a
+   ``(name)``.
 
 Generating Opam Files
 ---------------------
 
-In the latter case, if :doc:`(generate_opam_files)
-<dune-project/generate_opam_files>` is present in ``(dune-project)``, Dune will
-generate ``<package-name>.opam`` using the metadata in found in :doc:`(package)
-<dune-project/package>` stanzas and global fields such as ``(source)``.
+In the latter case, if ``(generate_opam_files)`` is present in
+``(dune-project)``, Dune will generate ``pkg.opam`` using the metadata in found in ``(package)`` stanzas and global fields such as ``(source)``.
 
 .. seealso:: :doc:`../howto/opam-file-generation`
 
-If a ``<package-name>.opam.template`` file is found, the fields found in this
-opam file are added to the generated file, overriding the generated ones in
-case of collision. This can be used as an escape hatch to add arbitrary opam
-fields.
-
-.. seealso:: :doc:`dune-project/package` for fields supported by ``dune-project``
+If a ``pkg.opam.template`` file is found, the fields found in this opam file
+are added to the generated file, overriding the generated ones in case of
+collision. This can be used as an escape hatch to add arbitrary opam fields.
 
 What Dune Installs
 ------------------
@@ -48,9 +40,9 @@ What Dune Installs
 Dune will install the following files:
 
 - ``(library)`` stanzas which have a ``(public_name)``. The package name is the
-  first component of the dot-separated public name: ``(public_name
-  <package-name>)`` and ``(public_name <package-name>.sub)`` will look for a
-  package named ``<package-name>`` to install their contents.
+  first component of the dot-separated public name: ``(public_name pkg)`` and
+  ``(public_name pkg.sub)`` will look for a package named ``pkg`` to install
+  their contents.
 - ``(executable)`` and ``(test)`` stanzas with a ``(public_name)``. The package
   to install the files in is determined by the ``(package)`` field, which can
   be omitted if there is only one package.

@@ -2,7 +2,7 @@
  ***  curl-helper.c
  ***
  ***  Copyright (c) 2003-2008, Lars Nilsson, <lars@quantumchamaeleon.com>
- ***  Copyright (c) 2009, ygrek, <ygrek@autistici.org>
+ ***  Copyright (c) 2009, <root@ygrek.org>
  ***/
 
 #ifndef CAML_NAME_SPACE
@@ -32,6 +32,7 @@
 #include <caml/callback.h>
 #include <caml/fail.h>
 #include <caml/unixsupport.h>
+#include <caml/socketaddr.h>
 #include <caml/custom.h>
 #include <caml/threads.h>
 #include <caml/bigarray.h>
@@ -406,6 +407,11 @@ CURLErrorMapping errorMap[] =
 #else
     {"CURLE_TELNET_OPTION_SYNTAX", -1},
 #endif
+#if HAVE_DECL_CURLE_OBSOLETE
+    {"CURLE_OBSOLETE", CURLE_OBSOLETE},
+#else
+    {"CURLE_OBSOLETE", -1},
+#endif
 #if HAVE_DECL_CURLE_SSL_PEER_CERTIFICATE
     {"CURLE_SSL_PEER_CERTIFICATE", CURLE_SSL_PEER_CERTIFICATE},
 #else
@@ -560,6 +566,106 @@ CURLErrorMapping errorMap[] =
     {"CURLE_AGAIN", CURLE_AGAIN},
 #else
     {"CURLE_AGAIN", -1},
+#endif
+#if HAVE_DECL_CURLE_SSL_CRL_BADFILE
+    {"CURLE_SSL_CRL_BADFILE", CURLE_SSL_CRL_BADFILE},
+#else
+    {"CURLE_SSL_CRL_BADFILE", -1},
+#endif
+#if HAVE_DECL_CURLE_SSL_ISSUER_ERROR
+    {"CURLE_SSL_ISSUER_ERROR", CURLE_SSL_ISSUER_ERROR},
+#else
+    {"CURLE_SSL_ISSUER_ERROR", -1},
+#endif
+#if HAVE_DECL_CURLE_FTP_PRET_FAILED
+    {"CURLE_FTP_PRET_FAILED", CURLE_FTP_PRET_FAILED},
+#else
+    {"CURLE_FTP_PRET_FAILED", -1},
+#endif
+#if HAVE_DECL_CURLE_RTSP_CSEQ_ERROR
+    {"CURLE_RTSP_CSEQ_ERROR", CURLE_RTSP_CSEQ_ERROR},
+#else
+    {"CURLE_RTSP_CSEQ_ERROR", -1},
+#endif
+#if HAVE_DECL_CURLE_RTSP_SESSION_ERROR
+    {"CURLE_RTSP_SESSION_ERROR", CURLE_RTSP_SESSION_ERROR},
+#else
+    {"CURLE_RTSP_SESSION_ERROR", -1},
+#endif
+#if HAVE_DECL_CURLE_FTP_BAD_FILE_LIST
+    {"CURLE_FTP_BAD_FILE_LIST", CURLE_FTP_BAD_FILE_LIST},
+#else
+    {"CURLE_FTP_BAD_FILE_LIST", -1},
+#endif
+#if HAVE_DECL_CURLE_CHUNK_FAILED
+    {"CURLE_CHUNK_FAILED", CURLE_CHUNK_FAILED},
+#else
+    {"CURLE_CHUNK_FAILED", -1},
+#endif
+#if HAVE_DECL_CURLE_NO_CONNECTION_AVAILABLE
+    {"CURLE_NO_CONNECTION_AVAILABLE", CURLE_NO_CONNECTION_AVAILABLE},
+#else
+    {"CURLE_NO_CONNECTION_AVAILABLE", -1},
+#endif
+#if HAVE_DECL_CURLE_SSL_PINNEDPUBKEYNOTMATCH
+    {"CURLE_SSL_PINNEDPUBKEYNOTMATCH", CURLE_SSL_PINNEDPUBKEYNOTMATCH},
+#else
+    {"CURLE_SSL_PINNEDPUBKEYNOTMATCH", -1},
+#endif
+#if HAVE_DECL_CURLE_SSL_INVALIDCERTSTATUS
+    {"CURLE_SSL_INVALIDCERTSTATUS", CURLE_SSL_INVALIDCERTSTATUS},
+#else
+    {"CURLE_SSL_INVALIDCERTSTATUS", -1},
+#endif
+#if HAVE_DECL_CURLE_HTTP2_STREAM
+    {"CURLE_HTTP2_STREAM", CURLE_HTTP2_STREAM},
+#else
+    {"CURLE_HTTP2_STREAM", -1},
+#endif
+#if HAVE_DECL_CURLE_RECURSIVE_API_CALL
+    {"CURLE_RECURSIVE_API_CALL", CURLE_RECURSIVE_API_CALL},
+#else
+    {"CURLE_RECURSIVE_API_CALL", -1},
+#endif
+#if HAVE_DECL_CURLE_AUTH_ERROR
+    {"CURLE_AUTH_ERROR", CURLE_AUTH_ERROR},
+#else
+    {"CURLE_AUTH_ERROR", -1},
+#endif
+#if HAVE_DECL_CURLE_HTTP3
+    {"CURLE_HTTP3", CURLE_HTTP3},
+#else
+    {"CURLE_HTTP3", -1},
+#endif
+#if HAVE_DECL_CURLE_QUIC_CONNECT_ERROR
+    {"CURLE_QUIC_CONNECT_ERROR", CURLE_QUIC_CONNECT_ERROR},
+#else
+    {"CURLE_QUIC_CONNECT_ERROR", -1},
+#endif
+#if HAVE_DECL_CURLE_PROXY
+    {"CURLE_PROXY", CURLE_PROXY},
+#else
+    {"CURLE_PROXY", -1},
+#endif
+#if HAVE_DECL_CURLE_SSL_CLIENTCERT
+    {"CURLE_SSL_CLIENTCERT", CURLE_SSL_CLIENTCERT},
+#else
+    {"CURLE_SSL_CLIENTCERT", -1},
+#endif
+#if HAVE_DECL_CURLE_UNRECOVERABLE_POLL
+    {"CURLE_UNRECOVERABLE_POLL", CURLE_UNRECOVERABLE_POLL},
+#else
+    {"CURLE_UNRECOVERABLE_POLL", -1},
+#endif
+#if HAVE_DECL_CURLE_TOO_LARGE
+    {"CURLE_TOO_LARGE", CURLE_TOO_LARGE},
+#else
+    {"CURLE_TOO_LARGE", -1},
+#endif
+#if HAVE_DECL_CURLE_ECH_REQUIRED
+    {"CURLE_ECH_REQUIRED", CURLE_ECH_REQUIRED},
+#else
+    {"CURLE_ECH_REQUIRED", -1},
 #endif
     /* sync check_enums */
     {NULL, (CURLcode)0}
@@ -887,12 +993,15 @@ static size_t cb_WRITEFUNCTION_BUF(char *ptr, size_t size, size_t nmemb, void *d
   buf = Field(conn->ocamlValues, Ocaml_CALLBACKBUFFER);
   if (buf == Val_unit)
     {
-      buf = caml_ba_alloc_dims(CAML_BA_UINT8 | CAML_BA_C_LAYOUT | CAML_BA_EXTERNAL, 1, NULL, 0);
+      buf = caml_ba_alloc_dims(CAML_BA_UINT8 | CAML_BA_C_LAYOUT | CAML_BA_EXTERNAL, 1, ptr, size*nmemb);
       Store_field(conn->ocamlValues, Ocaml_CALLBACKBUFFER, buf);
     }
-  struct caml_ba_array* ba = Caml_ba_array_val(buf);
-  ba->dim[0]=size*nmemb;
-  ba->data=ptr;
+  else
+    {
+      struct caml_ba_array* ba = Caml_ba_array_val(buf);
+      ba->dim[0]=size*nmemb;
+      ba->data=ptr;
+    }
   result = caml_callback_exn(Field(conn->ocamlValues, Ocaml_WRITEFUNCTION), buf);
 
   size_t r = 0;
@@ -1238,7 +1347,7 @@ static int cb_SEEKFUNCTION(void *data,
 }
 #endif
 
-static int cb_OPENSOCKETFUNCTION(void *data,
+static curl_socket_t cb_OPENSOCKETFUNCTION(void *data,
                         curlsocktype purpose,
                         struct curl_sockaddr *addr)
 {
@@ -1247,25 +1356,105 @@ static int cb_OPENSOCKETFUNCTION(void *data,
     CAMLparam0();
     CAMLlocal1(result);
     Connection *conn = (Connection *)data;
-    int sock = -1;
+    curl_socket_t sock = CURL_SOCKET_BAD;
     (void)purpose; /* not used */
 
     sock = socket(addr->family, addr->socktype, addr->protocol);
 
-    if (-1 != sock)
+    if (CURL_SOCKET_BAD != sock)
     {
       /* FIXME windows */
       result = caml_callback_exn(Field(conn->ocamlValues, Ocaml_OPENSOCKETFUNCTION), Val_int(sock));
       if (Is_exception_result(result))
       {
         close(sock);
-        sock = -1;
+        sock = CURL_SOCKET_BAD;
       }
     }
     CAMLdrop;
 
     caml_release_runtime_system();
-    return ((sock == -1) ? CURL_SOCKET_BAD : sock);
+    return sock;
+}
+
+static curl_socket_t cb_OPENSOCKETFUNCTION2(void *data,
+                        curlsocktype purpose,
+                        struct curl_sockaddr *addr)
+{
+    caml_acquire_runtime_system();
+
+    CAMLparam0();
+    CAMLlocal5(result, v_sock_purpose, v_sockdomain, v_socktype, v_sockaddr_record);
+    CAMLlocal1(v_unix_sockaddr);
+    Connection *conn = (Connection *)data;
+    curl_socket_t sock = CURL_SOCKET_BAD;
+
+    switch (purpose) {
+        case CURLSOCKTYPE_IPCXN:
+            v_sock_purpose = Val_int(0);
+            break;
+        default:
+            goto cleanup;
+    }
+
+    switch (addr->family) {
+        case AF_UNIX:
+            v_sockdomain = Val_int(0); /* PF_UNIX */
+            break;
+        case AF_INET:
+            v_sockdomain = Val_int(1); /* PF_INET */
+            break;
+        case AF_INET6:
+            v_sockdomain = Val_int(2); /* PF_INET6 */
+            break;
+        default:
+            goto cleanup;
+    }
+
+    switch (addr->socktype) {
+        case SOCK_STREAM:
+            v_socktype = Val_int(0); /* SOCK_STREAM */
+            break;
+        case SOCK_DGRAM:
+            v_socktype = Val_int(1); /* SOCK_DGRAM */
+            break;
+        case SOCK_RAW:
+            v_socktype = Val_int(2); /* SOCK_RAW */
+            break;
+        case SOCK_SEQPACKET:
+            v_socktype = Val_int(3); /* SOCK_SEQPACKET */
+            break;
+        default:
+            goto cleanup;
+    }
+
+    union sock_addr_union sock_addr;
+    if (addr->addrlen > sizeof(sock_addr))
+    {
+        goto cleanup;
+    }
+    memcpy(&sock_addr.s_gen, &(addr->addr), addr->addrlen);
+    v_unix_sockaddr = alloc_sockaddr(&sock_addr, addr->addrlen, -1);
+
+    v_sockaddr_record = caml_alloc(4, 0);
+    Store_field(v_sockaddr_record, 0, v_sockdomain);
+    Store_field(v_sockaddr_record, 1, v_socktype);
+    Store_field(v_sockaddr_record, 2, Val_int(addr->protocol));
+    Store_field(v_sockaddr_record, 3, v_unix_sockaddr);
+
+    result = caml_callback2_exn(Field(conn->ocamlValues, Ocaml_OPENSOCKETFUNCTION),
+                                v_sock_purpose, v_sockaddr_record);
+
+    if (!Is_exception_result(result) && Is_some(result))
+    {
+        sock = Socket_val(Some_val(result));
+    }
+
+cleanup:
+    CAMLdrop;
+
+    caml_release_runtime_system();
+    return sock;
 }
 
 static int cb_SSH_KEYFUNCTION(CURL *easy,
@@ -1647,6 +1836,7 @@ SETOPT_FUNCTION( IOCTL)
 #endif
 
 SETOPT_FUNCTION( OPENSOCKET)
+SETOPT_FUNCTION2( OPENSOCKET)
 
 static void handle_slist(Connection *conn, struct curl_slist** slist, CURLoption curl_option, value option)
 {
@@ -2361,6 +2551,19 @@ static void handle_SSLVERSION(Connection *conn, value option)
     case 5: v = CURL_SSLVERSION_TLSv1_1; break;
     case 6: v = CURL_SSLVERSION_TLSv1_2; break;
     case 7: v = CURL_SSLVERSION_TLSv1_3; break;
+#if HAVE_DECL_CURL_SSLVERSION_MAX_TLSV1_0
+    case 8: v = CURL_SSLVERSION_MAX_TLSv1_0; break;
+#endif
+#if HAVE_DECL_CURL_SSLVERSION_MAX_TLSV1_1
+    case 9: v = CURL_SSLVERSION_MAX_TLSv1_1; break;
+#endif
+#if HAVE_DECL_CURL_SSLVERSION_MAX_TLSV1_2
+    case 10: v = CURL_SSLVERSION_MAX_TLSv1_2; break;
+#endif
+#if HAVE_DECL_CURL_SSLVERSION_MAX_TLSV1_3
+    case 11: v = CURL_SSLVERSION_MAX_TLSv1_3; break;
+#endif
+
     default:
         caml_failwith("Invalid SSLVERSION Option");
         break;
@@ -3146,8 +3349,14 @@ static void handle_PROXYTYPE(Connection *conn, value option)
       case 3: proxy_type = CURLPROXY_SOCKS5; break;
       case 4: proxy_type = CURLPROXY_SOCKS4A; break;
       case 5: proxy_type = CURLPROXY_SOCKS5_HOSTNAME; break;
+#if HAVE_DECL_CURLPROXY_HTTPS
+      case 6: proxy_type = CURLPROXY_HTTPS; break;
+#endif
+#if HAVE_DECL_CURLPROXY_HTTPS2
+      case 7: proxy_type = CURLPROXY_HTTPS2; break;
+#endif
       default:
-        caml_failwith("Invalid curl proxy type");
+        caml_failwith("Unsupported curl proxy type");
     }
 
     result = curl_easy_setopt(conn->handle,
@@ -3354,6 +3563,10 @@ SETOPT_LONG( BUFFERSIZE)
 
 #if HAVE_DECL_CURLOPT_AWS_SIGV4
   SETOPT_STRING( AWS_SIGV4)
+#endif
+
+#if HAVE_DECL_CURLOPT_UNIX_SOCKET_PATH
+  SETOPT_STRING( UNIX_SOCKET_PATH)
 #endif
 
 /* Windows headers define these symbols and there is no (sane) way to
@@ -3702,6 +3915,7 @@ CURLOptionMapping implementedOptionMap[] =
   HAVENOT(AUTOREFERER),
 #endif
   HAVE(OPENSOCKETFUNCTION),
+  HAVE(OPENSOCKETFUNCTION2),
 #if HAVE_DECL_CURLOPT_PROXYTYPE
   HAVE(PROXYTYPE),
 #else
@@ -3817,6 +4031,11 @@ HAVE(TCP_KEEPALIVE),
 HAVE(TCP_KEEPIDLE),
 HAVE(TCP_KEEPINTVL),
 HAVE(NOPROXY),
+#if HAVE_DECL_CURLOPT_UNIX_SOCKET_PATH
+  HAVE(UNIX_SOCKET_PATH),
+#else
+  HAVENOT(UNIX_SOCKET_PATH),
+#endif
 };
 
 value caml_curl_easy_setopt(value conn, value option)
@@ -3901,7 +4120,7 @@ value caml_curl_easy_cleanup(value conn)
 
 enum GetInfoResultType {
     StringValue, LongValue, DoubleValue, StringListValue, StringListListValue,
-    SocketValue, OCamlValue, /* keep last - no matching OCaml CURLINFO_ constructor */
+    SocketValue, HTTPInfoValue, OCamlValue, /* keep last - no matching OCaml CURLINFO_ constructor */
 };
 
 value convertStringList(struct curl_slist *p)
@@ -4364,7 +4583,7 @@ value caml_curl_easy_getinfo(value conn, value option)
 #endif
 #if HAVE_DECL_CURLINFO_HTTP_VERSION
     case 38: /* CURLINFO_HTTP_VERSION */
-        resultType = LongValue;
+        resultType = HTTPInfoValue;
 
         curlResult = curl_easy_getinfo(connection->handle,
                                        CURLINFO_HTTP_VERSION,
@@ -4416,6 +4635,11 @@ value caml_curl_easy_getinfo(value conn, value option)
     case SocketValue:
         result = caml_alloc(1, SocketValue);
         Store_field(result, 0, Val_socket(socketValue));
+        break;
+
+    case HTTPInfoValue:
+        result = caml_alloc(1, HTTPInfoValue);
+        Store_field(result, 0, Val_long(longValue));
         break;
 
     case OCamlValue:
@@ -5348,7 +5572,35 @@ static const struct used_enum check_enums[] = {
   CURL_ENUM(HTTP_VERSION, 3),
 #endif
   { 38, CURLINFO_LASTONE, "CURLINFO" },
-#if HAVE_DECL_CURLE_AGAIN
+#if HAVE_DECL_CURLE_ECH_REQUIRED
+  { CURLE_ECH_REQUIRED, CURL_LAST, "CURLcode" }
+#elif HAVE_DECL_CURLE_TOO_LARGE
+  { CURLE_TOO_LARGE, CURL_LAST, "CURLcode" }
+#elif HAVE_DECL_CURLE_UNRECOVERABLE_POLL
+  { CURLE_UNRECOVERABLE_POLL, CURL_LAST, "CURLcode" }
+#elif HAVE_DECL_CURLE_SSL_CLIENTCERT
+  { CURLE_SSL_CLIENTCERT, CURL_LAST, "CURLcode" }
+#elif HAVE_DECL_CURLE_PROXY
+  { CURLE_PROXY, CURL_LAST, "CURLcode" }
+#elif HAVE_DECL_CURLE_QUIC_CONNECT_ERROR
+  { CURLE_QUIC_CONNECT_ERROR, CURL_LAST, "CURLcode" }
+#elif HAVE_DECL_CURLE_HTTP3
+  { CURLE_HTTP3, CURL_LAST, "CURLcode" }
+#elif HAVE_DECL_CURLE_AUTH_ERROR
+  { CURLE_AUTH_ERROR, CURL_LAST, "CURLcode" }
+#elif HAVE_DECL_CURLE_RECURSIVE_API_CALL
+  { CURLE_RECURSIVE_API_CALL, CURL_LAST, "CURLcode" }
+#elif HAVE_DECL_CURLE_HTTP2_STREAM
+  { CURLE_HTTP2_STREAM, CURL_LAST, "CURLcode" }
+#elif HAVE_DECL_CURLE_SSL_INVALIDCERTSTATUS
+  { CURLE_SSL_INVALIDCERTSTATUS, CURL_LAST, "CURLcode" }
+#elif HAVE_DECL_CURLE_SSL_PINNEDPUBKEYNOTMATCH
+  { CURLE_SSL_PINNEDPUBKEYNOTMATCH, CURL_LAST, "CURLcode" }
+#elif HAVE_DECL_CURLE_NO_CONNECTION_AVAILABLE
+  { CURLE_NO_CONNECTION_AVAILABLE, CURL_LAST, "CURLcode" }
+#elif HAVE_DECL_CURLE_CHUNK_FAILED
+  { CURLE_CHUNK_FAILED, CURL_LAST, "CURLcode" }
+#elif HAVE_DECL_CURLE_AGAIN
   { CURLE_AGAIN, CURL_LAST, "CURLcode" }
 #endif
 };
@@ -5373,6 +5625,100 @@ value caml_curl_check_enums(value v_unit)
 
   CAMLreturn(v_r);
 }
+
+#if HAVE_DECL_CURL_WS_META
+/* WebSocket flags mapping: same order as OCaml variant */
+static const long wsFlags[] = {
+  CURLWS_TEXT,    /* 0 */
+  CURLWS_BINARY,  /* 1 */
+  CURLWS_CONT,    /* 2 */
+  CURLWS_CLOSE,   /* 3 */
+  CURLWS_PING,    /* 4 */
+  CURLWS_PONG,    /* 5 */
+  CURLWS_OFFSET   /* 6 */
+};
+
+static value curlWSFlag_list_of_int(int flags)
+{
+  CAMLparam0();
+  CAMLlocal1(result);
+
+  result = Val_emptylist;
+
+  for (int i = 0; i < (int)(sizeof(wsFlags) / sizeof(wsFlags[0])); i++) {
+    if (flags & wsFlags[i]) {
+      result = Val_cons(result, Val_int(i));
+    }
+  }
+
+  CAMLreturn(result);
+}
+
+static int curlWSFlag_list_to_int(value flag_list)
+{
+  return convert_bit_list(wsFlags, sizeof(wsFlags) / sizeof(wsFlags[0]), flag_list);
+}
+
+value caml_curl_ws_meta(value conn_v)
+{
+  CAMLparam1(conn_v);
+  CAMLlocal1(frame_record);
+  Connection *conn = Connection_val(conn_v);
+  const struct curl_ws_frame* frame;
+
+  caml_release_runtime_system();
+  frame = curl_ws_meta(conn->handle);
+  caml_acquire_runtime_system();
+
+  if (frame == NULL) {
+    // No WebSocket frame information available
+    CAMLreturn(Val_none);
+  }
+
+  // Create OCaml record: { age; flags; offset; bytesleft }
+  frame_record = caml_alloc(4, 0);
+  Store_field(frame_record, 0, Val_int(frame->age));
+  Store_field(frame_record, 1, curlWSFlag_list_of_int(frame->flags));
+  Store_field(frame_record, 2, Val_int(frame->offset));
+  Store_field(frame_record, 3, Val_int(frame->bytesleft));
+
+  CAMLreturn(caml_alloc_some(frame_record));
+}
+
+value caml_curl_ws_send(value conn_v, value buffer_v, value flags_v)
+{
+  CAMLparam3(conn_v, buffer_v, flags_v);
+  Connection *conn = Connection_val(conn_v);
+  size_t sent;
+  CURLcode result;
+
+  size_t buffer_len = caml_string_length(buffer_v);
+  char* buffer = caml_stat_alloc(buffer_len);
+  memcpy(buffer, String_val(buffer_v), buffer_len);
+  int flags = curlWSFlag_list_to_int(flags_v);
+
+  caml_release_runtime_system();
+  result = curl_ws_send(conn->handle, buffer, buffer_len, &sent, 0, flags);
+  caml_stat_free(buffer);
+  caml_acquire_runtime_system();
+
+  if (result != CURLE_OK) {
+    raiseError(conn, result);
+  }
+
+  CAMLreturn(Val_long(sent));
+}
+#else
+value caml_curl_ws_meta(value conn_v)
+{
+  caml_failwith("WebSocket support not available");
+}
+
+value caml_curl_ws_send(value conn_v, value buffer_v, value flags_v)
+{
+  caml_failwith("WebSocket support not available");
+}
+#endif
 
 #ifdef __cplusplus
 }

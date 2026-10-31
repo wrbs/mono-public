@@ -171,7 +171,7 @@ end = struct
     let unit =
       try UnitTable.find units (ev_module, pos_fname)
       with Not_found ->
-        let crc = try String.Hashtbl.find crcs ev_module with Not_found -> None in
+        let crc = String.Hashtbl.find_opt crcs ev_module |> Option.join in
         let source : path option =
           (* First search the source based on [pos_fname] because the
              filename of the source might be unreleased to the
@@ -479,8 +479,6 @@ end = struct
 
   let ident_native = ident_of_custom (Obj.repr 0n)
 
-  let ident_f32 = ident_of_custom (Obj.repr 0.s) [@@if oxcaml]
-
   external is_null : Obj.t -> bool = "%is_null" [@@if oxcaml]
 
   let is_null obj = is_null (Sys.opaque_identity obj) [@@if oxcaml]
@@ -505,8 +503,8 @@ end = struct
       else if tag = Obj.custom_tag
       then
         match ident_of_custom x with
-        | ((Some name) [@if oxcaml]) when same_ident name ident_f32 ->
-            Float32 (Int64.bits_of_float ((Obj.magic x : float32) |> Float32.to_float))
+        | Some "_f32" ->
+            Float32 (Int64.bits_of_float ((Obj.magic x : Float32.t) |> Float32.to_float))
         | Some name when same_ident name ident_32 ->
             let i : int32 = Obj.magic x in
             Int32 i
@@ -549,11 +547,12 @@ let const32 i = Constant (Int (Targetint.of_int32_exn i))
 let const i = Constant (Int (Targetint.of_int_exn i))
 
 (* Globals *)
+
 type globals =
   { mutable vars : Var.t option array
   ; mutable is_const : bool array
   ; mutable is_exported : bool array
-  ; mutable named_value : string option array
+  ; mutable named_value : Global_name.t option array
   ; mutable cache_ids : Var.t list
   ; constants : Code.constant array
   ; primitives : string array
@@ -746,7 +745,15 @@ module State = struct
                    Code.Var.Hashtbl.add st.immutable v ()
                | Not_module -> Ident.Tbl.add st.module_or_not ident Not_module
                | Unknown -> ()));
-        Var.set_name v (Ident.name ident);
+        let name = Ident.name ident in
+        let generated =
+          (String.length name > 1 && Char.equal name.[0] '*')
+          ||
+          match name with
+          | "param" | "switcher" | "tag" -> true
+          | _ -> false
+        in
+        Var.set_name v ~generated name;
         name_rec debug st (i + 1) lrem srem summary
     | (j, _) :: _, _ :: srem when i < j -> name_rec debug st (i + 1) l srem summary
     | _ -> assert false
@@ -770,7 +777,7 @@ end
 
 let primitive_name state i =
   let g = State.globals state in
-  assert (i >= 0 && i <= Array.length g.primitives);
+  assert (i >= 0 && i < Array.length g.primitives);
   let prim = g.primitives.(i) in
   Primitive.add_external prim;
   prim
@@ -782,45 +789,61 @@ let access_global g i =
       g.is_const.(i) <- true;
       let x = Var.fresh () in
       g.vars.(i) <- Some x;
-      if debug_parser () then Format.printf "Access global(%d) %a\n" i Var.print x; 
       x
 
-let register_global ?(force = false) g i rem =
-  match g.is_exported.(i), force, Config.target () with
-  | true, _, `Wasm ->
-      (* Register a compilation unit (Wasm) *)
-      assert (not force);
-      let name =
-        match g.named_value.(i) with
-        | None -> assert false
-        | Some name -> name
+let register_global_instrs var ?name ?by_index rem =
+  let rem =
+    match by_index with
+    | Some index ->
+        Let
+          ( Var.fresh ()
+          , Prim
+              ( Extern "caml_register_global_by_index"
+              , [ Pv var; Pc (Int (Targetint.of_int_exn index)) ] ) )
+        :: rem
+    | None -> rem
+  in
+  match name with
+  | Some gn ->
+      let prim =
+        if Global_name.is_predef gn
+        then "caml_register_global_predef"
+        else "caml_register_global"
       in
-      Var.set_name (access_global g i) name;
-      Let
-        ( Var.fresh ()
-        , Prim (Extern "caml_set_global", [ Pc (String name); Pv (access_global g i) ]) )
-      :: rem
-  | true, _, (`JavaScript as target) | false, true, ((`Wasm | `JavaScript) as target) ->
-      (* Register an exception (if force = true), or a compilation unit
-         (Javascript) *)
-      let args =
-        match g.named_value.(i) with
-        | None -> []
-        | Some name ->
-            Var.set_name (access_global g i) name;
-            [ Pc
-                (match target with
-                | `JavaScript -> NativeString (Native_string.of_string name)
-                | `Wasm -> String name)
-            ]
+      let name_pc =
+        let name = Global_name.to_string gn in
+        Pc
+          (match Config.target () with
+          | `JavaScript -> NativeString (Native_string.of_string name)
+          | `Wasm -> String name)
       in
-      Let
-        ( Var.fresh ()
-        , Prim
-            ( Extern "caml_register_global"
-            , Pc (Int (Targetint.of_int_exn i)) :: Pv (access_global g i) :: args ) )
-      :: rem
-  | false, false, (`JavaScript | `Wasm) -> rem
+      Let (Var.fresh (), Prim (Extern prim, [ Pv var; name_pc ])) :: rem
+  | None -> rem
+
+let register_global g i rem =
+  if not g.is_exported.(i)
+  then rem
+  else
+    match g.named_value.(i) with
+    | None ->
+        let var = access_global g i in
+        register_global_instrs var ~by_index:i rem
+    | Some (Glob_predef (Predef name) as gn) ->
+        let var = access_global g i in
+        Var.set_name var name;
+        (* For wasm predefined exceptions, also register by index so that
+           runtime functions (e.g. caml_raise_not_found in fail.wat) can
+           find them in caml_global_data. *)
+        let by_index =
+          match Config.target () with
+          | `Wasm -> Some i
+          | `JavaScript -> None
+        in
+        register_global_instrs var ~name:gn ?by_index rem
+    | Some (Glob_compunit (Compunit name) as gn) ->
+        let var = access_global g i in
+        Var.set_name var name;
+        register_global_instrs var ~name:gn rem
 
 let get_global state instrs i =
   State.size_globals state (i + 1);
@@ -839,42 +862,50 @@ let get_global state instrs i =
         let cst = g.constants.(i) in
         x, state, Let (x, Constant cst) :: instrs
       else
-        match i < Array.length g.constants, target with
-        | true, _ | false, `JavaScript ->
-            (* Non-inlined constant, and reference to another compilation
-               units in case of separate compilation (JavaScript).
-               Some code is generated in a prelude to store the relevant
-               module in variable [x]. *)
+        match i < Array.length g.constants, g.named_value.(i) with
+        | true, _ | false, None ->
+            (* Non-inlined constant, or reference to another compilation
+               unit without a known name (e.g. toplevel).
+               Some code is generated in a prelude to initialize [x]. *)
             g.is_const.(i) <- true;
             let x, state = State.fresh_var state in
             if debug_parser () then Format.printf "%a = CONST(%d)@." Var.print x i;
-            if debug_parser () then Format.printf "get_global(%d) = %a\n" i Var.print x;
             g.vars.(i) <- Some x;
             (match g.named_value.(i) with
-            | None -> ()
-            | Some name -> (
+            | None | Some (Glob_predef _) -> ()
+            | Some (Glob_compunit (Compunit name)) -> (
                 match Shape.Store.load ~name with
                 | None -> ()
                 | Some shape -> Shape.State.assign x shape));
             x, state, instrs
-        | false, `Wasm -> (
-            (* Reference to another compilation units in case of separate
-               compilation (Wasm).
-               The toplevel module is available in an imported global
-               variables. *)
-            match g.named_value.(i) with
-            | None -> assert false
-            | Some name ->
-                let x, state = State.fresh_var state in
-                if debug_parser ()
-                then Format.printf "%a = get_global(%s)@." Var.print x name;
-                (match Shape.Store.load ~name with
+        | false, Some gn -> (
+            (* Reference to another compilation unit in case of separate
+               compilation. *)
+            let name = Global_name.to_string gn in
+            let x, state = State.fresh_var state in
+            Var.set_name x name;
+            if debug_parser () then Format.printf "%a = get_global(%s)@." Var.print x name;
+            (match gn with
+            | Glob_predef _ -> ()
+            | Glob_compunit (Compunit name) -> (
+                match Shape.Store.load ~name with
                 | None -> ()
-                | Some shape -> Shape.State.assign x shape);
-                ( x
-                , state
-                , Let (x, Prim (Extern "caml_get_global", [ Pc (String name) ])) :: instrs
-                )))
+                | Some shape -> Shape.State.assign x shape));
+            match Config.target () with
+            | `JavaScript ->
+                (* Cache the var and mark as const; the prelude will
+                   initialize it with a single caml_get_global
+                   or caml_get_global_predef call. *)
+                g.is_const.(i) <- true;
+                g.vars.(i) <- Some x;
+                x, state, instrs
+            | `Wasm ->
+                let prim =
+                  if Global_name.is_predef gn
+                  then "caml_get_global_predef"
+                  else "caml_get_global"
+                in
+                x, state, Let (x, Prim (Extern prim, [ Pc (String name) ])) :: instrs))
 
 let tagged_blocks = ref Addr.Map.empty
 
@@ -911,6 +942,41 @@ let string_of_addr debug_data addr =
       Printf.sprintf "%s:%s-%s %s" file (pos loc.loc_start) (pos loc.loc_end) kind)
 
 let is_immutable _instr _infos _pc = (* We don't know yet *) Maybe_mutable
+
+(* Decode the operands of the RESUME / RESUMETERM bytecode instructions.
+   In OxCaml, %resume takes a continuation directly: [accu] holds the
+   continuation, and the bytecode interpreter is responsible for unpacking it
+   into a stack pointer and a [last_fiber]. We mimic that unpacking at the
+   IR level so that the rest of the pipeline keeps working with the
+   four-argument [%resume stack f arg tail] primitive. *)
+let read_resume_args state =
+  let cont = State.accu state in
+  let func = State.peek 0 state in
+  let arg = State.peek 1 state in
+  let state = State.pop 2 state in
+  let last = Var.fresh_n "last" in
+  let stack = Var.fresh_n "stack" in
+  let prelude =
+    [ Let (last, Field (cont, 1, Non_float))
+    ; Let (stack, Prim (Extern "caml_continuation_use_noexc", [ Pv cont ]))
+    ]
+  in
+  state, prelude, stack, func, arg, Pv last
+[@@if oxcaml]
+
+let read_resume_args state =
+  let stack = State.accu state in
+  let func = State.peek 0 state in
+  let arg = State.peek 1 state in
+  let state, tail =
+    match Ocaml_version.compare Ocaml_version.current [ 5; 2 ] < 0 with
+    | true -> State.pop 2 state, Pc (Int (Targetint.of_int_exn 0))
+    | false ->
+        let tail = State.peek 2 state in
+        State.pop 3 state, Pv tail
+  in
+  state, [], stack, func, arg, tail
+[@@if not oxcaml]
 
 let rec compile_block blocks joins debug_data code pc state : unit =
   match Addr.Map.find_opt pc !tagged_blocks with
@@ -1435,7 +1501,7 @@ and compile infos pc state (instrs : instr list) =
         let y = State.accu state in
         let g = State.globals state in
 
-        if false then assert (Option.is_none g.vars.(i));
+        assert (Option.is_none g.vars.(i));
         if debug_parser () then Format.printf "(global %d) = %a@." i Var.print y;
         g.vars.(i) <- Some y;
         let x, state = State.fresh_var state in
@@ -2408,14 +2474,16 @@ and compile infos pc state (instrs : instr list) =
         let y = State.accu state in
         let z = State.peek 0 state in
         let x, state = State.fresh_var state in
-
+        let lt = Var.fresh () in
         if debug_parser ()
         then Format.printf "%a = mk_bool(%a >= %a)@." Var.print x Var.print y Var.print z;
         compile
           infos
           (pc + 1)
           (State.pop 1 state)
-          (Let (x, Prim (Ult, [ Pv z; Pv y ])) :: instrs)
+          (Let (x, Prim (Not, [ Pv lt ]))
+          :: Let (lt, Prim (Ult, [ Pv y; Pv z ]))
+          :: instrs)
     | GETPUBMET ->
         let n = gets32 code (pc + 1) in
         let obj = State.accu state in
@@ -2479,9 +2547,7 @@ and compile infos pc state (instrs : instr list) =
           :: instrs)
     | STOP -> instrs, Stop, state
     | RESUME ->
-        let stack = State.accu state in
-        let func = State.peek 0 state in
-        let arg = State.peek 1 state in
+        let state, prelude, stack, func, arg, tail = read_resume_args state in
         let x, state = State.fresh_var state in
         if debug_parser ()
         then
@@ -2495,30 +2561,15 @@ and compile infos pc state (instrs : instr list) =
             func
             Var.print
             arg;
-        let state, tail =
-          match Ocaml_version.compare Ocaml_version.current [ 5; 2 ] < 0 with
-          | true -> State.pop 2 state, Pc (Int (Targetint.of_int_exn 0))
-          | false ->
-              let tail = State.peek 2 state in
-              State.pop 3 state, Pv tail
-        in
         compile
           infos
           (pc + 1)
           state
-          (Let (x, Prim (Extern "%resume", [ Pv stack; Pv func; Pv arg; tail ])) :: instrs)
+          (Let (x, Prim (Extern "%resume", [ Pv stack; Pv func; Pv arg; tail ]))
+          :: List.rev_append prelude instrs)
     | RESUMETERM ->
-        let stack = State.accu state in
-        let func = State.peek 0 state in
-        let arg = State.peek 1 state in
+        let state, prelude, stack, func, arg, tail = read_resume_args state in
         let x, state = State.fresh_var state in
-        let tail =
-          match Ocaml_version.compare Ocaml_version.current [ 5; 2 ] < 0 with
-          | true -> Pc (Int (Targetint.of_int_exn 0))
-          | false ->
-              let tail = State.peek 2 state in
-              Pv tail
-        in
         if debug_parser ()
         then
           Format.printf
@@ -2529,7 +2580,8 @@ and compile infos pc state (instrs : instr list) =
             func
             Var.print
             arg;
-        ( Let (x, Prim (Extern "%resume", [ Pv stack; Pv func; Pv arg; tail ])) :: instrs
+        ( Let (x, Prim (Extern "%resume", [ Pv stack; Pv func; Pv arg; tail ]))
+          :: List.rev_append prelude instrs
         , Return x
         , state )
     | PERFORM ->
@@ -2555,6 +2607,162 @@ and compile infos pc state (instrs : instr list) =
         ( Let (x, Prim (Extern "%reperform", [ Pv eff; Pv stack; Pv tail ])) :: instrs
         , Return x
         , state )
+    | WITH_STACK ->
+        let valuec = State.accu state in
+        let exnc = State.peek 0 state in
+        let effc = State.peek 1 state in
+        let f = State.peek 2 state in
+        let arg = State.peek 3 state in
+        let state = State.pop 4 state in
+        let x, state = State.fresh_var state in
+
+        if debug_parser ()
+        then
+          Format.printf
+            "%a = with_stack(%a, %a, %a, %a, %a)@."
+            Var.print
+            x
+            Var.print
+            valuec
+            Var.print
+            exnc
+            Var.print
+            effc
+            Var.print
+            f
+            Var.print
+            arg;
+        compile
+          infos
+          (pc + 1)
+          state
+          (Let
+             ( x
+             , Prim (Extern "%with_stack", [ Pv valuec; Pv exnc; Pv effc; Pv f; Pv arg ])
+             )
+          :: instrs)
+    | WITH_STACK_BIND ->
+        let valuec = State.accu state in
+        let exnc = State.peek 0 state in
+        let effc = State.peek 1 state in
+        let dyn = State.peek 2 state in
+        let bind = State.peek 3 state in
+        let f = State.peek 4 state in
+        let arg = State.peek 5 state in
+        let state = State.pop 6 state in
+        let x, state = State.fresh_var state in
+
+        if debug_parser ()
+        then
+          Format.printf
+            "%a = with_stack_bind(%a, %a, %a, %a, %a, %a, %a)@."
+            Var.print
+            x
+            Var.print
+            valuec
+            Var.print
+            exnc
+            Var.print
+            effc
+            Var.print
+            dyn
+            Var.print
+            bind
+            Var.print
+            f
+            Var.print
+            arg;
+        compile
+          infos
+          (pc + 1)
+          state
+          (Let
+             ( x
+             , Prim
+                 ( Extern "%with_stack_bind"
+                 , [ Pv valuec; Pv exnc; Pv effc; Pv dyn; Pv bind; Pv f; Pv arg ] ) )
+          :: instrs)
+    | WITH_STACK_PREEMPTIBLE ->
+        let valuec = State.accu state in
+        let exnc = State.peek 0 state in
+        let effc = State.peek 1 state in
+        let tickc = State.peek 2 state in
+        let f = State.peek 3 state in
+        let arg = State.peek 4 state in
+        let state = State.pop 5 state in
+        let x, state = State.fresh_var state in
+        if debug_parser ()
+        then
+          Format.printf
+            "%a = with_stack_preemptible(%a, %a, %a, %a, %a, %a)@."
+            Var.print
+            x
+            Var.print
+            valuec
+            Var.print
+            exnc
+            Var.print
+            effc
+            Var.print
+            tickc
+            Var.print
+            f
+            Var.print
+            arg;
+        compile
+          infos
+          (pc + 1)
+          state
+          (Let
+             ( x
+             , Prim
+                 ( Extern "%with_stack_preemptible"
+                 , [ Pv valuec; Pv exnc; Pv effc; Pv tickc; Pv f; Pv arg ] ) )
+          :: instrs)
+    | WITH_STACK_BIND_PREEMPTIBLE ->
+        let valuec = State.accu state in
+        let exnc = State.peek 0 state in
+        let effc = State.peek 1 state in
+        let tickc = State.peek 2 state in
+        let dyn = State.peek 3 state in
+        let bind = State.peek 4 state in
+        let f = State.peek 5 state in
+        let arg = State.peek 6 state in
+        let state = State.pop 7 state in
+        let x, state = State.fresh_var state in
+        if debug_parser ()
+        then
+          Format.printf
+            "%a = with_stack_bind_preemptible(%a, %a, %a, %a, %a, %a, %a, %a)@."
+            Var.print
+            x
+            Var.print
+            valuec
+            Var.print
+            exnc
+            Var.print
+            effc
+            Var.print
+            tickc
+            Var.print
+            dyn
+            Var.print
+            bind
+            Var.print
+            f
+            Var.print
+            arg;
+        compile
+          infos
+          (pc + 1)
+          state
+          (Let
+             ( x
+             , Prim
+                 ( Extern "%with_stack_bind_preemptible"
+                 , [ Pv valuec; Pv exnc; Pv effc; Pv tickc; Pv dyn; Pv bind; Pv f; Pv arg ]
+                 ) )
+          :: instrs)
     | EVENT | BREAK | FIRST_UNIMPLEMENTED_OP -> assert false)
 
 (****)
@@ -2683,6 +2891,10 @@ let read_primitives toc ic =
   assert (Char.equal (String.get prim (String.length prim - 1)) '\000');
   String.split_on_char ~sep:'\000' (String.sub prim ~pos:0 ~len:(String.length prim - 1))
 
+let read_crcs ic =
+  let toc = Toc.read ic in
+  Toc.read_crcs toc ic
+
 type bytesections =
   { symb : Ocaml_compiler.Symtable.GlobalMap.t
   ; crcs : Ocaml_compiler.Import_info.table
@@ -2690,6 +2902,52 @@ type bytesections =
   ; dlpt : string list
   }
 [@@ocaml.warning "-unused-field"]
+
+type link_info =
+  { sections : bytesections
+  ; symbols : (Global_name.t * int) array
+  ; prim_count : int
+  ; aliases : (string * string) list
+  }
+[@@ocaml.warning "-unused-field"]
+
+let emit_link_info ~symbols ~primitives ~crcs ~num_globals body =
+  let primitives =
+    (* Add the externals translated by jsoo directly (in generate.ml) *)
+    StringSet.union (Primitive.get_external ()) (StringSet.of_list primitives)
+    |> StringSet.elements
+  in
+  let symbols_array =
+    Ocaml_compiler.Symtable.GlobalMap.fold (fun gn p acc -> (gn, p) :: acc) symbols []
+    |> Array.of_list
+  in
+
+  let sections =
+    { symb = symbols
+    ; crcs = Ocaml_compiler.Import_info.of_list crcs
+    ; prim = primitives
+    ; dlpt = []
+    }
+  in
+  let aliases = Primitive.aliases () in
+  let info =
+    { sections; symbols = symbols_array; prim_count = List.length primitives; aliases }
+  in
+  let body =
+    match Config.target () with
+    | `JavaScript -> body
+    | `Wasm ->
+        Let
+          ( Var.fresh ()
+          , Prim
+              ( Extern "caml_realloc_global"
+              , [ Pc (Int (Targetint.of_int_exn num_globals)) ] ) )
+        :: body
+  in
+  let c = Var.fresh () in
+  Let (c, Constant (Constants.parse (Obj.repr info)))
+  :: Let (Var.fresh (), Prim (Extern "caml_set_link_info", [ Pv c ]))
+  :: body
 
 let from_exe
     ?(includes = [])
@@ -2730,7 +2988,7 @@ let from_exe
     Ocaml_compiler.Symtable.GlobalMap.filter
       (function
         | Glob_predef _ -> true
-        | Glob_compunit name -> keep name)
+        | Glob_compunit (Compunit name) -> keep name)
       orig_symbols
   in
   let t = Timer.make () in
@@ -2752,15 +3010,16 @@ let from_exe
   if linkall
   then
     (* export globals *)
-    Ocaml_compiler.Symtable.GlobalMap.iter symbols ~f:(fun id n ->
-        globals.named_value.(n) <- Some (Ocaml_compiler.Symtable.Global.name id);
+    Ocaml_compiler.Symtable.GlobalMap.iter symbols ~f:(fun gn n ->
+        globals.named_value.(n) <- Some gn;
         globals.is_exported.(n) <- true);
   let p = parse_bytecode code globals debug_data in
   (* register predefined exception *)
   let body =
     List.fold_left predefined_exceptions ~init:[] ~f:(fun body (i, name) ->
-        globals.named_value.(i) <- Some name;
-        let body = register_global ~force:true globals i body in
+        globals.named_value.(i) <- Some (Glob_predef (Predef name));
+        globals.is_exported.(i) <- true;
+        let body = register_global globals i body in
         globals.is_exported.(i) <- false;
         body)
   in
@@ -2775,50 +3034,12 @@ let from_exe
   let body =
     if link_info
     then
-      let symbols_array =
-        Ocaml_compiler.Symtable.GlobalMap.fold
-          (fun i p acc -> (Ocaml_compiler.Symtable.Global.name i, p) :: acc)
-          symbols
-          []
-        |> Array.of_list
-      in
-      (* Include linking information *)
-      let sections =
-        { symb = symbols
-        ; crcs = Ocaml_compiler.Import_info.of_list crcs
-        ; prim = primitives
-        ; dlpt = []
-        }
-      in
-      let gdata = Var.fresh () in
-      let need_gdata = ref false in
-      let aliases = Primitive.aliases () in
-      let infos =
-        [ "sections", Constants.parse (Obj.repr sections)
-        ; "symbols", Constants.parse (Obj.repr symbols_array)
-        ; "prim_count", Int (Targetint.of_int_exn (Array.length globals.primitives))
-        ; "aliases", Constants.parse (Obj.repr aliases)
-        ]
-      in
-      let body =
-        List.fold_left infos ~init:body ~f:(fun rem (name, const) ->
-            assert (String.is_valid_utf_8 name);
-            need_gdata := true;
-            let c = Var.fresh () in
-            Let (c, Constant const)
-            :: Let
-                 ( Var.fresh ()
-                 , Prim
-                     ( Extern "caml_js_set"
-                     , [ Pv gdata
-                       ; Pc (NativeString (Code.Native_string.of_string name))
-                       ; Pv c
-                       ] ) )
-            :: rem)
-      in
-      if !need_gdata
-      then Let (gdata, Prim (Extern "caml_get_global_data", [])) :: body
-      else body
+      emit_link_info
+        ~symbols
+        ~primitives:(Array.to_list globals.primitives)
+        ~crcs
+        ~num_globals:(Array.length globals.vars)
+        body
     else body
   in
   (* List interface files *)
@@ -2847,7 +3068,7 @@ let from_exe
       Ocaml_compiler.Symtable.GlobalMap.fold
         (fun id _num acc ->
           match id with
-          | Ocaml_compiler.Symtable.Global.Glob_compunit name ->
+          | Global_name.Glob_compunit (Compunit name) ->
               if is_module name then StringSet.add name acc else acc
           | Glob_predef _ -> acc)
         symbols
@@ -2898,11 +3119,11 @@ let from_bytes ~prims ~debug (code : bytecode) =
     let value = (Meta.global_data ()).(i) in
     let tag = Obj.tag value in
     if tag = Obj.string_tag
-    then Some ("cst_" ^ Obj.magic value : string)
+    then Some (("cst_" ^ Obj.magic value : string), true)
     else
       match Int.Hashtbl.find ident_table i with
       | exception Not_found -> None
-      | glob -> Some (Ocaml_compiler.Symtable.Global.name glob)
+      | glob -> Some (Global_name.to_string glob, false)
   in
   let body =
     Array.fold_right_i globals.vars ~init:[] ~f:(fun i var l ->
@@ -2912,7 +3133,7 @@ let from_bytes ~prims ~debug (code : bytecode) =
              then
                match find_name i with
                | None -> ()
-               | Some name -> Code.Var.set_name x name);
+               | Some (name, generated) -> Code.Var.set_name x ~generated name);
             need_gdata := true;
             Let (x, Field (gdata, i, Non_float)) :: l
         | _ -> l)
@@ -2926,6 +3147,19 @@ let from_bytes ~prims ~debug (code : bytecode) =
 
 let from_string ~prims ~debug (code : string) = from_bytes ~prims ~debug code
 
+let normalize_bytecode code =
+  match Ocaml_version.compare Ocaml_version.current [ 5; 2 ] < 0 with
+  | true -> code
+  | false ->
+      (* Starting with OCaml 5.2, the toplevel no longer appends [RETURN 1] *)
+      let { opcode; _ } = find RETURN in
+      let len = String.length code in
+      let b = Bytes.create (len + 8) in
+      Bytes.blit_string ~src:code ~src_pos:0 ~dst:b ~dst_pos:0 ~len;
+      Bytes.set_int32_le b len (Int32.of_int opcode);
+      Bytes.set_int32_le b (len + 4) 1l;
+      Bytes.to_string b
+
 module Reloc = struct
   let gen_patch_int buff pos n =
     Bytes.set buff (pos + 0) (Char.unsafe_chr n);
@@ -2937,7 +3171,7 @@ module Reloc = struct
     { mutable pos : int
     ; mutable constants : Code.constant list
     ; mutable step2_started : bool
-    ; names : int String.Hashtbl.t
+    ; names : int Global_name.Hashtbl.t
     ; primitives : int String.Hashtbl.t
     }
 
@@ -2946,15 +3180,14 @@ module Reloc = struct
     { pos = List.length constants
     ; constants
     ; step2_started = false
-    ; names = String.Hashtbl.create 17
+    ; names = Global_name.Hashtbl.create 17
     ; primitives = String.Hashtbl.create 17
     }
 
   let constant_of_const x = Ocaml_compiler.constant_of_const x
-  [@@if oxcaml || ocaml_version < (5, 1, 0)]
+  [@@if ocaml_version < (5, 1, 0)]
 
-  let constant_of_const x = Constants.parse x
-  [@@if (not oxcaml) && ocaml_version >= (5, 1, 0)]
+  let constant_of_const x = Constants.parse x [@@if ocaml_version >= (5, 1, 0)]
 
   (* We currently rely on constants to be relocated before globals. *)
   let step1 t compunit code =
@@ -2983,29 +3216,44 @@ module Reloc = struct
   let step2 t compunit code =
     t.step2_started <- true;
     let open Cmo_format in
-    let next name =
-      try String.Hashtbl.find t.names name
+    let next gn =
+      try Global_name.Hashtbl.find t.names gn
       with Not_found ->
         let pos = t.pos in
         t.pos <- succ t.pos;
-        String.Hashtbl.add t.names name pos;
+        Global_name.Hashtbl.add t.names gn pos;
         pos
     in
-    let slot_for_global id = next id in
     List.iter compunit.cu_reloc ~f:(fun (reloc, pos) ->
         let patch name = gen_patch_int code pos name in
         match reloc with
         | ((Reloc_getglobal id) [@if ocaml_version < (5, 2, 0)]) ->
-            patch (slot_for_global (Ident.name id))
+            let gn : Global_name.t =
+              if Ident.is_predef id
+              then Glob_predef (Predef (Ident.name id))
+              else Glob_compunit (Compunit (Ident.name id))
+            in
+            patch (next gn)
         | ((Reloc_setglobal id) [@if ocaml_version < (5, 2, 0)]) ->
-            patch (slot_for_global (Ident.name id))
-        | ((Reloc_getcompunit id) [@if ocaml_version >= (5, 2, 0)]) ->
-            patch (slot_for_global (Ocaml_compiler.Compilation_unit.full_path_as_string id))
+            patch (next (Glob_compunit (Compunit (Ident.name id))))
+        | ((Reloc_getcompunit (Compunit id))
+           [@if (not oxcaml) && ocaml_version >= (5, 2, 0)]) ->
+            patch (next (Glob_compunit (Compunit id)))
+        | ((Reloc_getcompunit id) [@if oxcaml]) ->
+            patch
+              (next
+                 (Glob_compunit
+                    (Compunit (Ocaml_compiler.Compilation_unit.full_path_as_string id))))
         | ((Reloc_getpredef (Predef_exn id)) [@if ocaml_version >= (5, 2, 0)]) ->
-           if debug_parser () then Printf.printf "reloc_getpredef %s\n" (id);
-           patch (slot_for_global id)
-        | ((Reloc_setcompunit id) [@if ocaml_version >= (5, 2, 0)]) ->
-            patch (slot_for_global (Ocaml_compiler.Compilation_unit.full_path_as_string id))
+            patch (next (Glob_predef (Predef id)))
+        | ((Reloc_setcompunit (Compunit id))
+           [@if (not oxcaml) && ocaml_version >= (5, 2, 0)]) ->
+            patch (next (Glob_compunit (Compunit id)))
+        | ((Reloc_setcompunit id) [@if oxcaml]) ->
+            patch
+              (next
+                 (Glob_compunit
+                    (Compunit (Ocaml_compiler.Compilation_unit.full_path_as_string id))))
         | _ -> ())
 
   let primitives t =
@@ -3021,7 +3269,7 @@ module Reloc = struct
     let constants = constants t in
     let globals = make_globals (Array.length constants) constants primitives in
     resize_globals globals t.pos;
-    String.Hashtbl.iter (fun name i -> globals.named_value.(i) <- Some name) t.names;
+    Global_name.Hashtbl.iter (fun gn i -> globals.named_value.(i) <- Some gn) t.names;
     globals
 end
 
@@ -3035,42 +3283,44 @@ let from_compilation_units ~includes:_ ~include_cmis ~debug_data l =
     String.concat ~sep:"" l
   in
   let prog = parse_bytecode code globals debug_data in
-  let gdata = Var.fresh_n "global_data" in
-  let need_gdata = ref false in
   let body =
     Array.fold_right_i globals.vars ~init:[] ~f:(fun i var l ->
         match var with
         | Some x when globals.is_const.(i) -> (
-            match globals.named_value.(i) with
-            | None ->
+            match i < Array.length globals.constants, globals.named_value.(i) with
+            | true, _ ->
                 let l = register_global globals i l in
                 let cst = globals.constants.(i) in
                 (match cst, Code.Var.get_name x with
-                | String str, None -> Var.set_name x (Printf.sprintf "cst_%s" str)
+                | String str, None ->
+                    Var.set_name x ~generated:true (Printf.sprintf "cst_%s" str)
                 | _ -> ());
                 Let (x, Constant cst) :: l
-            | Some name ->
+            | false, Some gn ->
+                (* Cross-unit reference: initialize via
+                   caml_get_global or caml_get_global_predef *)
+                let name = Global_name.to_string gn in
+                let prim =
+                  if Global_name.is_predef gn
+                  then "caml_get_global_predef"
+                  else "caml_get_global"
+                in
                 Var.set_name x name;
-                need_gdata := true;
                 Let
                   ( x
                   , Prim
-                      ( Extern "caml_js_get"
-                      , [ Pv gdata; Pc (NativeString (Native_string.of_string name)) ] )
+                      (Extern prim, [ Pc (NativeString (Native_string.of_string name)) ])
                   )
-                :: l)
+                :: l
+            | false, None -> l)
         | _ -> l)
-  in
-  let body =
-    if !need_gdata
-    then Let (gdata, Prim (Extern "caml_get_global_data", [])) :: body
-    else body
   in
   let cmis =
     if include_cmis
     then
       List.fold_left l ~init:StringSet.empty ~f:(fun acc (compunit, _) ->
-          StringSet.add (Ocaml_compiler.Cmo_format.name compunit) acc)
+          let (Global_name.Compunit name) = Ocaml_compiler.Cmo_format.name compunit in
+          StringSet.add name acc)
     else StringSet.empty
   in
   { code = prepend prog body; cmis; debug = Debug.summarize debug_data }
@@ -3166,6 +3416,11 @@ let predefined_exceptions () =
         let exn = Var.fresh () in
         let v_name = Var.fresh () in
         let v_index = Var.fresh () in
+        let by_index =
+          match Config.target () with
+          | `Wasm -> Some index
+          | `JavaScript -> None
+        in
         [ Let (v_name, Constant (String name))
         ; Let
             ( v_index
@@ -3177,34 +3432,13 @@ let predefined_exceptions () =
                       (-index - 1))) )
         ; Let (exn, Block (248, [| v_name; v_index |], NotArray, Immutable))
         ]
-        @
-        match Config.target () with
-        | `JavaScript ->
-            let v_name_js = Var.fresh () in
-            [ Let (v_name_js, Constant (NativeString (Native_string.of_string name)))
-            ; Let
-                ( Var.fresh ()
-                , Prim
-                    ( Extern "caml_register_global"
-                    , [ Pc (Int (Targetint.of_int_exn index)); Pv exn; Pv v_name_js ] ) )
-            ]
-        | `Wasm ->
-            [ Let
-                ( Var.fresh ()
-                , Prim
-                    ( Extern "caml_register_global"
-                    , [ Pc (Int (Targetint.of_int_exn index)); Pv exn; Pv v_name ] ) )
-              (* Also make the exception available to the generated code *)
-            ; Let
-                ( Var.fresh ()
-                , Prim (Extern "caml_set_global", [ Pc (String name); Pv exn ]) )
-            ])
+        @ register_global_instrs exn ~name:(Glob_predef (Predef name)) ?by_index [])
     |> List.concat
   in
   let block = { params = []; body; branch = Stop } in
   let unit_info =
-    { Unit_info.provides = StringSet.of_list (List.map ~f:snd predefined_exceptions)
-    ; requires = StringSet.empty
+    { Unit_info.provides = Global_name.Compunit_set.empty
+    ; requires = Global_name.Compunit_set.empty
     ; force_link = true
     ; effects_without_cps = false
     ; primitives = []
@@ -3213,50 +3447,8 @@ let predefined_exceptions () =
   in
   { start = 0; blocks = Addr.Map.singleton 0 block; free_pc = 1 }, unit_info
 
-let link_info ~symbols ~primitives ~crcs =
-  let gdata = Code.Var.fresh_n "global_data" in
-  let symbols_array =
-    Ocaml_compiler.Symtable.GlobalMap.fold
-      (fun i p acc -> (Ocaml_compiler.Symtable.Global.name i, p) :: acc)
-      symbols
-      []
-    |> Array.of_list
-  in
-  let primitives =
-    (* Add the externals translated by jsoo directly (in generate.ml) *)
-    StringSet.union (Primitive.get_external ()) primitives |> StringSet.elements
-  in
-  let body = [] in
-  let body =
-    (* Include linking information *)
-    let sections =
-      { symb = symbols
-      ; crcs = Ocaml_compiler.Import_info.of_list crcs
-      ; prim = primitives
-      ; dlpt = []
-      }
-    in
-    let aliases = Primitive.aliases () in
-    let infos =
-      [ "sections", Constants.parse (Obj.repr sections)
-      ; "symbols", Constants.parse (Obj.repr symbols_array)
-      ; "prim_count", Int (Targetint.of_int_exn (List.length primitives))
-      ; "aliases", Constants.parse (Obj.repr aliases)
-      ]
-    in
-    let body =
-      List.fold_left infos ~init:body ~f:(fun rem (name, const) ->
-          let c = Var.fresh () in
-          Let (c, Constant const)
-          :: Let
-               ( Var.fresh ()
-               , Prim
-                   ( Extern "caml_js_set"
-                   , [ Pv gdata; Pc (NativeString (Native_string.of_string name)); Pv c ]
-                   ) )
-          :: rem)
-    in
-    Let (gdata, Prim (Extern "caml_get_global_data", [])) :: body
-  in
+let link_info ~symbols ~primitives ~crcs ~num_globals =
+  let primitives = StringSet.elements primitives in
+  let body = emit_link_info ~symbols ~primitives ~crcs ~num_globals [] in
   let block = { params = []; body; branch = Stop } in
   { start = 0; blocks = Addr.Map.singleton 0 block; free_pc = 1 }

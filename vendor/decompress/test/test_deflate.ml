@@ -7,7 +7,7 @@ let w0 = Lz77.make_window ~bits:15
 let w1 = make_window ~bits:15
 
 let load_file filename =
-  let ic = open_in filename in
+  let ic = open_in_bin filename in
   let ln = in_channel_length ic in
   let rs = really_input_string ic ln in
   close_in ic ; rs
@@ -19,8 +19,8 @@ let compare_files a b =
 let deflate_with_level ~level filename =
   Alcotest.test_case (Fmt.str "%s (level: %d)" filename level) `Quick
   @@ fun () ->
-  let ic = open_in filename in
-  let oc = open_out (filename ^ ".o") in
+  let ic = open_in_bin filename in
+  let oc = open_out_bin (filename ^ ".o") in
   let state = Lz77.state ~level ~q ~w:w0 (`Channel ic) in
   let encoder = Def.encoder `Manual ~q in
   let decoder = Inf.decoder `Manual ~o ~w:w1 in
@@ -34,11 +34,11 @@ let deflate_with_level ~level filename =
       ; encode
         @@ Def.encode encoder
              (`Block
-               {
-                 Def.kind=
-                   Dynamic (Def.dynamic_of_frequencies ~literals ~distances)
-               ; last= false
-               })
+                {
+                  Def.kind=
+                    Dynamic (Def.dynamic_of_frequencies ~literals ~distances)
+                ; last= false
+                })
     | `End ->
       Fmt.epr "[compress]: `End.\n%!"
       ; close_in ic
@@ -71,7 +71,7 @@ let deflate_with_level ~level filename =
       ; encode_rest @@ Def.encode encoder `Await
     | (`Flush | `End) as state ->
       let len = bigstring_length o - Inf.dst_rem decoder in
-      let str = Bigstringaf.substring o ~off:0 ~len in
+      let str = Bstr.sub_string o ~off:0 ~len in
       output_string oc str
       ; if state = `Flush then (
           Inf.flush decoder
@@ -84,7 +84,7 @@ let deflate_with_level ~level filename =
       ; encode @@ Def.encode encoder `Await
     | (`Flush | `End) as state ->
       let len = bigstring_length o - Inf.dst_rem decoder in
-      let str = Bigstringaf.substring o ~off:0 ~len in
+      let str = Bstr.sub_string o ~off:0 ~len in
       output_string oc str
       ; if state = `Flush then (
           Inf.flush decoder

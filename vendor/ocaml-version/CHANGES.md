@@ -1,3 +1,33 @@
+## v4.1.5 (2026-10-24)
+
+ * Add OCaml 5.5.2 (@Octachron #94)
+
+## v4.1.4 (2026-09-10)
+
+ * Add OCaml 5.5.1 (@mtelvers #93)
+
+## v4.1.3 (2026-06-19)
+
+ * Add OCaml 5.5.0 (@Octachron #92)
+
+## v4.1.2 (2026-06-15)
+
+ * Add OCaml 4.14.4 (@Octachron #91)
+
+## v4.1.1 (2026-05-12)
+
+ * Remove 4.08 from the `significant` releases list; the lowest curated
+   version is now 4.11 (@mtelvers)
+
+## v4.1.0 (2026-04-20)
+
+ * Add OCaml 5.6 and 5.5.0~beta1 (@kit-ty-kate #88)
+ * Expose a `significant` releases list to mark tested versions (@avsm #87)
+
+## v4.0.4 (2026-03-20)
+
+ * Add OCaml 4.14.3 and 5.4.1 (@mtelvers #86)
+
 ## v4.0.3 (2025-10-10)
 
  * Add OCaml 5.4.0 (@Octachron #85)

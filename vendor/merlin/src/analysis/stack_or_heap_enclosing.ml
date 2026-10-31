@@ -35,10 +35,10 @@ let from_nodes ~lsp_compat ~pos ~path =
     | ( Pattern { pat_desc = Tpat_var _; _ },
         Some
           (Value_binding
-            { vb_expr = { exp_desc = Texp_function { alloc_mode; _ }; _ };
-              vb_loc;
-              _
-            }) ) ->
+             { vb_expr = { exp_desc = Texp_function { alloc_mode; _ }; _ };
+               vb_loc;
+               _
+             }) ) ->
       (* The location that most sensibly corresponds to the "allocation" is the entire
          value binding. However, the LSP hover at this point will describe just the
          pattern, so we don't override the location in the [lsp_compat] regime. *)
@@ -101,10 +101,10 @@ let from_nodes ~lsp_compat ~pos ~path =
               ret ?loc Unexpected_no_alloc)))
       | Texp_record { representation; alloc_mode = maybe_alloc_mode; _ } -> (
         match (maybe_alloc_mode, representation) with
-        | _, Record_inlined _ -> None
+        | _, (Record_inlined _ | Record_dummy _) -> None
         | Some alloc_mode, _ -> ret_alloc alloc_mode
         | None, Record_unboxed -> ret_no_alloc "unboxed record"
-        | None, (Record_boxed _ | Record_float | Record_ufloat | Record_mixed _)
+        | None, (Record_boxed | Record_float | Record_ufloat | Record_mixed _)
           -> ret Unexpected_no_alloc)
       | Texp_field (_, _, _, _, boxed_or_unboxed, _) -> (
         match boxed_or_unboxed with
@@ -113,7 +113,7 @@ let from_nodes ~lsp_compat ~pos ~path =
       | Texp_variant (_, maybe_exp_and_alloc_mode) ->
         maybe_exp_and_alloc_mode
         |> Option.map ~f:(fun (_, (alloc_mode : Typedtree.alloc_mode)) ->
-               alloc_mode)
+            alloc_mode)
         |> ret_maybe_alloc "variant without argument"
       | _ -> None)
     | _ -> None

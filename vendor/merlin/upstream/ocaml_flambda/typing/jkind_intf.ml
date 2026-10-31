@@ -15,18 +15,32 @@
 (* This module contains definitions that we do not otherwise need to repeat
    between the various Jkind modules. See comment in jkind_types.mli. *)
 module type Sort = sig
+  (* CR layouts-scannable: The comment below is no longer entirely accurate,
+     after the addition of scannable axes (which are needed when compiling to
+     determine GC behavior).
+     It may be desirable to make a refined data definition that separates "the
+     thing that stores enough info to compiling" (sort + scannable axes, or
+     similarly layout - any) from "the discrete thing used for unification". *)
   (** A sort classifies how a type is represented at runtime. Every concrete
       jkind has a sort, and knowing the sort is sufficient for knowing the
       calling convention of values of a given type. *)
   type t
 
+  (** Rigid sort variables similiar to [Tunivar] for types. They can be
+      specified to be equal by [enter_repr] but cannot be equated/unified. *)
+  type univar = { name : string option }
+
+  (** [enter_repr pairs f] establishes correspondence between sort univars (for
+      Trepr) using the given list of pairs, then calls [f]. *)
+  val enter_repr : (univar * univar) list -> (unit -> 'a) -> 'a
+
   (** These are the constant sorts -- fully determined and without variables *)
   type base =
     | Void  (** No run time representation at all *)
-    | Value  (** Standard ocaml value representation *)
+    | Scannable  (** Standard ocaml value representation *)
     | Untagged_immediate
-        (** Untagged 31- or 63-bit immediates, but without the tag bit, so they must
-        never be visible to the GC *)
+        (** Untagged 31- or 63-bit immediates, but without the tag bit, so they
+            must never be visible to the GC *)
     | Float64  (** Unboxed 64-bit floats *)
     | Float32  (** Unboxed 32-bit floats *)
     | Word  (** Unboxed native-size integers *)
@@ -45,14 +59,21 @@ module type Sort = sig
     type t =
       | Base of base
       | Product of t list
+      | Univar of univar
+      | Genvar of var
+          (** A layout variable bound by a surrounding [val_lpoly]. It's a
+              "fake" constant that will be instantiated to real layout constant
+              by slambda. The [var] is used only for physical identity; its
+              contents are not consumed and its level must be
+              [Ident.highest_scope]. *)
 
     val equal : t -> t -> bool
 
-    val format : Format.formatter -> t -> unit
+    val format : Format_doc.formatter -> t -> unit
 
     val all_void : t -> bool
 
-    val value : t
+    val scannable : t
 
     val void : t
 
@@ -110,7 +131,7 @@ module type Sort = sig
     val for_list_element : t
 
     (** These are sorts for the types of ocaml expressions that we expect will
-        always be "value".  These names are used in the translation to lambda to
+        always be "value". These names are used in the translation to lambda to
         make the code clearer. *)
     val for_function : t
 
@@ -126,7 +147,8 @@ module type Sort = sig
 
     val for_module : t
 
-    val for_predef_value : t (* Predefined value types, e.g. int and string *)
+    (** Predefined scannable types, e.g. [int] and [string] *)
+    val for_predef_scannable : t
 
     val for_tuple : t
 
@@ -149,23 +171,27 @@ module type Sort = sig
     type id = private int
     (* the [private int] allows the debugger to print it *)
 
-    (** Extract the unique id for a [var]; this should be used only
-        for debugging or printing, not for decision making *)
+    (** Checks whether a [var] satisfies the properties that hold for variables
+        saved to a cmi. *)
+    val is_cmi_var : var -> bool
+
+    (** Extract the unique id for a [var]. Outside of a cmi, equal [id]s imply
+        physical equality of [var]s. *)
     val get_id : var -> id
 
-    (** Get the number of an [id], useful for printing. These numbers
-        get allocated only when an [id] gets printed, and so they are
-        less brittle than just printing the [id] itself. *)
+    (** Get the number of an [id], useful for printing. These numbers get
+        allocated only when an [id] gets printed, and so they are less brittle
+        than just printing the [id] itself. *)
     val get_print_number : id -> int
 
     (** These names are generated lazily and only when this function is called,
-      and are not guaranteed to be efficient to create *)
+        and are not guaranteed to be efficient to create *)
     val name : var -> string
   end
 
   val void : t
 
-  val value : t
+  val scannable : t
 
   val float64 : t
 
@@ -178,7 +204,7 @@ module type Sort = sig
   val bits64 : t
 
   (** Create a new sort variable that can be unified. *)
-  val new_var : level:int -> t
+  val new_var : level:int -> var
 
   val of_base : base -> t
 
@@ -186,31 +212,86 @@ module type Sort = sig
 
   val of_var : var -> t
 
-  (** This checks for equality, and sets any variables to make two sorts
-      equal, if possible *)
+  (** This checks for equality, and sets any variables to make two sorts equal,
+      if possible *)
   val equate : t -> t -> bool
 
-  val format : Format.formatter -> t -> unit
+  val format : Format_doc.formatter -> t -> unit
 
-  (** Checks whether this sort is [void], defaulting to [value] if a sort
-      variable is unfilled. *)
-  val is_void_defaulting : t -> bool
-
-  (** [default_to_value_and_get] extracts the sort as a `const`.  If it's a variable,
-      it is set to [value] first. *)
-  val default_to_value_and_get : t -> Const.t
+  (** [default_to_scannable_and_get] extracts the sort as a `const`. If it's a
+      variable, it is set to [scannable] first. *)
+  val default_to_scannable_and_get : t -> Const.t
 
   (* CR layouts v12: Default this to void. *)
 
-  (** [default_for_transl_and_get] extracts the sort as a `const`.  If it's a variable,
-      it is set to [value] first. After we have support for [void], this will default to
-      [void] instead. *)
+  (** [default_for_transl_and_get] extracts the sort as a `const`. If it's a
+      variable, it is set to [value] first. After we have support for [void],
+      this will default to [void] instead. *)
   val default_for_transl_and_get : t -> Const.t
 
-  (** To record changes to sorts, for use with `Types.{snapshot, backtrack}` *)
+  (** Like [default_to_scannable_and_get] but operates directly on a [var]. *)
+  val var_default_to_scannable_and_get : var -> Const.t
+
+  (** To record changes to sorts, for use with [Types.snapshot] and
+      [Types.backtrack]. *)
   type change
 
   val undo_change : change -> unit
+
+  (** Create a fresh polymorphic sort variable (level = [Ident.highest_scope]).
+  *)
+  val new_genvar : unit -> var
+
+  (** Create a polymorphic sort variable (level = [Ident.highest_scope]),
+      intended for saving to a cmi. *)
+  val new_genvar_for_cmi : unit -> var
+
+  (** Returns [true] iff the variable was created by {!new_genvar} or
+      {!new_genvar_for_cmi}. *)
+  val is_genvar : var -> bool
+
+  val reset_cmi_sort_id : unit -> unit
+
+  (** Get the concrete content of a variable. The returned sort must be
+      representable (including rigid sorts). *)
+  val get_representable_var : var -> t option
+
+  (** [subst s t] applies the variable substitution [s] to [t], replacing each
+      [Var v] where [(v, t')] is in [subst] with [t']. *)
+  val subst : (var * t) list -> t -> t
+
+  (** [instance_with ~level vars f] creates a fresh sort var at [level] for each
+      var in [vars], calls [f] with {!instance} configured to replace each var
+      with its fresh copy, and returns the fresh vars together with the result
+      of [f]. Raises if any var in [vars] is not a generic variable (see
+      {!is_genvar}). *)
+  val instance_with : level:int -> var list -> (unit -> 'a) -> var list * 'a
+
+  (** Apply instantiation to every [Var] node in a sort. Generic variables (see
+      {!is_genvar}) are replaced by fresh vars registered via {!instance_with};
+      non-generic variables are left unchanged. Must be called within the
+      dynamic extent of {!instance_with}. *)
+  val instance : t -> t
+
+  (** Returns a human-readable name for a generic variable. Must be called
+      within the dynamic extent of {!print_with_genvars}. *)
+  val to_string_genvar : var -> string
+
+  (** [print_with_genvars vars f] assigns a fresh name to each var in [vars],
+      calls [f] with those names, and returns the result. Within the call to
+      [f], {!to_string_genvar} will return the assigned name for each var. *)
+  val print_with_genvars : var list -> (string list -> 'a) -> 'a
+
+  (** [generalize_with f] runs [f] with sort generalization enabled (for let
+      poly_ support). Returns the result of [f] and the list of sort variables
+      lifted to generic during [f]. *)
+  val generalize_with : (unit -> 'a) -> 'a * var list
+
+  (** Generalize sort variables when in sort generalization context. Sets the
+      level of sort variables to Ident.highest_scope and accumulates them. This
+      should be called from Ctype.generalize. Only has an effect when called
+      within {!generalize_with}. *)
+  val generalize : current_level:int -> t -> unit
 
   module Debug_printers : sig
     val base : Format.formatter -> base -> unit
@@ -246,6 +327,7 @@ module History = struct
     | Idx_element
     | Structure_item
     | Signature_item
+    | Layout_poly
 
   (* For sort variables that are in the "legacy" position
      on the jkind lattice, defaulting exactly to [value]. *)
@@ -268,8 +350,10 @@ module History = struct
     | Existential_unpack : string -> (allowed * allowed) annotation_context
     | Univar : string -> (allowed * allowed) annotation_context
     | Type_variable : string -> (allowed * allowed) annotation_context
+    | Implicit_jkind : string -> (allowed * allowed) annotation_context
     | Type_wildcard : Location.t -> (allowed * allowed) annotation_context
     | Type_of_kind : Location.t -> (allowed * allowed) annotation_context
+    | Jkind_declaration : Path.t -> (allowed * allowed) annotation_context
     | With_error_message :
         string * 'd annotation_context
         -> 'd annotation_context
@@ -296,6 +380,10 @@ module History = struct
           position : int;
           arity : int
         }
+    | Recmod_fun_arg
+    | Array_comprehension_element
+    | Array_comprehension_iterator_element
+    | Idx_base
 
   type value_creation_reason =
     | Class_let_binding
@@ -324,20 +412,13 @@ module History = struct
     | Univar
     | Default_type_jkind
     | Existential_type_variable
-    | Idx_base
-    | Array_comprehension_element
     | List_comprehension_iterator_element
-    | Array_comprehension_iterator_element
     | Lazy_expression
     | Class_type_argument
     | Class_term_argument
     | Debug_printer_argument
-    | Recmod_fun_arg
-    | Quotation_result
-    | Antiquotation_result
-    | Tquote
-    | Tsplice
     | Array_type_kind
+    | Quoted_expression
     | Unknown of string (* CR layouts: get rid of these *)
 
   type immediate_creation_reason =
@@ -347,6 +428,8 @@ module History = struct
     | Immediate_polymorphic_variant
 
   type immediate_or_null_creation_reason = Primitive of Ident.t
+
+  type scannable_creation_reason = Dummy_jkind
 
   (* CR layouts v5: make new void_creation_reasons *)
   type void_creation_reason = |
@@ -368,6 +451,9 @@ module History = struct
           position : int;
           arity : int
         }
+    | Overapproximation_of_with_bounds
+    | Inside_quote
+    | Evaluated_quote
 
   type product_creation_reason =
     | Unboxed_tuple
@@ -380,6 +466,7 @@ module History = struct
     | Value_creation of value_creation_reason
     | Immediate_creation of immediate_creation_reason
     | Immediate_or_null_creation of immediate_or_null_creation_reason
+    | Scannable_creation of scannable_creation_reason
     | Void_creation of void_creation_reason
     | Any_creation of any_creation_reason
     | Product_creation of product_creation_reason

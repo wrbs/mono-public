@@ -84,8 +84,7 @@ let add_user_rule
     let build = interpret_and_add_locks ~expander rule.locks action.build in
     { action with Action_builder.With_targets.build }
   in
-  let* mode = Rule_mode_expand.expand_path ~expander ~dir rule.mode in
-  Super_context.add_rule_get_targets sctx ~dir ~mode ~loc:rule.loc action
+  Super_context.add_rule_get_targets sctx ~dir ~mode:rule.mode ~loc:rule.loc action
 ;;
 
 let user_rule sctx ?extra_bindings ~dir ~expander (rule : Rule_conf.t) =
@@ -242,7 +241,6 @@ let copy_files sctx ~dir ~expander ~src_dir (def : Copy_files.t) =
   in
   if def.syntax_version >= (3, 17) && Filename_set.is_empty files
   then User_error.raise ~loc [ Pp.textf "Does not match any files" ];
-  let* mode = Rule_mode_expand.expand_path ~dir ~expander def.mode in
   (* CR-someday amokhov: We currently traverse the set [files] twice: first, to
      add the corresponding rules, and then to convert the files to [targets]. To
      do only one traversal we need [Memo.parallel_map_set]. *)
@@ -257,7 +255,7 @@ let copy_files sctx ~dir ~expander ~src_dir (def : Copy_files.t) =
           sctx
           ~loc
           ~dir
-          ~mode
+          ~mode:def.mode
           ((if def.add_line_directive
             then Copy_line_directive.builder context
             else Action_builder.copy)

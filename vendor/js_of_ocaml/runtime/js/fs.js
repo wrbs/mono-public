@@ -25,10 +25,16 @@ function caml_trailing_slash(name) {
 }
 
 //Provides: caml_current_dir
-//Requires: caml_trailing_slash, fs_node_supported
-if (fs_node_supported() && globalThis.process && globalThis.process.cwd)
-  var caml_current_dir = globalThis.process.cwd().replace(/\\/g, "/");
-else var caml_current_dir = "/static";
+//Requires: caml_trailing_slash, fs_node_supported, fs_quickjs_supported
+var caml_current_dir = (function () {
+  if (fs_node_supported() && globalThis.process?.cwd)
+    return globalThis.process.cwd().replace(/\\/g, "/");
+  if (fs_quickjs_supported()) {
+    var r = globalThis.os.getcwd();
+    if (r[1] === 0) return r[0];
+  }
+  return "/static";
+})();
 caml_current_dir = caml_trailing_slash(caml_current_dir);
 
 //Provides: caml_get_root
@@ -50,6 +56,7 @@ function MlFile() {}
 
 //Provides: path_is_absolute
 //Requires: fs_node_supported
+//Requires: jsoo_is_win32
 function make_path_is_absolute() {
   function posix(path) {
     if (path.charAt(0) === "/") return ["", path.slice(1)];
@@ -72,13 +79,7 @@ function make_path_is_absolute() {
     }
     return;
   }
-  if (
-    fs_node_supported() &&
-    globalThis.process &&
-    globalThis.process.platform
-  ) {
-    return globalThis.process.platform === "win32" ? win32 : posix;
-  } else return posix;
+  return jsoo_is_win32 ? win32 : posix;
 }
 var path_is_absolute = make_path_is_absolute();
 
@@ -110,13 +111,38 @@ function caml_make_path(name) {
   return ncomp;
 }
 
+// QuickJS filesystem support can be added with by passing
+// +fs_quickjs.js to the command line. It's not included by default to
+// avoid bloat.
+
+//Provides: MlQuickJSDevice
+//Weakdef
+class MlQuickJSDevice {}
+
+//Provides: fs_quickjs_supported
+//Weakdef
+function fs_quickjs_supported() {
+  return false;
+}
+
+//Provides: caml_sys_open_for_quickjs
+//Weakdef
+function caml_sys_open_for_quickjs(_fd, _flags) {
+  return null;
+}
+
 //Provides:jsoo_mount_point
-//Requires: MlFakeDevice, MlNodeDevice, caml_root, fs_node_supported
+//Requires: MlFakeDevice, MlNodeDevice, MlQuickJSDevice, caml_root, fs_node_supported, fs_quickjs_supported
 var jsoo_mount_point = [];
 if (fs_node_supported()) {
   jsoo_mount_point.push({
     path: caml_root,
     device: new MlNodeDevice(caml_root),
+  });
+} else if (fs_quickjs_supported()) {
+  jsoo_mount_point.push({
+    path: caml_root,
+    device: new MlQuickJSDevice(caml_root),
   });
 } else {
   jsoo_mount_point.push({
@@ -278,7 +304,7 @@ function caml_sys_rename(o, n) {
   var n_root = resolve_fs_device(n);
   if (o_root.device !== n_root.device)
     caml_failwith("caml_sys_rename: cannot move file between two filesystem");
-  if (!o_root.device.rename) caml_failwith("caml_sys_rename: no implemented");
+  if (!o_root.device.rename) caml_failwith("caml_sys_rename: not implemented");
   o_root.device.rename(o_root.rest, n_root.rest);
 }
 
@@ -325,7 +351,7 @@ function jsoo_create_file_extern(name, content) {
 //Provides: caml_fs_init
 //Requires: jsoo_create_file
 function caml_fs_init() {
-  var tmp = globalThis.jsoo_fs_tmp;
+  var tmp = [].concat(globalThis.jsoo_fs_tmp || [], globalThis.caml_fs_tmp || []);
   if (tmp) {
     for (var i = 0; i < tmp.length; i++) {
       jsoo_create_file(tmp[i].name, tmp[i].content);
@@ -333,6 +359,7 @@ function caml_fs_init() {
   }
   globalThis.jsoo_create_file = jsoo_create_file;
   globalThis.jsoo_fs_tmp = [];
+  globalThis.caml_fs_tmp = [];
   return 0;
 }
 
@@ -363,7 +390,7 @@ function caml_read_file_content(name) {
     var file = root.device.open(root.rest, { rdonly: 1 });
     var len = file.length();
     var buf = new Uint8Array(len);
-    file.read(buf, 0, len);
+    file.read(buf, 0, len, false);
     return caml_string_of_uint8_array(buf);
   }
   caml_raise_no_such_file(caml_jsstring_of_string(name));

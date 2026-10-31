@@ -90,8 +90,7 @@ val run
 
 (** Same as [run], but for actions that don't produce targets *)
 val run'
-  :  ?sandbox:Sandbox_config.t
-  -> dir:Path.t
+  :  dir:Path.t
   -> Action.Prog.t
   -> Args.without_targets Args.t list
   -> Action.Full.t Action_builder.t

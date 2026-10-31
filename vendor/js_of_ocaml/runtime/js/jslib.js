@@ -76,6 +76,33 @@ function caml_stack_check_depth() {
   return --caml_stack_depth > 0;
 }
 
+//Provides: caml_direct_trampoline
+//If: effects
+//If: doubletranslate
+//Requires: caml_stack_depth
+// Entry trampoline for the direct version of a cps_needed mutually
+// recursive function under --effects=double-translation. Sets up a stack
+// budget, runs the inner direct body, then loops on caml_trampoline_return
+// bounce objects until a plain value comes back. Mirrors the CPS-side
+// trampoline (see caml_callback / caml_resume): each iteration starts with
+// a fresh stack budget and dispatches the bounce target directly (the
+// joo_tramp is always the inner direct closure of an SCC member, never a
+// paired wrapper, so plain apply is correct).
+function caml_direct_trampoline(f, args) {
+  var saved = caml_stack_depth;
+  try {
+    caml_stack_depth = 40;
+    var res = f.apply(null, args);
+    while (res?.joo_tramp) {
+      caml_stack_depth = 40;
+      res = res.joo_tramp.apply(null, res.joo_args);
+    }
+    return res;
+  } finally {
+    caml_stack_depth = saved;
+  }
+}
+
 //Provides: caml_callback
 //If: !effects
 //Requires:caml_call_gen
@@ -139,6 +166,12 @@ function caml_jsoo_flags_effects(_unit) {
   return caml_string_of_jsstring(CONFIG("effects"));
 }
 
+//Provides: caml_jsoo_build_config
+//Requires: caml_string_of_jsstring
+function caml_jsoo_build_config(_unit) {
+  return caml_string_of_jsstring(BUILD_CONFIG());
+}
+
 //Provides: caml_wrap_exception const (mutable)
 //Requires: caml_global_data,caml_string_of_jsstring,caml_named_value
 function caml_wrap_exception(e) {
@@ -149,24 +182,26 @@ function caml_wrap_exception(e) {
     if (
       globalThis.RangeError &&
       e instanceof globalThis.RangeError &&
-      e.message &&
-      e.message.match(/maximum call stack/i)
+      e.message?.match(/maximum call stack/i)
     )
-      exn = caml_global_data.Stack_overflow;
+      exn = caml_global_data["predef:Stack_overflow"];
     //Stack_overflow: firefox
     else if (
       globalThis.InternalError &&
       e instanceof globalThis.InternalError &&
-      e.message &&
-      e.message.match(/too much recursion/i)
+      e.message?.match(/too much recursion/i)
     )
-      exn = caml_global_data.Stack_overflow;
+      exn = caml_global_data["predef:Stack_overflow"];
     //Wrap Error in Js.Error exception
     else if (e instanceof globalThis.Error && caml_named_value("jsError"))
       exn = [0, caml_named_value("jsError"), e];
     //fallback: wrapped in Failure
     else
-      exn = [0, caml_global_data.Failure, caml_string_of_jsstring(String(e))];
+      exn = [
+        0,
+        caml_global_data["predef:Failure"],
+        caml_string_of_jsstring(String(e)),
+      ];
     // We already have an error at hand, let's use it.
     if (e instanceof globalThis.Error) exn.js_error = e;
     return exn;
@@ -279,7 +314,7 @@ function caml_js_var(x) {
     );
     //console.error("Js.Unsafe.eval_string")
   }
-  // biome-ignore lint/security/noGlobalEval:
+  // biome-ignore lint/security/noGlobalEval: ..
   return eval?.(x);
 }
 //Provides: caml_js_call (const, mutable, shallow)
@@ -466,7 +501,7 @@ function caml_js_function_arity(f) {
 
 //Provides: caml_js_equals mutable (const, const)
 function caml_js_equals(x, y) {
-  // biome-ignore lint/suspicious/noDoubleEquals:
+  // biome-ignore lint/suspicious/noDoubleEquals: ..
   return +(x == y);
 }
 
@@ -483,7 +518,7 @@ function caml_js_eval_string(s) {
   // This is faster and avoid variable captures.
   // Also prepends `"use strict"` directive since this is not inherited
   // from the enclosing function with an indirect eval.
-  // biome-ignore lint/security/noGlobalEval:
+  // biome-ignore lint/security/noGlobalEval: ..
   return eval?.('"use strict";' + caml_jsstring_of_string(s));
 }
 
@@ -494,7 +529,7 @@ function caml_js_expr(s) {
   // We add parentheses to avoid the ambiguity between expressions
   // and statements. This means that we accept invalid inputs like
   // "a)(b", but this is unlikely to be an issue in practice.
-  // biome-ignore lint/security/noGlobalEval:
+  // biome-ignore lint/security/noGlobalEval: ..
   return eval?.('"use strict";(' + caml_jsstring_of_string(s) + ")");
 }
 
@@ -502,7 +537,7 @@ function caml_js_expr(s) {
 //Requires: caml_jsstring_of_string
 function caml_pure_js_expr(s) {
   console.error("caml_pure_js_expr: fallback to runtime evaluation\n");
-  // biome-ignore lint/security/noGlobalEval:
+  // biome-ignore lint/security/noGlobalEval: ..
   return eval?.('"use strict";(' + caml_jsstring_of_string(s) + ")");
 }
 

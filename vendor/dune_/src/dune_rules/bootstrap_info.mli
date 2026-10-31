@@ -10,6 +10,5 @@ val gen_rules
   :  Super_context.t
   -> Executables.t
   -> dir:Path.Build.t
-  -> Lib.Compile.t
-  -> Dir_contents.t
+  -> requires_link:Lib.t list Resolve.t Memo.Lazy.t
   -> unit Memo.t

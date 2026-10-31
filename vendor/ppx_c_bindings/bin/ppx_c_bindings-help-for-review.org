@@ -1,0 +1,17 @@
+* ppx_c_bindings.exe
+
+: Generate the supporting C code for [ppx_c_binding]
+:
+:   ppx_c_bindings.exe FILE
+:
+: === flags ===
+:
+:   [-cpp]                     . Generate C++ output: wrap each generated binding
+:                                in an [extern "C"] block and emit [%%cpp ...]
+:                                contents verbatim outside of it (without [-cpp],
+:                                a [%%cpp ...] block produces a compile-time
+:                                [#error])
+:   [-no-line-numbers]         . Do not include line numbers in the output
+:   [-build-info]              . print info about this build and exit
+:   [-version]                 . print the version of this build and exit
+:   [-help], -?                . print this help text and exit

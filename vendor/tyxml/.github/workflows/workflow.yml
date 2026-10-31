@@ -1,11 +1,17 @@
-name: Main workflow
+name: Builds, tests & co
 
 on:
-  pull_request:
   push:
+    branches:
+      - master
+  pull_request:
   schedule:
     # Prime the caches every Monday
     - cron: 0 1 * * MON
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -14,36 +20,57 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
+          - macos-latest
+          - windows-latest
         ocaml-compiler:
-          - 4.04.x
-          - 4.05.x
-          - 4.11.x
-          - 4.13.x
-          - 4.14.x
-          - 5.0.x
-          - 5.1.x
-        include:
-          - os: macos-latest
-            ocaml-compiler: 4.14.x
-          - os: windows-latest
-            ocaml-compiler: 4.14.x
-          - os: macos-latest
-            ocaml-compiler: 5.1.x
+          - 5
+          - 4
 
     runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout tree
+        uses: actions/checkout@v7
 
-      - name: Use OCaml ${{ matrix.ocaml-compiler }}
-        uses: ocaml/setup-ocaml@v2
+      - name: Set-up OCaml
+        uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
-          opam-depext-flags: --with-test
 
       - run: opam install . --deps-only --with-test
 
       - run: opam exec -- make build
 
       - run: opam exec -- make test
+
+  # TyXML is upstream of odoc, which names content types such as
+  # Html_types.div_content in its own signatures. Widening one of those types
+  # is invisible to callers of the element functions but breaks code that names
+  # it, so build the most sensitive reverse dependency against this revision.
+  reverse-deps:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tree
+        uses: actions/checkout@v7
+
+      - name: Set-up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: 5
+
+      - name: Pin this revision of TyXML
+        run: opam pin add --no-action --yes tyxml .
+
+      - name: Build odoc against it
+        run: opam install --yes odoc
+
+  lint-opam:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tree
+        uses: actions/checkout@v7
+      - name: Set-up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: 4
+      - uses: ocaml/setup-ocaml/lint-opam@v3

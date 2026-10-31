@@ -12,9 +12,9 @@
 (*                                                                        *)
 (**************************************************************************)
 
-(** You should use the types defined in [Jkind] (which redefines the
-   types in this file) rather than using this file directly, unless you
-   are in [Types] or [Primitive]. *)
+(** You should use the types defined in [Jkind] (which redefines the types in
+    this file) rather than using this file directly, unless you are in [Types]
+    or [Primitive]. *)
 
 (* This module defines types used in the module Jkind. This is to avoid a mutual
    dependencies between jkind.ml(i) and types.ml(i) and bewteen jkind.ml(i) and
@@ -47,7 +47,7 @@ module Sort : sig
   (* Comments in [Jkind_intf.ml] *)
   type base =
     | Void
-    | Value
+    | Scannable
     | Untagged_immediate
     | Float64
     | Float32
@@ -64,15 +64,22 @@ module Sort : sig
 
   val equal_base : base -> base -> bool
 
+  type univar = { name : string option }
+
   type t =
     | Var of var
     | Base of base
     | Product of t list
+    | Univar of univar
 
   and var
 
   include
-    Jkind_intf.Sort with type t := t and type var := var and type base := base
+    Jkind_intf.Sort
+      with type t := t
+       and type var := var
+       and type univar := univar
+       and type base := base
 
   val set_change_log : (change -> unit) -> unit
 
@@ -85,13 +92,40 @@ module Sort : sig
 
   val equate_tracking_mutation : t -> t -> equate_result
 
-  (** Post-condition (which holds deeply within the sort): If the
-      result is a [Var v], then [!v] is [None]. *)
+  (** Post-condition (which holds deeply within the sort): If the result is a
+      [Var v], then [!v] is [None]. *)
   val get : t -> t
 
-  (** Decompose a sort into a list (of the given length) of fresh sort variables,
-      equating the input sort with the product of the output sorts. *)
-  val decompose_into_product : level:int -> t -> int -> t list option
+  (** Determines if the sort is [Scannable] or an unfilled sort variable *)
+  val is_scannable_or_var : t -> bool
+
+  (** Decompose a sort into a list (of the given length) of fresh sort
+      variables, equating the input sort with the product of the output sorts.
+  *)
+  val decompose_into_product : t -> int -> t list option
+
+  module Flat : sig
+    type t =
+      | Var of Var.id
+      | Genvar of var
+      | Univar of univar
+      | Base of base
+  end
+end
+
+module Scannable_axes : sig
+  type t =
+    { nullability : Jkind_axis.Nullability.t;
+      separability : Jkind_axis.Separability.t
+    }
+
+  val max : t
+
+  val value_axes : t
+
+  val equal : t -> t -> bool
+
+  val less_or_equal : t -> t -> Misc.Le_result.t
 end
 
 module Layout : sig
@@ -99,14 +133,41 @@ module Layout : sig
       [Sort (Product ...]. This duplication is hard to eliminate because of the
       possibility that a sort variable may be instantiated by a product sort. *)
   type 'sort t =
-    | Sort of 'sort
+    | Sort of 'sort * Scannable_axes.t
     | Product of 'sort t list
-    | Any
+    | Any of Scannable_axes.t
 
   module Const : sig
     type t =
-      | Any
-      | Base of Sort.base
+      | Any of Scannable_axes.t
+      | Base of Sort.base * Scannable_axes.t
       | Product of t list
+      | Univar of Sort.univar
+      | Genvar of Sort.var
+          (** A layout variable bound by a surrounding [val_lpoly]. It's a
+              "fake" constant that will be instantiated to real layout constant
+              by slambda. The [var] is used only for physical identity; its
+              contents are not consumed and its level must be
+              [Ident.highest_scope]. *)
+
+    module Static : sig
+      val of_base : Sort.base -> Scannable_axes.t -> t
+    end
+
+    val equal : t -> t -> bool
+
+    val max : t
+
+    val get_sort : t -> Sort.Const.t option
   end
+
+  val of_const : Const.t -> Sort.t t
+
+  val of_new_sort_var : level:int -> Scannable_axes.t -> Sort.t t * Sort.t
+
+  val get_const : Sort.t t -> Const.t option
+
+  val get_flat_const : Sort.Flat.t t -> Const.t option
+
+  val product : 'a t list -> 'a t
 end

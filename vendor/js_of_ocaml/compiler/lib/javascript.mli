@@ -298,6 +298,8 @@ and variable_declaration_kind =
   | Var
   | Let
   | Const
+  | Using
+  | AwaitUsing
 
 and case_clause = expression * statement_list
 
@@ -312,14 +314,20 @@ and function_kind =
   ; generator : bool
   }
 
+and decorator = expression
+
 and class_declaration =
-  { extends : expression option
+  { decorators : decorator list
+  ; extends : expression option
   ; body : class_element list
   }
 
 and class_element =
-  | CEMethod of bool (* static *) * class_element_name * method_
-  | CEField of bool (* static *) * class_element_name * initialiser option
+  | CEMethod of decorator list * bool (* static *) * class_element_name * method_
+  | CEField of
+      decorator list * bool (* static *) * class_element_name * initialiser option
+  | CEAccessor of
+      decorator list * bool (* static *) * class_element_name * initialiser option
   | CEStaticBLock of statement_list
 
 and class_element_name =
@@ -386,6 +394,7 @@ and export =
   | ExportFrom of
       { kind : export_from_kind
       ; from : Utf8_string.t
+      ; withClause : withClause option
       }
   | CoverExportFrom of early_error
 
@@ -396,11 +405,15 @@ and export_from_kind =
 and import =
   { from : Utf8_string.t
   ; kind : import_kind
+  ; withClause : withClause option
   }
+
+and withClause = (Utf8_string.t * Utf8_string.t) list
 
 and import_default = ident
 
 and import_kind =
+  | DeferNamespace of ident
   | Namespace of import_default option * ident
   (* import * as name from "fname" *)
   (* import defaultname, * as name from "fname" *)

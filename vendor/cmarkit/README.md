@@ -1,6 +1,6 @@
 cmarkit — CommonMark parser and renderer for OCaml
 ==================================================
-v0.3.0+dune
+v0.3.0
 
 Cmarkit parses the [CommonMark specification]. It provides:
 

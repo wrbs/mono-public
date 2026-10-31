@@ -1,4 +1,0 @@
-sort(data):
-  A Z b
-sort(data, compare=if_fst_cmp):
-  A b Z

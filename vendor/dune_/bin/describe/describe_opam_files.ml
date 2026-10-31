@@ -3,13 +3,7 @@ open Import
 let term =
   let+ builder = Common.Builder.term
   and+ format = Describe_format.arg
-  and+ _ = Describe_lang_compat.arg
-  and+ filenames_only =
-    let doc =
-      "Print opam filenames, each on their own line. This ignores the --format argument."
-    in
-    Arg.(value & flag & info [ "files" ] ~doc:(Some doc))
-  in
+  and+ _ = Describe_lang_compat.arg in
   let common, config = Common.init builder in
   Scheduler.go_with_rpc_server ~common ~config
   @@ fun () ->
@@ -34,14 +28,7 @@ let term =
     in
     Dyn.Tuple [ String (Path.to_string opam_file); String contents ]
   in
-  if filenames_only
-  then
-    Console.print
-      [ Pp.vbox
-          (Pp.concat_map ~sep:Pp.cut packages ~f:(fun pkg ->
-             Package.opam_file pkg |> Path.source |> Path.pp))
-      ]
-  else packages |> Dyn.list opam_file_to_dyn |> Describe_format.print_dyn format
+  packages |> Dyn.list opam_file_to_dyn |> Describe_format.print_dyn format
 ;;
 
 let command =

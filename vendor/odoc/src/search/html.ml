@@ -4,7 +4,7 @@ open Odoc_model
 open Lang
 open Odoc_index
 
-let url { Entry.id; kind; doc = _ ; source_loc = _} =
+let url { Entry.id; kind; doc = _ } =
   let open Entry in
   let stop_before =
     (* Some module/module types/... might not have an expansion, so we need to
@@ -34,7 +34,7 @@ let display_constructor_args args =
   let open Odoc_model.Lang in
   match args with
   | TypeDecl.Constructor.Tuple args ->
-      let no_label arg = None, arg in
+      let no_label arg = (None, arg) in
       (match args with
       | _ :: _ :: _ -> Some TypeExpr.(Tuple (List.map no_label args))
       | [ arg ] -> Some arg
@@ -64,6 +64,7 @@ let typedecl_params ?(delim = `parens) params =
       | None -> desc
       | Some TypeDecl.Pos -> "+" :: desc
       | Some TypeDecl.Neg -> "-" :: desc
+      | Some TypeDecl.Bivariant -> "+" :: "-" :: desc
     in
     let final = if injectivity then "!" :: var_desc else var_desc in
     String.concat "" final
@@ -226,7 +227,7 @@ let html_string_of_doc doc =
   doc |> of_doc |> Format.asprintf "%a" (Tyxml.Html.pp_elt ())
 
 let of_entry (entry : Entry.t) =
-  let ({ id; doc; kind ; source_loc=_} : Entry.t) = entry in
+  let ({ id; doc; kind } : Entry.t) = entry in
   let rhs = rhs_of_kind kind in
   let prefix_name, name = names_of_id id in
   let prefix_name = Some prefix_name and name = Some name in

@@ -58,6 +58,7 @@ type mapper = {
   include_declaration: mapper -> include_declaration -> include_declaration;
   include_description: mapper -> include_description -> include_description;
   jkind_annotation: mapper -> jkind_annotation -> jkind_annotation;
+  jkind_declaration: mapper -> jkind_declaration -> jkind_declaration;
   label_declaration: mapper -> label_declaration -> label_declaration;
   location: mapper -> Location.t -> Location.t;
   module_binding: mapper -> module_binding -> module_binding;
@@ -199,6 +200,10 @@ module T = struct
         splice ~loc ~attrs (sub.typ sub t)
     | Ptyp_of_kind jkind ->
         of_kind ~loc ~attrs (sub.jkind_annotation sub jkind)
+    | Ptyp_repr (lvars, t) ->
+        repr ~loc ~attrs (List.map (map_loc sub) lvars) (sub.typ sub t)
+    | Ptyp_newlayout (lvars, t) ->
+        newlayout ~loc ~attrs (List.map (map_loc sub) lvars) (sub.typ sub t)
     | Ptyp_extension x -> extension ~loc ~attrs (sub.extension sub x)
 
   let map_type_declaration sub
@@ -363,12 +368,16 @@ module MT = struct
         Pwith_module (map_loc sub lid, map_loc sub lid2)
     | Pwith_modtype (lid, mty) ->
         Pwith_modtype (map_loc sub lid, sub.module_type sub mty)
+    | Pwith_jkind (lid, d) ->
+        Pwith_jkind (map_loc sub lid, sub.jkind_declaration sub d)
     | Pwith_typesubst (lid, d) ->
         Pwith_typesubst (map_loc sub lid, sub.type_declaration sub d)
     | Pwith_modsubst (s, lid) ->
         Pwith_modsubst (map_loc sub s, map_loc sub lid)
     | Pwith_modtypesubst (lid, mty) ->
         Pwith_modtypesubst (map_loc sub lid, sub.module_type sub mty)
+    | Pwith_jkindsubst (lid, d) ->
+        Pwith_jkindsubst (map_loc sub lid, sub.jkind_declaration sub d)
 
   let map_signature_item sub {psig_desc = desc; psig_loc = loc} =
     let open Sig in
@@ -399,11 +408,7 @@ module MT = struct
         let attrs = sub.attributes sub attrs in
         extension ~loc ~attrs (sub.extension sub x)
     | Psig_attribute x -> attribute ~loc (sub.attribute sub x)
-    | Psig_kind_abbrev (name, jkind) ->
-        kind_abbrev
-          ~loc
-          (map_loc sub name)
-          (sub.jkind_annotation sub jkind)
+    | Psig_jkind x -> jkind ~loc (sub.jkind_declaration sub x)
 end
 
 
@@ -457,11 +462,7 @@ module M = struct
         let attrs = sub.attributes sub attrs in
         extension ~loc ~attrs (sub.extension sub x)
     | Pstr_attribute x -> attribute ~loc (sub.attribute sub x)
-    | Pstr_kind_abbrev (name, jkind) ->
-        kind_abbrev
-          ~loc
-          (map_loc sub name)
-          (sub.jkind_annotation sub jkind)
+    | Pstr_jkind x -> jkind ~loc (sub.jkind_declaration sub x)
 end
 
 module E = struct
@@ -502,7 +503,6 @@ module E = struct
 
   let map_block_access sub = function
     | Baccess_field lid -> Baccess_field (map_loc sub lid)
-    | Baccess_array (mut, ik, e) -> Baccess_array (mut, ik, sub.expr sub e)
     | Baccess_block (mut, e) -> Baccess_block (mut, sub.expr sub e)
 
   let map_unboxed_access sub = function
@@ -557,6 +557,8 @@ module E = struct
     | Pexp_match (e, pel) ->
         match_ ~loc ~attrs (sub.expr sub e) (sub.cases sub pel)
     | Pexp_try (e, pel) -> try_ ~loc ~attrs (sub.expr sub e) (sub.cases sub pel)
+    | Pexp_unboxed_unit -> unboxed_unit ~loc ~attrs ()
+    | Pexp_unboxed_bool b -> unboxed_bool ~loc ~attrs b
     | Pexp_tuple el ->
         tuple ~loc ~attrs (map_ltexp sub el)
     | Pexp_unboxed_tuple el ->
@@ -636,6 +638,7 @@ module E = struct
     | Pexp_quote e -> quote ~loc ~attrs (sub.expr sub e)
     | Pexp_splice e -> splice ~loc ~attrs (sub.expr sub e)
     | Pexp_hole -> hole ~loc ~attrs ()
+    | Pexp_borrow e -> borrow ~loc ~attrs (sub.expr sub e)
 
   let map_binding_op sub {pbop_op; pbop_pat; pbop_exp; pbop_loc} =
     let open Exp in
@@ -663,6 +666,8 @@ module P = struct
     | Ppat_constant c -> constant ~loc ~attrs (sub.constant sub c)
     | Ppat_interval (c1, c2) ->
         interval ~loc ~attrs (sub.constant sub c1) (sub.constant sub c2)
+    | Ppat_unboxed_unit -> unboxed_unit ~loc ~attrs ()
+    | Ppat_unboxed_bool b -> unboxed_bool ~loc ~attrs b
     | Ppat_tuple (pl, c) -> tuple ~loc ~attrs (map_ltpat sub pl) c
     | Ppat_unboxed_tuple (pl, c) ->
         unboxed_tuple ~loc ~attrs (map_ltpat sub pl) c
@@ -801,13 +806,14 @@ let default_mapper =
     type_exception = T.map_type_exception;
     extension_constructor = T.map_extension_constructor;
     value_description =
-      (fun this {pval_name; pval_type; pval_modalities; pval_prim; pval_loc;
-                 pval_attributes} ->
+      (fun this {pval_name; pval_type; pval_modalities; pval_prim; pval_poly;
+                 pval_loc; pval_attributes} ->
         Val.mk
           (map_loc this pval_name)
           (this.typ this pval_type)
           ~attrs:(this.attributes this pval_attributes)
           ~loc:(this.location this pval_loc)
+          ~poly:pval_poly
           ~modalities:(this.modalities this pval_modalities)
           ~prim:pval_prim
       );
@@ -884,7 +890,8 @@ let default_mapper =
 
 
     value_binding =
-      (fun this {pvb_pat; pvb_expr; pvb_constraint; pvb_modes; pvb_attributes; pvb_loc} ->
+      (fun this {pvb_pat; pvb_expr; pvb_constraint; pvb_is_poly; pvb_modes;
+                 pvb_attributes; pvb_loc} ->
          let map_ct (ct:Parsetree.value_constraint) = match ct with
            | Pvc_constraint {locally_abstract_univars=vars; typ} ->
                Pvc_constraint
@@ -901,6 +908,7 @@ let default_mapper =
            (this.pat this pvb_pat)
            (this.expr this pvb_expr)
            ?value_constraint:(Option.map map_ct pvb_constraint)
+           ~poly:pvb_is_poly
            ~loc:(this.location this pvb_loc)
            ~modes:(this.modes this pvb_modes)
            ~attrs:(this.attributes this pvb_attributes)
@@ -963,12 +971,13 @@ let default_mapper =
          | PPat (x, g) -> PPat (this.pat this x, map_opt (this.expr this) g)
       );
 
-    jkind_annotation = (fun this { pjkind_loc; pjkind_desc } ->
-      let pjkind_loc = this.location this pjkind_loc in
-      let pjkind_desc =
-        match pjkind_desc with
+    jkind_annotation = (fun this { pjka_loc; pjka_desc } ->
+      let pjka_loc = this.location this pjka_loc in
+      let pjka_desc =
+        match pjka_desc with
         | Pjk_default -> Pjk_default
-        | Pjk_abbreviation (s : string) -> Pjk_abbreviation s
+        | Pjk_abbreviation (lid, sa) ->
+          Pjk_abbreviation (map_loc this lid, List.map (map_loc this) sa)
         | Pjk_mod (t, mode_list) ->
           Pjk_mod (this.jkind_annotation this t, this.modes this mode_list)
         | Pjk_with (t, ty, modalities) ->
@@ -981,7 +990,18 @@ let default_mapper =
         | Pjk_product ts ->
           Pjk_product (List.map (this.jkind_annotation this) ts)
       in
-      { pjkind_loc; pjkind_desc });
+      { pjka_loc; pjka_desc });
+
+    jkind_declaration =
+      (fun this { pjkind_name; pjkind_manifest; pjkind_attributes;
+                  pjkind_loc } ->
+         let pjkind_name = map_loc this pjkind_name in
+         let pjkind_manifest =
+           Option.map (this.jkind_annotation this) pjkind_manifest
+         in
+         let pjkind_attributes = this.attributes this pjkind_attributes in
+         let pjkind_loc = this.location this pjkind_loc in
+         { pjkind_name; pjkind_manifest; pjkind_attributes; pjkind_loc });
 
     modes = (fun this m ->
       List.map (map_loc this) m);
@@ -1009,15 +1029,15 @@ let default_mapper =
 let extension_of_error {kind; main; sub} =
   if kind <> Location.Report_error then
     raise (Invalid_argument "extension_of_error: expected kind Report_error");
-  let str_of_pp pp_msg = Format.asprintf "%t" pp_msg in
+  let str_of_msg msg = Format.asprintf "%a" Format_doc.Doc.format msg in
   let extension_of_sub sub =
     { loc = sub.loc; txt = "ocaml.error" },
     PStr ([Str.eval (Exp.constant
-                       (Pconst_string (str_of_pp sub.txt, sub.loc, None)))])
+                       (Pconst_string (str_of_msg sub.txt, sub.loc, None)))])
   in
   { loc = main.loc; txt = "ocaml.error" },
   PStr (Str.eval (Exp.constant
-                    (Pconst_string (str_of_pp main.txt, main.loc, None))) ::
+                    (Pconst_string (str_of_msg main.txt, main.loc, None))) ::
         List.map (fun msg -> Str.extension (extension_of_sub msg)) sub)
 
 let attribute_of_warning loc s =
@@ -1083,15 +1103,25 @@ module PpxContext = struct
 
   let make ~tool_name () =
     let Load_path.{ visible; hidden } = Load_path.get_paths () in
+    let visible_load_dir_pairs dirs =
+      List.map
+        (fun (e : Clflags.visible_include) -> (e.path, e.cmx_guaranteed))
+        dirs
+    in
     let fields =
       [
         lid "tool_name",    make_string tool_name;
-        lid "include_dirs", make_list make_string (!Clflags.include_dirs);
+        lid "include_dirs",
+          make_list
+            (make_pair make_string make_bool)
+            (visible_load_dir_pairs !Clflags.include_dirs);
         lid "hidden_include_dirs",
           make_list make_string (!Clflags.hidden_include_dirs);
         lid "load_path",
-          make_pair (make_list make_string) (make_list make_string)
-            (visible, hidden);
+          make_pair
+            (make_list (make_pair make_string make_bool))
+            (make_list make_string)
+            (visible_load_dir_pairs visible, hidden);
         lid "open_modules", make_list make_string !Clflags.open_modules;
         lid "for_package",  make_option make_string !Clflags.for_package;
         lid "debug",        make_bool !Clflags.debug;
@@ -1159,7 +1189,10 @@ module PpxContext = struct
       | "tool_name" ->
           tool_name_ref := get_string payload
       | "include_dirs" ->
-          Clflags.include_dirs := get_list get_string payload
+          Clflags.include_dirs :=
+            List.map
+              (fun (path, cmx_guaranteed) -> { Clflags.path; cmx_guaranteed })
+              (get_list (get_pair get_string get_bool) payload)
       | "hidden_include_dirs" ->
           Clflags.hidden_include_dirs := get_list get_string payload
       | "load_path" ->
@@ -1173,7 +1206,16 @@ module PpxContext = struct
               Load_path.auto_include_otherlibs alert find_in_dir fn
           in
           let visible, hidden =
-            get_pair (get_list get_string) (get_list get_string) payload
+            get_pair
+              (get_list (get_pair get_string get_bool))
+              (get_list get_string)
+              payload
+          in
+          let visible =
+            List.map
+              (fun (path, cmx_guaranteed) : Clflags.visible_include ->
+                 { path; cmx_guaranteed })
+              visible
           in
           Load_path.init ~auto_include ~visible ~hidden
       | "open_modules" ->

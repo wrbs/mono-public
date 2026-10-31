@@ -1,3 +1,0 @@
-{{ null | default('foo') }}
-{{ 'bar' | default('foo') }}
-{% set baz = default('baz', null) %}{{ baz }}

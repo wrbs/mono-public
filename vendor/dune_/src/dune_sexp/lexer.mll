@@ -1,4 +1,6 @@
 {
+open! Stdune
+
 open Stdune
 
 module Token = struct
@@ -126,8 +128,8 @@ module Template = struct
         let parts = add_buf_to_parts parts in
         state := Template (v::parts)
 
-    let add_text   = Buffer.add_string text_buf
-    let add_text_c = Buffer.add_char text_buf
+    let add_text s  = Buffer.add_string text_buf s
+    let add_text_c c = Buffer.add_char text_buf c
   end
 end
 }
@@ -182,8 +184,6 @@ and atom acc start = parse
     { atom ((template_variable lexbuf) :: acc) start lexbuf }
   | "%"
     { atom (Template.add_text acc "%") start lexbuf }
-  | ['\128'-'\255']
-    { error lexbuf Atom.non_ascii_error_message }
   | ""
     { Template.token acc ~quoted:false ~start lexbuf }
 

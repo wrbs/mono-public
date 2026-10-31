@@ -200,7 +200,13 @@ let decode =
 
 let () =
   let open Dune_lang.Decoder in
-  Dune_project.Extension.register_simple syntax (return [ name, decode_stanza decode ])
+  Dune_project.Extension.register_simple
+    syntax
+    (return
+       [ ( name
+         , let+ stanza = decode in
+           [ make_stanza stanza ] )
+       ])
 ;;
 
 let type_gen_script ctypes =

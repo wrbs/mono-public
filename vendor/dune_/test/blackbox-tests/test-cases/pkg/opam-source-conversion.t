@@ -16,8 +16,8 @@ Test conversion of opam sources into lock dir package specifications
   - testpkg.0.0.1
 
   $ showpkg() {
-  >   local f="${default_lock_dir}"/testpkg.0.0.1.pkg
-  >   [ -e $f ] && cat $f
+  > local f=dune.lock/testpkg.pkg
+  > [ -e $f ] && cat $f
   > }
  
   $ showpkg
@@ -36,7 +36,7 @@ Test conversion of opam sources into lock dir package specifications
   > }
   > EOF
 
-  $ rm -rf ${default_lock_dir}
+  $ rm -rf dune.lock
 
   $ solve testpkg 2>&1 | sed -E 's#.*.sandbox/[^/]+#.sandbox/$SANDBOX#g' | sed '/File "/q'
   Solution for dune.lock:
@@ -54,7 +54,7 @@ Test conversion of opam sources into lock dir package specifications
 
 Unsupported backends:
 
-  $ rm -rf ${default_lock_dir}
+  $ rm -rf dune.lock
 
   $ mkpkg testpkg <<EOF
   > url {
@@ -76,7 +76,7 @@ Unsupported backends:
 
 git+http
 
-  $ rm -rf ${default_lock_dir}
+  $ rm -rf dune.lock
   $ mkpkg testpkg <<EOF
   > url {
   >   src: "git+http://github.com/foo"
@@ -97,7 +97,7 @@ git+http
 
 git+file
 
-  $ rm -rf ${default_lock_dir}
+  $ rm -rf dune.lock
   $ mkpkg testpkg <<EOF
   > url {
   >   src: "git+file://here"
@@ -116,8 +116,7 @@ git+file
     (checksum md5=069aa55d40e548280f92af693f6c625a)))
 
 git+foobar
-
-  $ rm -rf ${default_lock_dir}
+  $ rm -rf dune.lock
   $ mkpkg testpkg <<EOF
   > url {
   >   src: "git+foobar://random-thing-here"
@@ -136,8 +135,7 @@ git+foobar
     (checksum md5=069aa55d40e548280f92af693f6c625a)))
 
 file+git
-
-  $ rm -rf ${default_lock_dir}
+  $ rm -rf dune.lock
   $ mkpkg testpkg <<EOF
   > url {
   >   src: "file+git://random-thing-here"

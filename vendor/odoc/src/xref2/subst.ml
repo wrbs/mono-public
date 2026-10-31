@@ -29,6 +29,49 @@ let identity =
     unresolve_opaque_paths = false;
   }
 
+let pp fmt s =
+  let pp_map pp_binding b fmt map =
+    let pp_b fmt (id, v) =
+      Format.fprintf fmt "%a -> %a" Ident.fmt id pp_binding v
+    in
+    Format.fprintf fmt "@[<hov 1>{%a}@]" (Format.pp_print_list pp_b) (b map)
+  in
+  let pp_subst ppp fmt v =
+    Format.fprintf fmt "%s"
+      (match v with
+      | `Prefixed (p, _) -> Format.asprintf "%a" ppp p
+      | `Renamed id' -> Format.asprintf "%a" Ident.fmt id'
+      | `Substituted -> "<substituted>")
+  in
+  let pp_type_replacement fmt (te, eq) =
+    Format.fprintf fmt "(%a,%a)"
+      Component.Fmt.(type_expr default)
+      te
+      Component.Fmt.(type_equation default)
+      eq
+  in
+
+  Format.fprintf fmt
+    "{ module_ = %a;@ module_type = %a;@ type_ = %a;@ class_type = %a;@ \
+     type_replacement = %a;@ module_type_replacement = %a;@ \
+     path_invalidating_modules = [%a];@ unresolve_opaque_paths = %b }"
+    (pp_map (pp_subst Component.Fmt.(module_path default)) ModuleMap.bindings)
+    s.module_
+    (pp_map
+       (pp_subst Component.Fmt.(module_type_path default))
+       ModuleTypeMap.bindings)
+    s.module_type
+    (pp_map (pp_subst Component.Fmt.(type_path default)) TypeMap.bindings)
+    s.type_
+    (pp_map (pp_subst Component.Fmt.(class_type_path default)) TypeMap.bindings)
+    s.class_type
+    (pp_map pp_type_replacement TypeMap.bindings)
+    s.type_replacement
+    (pp_map Component.Fmt.(module_type_expr default) ModuleTypeMap.bindings)
+    s.module_type_replacement
+    (Format.pp_print_list Ident.fmt)
+    s.path_invalidating_modules s.unresolve_opaque_paths
+
 let unresolve_opaque_paths s = { s with unresolve_opaque_paths = true }
 
 let path_invalidate_module id t =
@@ -123,16 +166,26 @@ let rec substitute_vars vars t =
   | Alias (t, str) -> Alias (substitute_vars vars t, str)
   | Arrow (lbl, t1, t2) ->
       Arrow (lbl, substitute_vars vars t1, substitute_vars vars t2)
-  | Tuple ts -> Tuple (List.map (fun (l, t) -> l, substitute_vars vars t) ts)
+  | Tuple ts ->
+      Tuple (List.map (fun (lbl, ty) -> (lbl, substitute_vars vars ty)) ts)
   | Unboxed_tuple ts ->
-    Unboxed_tuple (List.map (fun (l, t) -> l, substitute_vars vars t) ts)
+      Unboxed_tuple (List.map (fun (l, t) -> (l, substitute_vars vars t)) ts)
   | Constr (p, ts) -> Constr (p, List.map (substitute_vars vars) ts)
   | Polymorphic_variant v ->
       Polymorphic_variant (substitute_vars_poly_variant vars v)
   | Object o -> Object (substitute_vars_type_object vars o)
   | Class (p, ts) -> Class (p, List.map (substitute_vars vars) ts)
   | Poly (strs, ts) -> Poly (strs, substitute_vars vars ts)
+  | Quote t -> Quote (substitute_vars vars t)
+  | Splice t -> Splice (substitute_vars vars t)
   | Package p -> Package (substitute_vars_package vars p)
+  | Arrow_functor (lbl, m_arg, t) ->
+      Arrow_functor
+        (lbl, substitute_vars_module_arg vars m_arg, substitute_vars vars t)
+
+and substitute_vars_module_arg vars m_arg =
+  let package = substitute_vars_package vars m_arg.package in
+  { m_arg with package }
 
 and substitute_vars_package vars p =
   let open TypeExpr.Package in
@@ -400,7 +453,12 @@ let rec resolved_signature_fragment :
       let p =
         match resolved_module_type_path t p with
         | Not_replaced p -> p
-        | Replaced _ -> assert false
+        | Replaced _ ->
+            (* The resolved root module type of the fragment is being
+               substituted away. The resolved form is no longer valid —
+               unresolve and re-resolve against the post-substitution context
+            *)
+            raise Invalidated
       in
       `Root (`ModuleType p)
   | `Root (`Module p) -> `Root (`Module (resolved_module_path t p))
@@ -491,7 +549,7 @@ and type_decl_representation s t =
   | Variant cs -> Variant (List.map (type_decl_constructor s) cs)
   | Record fs -> Record (List.map (type_decl_field s) fs)
   | Record_unboxed_product fs ->
-    Record_unboxed_product (List.map (type_decl_unboxed_field s) fs)
+      Record_unboxed_product (List.map (type_decl_unboxed_field s) fs)
   | Extensible -> t
 
 and type_decl_constructor s t =
@@ -550,8 +608,9 @@ and type_expr s t =
   | Any -> Any
   | Alias (t, str) -> Alias (type_expr s t, str)
   | Arrow (lbl, t1, t2) -> Arrow (lbl, type_expr s t1, type_expr s t2)
-  | Tuple ts -> Tuple (List.map (fun (l, t) -> l, type_expr s t) ts)
-  | Unboxed_tuple ts -> Unboxed_tuple (List.map (fun (l, t) -> l, type_expr s t) ts)
+  | Tuple ts -> Tuple (List.map (fun (lbl, ty) -> (lbl, type_expr s ty)) ts)
+  | Unboxed_tuple ts ->
+      Unboxed_tuple (List.map (fun (l, t) -> (l, type_expr s t)) ts)
   | Constr (p, ts) -> (
       match type_path s p with
       | Replaced (t, eq) ->
@@ -560,6 +619,11 @@ and type_expr s t =
             | Any -> acc
             | Var n -> (n, type_expr s pexpr) :: acc
           in
+          if List.length ts <> List.length eq.params then (
+            Format.eprintf
+              "Type substitution error: eq.params length=%d ts length=%d@."
+              (List.length eq.params) (List.length ts);
+            assert false);
           let vars = List.fold_left2 mk_var [] ts eq.params in
           substitute_vars vars t
       | Not_replaced p -> Constr (p, List.map (type_expr s) ts))
@@ -567,7 +631,15 @@ and type_expr s t =
   | Object o -> Object (type_object s o)
   | Class (p, ts) -> Class (class_type_path s p, List.map (type_expr s) ts)
   | Poly (strs, ts) -> Poly (strs, type_expr s ts)
+  | Quote t -> Quote (type_expr s t)
+  | Splice t -> Splice (type_expr s t)
   | Package p -> Package (type_package s p)
+  | Arrow_functor (lbl, m_arg, t) ->
+      Arrow_functor (lbl, type_module_arg s m_arg, type_expr s t)
+
+and type_module_arg s m_arg =
+  let package = type_package s m_arg.package in
+  { m_arg with package }
 
 and simple_expansion :
     t ->
@@ -584,7 +656,7 @@ and module_type s t =
   let expr =
     match t.expr with Some m -> Some (module_type_expr s m) | None -> None
   in
-  { expr; source_loc = t.source_loc; source_loc_jane = t.source_loc_jane ; doc = t.doc; canonical = t.canonical }
+  { expr; source_loc = t.source_loc; doc = t.doc; canonical = t.canonical }
 
 and module_type_substitution s t =
   let open Component.ModuleTypeSubstitution in
@@ -662,7 +734,7 @@ and module_type_expr s t =
           s_expr = u_module_type_expr s s_expr;
           s_path = module_path s s_path;
           s_aliasable;
-          s_expansion = option_ simple_expansion s s_expansion
+          s_expansion = option_ simple_expansion s s_expansion;
         }
 
 and with_module_type_substitution s sub =

@@ -288,7 +288,7 @@ let _distance =
 
 let _distance code =
   if code < 256 then _distance.(code) else _distance.(256 + (code lsr 7))
-  [@@inline]
+[@@inline]
 
 let _base_length =
   [|
@@ -348,17 +348,26 @@ let window_bits w = ffs (bigstring_length w)
 
 module Lookup = struct
   (* Used as inflate to store lookup.[bit-sequence] = [len << 15 | byte].
-     Used as deflate to store lookup.[byte] = [len << 15 | bit-sequence]. *)
-  type t = {t: int array; m: int; l: int}
+     Used as deflate to store lookup.[byte] = [len << 15 | bit-sequence].
+
+     For inflate, the table can be two-level (see zlib's inftrees.c):
+     [m] is the mask of the [root] index bits
+     [l] is the longest code length used to know how many bits to buffer
+
+     A one-level table simply has [root = l] *)
+  type t = {t: int array; m: int; l: int; root: int}
 
   let mask = (1 lsl _max_bits) - 1
-  let make t m = {t; m= (1 lsl m) - 1; l= m}
+
+  let make t ?root max =
+    let root = Option.value ~default:max root in
+    {t; m= (1 lsl root) - 1; l= max; root}
 
   let get t i =
     let v = t.t.(i) in
     v lsr _max_bits, v land mask
-    (* allocation *)
-    [@@inline]
+  (* allocation *)
+  [@@inline]
 end
 
 let _static_ltree =
@@ -424,42 +433,13 @@ let _static_dtree =
 
 type optint = Optint.t
 
-(* XXX(dinosaure): optimize [Heap]. TODO! *)
-
-module Heap = struct
-  type priority = int
-  type 'a queue = None | Node of priority * 'a * 'a queue * 'a queue
-
-  let rec push queue priority elt =
-    match queue with
-    | None -> Node (priority, elt, None, None)
-    | Node (p, e, left, right) ->
-      if priority <= p then Node (priority, elt, push right p e, left)
-      else Node (p, e, push right priority elt, left)
-
-  exception Empty
-
-  let rec remove = function
-    | None -> raise_notrace Empty
-    | Node (_, _, left, None) -> left
-    | Node (_, _, None, right) -> right
-    | Node (_, _, (Node (lp, le, _, _) as left), (Node (rp, re, _, _) as right))
-      ->
-      if lp <= rp then Node (lp, le, remove left, right)
-      else Node (rp, re, left, remove right)
-
-  let take = function
-    | None -> raise_notrace Empty
-    | Node (p, e, _, _) as queue -> p, e, remove queue
-end
-
 module WInf = struct
   type t = {raw: bigstring; mutable w: int; mutable c: optint}
 
   let max = 1 lsl 15
   let mask = (1 lsl 15) - 1
 
-  let[@warning "-32"] make () =
+  let[@warning "-unused-value-declaration"] make () =
     {raw= bigstring_create max; w= 0; c= Checkseum.Adler32.default}
 
   let from raw = {raw; w= 0; c= Checkseum.Adler32.default}
@@ -535,28 +515,10 @@ module Inf = struct
 
   exception Invalid_huffman
 
-  let prefix heap max =
-    assert (max < 16)
-    ; (* allocation *)
-      let tbl = Array.make (1 lsl max) 0 in
-      let rec backward huff incr =
-        if huff land incr <> 0 then backward huff (incr lsr 1) else incr in
-      let rec aux huff heap =
-        match Heap.take heap with
-        | _, (len, value), heap ->
-          let rec loop decr fill =
-            tbl.(huff + fill) <- (len lsl 15) lor value
-            ; if fill <> 0 then loop decr (fill - decr) in
-          let decr = 1 lsl len in
-          loop decr ((1 lsl max) - decr)
-          ; let incr = backward huff (1 lsl (len - 1)) in
-            aux (if incr != 0 then (huff land (incr - 1)) + incr else 0) heap
-        | exception Heap.Empty -> () in
-      aux 0 heap ; tbl
-
   type kind = CODES | LENS | DISTS
 
-  let empty_table = [|1 lsl _max_bits (* len: 1, val: 0 *)|], 1
+  let _link_flag = 1 lsl 20
+  let empty_table = [|1 lsl _max_bits (* len: 1, val: 0 *)|], 1, 1
 
   let huffman kind table off codes =
     let bl_count = Array.make 16 0 in
@@ -578,31 +540,111 @@ module Inf = struct
        with Break -> ())
 
       ; if !max == 0 then empty_table
-        else
-          let code = ref 0 in
+        else begin
           let left = ref 1 in
-          let next_code = Array.make 16 0 in
           for i = 1 to 15 do
-            left := !left lsl 1
-            ; left := !left - bl_count.(i)
+            left := (!left lsl 1) - bl_count.(i)
             ; if !left < 0 then raise Invalid_huffman
-            ; code := (!code + bl_count.(i)) lsl 1
-            ; next_code.(i) <- !code
           done
           ; if !left > 0 && (kind = CODES || !max != 1) then
               raise Invalid_huffman
-          ; let ordered = ref Heap.None in
-            let max = ref 0 in
-            for i = 0 to codes - 1 do
-              let l = table.(off + i) in
-              if l <> 0 then (
-                let n = next_code.(l - 1) in
-                next_code.(l - 1) <- n + 1
-                ; ordered := Heap.push !ordered n (l, i)
-                ; (* allocation *)
-                  max := if l > !max then l else !max)
-            done
-            ; prefix !ordered !max, !max
+          ; let min = ref 1 in
+            (try
+               while !min <= 15 do
+                 if bl_count.(!min) != 0 then raise_notrace Break
+                 ; incr min
+               done
+             with Break -> ())
+            ; let offs = Array.make 16 0 in
+              for idx = 1 to 14 do
+                offs.(idx + 1) <- offs.(idx) + bl_count.(idx)
+              done
+              ; let count = offs.(!max) + bl_count.(!max) in
+                let work = Array.make count 0 in
+                for sym = 0 to codes - 1 do
+                  let l = table.(off + sym) in
+                  if l <> 0 then (
+                    work.(offs.(l)) <- sym
+                    ; offs.(l) <- offs.(l) + 1)
+                done
+                ; let root =
+                    ref (match kind with LENS -> 9 | DISTS -> 6 | CODES -> 7)
+                  in
+                  if !root > !max then root := !max
+                  ; if !root < !min then root := !min
+                  ; let size =
+                      if !max <= !root then 1 lsl !max
+                      else
+                        match kind with
+                        | LENS -> 852
+                        | DISTS -> 592
+                        | CODES -> 1 lsl !max in
+                    let tbl = Array.make size 0 in
+                    let rec backward huff incr =
+                      if huff land incr <> 0 then backward huff (incr lsr 1)
+                      else incr in
+                    let huff = ref 0
+                    and sym = ref 0
+                    and len = ref !min
+                    and next = ref 0
+                    and curr = ref !root
+                    and drop = ref 0
+                    and low = ref (-1)
+                    and mask = (1 lsl !root) - 1
+                    and fill_size = ref 0
+                    and finished = ref false in
+                    while not !finished do
+                      let value = work.(!sym) in
+                      let entry = (!len lsl 15) lor value in
+                      let step = 1 lsl (!len - !drop) in
+                      fill_size := 1 lsl !curr
+                      ; let rec go fill =
+                          let fill = fill - step in
+                          tbl.(!next + (!huff lsr !drop) + fill) <- entry
+                          ; if fill <> 0 then go fill in
+                        go !fill_size
+                        ; let inc = backward !huff (1 lsl (!len - 1)) in
+                          huff :=
+                            if inc <> 0 then (!huff land (inc - 1)) + inc else 0
+                          ; incr sym
+                          ; bl_count.(!len) <- bl_count.(!len) - 1
+                          ; if bl_count.(!len) = 0 then
+                              if !len = !max then finished := true
+                              else len := table.(off + work.(!sym))
+                          ; if
+                              (not !finished)
+                              && !len > !root
+                              && !huff land mask <> !low
+                            then begin
+                              if !drop = 0 then drop := !root
+                              ; next := !next + !fill_size
+                              ; curr := !len - !drop
+                              ; let left = ref (1 lsl !curr) in
+                                begin try
+                                  while !curr + !drop < !max do
+                                    left := !left - bl_count.(!curr + !drop)
+                                    ; if !left <= 0 then raise_notrace Break
+                                    ; incr curr
+                                    ; left := !left lsl 1
+                                  done
+                                with Break -> ()
+                                end
+                                ; low := !huff land mask
+                                ; tbl.(!low) <-
+                                    _link_flag lor (!curr lsl 15) lor !next
+                            end
+                    done
+                    ; tbl, !root, !max
+        end
+
+  let resolve lookup hold =
+    let value = lookup.Lookup.t.(hold land lookup.Lookup.m) in
+    if value land _link_flag == 0 then value
+    else
+      let sub = (value lsr 15) land 0x1f in
+      lookup.Lookup.t.((value land 0x7fff)
+                       + ((hold lsr lookup.Lookup.root) land ((1 lsl sub) - 1)))
+  [@@inline]
 
   (* allocation *)
 
@@ -774,7 +816,7 @@ module Inf = struct
        ; 0x3F; 0xBF; 0x7F; 0xFF
       |] in
     t.(bits)
-    [@@inline]
+  [@@inline]
 
   let fixed_lit, fixed_dist =
     let tbl_lit =
@@ -787,8 +829,8 @@ module Inf = struct
         (fun i _ -> res.(i) <- (5 lsl 15) lor reverse_bits (i lsl 3))
         res
       ; res in
-    let tbl_lit, max_lit = huffman LENS tbl_lit 0 288 in
-    Lookup.make tbl_lit max_lit, Lookup.make tbl_dist 5
+    let tbl_lit, root_lit, max_lit = huffman LENS tbl_lit 0 288 in
+    Lookup.make tbl_lit ~root:root_lit max_lit, Lookup.make tbl_dist 5
 
   let checksum d = WInf.checksum d.w
 
@@ -896,10 +938,9 @@ module Inf = struct
 
         if rem <= 0 then
           if rem < 0 (* end of input *) then
+            let v = resolve lit d.hold in
             let is_end_of_block =
-              lit.Lookup.t.(d.hold land lit.Lookup.m) land Lookup.mask == 256
-              && lit.Lookup.t.(d.hold land lit.Lookup.m) lsr 15 <= d.bits
-              && d.last in
+              v land Lookup.mask == 256 && v lsr 15 <= d.bits && d.last in
             if is_end_of_block then k d else err_unexpected_end_of_input d
           else refill (c_peek_bits n k) d (* allocation *)
         else
@@ -912,8 +953,9 @@ module Inf = struct
     match jump with
     | Length ->
       let k d =
-        let value = lit.Lookup.t.(d.hold land lit.Lookup.m) land Lookup.mask in
-        let len = lit.Lookup.t.(d.hold land lit.Lookup.m) lsr 15 in
+        let v = resolve lit d.hold in
+        let value = v land Lookup.mask in
+        let len = v lsr 15 in
         d.hold <- d.hold lsr len
         ; d.bits <- d.bits - len
 
@@ -963,8 +1005,9 @@ module Inf = struct
       c_peek_bits len k d
     | Distance ->
       let k d =
-        let value = dist.Lookup.t.(d.hold land dist.Lookup.m) land Lookup.mask in
-        let len = dist.Lookup.t.(d.hold land dist.Lookup.m) lsr 15 in
+        let v = resolve dist d.hold in
+        let value = v land Lookup.mask in
+        let len = v lsr 15 in
 
         d.hold <- d.hold lsr len
         ; d.bits <- d.bits - len
@@ -1020,6 +1063,8 @@ module Inf = struct
 
     let lit_mask = Nativeint.of_int lit.Lookup.m in
     let dist_mask = Nativeint.of_int dist.Lookup.m in
+    let lit_root = lit.Lookup.root in
+    let dist_root = dist.Lookup.root in
 
     (* XXX(dinosaure): 2 jumps were done in this hot-loop:
        1- [while],
@@ -1044,12 +1089,22 @@ module Inf = struct
                     shift_left (of_int (unsafe_get_uint8 d.i !i_pos)) !bits)
             ; bits := !bits + 8
             ; incr i_pos)
-          ; let value =
-              lit.Lookup.t.(Nativeint.(to_int (logand !hold lit_mask)))
-              land Lookup.mask in
-            let len =
-              lit.Lookup.t.(Nativeint.(to_int (logand !hold lit_mask))) lsr 15
-            in
+          ; let code =
+              let h = Nativeint.(to_int (logand !hold lit_mask)) in
+              let v = lit.Lookup.t.(h) in
+              if v land _link_flag == 0 then v
+              else
+                let i = v land 0x7fff in
+                let m =
+                  let open Nativeint in
+                  sub (shift_left 1n ((v lsr 15) land 0x1f)) 1n in
+                let i =
+                  let open Nativeint in
+                  i + to_int (logand (shift_right_logical !hold lit_root) m)
+                in
+                lit.Lookup.t.(i) in
+            let value = code land Lookup.mask in
+            let len = code lsr 15 in
             hold := Nativeint.shift_right_logical !hold len
             ; bits := !bits - len
 
@@ -1092,12 +1147,23 @@ module Inf = struct
                     shift_left (of_int (unsafe_get_uint8 d.i !i_pos)) !bits)
             ; bits := !bits + 8
             ; incr i_pos)
-          ; let value =
-              dist.Lookup.t.(Nativeint.(to_int (logand !hold dist_mask)))
-              land Lookup.mask in
-            let len =
-              dist.Lookup.t.(Nativeint.(to_int (logand !hold dist_mask))) lsr 15
-            in
+          ; let code =
+              let v =
+                dist.Lookup.t.(Nativeint.(to_int (logand !hold dist_mask)))
+              in
+              if v land _link_flag == 0 then v
+              else
+                let i = v land 0x7fff in
+                let m =
+                  let open Nativeint in
+                  sub (shift_left 1n ((v lsr 15) land 0x1f)) 1n in
+                let i =
+                  let open Nativeint in
+                  i + to_int (logand (shift_right_logical !hold dist_root) m)
+                in
+                dist.Lookup.t.(i) in
+            let value = code land Lookup.mask in
+            let len = code lsr 15 in
 
             hold := Nativeint.shift_right_logical !hold len
             ; bits := !bits - len
@@ -1137,16 +1203,16 @@ module Inf = struct
             let off = WInf.mask (d.w.WInf.w - d.d) in
 
             (if d.d == 1 then
-             let v = unsafe_get_uint8 d.w.WInf.raw off in
-             WInf.fill d.w v d.o !o_pos len
-            else
-              let off = WInf.mask (d.w.WInf.w - d.d) in
-              let pre = WInf.max - off in
-              let rst = len - pre in
-              if rst > 0 then (
-                WInf.blit d.w d.w.WInf.raw off d.o !o_pos pre
-                ; WInf.blit d.w d.w.WInf.raw 0 d.o (!o_pos + pre) rst)
-              else WInf.blit d.w d.w.WInf.raw off d.o !o_pos len)
+               let v = unsafe_get_uint8 d.w.WInf.raw off in
+               WInf.fill d.w v d.o !o_pos len
+             else
+               let off = WInf.mask (d.w.WInf.w - d.d) in
+               let pre = WInf.max - off in
+               let rst = len - pre in
+               if rst > 0 then (
+                 WInf.blit d.w d.w.WInf.raw off d.o !o_pos pre
+                 ; WInf.blit d.w d.w.WInf.raw 0 d.o (!o_pos + pre) rst)
+               else WInf.blit d.w d.w.WInf.raw off d.o !o_pos len)
             ; o_pos := !o_pos + len
               ; if d.l - len == 0 then jump := Length else d.l <- d.l - len
       done
@@ -1210,11 +1276,11 @@ module Inf = struct
 
       ; (* XXX(dinosaure): an huffman tree MUST have at least an End-Of-Block
            symbol. *)
-        let t_lit, l_lit = huffman LENS t 0 hlit in
-        let t_dist, l_dist = huffman DISTS t hlit hdist in
+        let t_lit, root_lit, l_lit = huffman LENS t 0 hlit in
+        let t_dist, root_dist, l_dist = huffman DISTS t hlit hdist in
 
-        let lit = Lookup.make t_lit l_lit in
-        let dist = Lookup.make t_dist l_dist in
+        let lit = Lookup.make t_lit ~root:root_lit l_lit in
+        let dist = Lookup.make t_dist ~root:root_dist l_dist in
 
         d.literal <- lit
         ; d.distance <- dist
@@ -1225,8 +1291,13 @@ module Inf = struct
     with Invalid_huffman -> err_invalid_dictionary d
 
   let inflate_table d =
-    let[@warning "-8"] (Inflate_table
-                         {t; l= max_bits; r= res; h= hlit, hdist, _}) =
+    let[@warning "-partial-match"] (Inflate_table
+                                      {
+                                        t
+                                      ; l= max_bits
+                                      ; r= res
+                                      ; h= hlit, hdist, _
+                                      }) =
       d.s in
     let max_res = hlit + hdist in
     let mask = (1 lsl max_bits) - 1 in
@@ -1279,7 +1350,7 @@ module Inf = struct
      have enough bytes to inflate huffman tree. *)
 
   let table d =
-    let[@warning "-8"] (Table {hlit; hdist; hclen}) = d.s in
+    let[@warning "-partial-match"] (Table {hlit; hdist; hclen}) = d.s in
     let hold = ref d.hold in
     let bits = ref d.bits in
     let t_pos = ref 0 in
@@ -1300,7 +1371,7 @@ module Inf = struct
     done
 
     ; try
-        let t, l = huffman CODES res 0 19 in
+        let t, _, l = huffman CODES res 0 19 in
 
         d.hold <- !hold
         ; d.bits <- !bits
@@ -1317,7 +1388,7 @@ module Inf = struct
     if y < 0 then raise Division_by_zero
     else if x > 0 then 1 + ((x - 1) / y)
     else 0
-    [@@inline]
+  [@@inline]
 
   let dynamic d =
     let l_header d =
@@ -1567,7 +1638,7 @@ module Inf = struct
           ; d.i_pos <- d.i_pos + 1
           ; d.bits <- d.bits + 8)
         else err_unexpected_end_of_input ()
-      [@@inline]
+    [@@inline]
 
     let __fill_bits d n =
       if d.bits < n then
@@ -1580,14 +1651,14 @@ module Inf = struct
           d.hold <- d.hold lor (unsafe_get_uint8 d.i d.i_pos lsl d.bits)
           ; d.i_pos <- d.i_pos + 1
           ; d.bits <- d.bits + 8)
-      [@@inline]
+    [@@inline]
 
     let pop_bits d n =
       let v = d.hold land ((1 lsl n) - 1) in
       d.hold <- d.hold lsr n
       ; d.bits <- d.bits - n
       ; v
-      [@@inline]
+    [@@inline]
 
     exception End
     exception Invalid_distance
@@ -1597,9 +1668,9 @@ module Inf = struct
       try
         let rec inflate_loop () =
           __fill_bits d lit.Lookup.l
-          ; let value =
-              lit.Lookup.t.(d.hold land lit.Lookup.m) land Lookup.mask in
-            let len = lit.Lookup.t.(d.hold land lit.Lookup.m) lsr 15 in
+          ; let code = resolve lit d.hold in
+            let value = code land Lookup.mask in
+            let len = code lsr 15 in
             d.hold <- d.hold lsr len
             ; d.bits <- d.bits - len
             ; if value < 256 then (
@@ -1615,10 +1686,9 @@ module Inf = struct
                 ; let extra = pop_bits d len in
                   let l = _base_length.(l land 0x1f) + 3 + extra in
                   __fill_bits d dist.Lookup.l
-                  ; let value =
-                      dist.Lookup.t.(d.hold land dist.Lookup.m) land Lookup.mask
-                    in
-                    let len = dist.Lookup.t.(d.hold land dist.Lookup.m) lsr 15 in
+                  ; let code = resolve dist d.hold in
+                    let value = code land Lookup.mask in
+                    let len = code lsr 15 in
                     d.hold <- d.hold lsr len
                     ; d.bits <- d.bits - len
                     ; let d_ = value in
@@ -1651,11 +1721,11 @@ module Inf = struct
 
         ; (* XXX(dinosaure): an huffman tree MUST have at least an End-Of-Block
              symbol. *)
-          let t_lit, l_lit = huffman LENS t 0 hlit in
-          let t_dist, l_dist = huffman DISTS t hlit hdist in
+          let t_lit, root_lit, l_lit = huffman LENS t 0 hlit in
+          let t_dist, root_dist, l_dist = huffman DISTS t hlit hdist in
 
-          let lit = Lookup.make t_lit l_lit in
-          let dist = Lookup.make t_dist l_dist in
+          let lit = Lookup.make t_lit ~root:root_lit l_lit in
+          let dist = Lookup.make t_dist ~root:root_dist l_dist in
 
           inflate lit dist d
       with Invalid_huffman -> err_invalid_dictionary ()
@@ -1709,7 +1779,7 @@ module Inf = struct
           ; incr i
       done
       ; try
-          let t, l = huffman CODES res 0 19 in
+          let t, _, l = huffman CODES res 0 19 in
           let r = Array.make (hlit + hdist) 0 in
           let h = hlit, hdist, hclen in
           inflate_table d t l r h
@@ -1993,7 +2063,8 @@ module T = struct
         {
           lengths= tree_lengths
         ; max_code
-        ; tree= {Lookup.t= tree; m= (1 lsl !length) - 1; l= !length}
+        ; tree=
+            {Lookup.t= tree; m= (1 lsl !length) - 1; l= !length; root= !length}
         }
 
   let scan tree_lengths max_code ~bl_freqs =
@@ -2175,7 +2246,7 @@ module Queue = struct
     assert (len >= 3 && len <= 255 + 3)
     ; assert (off >= 1 && off <= 32767 + 1)
     ; ((len - 3) lsl 16) lor (off - 1) lor 0x2000000
-    [@@inline]
+  [@@inline]
 
   let literal chr = Char.code chr [@@inline]
   let eob = 256
@@ -2261,7 +2332,8 @@ type distances = int array
 
 let make_literals () =
   let res = Array.make ((2 * _l_codes) + 1) 0 in
-  res.(256) <- 1 ; res
+  res.(256) <- 1
+  ; res
 
 let succ_literal literals chr =
   literals.(Char.code chr) <- literals.(Char.code chr) + 1
@@ -2339,6 +2411,42 @@ module Def = struct
   type kind = Flat | Fixed | Dynamic of dynamic
   type block = {kind: kind; last: bool}
   type encode = [ `Await | `Flush | `Block of block ]
+
+  let calculate_static_block ~literals ~distances =
+    let bits = ref 0 in
+    for idx = 0 to _l_codes - 1 do
+      if literals.(idx) <> 0 then
+        bits := !bits + (literals.(idx) * fst (Lookup.get _static_ltree idx))
+    done
+    ; for idx = 0 to _d_codes - 1 do
+        if distances.(idx) <> 0 then
+          bits := !bits + (distances.(idx) + fst (Lookup.get _static_dtree idx))
+      done
+    ; !bits
+
+  let calculate_dynamic_block dynamic ~literals ~distances =
+    (* HLIT + HDST + HCLEN + precode lengths *)
+    let bits = ref (5 + 5 + 4 + (dynamic.h_len * 3)) in
+    let fn x = bits := !bits + (x lsr _max_bits) in
+    Array.iter fn dynamic.symbols
+    ; let ltree = dynamic.ltree.T.lengths and dtree = dynamic.dtree.T.lengths in
+      for idx = 0 to _l_codes - 1 do
+        if literals.(idx) <> 0 then
+          bits := !bits + (literals.(idx) * ltree.(idx))
+      done
+      ; for idx = 0 to _d_codes - 1 do
+          if distances.(idx) <> 0 then
+            bits := !bits + (distances.(idx) + dtree.(idx))
+        done
+      ; !bits
+
+  let block_of_frequencies ~last ~literals ~distances =
+    let dynamic = dynamic_of_frequencies ~literals ~distances in
+    if
+      calculate_dynamic_block dynamic ~literals ~distances
+      <= calculate_static_block ~literals ~distances
+    then {kind= Dynamic dynamic; last}
+    else {kind= Fixed; last}
 
   let exists v block =
     match v, block.kind with
@@ -3943,10 +4051,21 @@ module Lz77 = struct
   let _mem_level = 8 (* default *)
   let _hash_bits = _mem_level + 7
   let _hash_size = 1 lsl _hash_bits
-  let _hash_mask = _hash_size - 1
-  let _hash_shift = (_hash_bits + _min_match - 1) / _min_match
   let _too_far = 4096
-  let update_hash hash chr = (hash lsl _hash_shift) lxor chr land _hash_mask
+  let _hash_magic = (0x9e37 lsl 16) lor 0x79b1 (* xxHash *)
+  let _hash_magic32 = 0x9e3779b1l
+  let _mask32 = (0xffff lsl 16) lor 0xffff
+  let _hash_shift = 32 - _hash_bits
+
+  let hash4 buf off =
+    let lo = unsafe_get_uint16 buf off in
+    let hi = unsafe_get_uint16 buf (off + 2) in
+    if Sys.word_size = 64 then
+      let v = lo lor (hi lsl 16) in
+      (v * _hash_magic land _mask32) lsr _hash_shift
+    else
+      let v = Int32.(logor (of_int lo) (shift_left (of_int hi) 16)) in
+      Int32.(to_int (shift_right_logical (mul v _hash_magic32) _hash_shift))
 
   type src = [ `Channel of in_channel | `String of string | `Manual ]
   type decode = [ `Await | `Flush | `End ]
@@ -3966,7 +4085,6 @@ module Lz77 = struct
     ; mutable strstart: int
     ; prev: int array
     ; head: int array
-    ; mutable hash: int
     ; mutable match_start: int
     ; mutable match_length: int
     ; mutable match_available: bool
@@ -3998,7 +4116,7 @@ module Lz77 = struct
     let chain_length =
       ref
         (if s.prev_length >= cfg.good_length then cfg.max_chain asr 2
-        else cfg.max_chain) in
+         else cfg.max_chain) in
     (* max hash chain length *)
     let scan = ref s.strstart in
     (* current string *)
@@ -4098,11 +4216,11 @@ module Lz77 = struct
 
   let insert_string s str =
     let wmask = (1 lsl s.wbits) - 1 in
-    s.hash <- update_hash s.hash s.w.!{str + (_min_match - 1)}
-    ; let res = s.head.(s.hash) in
-      s.prev.(str land wmask) <- res
-      ; s.head.(s.hash) <- str
-      ; res
+    let hash = hash4 s.w str in
+    let res = s.head.(hash) in
+    s.prev.(str land wmask) <- res
+    ; s.head.(hash) <- str
+    ; res
 
   let succ_length literals length =
     literals.(256 + 1 + _length.(length)) <-
@@ -4177,8 +4295,7 @@ module Lz77 = struct
     let deflate cfg s =
       match cfg, s.level with
       | Copy, _ -> copy s
-      | Deflate deflate_cfg, (1 | 2 | 3) -> deflate_fast deflate_cfg s
-      | Deflate deflate_cfg, _ -> deflate_slow deflate_cfg s in
+      | Deflate deflate_cfg, _ -> deflate deflate_cfg s in
     (* max *)
     let more =
       if s.strstart >= wsize + max_dist s then begin
@@ -4203,18 +4320,17 @@ module Lz77 = struct
         ; if s.lookahead + s.insert >= _min_match then begin
             let str = ref (s.strstart - s.insert) in
             let insert = ref s.insert in
-            s.hash <- s.w.!{!str}
-            ; s.hash <- update_hash s.hash s.w.!{!str + 1}
-            ; while s.lookahead + !insert >= _min_match && !insert != 0 do
-                s.hash <- update_hash s.hash s.w.!{!str + _min_match - 1}
-                ; s.prev.(!str land wmask) <- s.head.(s.hash)
-                ; s.head.(s.hash) <- !str
-                ; incr str
-                ; decr insert
-                ; if s.lookahead + !insert < _min_match then (
-                    s.insert <- !insert
-                    ; raise Break)
-              done
+            while s.lookahead + !insert >= _min_match && !insert != 0 do
+              let hash = hash4 s.w !str in
+              s.prev.(!str land wmask) <- s.head.(hash)
+              ; s.head.(hash) <- !str
+              ; incr str
+              ; decr insert
+              ; if s.lookahead + !insert < _min_match then begin
+                  s.insert <- !insert
+                  ; raise Break
+                end
+            done
             ; s.insert <- !insert
           end
         ; if s.lookahead < _min_lookahead && i_rem s >= 0 then
@@ -4227,67 +4343,26 @@ module Lz77 = struct
     else
       match cfg, s.level with
       | Copy, _ -> copy s
-      | Deflate deflate_cfg, (1 | 2 | 3) -> deflate_fast deflate_cfg s
-      | Deflate deflate_cfg, _ -> deflate_slow deflate_cfg s
+      | Deflate deflate_cfg, _ -> deflate deflate_cfg s
 
-  and deflate_fast (cfg : deflate_configuration) s =
-    let hash_head = ref 0 in
-    let flush = ref false in
-    if s.lookahead >= _min_match then hash_head := insert_string s s.strstart
-    ; if !hash_head != 0 && s.strstart - !hash_head <= max_dist s then
-        s.match_length <- longest_match cfg s !hash_head
-    ; if s.match_length >= _min_match then begin
-        flush :=
-          emit_match s ~off:(s.strstart - s.match_start) ~len:s.match_length
-        ; s.lookahead <- s.lookahead - s.match_length
-        ; if s.match_length <= cfg.max_lazy && s.lookahead >= _min_match then begin
-            s.match_length <- s.match_length - 1
-            ; while
-                s.strstart <- s.strstart + 1
-                ; hash_head := insert_string s s.strstart
-                ; s.match_length <- s.match_length - 1
-                ; s.match_length != 0
-              do
-                ()
-              done
-            ; s.strstart <- s.strstart + 1
-          end
-          else begin
-            s.strstart <- s.strstart + s.match_length
-            ; s.match_length <- 0
-            ; s.hash <- s.w.!{s.strstart}
-            ; s.hash <- update_hash s.hash s.w.!{s.strstart + 1}
-          end
-      end
-      else begin
-        flush := emit_literal s (unsafe_get_char s.w s.strstart)
-        ; s.lookahead <- s.lookahead - 1
-        ; s.strstart <- s.strstart + 1
-      end
-    ; match !flush with
-      | true ->
-        s.k <- enough
-        ; `Flush
-      | false -> enough (Deflate cfg) s
-
-  and deflate_slow (cfg : deflate_configuration) s =
+  and deflate (cfg : deflate_configuration) s =
     let hash_head = ref 0 in
     if s.lookahead >= _min_match then hash_head := insert_string s s.strstart
     ; s.prev_length <- s.match_length
     ; s.prev_match <- s.match_start
     ; s.match_length <- _min_match - 1
     ; (if
-       !hash_head != 0
-       && s.prev_length < cfg.max_lazy
-       && s.strstart - !hash_head <= max_dist s
-      then
-       let match_length = longest_match cfg s !hash_head in
-       if
-         match_length <= 5
-         && match_length == _min_match
-         && s.strstart - s.match_start > _too_far
-       then s.match_length <- _min_match - 1
-       else s.match_length <- match_length)
+         !hash_head != 0
+         && s.prev_length < cfg.max_lazy
+         && s.strstart - !hash_head <= max_dist s
+       then
+         let match_length = longest_match cfg s !hash_head in
+         if
+           match_length <= 5
+           && match_length == _min_match
+           && s.strstart - s.match_start > _too_far
+         then s.match_length <- _min_match - 1
+         else s.match_length <- match_length)
     ; if s.prev_length >= _min_match && s.match_length <= s.prev_length then begin
         let max_insert = s.strstart + s.lookahead - _min_match in
         let flush =
@@ -4312,8 +4387,8 @@ module Lz77 = struct
             ; `Flush)
           else enough (Deflate cfg) s
       end
-      else if s.match_available then begin
-        match emit_literal s (unsafe_get_char s.w (s.strstart - 1)) with
+      else if s.match_available then
+        begin match emit_literal s (unsafe_get_char s.w (s.strstart - 1)) with
         | true ->
           s.strstart <- s.strstart + 1
           ; s.lookahead <- s.lookahead - 1
@@ -4323,7 +4398,7 @@ module Lz77 = struct
           s.strstart <- s.strstart + 1
           ; s.lookahead <- s.lookahead - 1
           ; enough (Deflate cfg) s
-      end
+        end
       else begin
         s.match_available <- true
         ; s.strstart <- s.strstart + 1
@@ -4417,7 +4492,6 @@ module Lz77 = struct
     ; strstart= 0
     ; prev= Array.make wsize 0
     ; head= Array.make _hash_size 0
-    ; hash= 0
     ; match_start= 0
     ; match_length= 0
     ; match_available= false
@@ -4441,20 +4515,19 @@ module Higher = struct
   let compress ~w ~q ~refill ~flush i o =
     let state = Lz77.state `Manual ~w ~q in
     let encoder = Def.encoder `Manual ~q in
-    let kind = ref Def.Fixed in
+
+    let block ~last =
+      let literals = Lz77.literals state in
+      let distances = Lz77.distances state in
+      Def.block_of_frequencies ~last ~literals ~distances in
 
     let rec compress () =
       match Lz77.compress state with
       | `Await ->
         let len = refill i in
         Lz77.src state i 0 len ; compress ()
-      | `Flush ->
-        let literals = Lz77.literals state in
-        let distances = Lz77.distances state in
-        kind := Def.Dynamic (Def.dynamic_of_frequencies ~literals ~distances)
-        ; encode (Def.encode encoder (`Block {Def.kind= !kind; last= false}))
-      | `End ->
-        pending (Def.encode encoder (`Block {Def.kind= Def.Fixed; last= true}))
+      | `Flush -> encode (Def.encode encoder (`Block (block ~last:false)))
+      | `End -> pending (Def.encode encoder (`Block (block ~last:true)))
     and encode = function
       | `Partial ->
         let len = bigstring_length o - Def.dst_rem encoder in
@@ -4462,11 +4535,7 @@ module Higher = struct
         ; Def.dst encoder o 0 (bigstring_length o)
         ; encode (Def.encode encoder `Await)
       | `Ok -> compress ()
-      | `Block ->
-        let literals = Lz77.literals state in
-        let distances = Lz77.distances state in
-        kind := Def.Dynamic (Def.dynamic_of_frequencies ~literals ~distances)
-        ; encode (Def.encode encoder (`Block {Def.kind= !kind; last= false}))
+      | `Block -> encode (Def.encode encoder (`Block (block ~last:false)))
     and pending = function
       | `Block -> assert false (* XXX(dinosaure): should never appear. *)
       | `Partial ->
@@ -4517,28 +4586,23 @@ module Higher = struct
     let buf = Buffer.create buffer in
     let state = Lz77.state `Manual ~q ~w in
     let encoder = Def.encoder (`Buffer buf) ~q in
-    let kind = ref Def.Fixed in
+
+    let block ~last =
+      let literals = Lz77.literals state in
+      let distances = Lz77.distances state in
+      Def.block_of_frequencies ~last ~literals ~distances in
 
     let rec compress () =
       match Lz77.compress state with
       | `Await ->
         let len = refill i in
         Lz77.src state i 0 len ; compress ()
-      | `Flush ->
-        let literals = Lz77.literals state in
-        let distances = Lz77.distances state in
-        kind := Def.Dynamic (Def.dynamic_of_frequencies ~literals ~distances)
-        ; encode (Def.encode encoder (`Block {Def.kind= !kind; last= false}))
-      | `End ->
-        pending (Def.encode encoder (`Block {Def.kind= Def.Fixed; last= true}))
+      | `Flush -> encode (Def.encode encoder (`Block (block ~last:false)))
+      | `End -> pending (Def.encode encoder (`Block (block ~last:true)))
     and encode = function
       | `Partial -> assert false
       | `Ok -> compress ()
-      | `Block ->
-        let literals = Lz77.literals state in
-        let distances = Lz77.distances state in
-        kind := Def.Dynamic (Def.dynamic_of_frequencies ~literals ~distances)
-        ; encode (Def.encode encoder (`Block {Def.kind= !kind; last= false}))
+      | `Block -> encode (Def.encode encoder (`Block (block ~last:false)))
     and pending = function `Partial | `Block -> assert false | `Ok -> () in
 
     Queue.reset q ; compress () ; Buffer.contents buf

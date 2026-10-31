@@ -17,7 +17,7 @@
 (*                                                                        *)
 (**************************************************************************)
 
-(* Format of .cmx, .cmxa and .cmxs files *)
+(* Format of .cmx and .cmxa files *)
 
 open Misc
 
@@ -64,14 +64,20 @@ type 'format unit_infos_gen =
                                           (* Interfaces imported *)
     mutable ui_imports_cmx: Import_info.t list;
                                           (* Infos imported *)
-    mutable ui_quoted_globals: Compilation_unit.Name.t list;
-                                          (* Globals that are used in quotes *)
+    mutable ui_quoted_cmi: Compilation_unit.Name.t list;
+                                          (* Interfaces that are used in
+                                             quotes *)
+    mutable ui_quoted_cmx: Compilation_unit.t list;
+                                          (* Implementations that are used in
+                                             quotes *)
     mutable ui_format: 'format;
                                           (* Structure of the main module block *)
     mutable ui_generic_fns: generic_fns;  (* Generic functions needed *)
     mutable ui_export_info: Flambda2_cmx.Flambda_cmx_format.t option;
     mutable ui_zero_alloc_info: Zero_alloc_info.t;
     mutable ui_force_link: bool;          (* Always linked *)
+    mutable ui_requires_metaprogramming: bool;
+                                          (* Requires metaprogramming libs *)
     mutable ui_external_symbols: string list; (* Set of external symbols *)
   }
 
@@ -83,12 +89,14 @@ type unit_infos_raw =
     uir_arg_descr: Lambda.arg_descr option;
     uir_imports_cmi: Import_info.t array;
     uir_imports_cmx: Import_info.t array;
-    uir_quoted_globals: Compilation_unit.Name.t array;
+    uir_quoted_cmi: Compilation_unit.Name.t array;
+    uir_quoted_cmx: Compilation_unit.t array;
     uir_format: Lambda.main_module_block_format;
     uir_generic_fns: generic_fns;
     uir_export_info: Flambda2_cmx.Flambda_cmx_format.raw option;
     uir_zero_alloc_info: Zero_alloc_info.Raw.t;
     uir_force_link: bool;
+    uir_requires_metaprogramming: bool;
     uir_section_toc: int array;    (* Byte offsets of sections in .cmx
                                       relative to byte immediately after
                                       this record *)
@@ -106,16 +114,19 @@ type lib_unit_info =
     li_force_link: bool;
     li_imports_cmi : Bitmap.t;  (* subset of lib_imports_cmi *)
     li_imports_cmx : Bitmap.t;  (* subset of lib_imports_cmx *)
-    li_quoted_globals : Bitmap.t;    (* subset of lib_quoted_globals *)
+    li_quoted_cmi : Bitmap.t;   (* subset of lib_quoted_cmi *)
+    li_quoted_cmx : Bitmap.t;   (* subset of lib_quoted_cmx *)
     li_external_symbols: string array;
   }
 
 type library_infos =
   { lib_imports_cmi: Import_info.t array;
     lib_imports_cmx: Import_info.t array;
-    lib_quoted_globals: Compilation_unit.Name.t array;
+    lib_quoted_cmi: Compilation_unit.Name.t array;
+    lib_quoted_cmx: Compilation_unit.t array;
     lib_units: lib_unit_info list;
     lib_generic_fns: generic_fns;
+    lib_requires_metaprogramming: bool;  (* OR of all units *)
     (* In the following fields the lists are reversed with respect to
        how they end up being used on the command line. *)
     lib_ccobjs: string list;            (* C object files needed *)

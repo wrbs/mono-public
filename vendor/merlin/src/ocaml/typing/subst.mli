@@ -45,11 +45,13 @@ type t = safe subst
 (** Standard substitution*)
 
 val identity: 'a subst
+val for_loading_cmi : unit -> t
 val unsafe: t -> unsafe subst
 
 val add_type: Ident.t -> Path.t -> 'k subst -> 'k subst
 val add_module: Ident.t -> Path.t -> 'k subst -> 'k subst
 val add_modtype: Ident.t -> Path.t -> 'k subst -> 'k subst
+val add_jkind: Ident.t -> Path.t -> t -> t
 
 type additional_action_config =
    | Duplicate_variables
@@ -70,10 +72,11 @@ type additional_action_config =
 val with_additional_action: additional_action_config -> t -> t
 
 (* Any of the additional actions involve copying type variables. Calling
-   [reset_additional_action_type_id] resets the id counter used when the copying
+   [reset_additional_action_id] resets the id counter used when the copying
    of type variables needs to mint new type variable ids.
+   The function additionally reset the counter used for sort ids.
 *)
-val reset_additional_action_type_id: unit -> unit
+val reset_additional_action_id: unit -> unit
 
 val make_loc_ghost: t -> t
 val change_locs: 'k subst -> Location.t -> 'k subst
@@ -90,6 +93,7 @@ val extension_constructor:
         t -> extension_constructor -> extension_constructor
 val class_declaration: t -> class_declaration -> class_declaration
 val cltype_declaration: t -> class_type_declaration -> class_type_declaration
+val jkind_declaration: t -> jkind_declaration -> jkind_declaration
 
 (**
    When applied to a signature item, a substitution not only modifies the types
@@ -116,6 +120,23 @@ val module_declaration: scoping -> t -> module_declaration -> module_declaration
      apply (compose s1 s2) x = apply s2 (apply s1 x) **)
 val compose: t -> t -> t
 
+module Ikind_substitution : sig
+  type type_lookup_result =
+    | Lookup_identity
+    | Lookup_path of Path.t
+    | Lookup_type_fun of type_expr list * type_expr
+
+  type jkind_lookup_result =
+    | Lookup_jkind_identity
+    | Lookup_jkind_path of Path.t
+    | Lookup_jkind_const of jkind_const_desc_lr
+
+  val substitute_decl_ikind_with_lookup :
+    (lookup_type:(Path.t -> type_lookup_result) ->
+     lookup_jkind:(Path.t -> jkind_lookup_result) ->
+     type_ikind -> type_ikind) ref
+end
+
 module Unsafe: sig
 
   type t = unsafe subst
@@ -133,6 +154,9 @@ module Unsafe: sig
   val add_type_function:
     Path.t -> params:type_expr list -> body:type_expr -> t -> t
   val add_module_path: Path.t -> Path.t -> t -> t
+
+  val add_jkind_path: Path.t -> Path.t -> t -> t
+  val add_jkind : Path.t -> jkind_const_desc_lr -> t -> t
 
   type error =
     | Fcm_type_substituted_away of Path.t * Types.module_type
@@ -181,4 +205,5 @@ module Lazy : sig
   val force_functor_parameter : functor_parameter -> Types.functor_parameter
   val force_value_description : value_description -> Types.value_description
   val force_type_expr : type_expr wrapped -> type_expr
+  val force_lpoly : Types.Lpoly.t wrapped -> Types.Lpoly.t
 end

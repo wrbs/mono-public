@@ -1,0 +1,5 @@
+(library
+ (name fastdom)
+ (public_name fastdom)
+ (preprocess no_preprocessing)
+ (libraries core core_kernel.reversed_list))

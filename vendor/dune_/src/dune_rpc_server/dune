@@ -7,7 +7,7 @@
   chrome_trace
   dyn
   ordering
-  dune_trace
+  dune_stats
   dune_util
   dune_rpc_private
   unix))

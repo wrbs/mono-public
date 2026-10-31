@@ -57,9 +57,8 @@ module Message_viewer = struct
   let is_message_hidden = Lwd.var (fun _ -> false)
 
   let message_images =
-    let+ messages = Lwd.get messages
-    and+ w, _ = Lwd.get term_size in
-    List.map messages ~f:(fun x -> Drawing.pp_to_image ~w (User_message.pp x))
+    let+ messages = Lwd.get messages in
+    List.map messages ~f:(fun x -> Drawing.pp_to_image (User_message.pp x))
   ;;
 
   (* We calculate the max message length from all the messages. This is used to keep the
@@ -203,7 +202,13 @@ module Message_viewer = struct
         `Handled
       | _ -> `Unhandled
     in
-    ui |> Ui.keyboard_area keyboard_handler
+    let mouse_handler ~x:_ ~y:_ = function
+      | `Scroll dir ->
+        vscroll ~dir;
+        `Handled
+      | _ -> `Unhandled
+    in
+    ui |> Ui.keyboard_area keyboard_handler |> Ui.mouse_area mouse_handler
   ;;
 end
 
@@ -223,8 +228,8 @@ let help_box =
 
 (* The status bar shows the build status and includes a help button. *)
 let status_bar =
-  let* w, _ = Lwd.get term_size in
-  let+ help_button =
+  let+ w, _ = Lwd.get term_size
+  and+ help_button =
     let+ { toggle; _ } = help_box in
     let image =
       I.hcat
@@ -238,7 +243,7 @@ let status_bar =
     Lwd.get status_line
     >>| function
     | None -> I.empty
-    | Some message -> Drawing.pp_to_image ~w message
+    | Some message -> Drawing.pp_to_image message
   in
   let status =
     I.hcat [ I.char helper_attr ' ' 1 1; status; I.char helper_attr ' ' 1 1 ]

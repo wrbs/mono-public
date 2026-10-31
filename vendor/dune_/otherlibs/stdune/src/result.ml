@@ -79,7 +79,6 @@ module O = struct
   let ( >>| ) t f = map t ~f
   let ( let* ) = ( >>= )
   let ( let+ ) = ( >>| )
-  let ( and* ) = both
   let ( and+ ) = both
 end
 

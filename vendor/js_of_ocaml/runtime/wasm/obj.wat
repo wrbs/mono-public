@@ -222,6 +222,12 @@
       (local $forig (ref $float_array)) (local $fres (ref $float_array))
       (local $s (ref $bytes)) (local $s' (ref $bytes))
       (local $len i32)
+      ;; Handle null values for or_null
+      (if (ref.eq (local.get 0) (global.get $null))
+         (then (return (global.get $null))))
+      ;; Handle immediate integers
+      (if (ref.test (ref i31) (local.get 0))
+         (then (return (local.get 0))))
       (drop (block $not_block (result (ref eq))
          (local.set $orig (br_on_cast_fail $not_block (ref eq) (ref $block)
             (local.get 0)))
@@ -374,16 +380,24 @@
 
    (func (export "caml_obj_raw_field")
       (param $o (ref eq)) (param $i (ref eq)) (result (ref eq))
-      (array.get $block (ref.cast (ref $block) (local.get $o))
-         (i32.add
-            (i31.get_u (ref.cast (ref i31) (local.get $i))) (i32.const 1))))
+      (if (ref.test (ref $block) (local.get $o))
+         (then
+            (return
+               (array.get $block (ref.cast (ref $block) (local.get $o))
+                  (i32.add
+                     (i31.get_u (ref.cast (ref i31) (local.get $i)))
+                     (i32.const 1))))))
+      (ref.i31 (i32.const 0)))
 
    (func (export "caml_obj_set_raw_field")
       (param $o (ref eq)) (param $i (ref eq)) (param $v (ref eq))
       (result (ref eq))
-      (array.set $block (ref.cast (ref $block) (local.get $o))
-         (i32.add (i31.get_u (ref.cast (ref i31) (local.get $i))) (i32.const 1))
-         (local.get $v))
+      (if (ref.test (ref $block) (local.get $o))
+         (then
+            (array.set $block (ref.cast (ref $block) (local.get $o))
+               (i32.add (i31.get_u (ref.cast (ref i31) (local.get $i)))
+                        (i32.const 1))
+               (local.get $v))))
       (ref.i31 (i32.const 0)))
 
    (@string $not_implemented "Obj.add_offset is not supported")

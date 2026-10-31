@@ -322,7 +322,8 @@ and signature_items : Env.t -> Id.Signature.t -> Signature.item list -> _ =
             let m' = module_type env mt in
             let ty = Component.Of_Lang.(module_type (empty ()) m') in
             let env' = Env.add_module_type mt.id ty env in
-            loop (ModuleType (module_type env mt) :: items) env' rest
+            let items' = ModuleType m' :: items in
+            loop items' env' rest
         | ModuleTypeSubstitution mt ->
             let env' = Env.open_module_type_substitution mt env in
             loop
@@ -385,7 +386,9 @@ and include_decl : Env.t -> Id.Signature.t -> Include.decl -> Include.decl =
  fun env id decl ->
   let open Include in
   match decl with
-  | ModuleType expr -> ModuleType (u_module_type_expr env id expr)
+  | ModuleType expr ->
+      if is_elidable_with_module_type_u expr then ModuleType expr
+      else ModuleType (u_module_type_expr env id expr)
   | Alias p -> Alias (module_path env p)
 
 and module_type : Env.t -> ModuleType.t -> ModuleType.t =
@@ -424,8 +427,8 @@ and include_ : Env.t -> Include.t -> Include.t * Env.t =
               Strengthen.signature cp sg
           | None -> sg
         in
-        let e = Lang_of.(simple_expansion map i.parent (Signature sg')) in
-
+        let sg'' = Tools.apply_inner_substs env sg' in
+        let e = Lang_of.(simple_expansion map i.parent (Signature sg'')) in
         let expansion_sg =
           match e with
           | ModuleType.Signature sg -> sg
@@ -434,7 +437,9 @@ and include_ : Env.t -> Include.t -> Include.t * Env.t =
         in
         { i.expansion with content = expansion_sg }
   in
-  let expansion = get_expansion () in
+  let expansion =
+    if i.expansion.content.compiled then i.expansion else get_expansion ()
+  in
   let items, env' = signature_items env i.parent expansion.content.items in
   let expansion =
     {
@@ -784,7 +789,7 @@ and type_decl_representation :
   | Variant cs -> Variant (List.map (type_decl_constructor env parent) cs)
   | Record fs -> Record (List.map (type_decl_field env parent) fs)
   | Record_unboxed_product fs ->
-    Record_unboxed_product (List.map (type_decl_unboxed_field env parent) fs)
+      Record_unboxed_product (List.map (type_decl_unboxed_field env parent) fs)
   | Extensible -> Extensible
 
 and type_decl_field env parent f =
@@ -832,6 +837,10 @@ and type_expression_object env parent o =
     | Inherit t -> Inherit (type_expression env parent t)
   in
   { o with fields = List.map field o.fields }
+
+and type_expression_module_arg env parent m_arg =
+  let open TypeExpr.Module in
+  { m_arg with package = type_expression_package env parent m_arg.package }
 
 and type_expression_package env parent p =
   let open TypeExpr.Package in
@@ -917,9 +926,12 @@ and type_expression : Env.t -> Id.LabelParent.t -> _ -> _ =
   | Var _ | Any -> texpr
   | Alias (t, str) -> Alias (type_expression env parent t, str)
   | Arrow (lbl, t1, t2) -> handle_arrow env parent lbl t1 t2
-  | Tuple ts -> Tuple (List.map (fun (l, t) -> l, type_expression env parent t) ts)
+  | Tuple ts ->
+      Tuple
+        (List.map (fun (lbl, ty) -> (lbl, type_expression env parent ty)) ts)
   | Unboxed_tuple ts ->
-    Unboxed_tuple (List.map (fun (l, t) -> l, type_expression env parent t) ts)
+      Unboxed_tuple
+        (List.map (fun (l, t) -> (l, type_expression env parent t)) ts)
   | Constr (path, ts') -> (
       let cp = Component.Of_Lang.(type_path (empty ()) path) in
       let ts = List.map (type_expression env parent) ts' in
@@ -945,7 +957,15 @@ and type_expression : Env.t -> Id.LabelParent.t -> _ -> _ =
           Class (`Resolved p, ts')
       | _ -> Class (path, ts'))
   | Poly (strs, t) -> Poly (strs, type_expression env parent t)
+  | Quote t -> Quote (type_expression env parent t)
+  | Splice t -> Splice (type_expression env parent t)
   | Package p -> Package (type_expression_package env parent p)
+  | Arrow_functor (lbl, m_arg, t) ->
+      let new_env = Env.add_module_arg m_arg env in
+      Arrow_functor
+        ( lbl,
+          type_expression_module_arg env parent m_arg,
+          type_expression new_env parent t )
 
 let compile ~filename env compilation_unit =
   Lookup_failures.catch_failures ~filename (fun () -> unit env compilation_unit)

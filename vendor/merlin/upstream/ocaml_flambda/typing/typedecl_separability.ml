@@ -147,11 +147,12 @@ let rec immediate_subtypes : type_expr -> type_expr list = fun ty ->
       (* these should only occur under Tobject and not at the toplevel,
          but "better safe than sorry" *)
       immediate_subtypes_object_row [] ty
-  | Tquote ty | Tsplice ty -> [ty]
+  | Tquote ty | Tsplice ty | Tquote_eval ty -> [ty]
   | Tlink _ | Tsubst _ -> assert false (* impossible due to Ctype.repr *)
   | Tvar _ | Tunivar _ -> []
   | Tof_kind _ -> []
   | Tpoly (pty, _) -> [pty]
+  | Trepr (_, _) -> Misc.fatal_error "immediate_subtypes: Trepr"
   | Tconstr (_path, tys, _) -> tys
 
 and immediate_subtypes_object_row acc ty = match get_desc ty with
@@ -388,7 +389,18 @@ let check_type
   : upstream_compatible:bool -> Env.t -> type_expr -> mode -> context
   = fun ~upstream_compatible env ty m ->
   let rec check_type hyps ty m =
+    (* If the jkind of [ty] says it is [Non_float], then [ty]
+       is separable with no constraints on its free variables. However, this
+       only suffices for [Sep] mode, not [Deepsep]: a type like ['b list]
+       is [Non_float] (lists are never flat floats), but for deep
+       separability we must still recurse into sub-type-expressions to
+       check ['b]. Without the [m <> Deepsep] guard, an abstract type
+       [type 'a t constraint 'a = 'b list] whose representation depends
+       on ['b] (not ['a]) would be wrongly deemed separable, because the
+       parameter ['a = 'b list] is [Non_float] yet ['b] is unconstrained.
+       See testsuite/tests/typing-separability/separability-bug.ml. *)
     if not upstream_compatible
+      && m <> Deepsep
       && Ctype.check_type_separability env ty Non_float
     then empty else
     if Hyps.safe ty m hyps then empty
@@ -414,6 +426,7 @@ let check_type
     | ((Tnil | Tfield _)  , Sep    )
     | (Tquote(_)          , Sep    )
     | (Tsplice(_)         , Sep    )
+    | (Tquote_eval(_)     , Sep    )
     | (Tpackage(_,_)      , Sep    )
     | (Tof_kind(_)        , Sep    ) -> empty
     (* "Deeply separable" case for these same constructors. *)
@@ -425,6 +438,7 @@ let check_type
     | ((Tnil | Tfield _)  , Deepsep)
     | (Tquote(_)          , Deepsep)
     | (Tsplice(_)         , Deepsep)
+    | (Tquote_eval(_)     , Deepsep)
     | (Tpackage(_,_)      , Deepsep) ->
         let tys = immediate_subtypes ty in
         let on_subtype context ty =
@@ -452,6 +466,8 @@ let check_type
        under a separating type constructor. *)
     | (Tpoly(pty,_)       , m      ) ->
         check_type hyps pty m
+    | (Trepr(_pty,_)       , _m    ) ->
+        assert false
     | (Tunivar(_)         , _      ) -> empty
     | (Tof_kind(_)         , _      ) -> empty
     (* Type constructor case. *)
@@ -485,7 +501,7 @@ let worst_msig decl = List.map (fun _ -> Deepsep) decl.type_params
 let msig_of_external_type env decl =
   let context = Ctype.mk_jkind_context_check_principal env in
   let is_external =
-    match Jkind.get_externality_upper_bound ~context decl.type_jkind with
+    match Jkind.get_externality_upper_bound ~context env decl.type_jkind with
     | Internal -> false
     | External | External64 -> true
   in

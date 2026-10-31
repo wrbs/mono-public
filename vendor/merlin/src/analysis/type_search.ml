@@ -42,7 +42,7 @@ let sherlodoc_type_of env typ =
     | Types.Tarrow (_, a, b, _) -> Type_parsed.Arrow (aux a, aux b)
     | Types.Tconstr (p, args, _) ->
       let p = Printtyp.rewrite_double_underscore_paths env p in
-      let name = Format.asprintf "%a" Printtyp.path p in
+      let name = Format_doc.asprintf "%a" Printtyp.path p in
       Type_parsed.Tycon (name, List.map ~f:aux args)
     | Types.Tpoly (typ, []) -> aux typ
     | _ -> Type_parsed.Unhandled
@@ -100,7 +100,7 @@ let compute_value query env _ path desc _ acc =
   let name =
     Printtyp.wrap_printing_env env @@ fun () ->
     let path = Printtyp.rewrite_double_underscore_paths env path in
-    Format.asprintf "%a" Printtyp.path path
+    Format_doc.asprintf "%a" Printtyp.path path
   in
   let cost = Query.distance_for query ~path:name typ in
   if cost >= 1000 then acc
@@ -135,8 +135,8 @@ let run ?(limit = 100) ~env ~query ~modules () =
   let init = compute_values query env None [] in
   modules
   |> List.fold_left ~init ~f:(fun acc name ->
-         let lident = Longident.Lident name in
-         values_from_module query env lident acc)
+      let lident = Longident.Lident name in
+      values_from_module query env lident acc)
   |> List.sort ~cmp:compare_result
   |> List.take_n limit
 

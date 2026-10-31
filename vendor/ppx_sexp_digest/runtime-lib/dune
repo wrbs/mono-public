@@ -1,0 +1,6 @@
+(library
+ (name ppx_sexp_digest_lib)
+ (public_name ppx_sexp_digest.lib)
+ (libraries base base.md5 sexp_grammar)
+ (preprocess
+  (pps ppx_jane)))

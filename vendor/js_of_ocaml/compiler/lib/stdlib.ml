@@ -359,17 +359,6 @@ end
 module Float32 = struct
   type t
 
-  let of_float _ = assert false
-
-  let to_float _ = assert false
-
-  let of_string _ = assert false
-end
-[@@if not oxcaml]
-
-module Float32 = struct
-  type t = float32
-
   external of_float : float -> t = "%float32offloat"
 
   external to_float : t -> float = "%floatoffloat32"
@@ -378,7 +367,6 @@ module Float32 = struct
      This is not equivalent to native code, which parses to 32 bits directly. *)
   let of_string s = float_of_string s |> of_float
 end
-[@@if oxcaml]
 
 module Bool = struct
   include Bool
@@ -861,6 +849,63 @@ module Int = struct
   end)
 end
 
+module Set = struct
+  module type S = sig
+    include Set.S
+
+    val compare_cardinal_with : t -> int -> int
+    (** [compare_cardinal_with s n] is equivalent to [compare (cardinal s) n]
+        but runs in O(min(n, cardinal s)) time instead of O(cardinal s). *)
+
+    val to_list_bounded : int -> t -> elt list option
+    (** [to_list_bounded n s] returns [Some l] if [s] has at most [n] elements,
+        where [l] is the sorted list of all elements. Returns [None] if [s] has
+        more than [n] elements. Traverses at most [n+1] elements. *)
+  end
+
+  module Make (Ord : Set.OrderedType) : S with type elt = Ord.t = struct
+    include Set.Make (Ord)
+
+    let equal a b = phys_equal a b || equal a b
+
+    let compare a b = if phys_equal a b then 0 else compare a b
+
+    let union a b = if phys_equal a b then a else union a b
+
+    let inter a b = if phys_equal a b then a else inter a b
+
+    let diff a b = if phys_equal a b then empty else diff a b
+
+    let compare_cardinal_with s n =
+      let r =
+        try
+          fold
+            (fun _ n ->
+              (* [n <= 0] means we've already counted [n] elements, so
+                 [cardinal s > n] and we can stop early. *)
+              if n <= 0 then raise_notrace Exit else n - 1)
+            s
+            n
+        with Exit -> -1
+      in
+      if r < 0 then 1 else Int.compare 0 r
+
+    let to_list_bounded n s =
+      try
+        Some
+          (fold
+             (fun x (n, acc) ->
+               (* [n <= 0] means we've already collected [n] elements,
+                  so [cardinal s > n] and we return [None]. *)
+               if n <= 0 then raise_notrace Exit else n - 1, x :: acc)
+             s
+             (n, [])
+          |> snd
+          |> List.rev)
+      with Exit -> None
+  end
+end
+
 module IntSet = Set.Make (Int)
 module IntMap = Map.Make (Int)
 module StringSet = Set.Make (String)
@@ -894,6 +939,33 @@ module BitSet : sig
   val clear : t -> unit
 end = struct
   type t = { mutable arr : int array }
+
+  (* Count trailing zeros. [w] must be non-zero. *)
+  let ctz w =
+    let n = ref 0 in
+    let w = ref w in
+    if Sys.int_size > 32 && !w land ((1 lsl 32) - 1) = 0
+    then (
+      n := 32;
+      w := !w lsr 32);
+    if !w land 0xFFFF = 0
+    then (
+      n := !n + 16;
+      w := !w lsr 16);
+    if !w land 0xFF = 0
+    then (
+      n := !n + 8;
+      w := !w lsr 8);
+    if !w land 0xF = 0
+    then (
+      n := !n + 4;
+      w := !w lsr 4);
+    if !w land 0x3 = 0
+    then (
+      n := !n + 2;
+      w := !w lsr 2);
+    if !w land 0x1 = 0 then n := !n + 1;
+    !n
 
   let create () = { arr = Array.make 1 0 }
 
@@ -941,24 +1013,69 @@ end = struct
       if b <> 0 && b land mask <> 0 then Array.unsafe_set t.arr idx (b lxor mask)
 
   let next_free t i =
-    let x = ref i in
-    while mem t !x do
-      incr x
-    done;
-    !x
+    let arr = t.arr in
+    let len = Array.length arr in
+    let idx = ref (i / Sys.int_size) in
+    if !idx >= len
+    then i
+    else
+      let off = i mod Sys.int_size in
+      (* [lnot] flips set/unset so that [ctz] finds the first *free* bit *)
+      let word = lnot (Array.unsafe_get arr !idx) lsr off in
+      if word <> 0
+      then
+        (* There's a free bit in this word at or above [off] *)
+        i + ctz word
+      else (
+        (* Search subsequent words *)
+        incr idx;
+        while !idx < len && Array.unsafe_get arr !idx = -1 do
+          incr idx
+        done;
+        if !idx >= len
+        then len * Sys.int_size
+        else
+          (* [lnot] to find first free (zero) bit via [ctz] *)
+          let w = lnot (Array.unsafe_get arr !idx) in
+          (!idx * Sys.int_size) + ctz w)
 
   let next_mem t i =
-    let x = ref i in
-    while not (mem t !x) do
-      incr x
-    done;
-    !x
+    let arr = t.arr in
+    let len = Array.length arr in
+    let idx = ref (i / Sys.int_size) in
+    if !idx >= len
+    then failwith "BitSet.next_mem: no set bit found"
+    else
+      let off = i mod Sys.int_size in
+      (* Mask out bits below [off] *)
+      let word = Array.unsafe_get arr !idx lsr off in
+      if word <> 0
+      then i + ctz word
+      else (
+        incr idx;
+        while !idx < len && Array.unsafe_get arr !idx = 0 do
+          incr idx
+        done;
+        if !idx >= len
+        then failwith "BitSet.next_mem: no set bit found"
+        else
+          let w = Array.unsafe_get arr !idx in
+          (!idx * Sys.int_size) + ctz w)
 
   let copy t = { arr = Array.copy t.arr }
 
   let iter ~f t =
-    for i = 0 to size t do
-      if mem t i then f i
+    let arr = t.arr in
+    for idx = 0 to Array.length arr - 1 do
+      let ref_word = ref (Array.unsafe_get arr idx) in
+      if !ref_word <> 0
+      then
+        let base = idx * Sys.int_size in
+        while !ref_word <> 0 do
+          let bit = ctz !ref_word in
+          f (base + bit);
+          ref_word := !ref_word land (!ref_word - 1)
+        done
     done
 end
 
@@ -1196,10 +1313,6 @@ let file_lines_text file =
   let c = In_channel.input_lines ic in
   close_in ic;
   c
-
-let generated_name = function
-  | "param" | "match" | "switcher" -> true
-  | s -> String.starts_with ~prefix:"cst_" s
 
 module Hashtbl = struct
   include Hashtbl

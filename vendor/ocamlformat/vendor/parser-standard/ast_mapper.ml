@@ -193,6 +193,10 @@ module T = struct
           (List.map (map_tuple (map_loc sub) (sub.typ sub)) l)
     | Ptyp_open (mod_ident, t) ->
         open_ ~loc ~attrs (map_loc sub mod_ident) (sub.typ sub t)
+    | Ptyp_quote t ->
+        quote ~loc ~attrs (sub.typ sub t)
+    | Ptyp_splice t ->
+        splice ~loc ~attrs (sub.typ sub t)
     | Ptyp_of_kind jkind ->
         of_kind ~loc ~attrs (sub.jkind_annotation sub jkind)
     | Ptyp_extension x -> extension ~loc ~attrs (sub.extension sub x)
@@ -497,6 +501,14 @@ module E = struct
       ret_mode_annotations = sub.modes sub ret_mode_annotations
     }
 
+  let map_block_access sub = function
+    | Baccess_field lid -> Baccess_field (map_loc sub lid)
+    | Baccess_array (mut, ik, e) -> Baccess_array (mut, ik, sub.expr sub e)
+    | Baccess_block (mut, e) -> Baccess_block (mut, sub.expr sub e)
+
+  let map_unboxed_access sub = function
+    | Uaccess_unboxed_field lid -> Uaccess_unboxed_field (map_loc sub lid)
+
   let map_iterator sub = function
     | Pcomp_range { start; stop; direction } ->
       Pcomp_range { start = sub.expr sub start;
@@ -550,6 +562,8 @@ module E = struct
         tuple ~loc ~attrs (map_ltexp sub el)
     | Pexp_unboxed_tuple el ->
         unboxed_tuple ~loc ~attrs (map_ltexp sub el)
+    | Pexp_unboxed_unit -> unboxed_unit ~loc ~attrs ()
+    | Pexp_unboxed_bool b -> unboxed_bool ~loc ~attrs b
     | Pexp_construct (lid, arg) ->
         construct ~loc ~attrs (map_loc sub lid) (map_opt (sub.expr sub) arg)
     | Pexp_variant (lab, eo) ->
@@ -569,6 +583,9 @@ module E = struct
         setfield ~loc ~attrs (sub.expr sub e1) (map_loc sub lid)
           (sub.expr sub e2)
     | Pexp_array (mut, el) -> array ~loc ~attrs mut (List.map (sub.expr sub) el)
+    | Pexp_idx (ba, uas) ->
+      idx ~loc ~attrs (map_block_access sub ba)
+        (List.map (map_unboxed_access sub) uas)
     | Pexp_ifthenelse (e1, e2, e3) ->
         ifthenelse ~loc ~attrs (sub.expr sub e1) (sub.expr sub e2)
           (map_opt (sub.expr sub) e3)
@@ -617,8 +634,11 @@ module E = struct
     | Pexp_extension x -> extension ~loc ~attrs (sub.extension sub x)
     | Pexp_unreachable -> unreachable ~loc ~attrs ()
     | Pexp_stack e -> stack ~loc ~attrs (sub.expr sub e)
+    | Pexp_borrow e -> borrow ~loc ~attrs (sub.expr sub e)
     | Pexp_comprehension c -> comprehension ~loc ~attrs (map_cexp sub c)
     | Pexp_overwrite (e1, e2) -> overwrite ~loc ~attrs (sub.expr sub e1) (sub.expr sub e2)
+    | Pexp_quote e -> quote ~loc ~attrs (sub.expr sub e)
+    | Pexp_splice e -> splice ~loc ~attrs (sub.expr sub e)
     | Pexp_hole -> hole ~loc ~attrs ()
 
   let map_binding_op sub {pbop_op; pbop_pat; pbop_exp; pbop_loc} =
@@ -650,6 +670,8 @@ module P = struct
     | Ppat_tuple (pl, c) -> tuple ~loc ~attrs (map_ltpat sub pl) c
     | Ppat_unboxed_tuple (pl, c) ->
         unboxed_tuple ~loc ~attrs (map_ltpat sub pl) c
+    | Ppat_unboxed_unit -> unboxed_unit ~loc ~attrs ()
+    | Ppat_unboxed_bool b -> unboxed_bool ~loc ~attrs b
     | Ppat_construct (l, p) ->
         construct ~loc ~attrs (map_loc sub l)
           (map_opt

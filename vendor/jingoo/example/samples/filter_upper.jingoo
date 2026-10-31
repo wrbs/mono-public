@@ -1,1 +1,0 @@
-upper test: {{ "must be upper" | upper }}

@@ -20,10 +20,15 @@
       (func $compare_strings (param externref externref) (result i32)))
    (import "wasm:js-string" "test"
       (func $is_string (param externref) (result i32)))
+   (import "wasm:js-string" "length"
+      (func $string_length (param externref) (result i32)))
    (import "wasm:js-string" "fromCharCodeArray"
       (func $fromCharCodeArray
          (param (ref null $wstring)) (param i32) (param i32)
          (result (ref extern))))
+   (import "wasm:js-string" "intoCharCodeArray"
+      (func $intoCharCodeArray
+         (param externref (ref null $wstring) i32) (result i32)))
 
    (import "wasm:text-decoder" "decodeStringFromUTF8Array"
       (func $decodeStringFromUTF8Array
@@ -50,7 +55,7 @@
    (global $text_converters_available (mut i32) (i32.const 0))
    (global $string_builtins_available (mut i32) (i32.const 0))
 
-   (global $utf16_buffer_size i32 (i32.const 32768))
+   (global $utf16_buffer_size i32 (i32.const 1024))
    (global $buffer (mut (ref $wstring))
       (array.new $wstring (i32.const 0) (i32.const 0)))
 

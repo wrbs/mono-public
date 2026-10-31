@@ -104,6 +104,7 @@ let builtin_attrs =
   ; "nolabels"
   ; "flambda_oclassic"
   ; "flambda_o3"
+  ; "flambda_o4"
   ; "afl_inst_ratio"
   ; "local_opt"
   ; "curry"; "extension.curry"
@@ -115,6 +116,7 @@ let builtin_attrs =
   ; "noalloc"
   ; "zero_alloc"
   ; "untagged"
+  ; "unpacked"
   ; "poll"
   ; "loop"
   ; "tail_mod_cons"
@@ -125,12 +127,16 @@ let builtin_attrs =
   ; "only_generative_effects"
   ; "error_message"
   ; "layout_poly"
+  ; "or_null"
   ; "or_null_reexport"
   ; "no_recursive_modalities"
   ; "jane.non_erasable.instances"
   ; "cold"
   ; "regalloc"
   ; "regalloc_param"
+  ; "implicit_kind"
+  ; "flatten_floats"
+  ; "represent_as_float_array"
   ]
 
 let builtin_attrs =
@@ -184,6 +190,7 @@ let string_of_opt_payload p =
   | Some s -> s
   | None -> ""
 
+module Style = Misc.Style
 let error_of_extension ext =
   let submessage_from main_loc main_txt = function
     | {pstr_desc=Pstr_extension
@@ -192,19 +199,18 @@ let error_of_extension ext =
         | PStr([{pstr_desc=Pstr_eval
                      ({pexp_desc=Pexp_constant(Pconst_string(msg,_,_))}, _)}
                ]) ->
-            { Location.loc; txt = fun ppf -> Format.pp_print_text ppf msg }
+            Location.msg ~loc "%a" Format_doc.pp_print_text msg
         | _ ->
-            { Location.loc; txt = fun ppf ->
-                Format.fprintf ppf
-                  "Invalid syntax for sub-message of extension '%s'." main_txt }
+            Location.msg ~loc "Invalid syntax for sub-message of extension %a."
+              Style.inline_code main_txt
         end
     | {pstr_desc=Pstr_extension (({txt; loc}, _), _)} ->
-        { Location.loc; txt = fun ppf ->
-            Format.fprintf ppf "Uninterpreted extension '%s'." txt }
+        Location.msg ~loc "Uninterpreted extension '%a'."
+          Style.inline_code txt
     | _ ->
-        { Location.loc = main_loc; txt = fun ppf ->
-            Format.fprintf ppf
-              "Invalid syntax for sub-message of extension '%s'." main_txt }
+        Location.msg ~loc:main_loc
+          "Invalid syntax for sub-message of extension %a."
+          Style.inline_code main_txt
   in
   match ext with
   | ({txt = ("ocaml.error"|"error") as txt; loc}, p) ->
@@ -214,7 +220,7 @@ let error_of_extension ext =
                   ({pexp_desc=Pexp_constant(Pconst_string(msg,_,_))}, _)}::
              inner) ->
           let sub = List.map (submessage_from loc txt) inner in
-          Location.error_of_printer ~loc ~sub Format.pp_print_text msg
+          Location.error_of_printer ~loc ~sub Format_doc.pp_print_text msg
       | _ ->
           Location.errorf ~loc "Invalid syntax for extension '%s'." txt
       end
@@ -297,21 +303,21 @@ let alerts_of_attrs l =
          | None | Some "" -> Some message
          | Some s -> Some (cat s message)
        in
-       Misc.String.Map.update kind upd acc
+       Misc.Stdlib.String.Map.update kind upd acc
     )
-    Misc.String.Map.empty
+    Misc.Stdlib.String.Map.empty
     (alert_attrs l)
 
 let check_alerts loc attrs s =
-  Misc.String.Map.iter
+  Misc.Stdlib.String.Map.iter
     (fun kind message -> Location.alert loc ~kind (cat s message))
     (alerts_of_attrs attrs)
 
 let check_alerts_inclusion ~def ~use loc attrs1 attrs2 s =
   let m2 = alerts_of_attrs attrs2 in
-  Misc.String.Map.iter
+  Misc.Stdlib.String.Map.iter
     (fun kind msg ->
-       if not (Misc.String.Map.mem kind m2) then
+       if not (Misc.Stdlib.String.Map.mem kind m2) then
          Location.alert ~def ~use ~kind loc (cat s msg)
     )
     (alerts_of_attrs attrs1)
@@ -518,6 +524,11 @@ let has_unboxed attrs = has_attribute "unboxed" attrs
 
 let has_boxed attrs = has_attribute "boxed" attrs
 
+let has_flatten_floats attrs = has_attribute "flatten_floats" attrs
+
+let has_represent_as_float_array attrs =
+  has_attribute "represent_as_float_array" attrs
+
 let has_unsafe_allow_any_mode_crossing attrs =
   has_attribute "unsafe_allow_any_mode_crossing" attrs
 
@@ -594,6 +605,11 @@ let flambda_o3_attribute attr =
   clflags_attribute_without_payload' attr
     ~name:"flambda_o3"
     ~f:(fun () -> if Config.flambda || Config.flambda2 then Clflags.set_o3 ())
+
+let flambda_o4_attribute attr =
+  clflags_attribute_without_payload' attr
+    ~name:"flambda_o4"
+    ~f:(fun () -> if Config.flambda || Config.flambda2 then Clflags.set_o4 ())
 
 let llvm_backend_attribute attr =
   clflags_attribute_without_payload' attr
@@ -681,6 +697,7 @@ let parse_standard_implementation_attributes attr =
   inline_attribute attr;
   afl_inst_ratio_attribute attr;
   flambda_o3_attribute attr;
+  flambda_o4_attribute attr;
   flambda_oclassic_attribute attr;
   zero_alloc_attribute attr
   *)
@@ -701,8 +718,14 @@ let has_curry attrs =
   has_attribute curry_attr_name attrs
   || has_attribute "curry" attrs
 
+let has_or_null attrs =
+  has_attribute "or_null" attrs
+
 let has_or_null_reexport attrs =
   has_attribute "or_null_reexport" attrs
+
+let has_magic_staged_modes attrs =
+  has_attribute "magic_staged_modes" attrs
 
 let curry_attr loc =
   Ast_helper.Attr.mk ~loc:Location.none (Location.mkloc curry_attr_name loc) (PStr [])
@@ -740,6 +763,44 @@ let error_message_attr l =
       end
     | _ -> None in
   List.find_map inner l
+
+let get_implicit_jkind_attr x =
+  let extract_var_and_jkind typ =
+    match typ.ptyp_desc with
+    | Ptyp_var (var_name, Some jkind_annot) ->
+        var_name, jkind_annot
+    | _ -> raise Exit
+  in
+  let parse_implicit_jkind_payload = function
+    | PTyp typ ->
+        begin match typ.ptyp_desc with
+        | Ptyp_var (_, Some _) ->
+            (* Single variable: ('a : immediate) *)
+            [extract_var_and_jkind typ]
+        | Ptyp_tuple typs ->
+            (* Multiple variables: ('a : immediate) * ('b : int) *)
+            List.map (fun (label_opt, typ) ->
+              match label_opt with
+              | None -> extract_var_and_jkind typ
+              | Some _ -> raise Exit
+            ) typs
+        | _ -> raise Exit
+        end
+    | _ -> raise Exit
+  in
+  match x.attr_name.txt with
+  | "ocaml.implicit_kind" | "implicit_kind" ->
+    begin match parse_implicit_jkind_payload x.attr_payload with
+    | pairs ->
+      mark_used x.attr_name;
+      pairs
+    | exception Exit ->
+      warn_payload x.attr_loc x.attr_name.txt
+        "implicit_kind attribute expects: \
+        ('var1 : jkind1) * ('var2 : jkind2) ...";
+      []
+    end
+  | _ -> []
 
 type zero_alloc_check =
   { strict: bool;
@@ -1148,13 +1209,10 @@ let get_tracing_probe_payload (payload : Parsetree.payload) =
   in
   Ok { name; name_loc; enabled_at_init; arg }
 
-let get_eval_payload payload =
-  match payload with
-  | PTyp typ -> Ok typ
-  | _ -> Error ()
-
 let has_atomic attrs = has_attribute "atomic" attrs
 
 (* Merlin specific *)
 
-let merlin_let_punned = "merlin.let-punned"
+let merlin_punned_let = "merlin.punned-let"
+
+let merlin_punned_record_pattern = "merlin.punned-record-pattern"

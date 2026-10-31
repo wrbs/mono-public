@@ -3,7 +3,6 @@ a mock compiler package using dune's toolchain mechanism.
 
   $ . ./helpers.sh
   $ make_lockdir
-  $ add_mock_repo_if_needed
 
 We create a fake compiler by creating a configure file.
 
@@ -41,7 +40,7 @@ location
 
 We generate the lockfile for the fake compiler
 
-  $ make_lockpkg ocaml-base-compiler << EOF
+  $ cat > dune.lock/ocaml-base-compiler.pkg << EOF
   > (version 1)
   > (build
   >  (run ./configure %{prefix}))
@@ -55,7 +54,7 @@ We generate the lock file for the package to demonstrate the variable is
 replaced with the path to the sandbox inside of the path to the non-relocatable
 location.
 
-  $ make_lockpkg baz << EOF
+  $ cat > dune.lock/baz.pkg << EOF
   > (version 1)
   > (build
   >  (run sh -exc "echo %{pkg:ocaml-base-compiler:share}"))
@@ -84,5 +83,5 @@ We try to build the dependency to show that it echoes the wong path. Until we
 fix the problem, it shows the sandbox path
 
   $ XDG_CACHE_HOME=$PWD/fake-cache dune build @pkg-install 2>&1 | sed -E 's#[[:alnum:]]{32}#<hash>#g' | sed 's#[^ ]*_build#$TESTCASE_ROOT/_build#g'
-  $TESTCASE_ROOT/_build/.sandbox/<hash>/_private/default/.pkg/ocaml-base-compiler.1-<hash>/target/share/ocaml-base-compiler
+  $TESTCASE_ROOT/_build/.sandbox/<hash>/_private/default/.pkg/ocaml-base-compiler/target/share/ocaml-base-compiler
 

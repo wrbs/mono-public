@@ -8,6 +8,8 @@
 (*  exception on linking described in the file LICENSE.                   *)
 (*                                                                        *)
 (**************************************************************************)
+module Re = Dune_re
+
 open OpamTypes
 open OpamTypesBase
 open OpamStd.Op

@@ -1,13 +1,5 @@
-(env
- (_
-  (binaries ../../utils/ocamlformat.exe)))
-
 (cram
  (deps helpers.sh))
-
-(cram
- (applies_to fmt-test)
- (deps %{bin:ocamlformat}))
 
 (cram
  ; see https://github.com/ocaml/dune/pull/4728
@@ -25,8 +17,10 @@
  (applies_to what-dune-watches)
  (deps %{bin:strace}))
 
-;; Disabled due to timeouts
+;; These tests sometimes get stuck and time out:
 
 (cram
- (enabled_if false)
- (applies_to watching-eager-concurrent-build-command))
+ (applies_to
+  watching-eager-concurrent-build-command
+  watching-eager-concurrent-exec-command)
+ (enabled_if false))

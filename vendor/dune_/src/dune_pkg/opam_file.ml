@@ -291,5 +291,4 @@ let load_opam_file_with_contents ~contents:opam_file_string file name =
     ~sites:Dune_lang.Site.Map.empty
     ~allow_empty:true
     ~original_opam_file:(Some { file; contents = opam_file_string })
-    ~contents_basename:None
 ;;

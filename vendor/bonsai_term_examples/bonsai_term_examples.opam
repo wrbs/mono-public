@@ -6,6 +6,7 @@ bug-reports: "https://github.com/janestreet/bonsai_term_examples/issues"
 dev-repo: "git+https://github.com/janestreet/bonsai_term_examples.git"
 doc: "https://ocaml.janestreet.com/ocaml-core/latest/doc/bonsai_term_examples/index.html"
 license: "MIT"
+x-maintenance-intent: ["(latest)"]
 build: [
   ["dune" "build" "-p" name "-j" jobs]
 ]
@@ -19,12 +20,16 @@ depends: [
   "bonsai_test"
   "core"
   "core_unix"
-  "ppx_embed_file"
+  "file_path"
+  "filesystem"
   "ppx_expect"
   "ppx_jane"
   "dune"                   {>= "3.17.0"}
 ]
-available: arch != "arm32" & arch != "x86_32"
+available: arch != "x86_32"
+conflicts: [
+  "oxcaml-compiler" {< "5.2.0minus39"}
+]
 synopsis: "Some examples for bonsai_term"
 description: "
 Bonsai_term is a library for building reusable TUI componetns and apps

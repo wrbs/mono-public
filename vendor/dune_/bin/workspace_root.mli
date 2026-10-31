@@ -1,3 +1,5 @@
+open! Stdune
+
 (** Finding the root of the workspace *)
 
 module Kind : sig
@@ -17,15 +19,8 @@ type t =
   }
 
 val create
-  :  from:string
-  -> default_is_cwd:bool
+  :  default_is_cwd:bool
   -> specified_by_user:string option
-  -> unit
-  -> t option
+  -> (t, User_message.t) result
 
-val create_exn
-  :  from:string
-  -> default_is_cwd:bool
-  -> specified_by_user:string option
-  -> unit
-  -> t
+val create_exn : default_is_cwd:bool -> specified_by_user:string option -> t

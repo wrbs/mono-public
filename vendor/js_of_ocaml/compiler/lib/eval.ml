@@ -33,8 +33,7 @@ let clear_static_env () = String.Hashtbl.clear static_env
 
 let set_static_env s value = String.Hashtbl.add static_env s value
 
-let get_static_env s =
-  try Some (String.Hashtbl.find static_env s) with Not_found -> None
+let get_static_env s = String.Hashtbl.find_opt static_env s
 
 let int_unop l f =
   match l with
@@ -297,7 +296,8 @@ let eval_prim ~target x =
           nativeint_shiftop l Int32.shift_right_logical
       | "caml_nativeint_compare", [ NativeInt i; NativeInt j ] ->
           Some (Int (Targetint.of_int_exn (Int32.compare i j)))
-      | "caml_nativeint_to_int", [ Int32 i ] -> Some (Int (Targetint.of_int32_truncate i))
+      | "caml_nativeint_to_int", [ NativeInt i ] ->
+          Some (Int (Targetint.of_int32_truncate i))
       | "caml_checked_int32_to_int", [ Int32 i ]
         when Int32.equal i (Targetint.to_int32 (Targetint.of_int32_truncate i)) ->
           Some (Int (Targetint.of_int32_truncate i))
@@ -311,7 +311,8 @@ let eval_prim ~target x =
           Some (Int (Targetint.of_int32_truncate (Int64.to_int32 i)))
       | "caml_nativeint_of_int", [ Int i ] -> nativeint (Targetint.to_int32 i)
       (* int64 *)
-      | "caml_int64_bits_of_float", [ Float f ] -> int64 f
+
+      (* | "caml_int64_bits_of_float", [ Float f ] -> int64 f *)
       | "caml_int64_float_of_bits", [ Int64 i ]
         when match target with
              | `JavaScript ->
@@ -602,13 +603,16 @@ let eval_instr update_count inline_constant ~target info i =
   | Let (x, Prim (Extern "caml_atomic_load_field", [ Pv o; f ])) -> (
       match the_int info f with
       | None -> [ i ]
-      | Some i -> [ Let (x, Field (o, Targetint.to_int_exn i, Non_float)) ])
+      | Some i ->
+          incr update_count;
+          [ Let (x, Field (o, Targetint.to_int_exn i, Non_float)) ])
   | Let (x, Prim (IsInt, [ y ])) -> (
       match is_int info y with
       | Unknown -> [ i ]
       | Y ->
           let c = Constant (bool' true) in
           Flow.Info.update_def info x c;
+          incr update_count;
           [ Let (x, c) ]
       | N ->
           let c = Constant (bool' false) in
@@ -660,7 +664,15 @@ let eval_instr update_count inline_constant ~target info i =
       [ Let (jsoo, Constant (String backend_name))
       ; Let (x, Block (0, [| jsoo |], NotArray, Immutable))
       ]
-  | Let (_, Prim (Extern ("%resume" | "%perform" | "%reperform"), _)) ->
+  | Let
+      ( _
+      , Prim
+          ( Extern
+              ("%resume" | "%perform" | "%reperform" | "%with_stack"
+               | "%with_stack_bind"
+               | "%with_stack_preemptible"
+               | "%with_stack_bind_preemptible" )
+          , _ ) ) ->
       [ i ] (* We need that the arguments to this primitives remain variables *)
   | Let (x, Prim (prim, prim_args)) -> (
       let prim_args' =

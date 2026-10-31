@@ -1,0 +1,7 @@
+(library
+ (name hardcaml_computation_dsl_standard_functions)
+ (public_name hardcaml_computation_dsl.standard_functions)
+ (libraries bignum.bigint core hardcaml hardcaml_circuits
+   hardcaml_computation_dsl hardcaml_fixed_point zarith)
+ (preprocess
+  (pps ppx_hardcaml ppx_jane)))

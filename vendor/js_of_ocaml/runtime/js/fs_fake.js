@@ -149,7 +149,6 @@ class MlFakeDevice {
 
   rmdir(name, raise_unix) {
     var name_slash = name === "" ? "" : this.slash(name);
-    var r = new RegExp("^" + name_slash + "([^/]+)");
     if (!this.exists(name))
       caml_raise_system_error(
         raise_unix,
@@ -167,7 +166,7 @@ class MlFakeDevice {
         this.nm(name),
       );
     for (var n in this.content) {
-      if (n.match(r))
+      if (n.startsWith(name_slash) && n !== name_slash)
         caml_raise_system_error(
           raise_unix,
           "ENOTEMPTY",
@@ -187,14 +186,17 @@ class MlFakeDevice {
     if (!this.is_dir(name)) {
       caml_raise_sys_error(name + ": Not a directory");
     }
-    var r = new RegExp("^" + name_slash + "([^/]+)");
     var seen = {};
     var a = [];
     for (var n in this.content) {
-      var m = n.match(r);
-      if (m && !seen[m[1]]) {
-        seen[m[1]] = true;
-        a.push(m[1]);
+      if (n.startsWith(name_slash) && n !== name_slash) {
+        var last = n.indexOf("/", name_slash.length);
+        if (last < 0) last = undefined;
+        var m = n.slice(name_slash.length, last);
+        if (m && !seen[m]) {
+          seen[m] = true;
+          a.push(m);
+        }
       }
     }
     return a;
@@ -291,7 +293,7 @@ class MlFakeDevice {
           this.nm(name),
         );
       file = this.content[name];
-      if (f.truncate) file.truncate();
+      if (f.truncate) file.truncate(0);
     } else if (f.create) {
       this.create_dir_if_needed(name);
       this.content[name] = new MlFakeFile(caml_create_bytes(0));
@@ -360,8 +362,9 @@ class MlFakeFile extends MlFile {
 
   truncate(len) {
     var old = this.data;
+    var old_len = caml_ml_bytes_length(old);
     this.data = caml_create_bytes(len | 0);
-    caml_blit_bytes(old, 0, this.data, 0, len);
+    caml_blit_bytes(old, 0, this.data, 0, Math.min(len, old_len));
   }
 
   length() {
@@ -391,12 +394,13 @@ class MlFakeFile extends MlFile {
     if (offset + len >= clen) {
       len = clen - offset;
     }
-    if (len) {
+    if (len > 0) {
       var data = caml_create_bytes(len | 0);
       caml_blit_bytes(this.data, offset, data, 0, len);
       buf.set(caml_uint8_array_of_bytes(data), pos);
+      return len;
     }
-    return len;
+    return 0;
   }
 }
 
@@ -406,13 +410,20 @@ class MlFakeFile extends MlFile {
 class MlFakeFd_out extends MlFakeFile {
   constructor(fd, flags) {
     super(caml_create_bytes(0));
-    this.log = function (_s) {
-      return 0;
-    };
-    if (fd === 1 && typeof console.log === "function") this.log = console.log;
+    // Pick a stdout / stderr sink. console.log / console.error always
+    // append a newline, so wrap them to drop at most one trailing \n
+    // (otherwise OCaml's own newline doubles up).
+    var via_console = (sink) => (s) =>
+      sink(
+        s.length > 0 && s.charCodeAt(s.length - 1) === 10 ? s.slice(0, -1) : s,
+      );
+    if (fd === 1 && typeof console.log === "function")
+      this.log = via_console(console.log);
     else if (fd === 2 && typeof console.error === "function")
-      this.log = console.error;
-    else if (typeof console.log === "function") this.log = console.log;
+      this.log = via_console(console.error);
+    else if (typeof console.log === "function")
+      this.log = via_console(console.log);
+    else this.log = (_s) => 0;
     this.flags = flags;
   }
 
@@ -430,21 +441,11 @@ class MlFakeFd_out extends MlFakeFile {
   }
 
   write(buf, pos, len, raise_unix) {
-    var written = len;
     if (this.log) {
-      if (
-        len > 0 &&
-        pos >= 0 &&
-        pos + len <= buf.length &&
-        buf[pos + len - 1] === 10
-      )
-        len--;
-      // Do not output the last \n if present
-      // as console logging display a newline at the end
       var src = caml_create_bytes(len);
       caml_blit_bytes(caml_bytes_of_uint8_array(buf), pos, src, 0, len);
       this.log(src.toUtf16());
-      return written;
+      return len;
     }
     caml_raise_system_error(
       raise_unix,
@@ -460,6 +461,9 @@ class MlFakeFd_out extends MlFakeFile {
 
   seek(_len, _whence, raise_unix) {
     caml_raise_system_error(raise_unix, "ESPIPE", "lseek", "illegal seek");
+  }
+  pos() {
+    return -1;
   }
 
   close() {
@@ -544,6 +548,11 @@ class MlFakeFd {
       );
     this.offset = offset;
     this.seeked = true;
+    return offset;
+  }
+
+  pos() {
+    return this.offset;
   }
 
   close() {

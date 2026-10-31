@@ -3,7 +3,7 @@ Packages can export environment variables
   $ . ./helpers.sh
 
   $ make_lockdir
-  $ make_lockpkg test <<EOF
+  $ cat >dune.lock/test.pkg <<EOF
   > (version 0.0.1)
   > (exported_env
   >  (= FOO bar)
@@ -12,7 +12,7 @@ Packages can export environment variables
   >  (:= BAR zzz))
   > EOF
 
-  $ make_lockpkg usetest <<'EOF'
+  $ cat >dune.lock/usetest.pkg <<'EOF'
   > (depends test)
   > (version 1.2.3)
   > (build

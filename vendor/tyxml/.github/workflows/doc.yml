@@ -1,0 +1,131 @@
+# Build the TyXML documentation (manual + API) with odoc, theme it with the
+# Ocsigen chrome (wodoc), and publish it on the project's gh-pages branch, served
+# at https://ocsigen.org/tyxml/. See doc/README.md for the full picture.
+#
+# CI deploys ONLY the "dev" docs and ONLY from master. Stable versions are built
+# by hand and committed to gh-pages at release time, so there is no dispatch /
+# release path here. Each run replaces only the dev/ directory; the other version
+# directories already on gh-pages are PRESERVED.
+name: Documentation
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Publish a stable version: freeze the dev docs now on gh-pages as /<version>/ and repoint `latest` (e.g. 1.2.3). Leave empty to just rebuild dev."
+        required: false
+        default: ""
+
+concurrency:
+  # This workflow only runs on master and on manual dispatch, and it pushes
+  # to gh-pages: never cancel a deployment in flight.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-deploy:
+    if: github.repository == 'ocsigen/tyxml' && (github.event_name != 'workflow_dispatch' || github.event.inputs.version == '')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.4.0"
+
+      # The bottleneck of this job is compiling the dependency tree plus wodoc and
+      # odoc from source; setup-ocaml only caches the base switch (the compiler),
+      # so they recompiled on every push. Cache the whole _opam switch keyed on the
+      # *.opam files (the dep set) and wodoc's HEAD commit; on a cache hit the
+      # install is skipped and only the project itself is (re)built by the doc step
+      # below. The key changes -- and the deps/wodoc rebuild once -- only when an
+      # *.opam file or wodoc move.
+      - name: Resolve wodoc HEAD commit
+        id: wodoc
+        run: echo "sha=$(git ls-remote https://github.com/ocsigen/wodoc.git HEAD | cut -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the opam switch (deps + wodoc)
+        id: switch-cache
+        uses: actions/cache@v6
+        with:
+          path: _opam
+          key: opam-switch-${{ runner.os }}-ocaml5.4.0-${{ hashFiles('*.opam') }}-wodoc-${{ steps.wodoc.outputs.sha }}
+
+      - name: Install dependencies
+        if: steps.switch-cache.outputs.cache-hit != 'true'
+        run: |
+          opam install . --deps-only --with-doc   # odoc is a with-doc dep
+          # wodoc: the odoc driver that themes the pages with the Ocsigen chrome.
+          opam pin add -n wodoc https://github.com/ocsigen/wodoc.git
+          opam install wodoc
+
+      - name: Build documentation (dev)
+        # wodoc build runs `dune build @doc --profile release`, assembles the
+        # themed site from doc/wodoc, and fetches the shared menu from its single
+        # canonical copy in ocsigen.github.io.
+        run: >-
+          opam exec -- wodoc build --config doc/wodoc
+          --menu https://ocsigen.org/doc/menu.html
+          --out "$PWD/_doc-site/dev" --label dev
+          --strict-refs
+
+      - name: Deploy to gh-pages (replace only dev/, keep the rest)
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: _doc-site/dev
+          target-folder: dev
+          clean: true
+
+  release:
+    # Manual run with a version: freeze the dev docs currently on gh-pages as the
+    # stable /<version>/ and repoint `latest` at it (refreshing versions.json).
+    # No rebuild -- the docs of a release are exactly the dev docs at that point.
+    if: github.repository == 'ocsigen/tyxml' && github.event_name == 'workflow_dispatch' && github.event.inputs.version != ''
+    runs-on: ubuntu-latest
+    # Pass the user-supplied version through the environment; never interpolate
+    # it directly into a run: shell (avoids command injection from the input).
+    env:
+      VERSION: ${{ github.event.inputs.version }}
+    permissions:
+      contents: write
+    steps:
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.4.0"
+
+      - name: Install wodoc
+        run: |
+          opam pin add -n wodoc https://github.com/ocsigen/wodoc.git
+          opam install wodoc
+
+      - name: Checkout gh-pages
+        uses: actions/checkout@v7
+        with:
+          ref: gh-pages
+          path: site
+          fetch-depth: 0
+
+      - name: Freeze dev as the stable version and repoint latest
+        # wodoc release: cp -a site/dev site/<version>, ln -sfn <version> latest,
+        # write the root index.html redirect if missing, refresh versions.json.
+        run: >-
+          opam exec -- wodoc release --site site --from dev
+          --version "$VERSION"
+
+      - name: Commit and push gh-pages
+        run: |
+          cd site
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet \
+            || git commit -m "Release doc $VERSION (freeze dev, repoint latest)"
+          git push

@@ -38,20 +38,27 @@
  (applies_to
   github_issue_587
   shadow
-  shadow2
   shadow4
   shadow5
   js_stack_overflow
   expansion
   github_issue_1066
+  github_issue_1431
   include_module_type_of_preamble)
  (enabled_if
   (>= %{ocaml_version} 4.08.0)))
 
+; 4.09.0 and above
+
+(cram
+ (applies_to shadow2)
+ (enabled_if
+  (>= %{ocaml_version} 4.13.0)))
+
 ; 4.13.0 and above
 
 (cram
- (applies_to github_issue_793)
+ (applies_to github_issue_793 apply_inner_substs_module_type)
  (enabled_if
   (>= %{ocaml_version} 4.13.0)))
 
@@ -61,6 +68,13 @@
  (applies_to lookup_def shadow3 to_remove_test)
  (enabled_if
   (>= %{ocaml_version} 4.14.0)))
+
+; 5.5.0 and above
+
+(cram
+ (applies_to github_issue_1426)
+ (enabled_if
+  (>= %{ocaml_version} 5.5.0)))
 
 ; Disable the big_search_path test, as it had too many false positive in CI.
 ; Kept for reference until the test is integrated in a benchmark. (TODO)

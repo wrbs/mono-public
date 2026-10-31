@@ -32,90 +32,91 @@ module Loc_comparison_result = struct
     | Inside -> true
 end
 
-let get_jkind_abbrev_doc abbrev =
+let get_jkind_abbrev_doc (abbrev : Longident.t) =
   let open Option.Infix in
   let open struct
     type docpage = Kind_syntax | Unboxed_types
   end in
   let* description, docpage =
     match abbrev with
-    | "any" ->
+    | Lident "any" ->
       Some
         ("The top of the kind lattice; all types have this kind.", Kind_syntax)
-    | "any_non_null" -> Some ("A synonym for `any mod non_null`.", Kind_syntax)
-    | "value_or_null" ->
+    | Lident "any_non_null" ->
+      Some ("A synonym for `any mod non_null`.", Kind_syntax)
+    | Lident "value_or_null" ->
       Some
         ( "The kind of ordinary OCaml types, but with the possibility that the \
            type contains `null`.",
           Kind_syntax )
-    | "value" -> Some ("The kind of ordinary OCaml types", Kind_syntax)
-    | "void" ->
+    | Lident "value" -> Some ("The kind of ordinary OCaml types", Kind_syntax)
+    | Lident "void" ->
       Some
         ( "The layout of types that are represented by 0 bits at runtime; \
            these types can contain only 1 value.",
           Kind_syntax )
-    | "immediate64" ->
+    | Lident "immediate64" ->
       Some
         ( "On 64-bit platforms, the kind of types inhabited only by tagged \
            integers.",
           Kind_syntax )
-    | "immediate" ->
+    | Lident "immediate" ->
       Some ("The kind of types inhabited only by tagged integers.", Kind_syntax)
-    | "immediate_or_null" ->
+    | Lident "immediate_or_null" ->
       Some
         ( "The kind of types inhabited by tagged integers and the bit pattern \
            containing all 0s.",
           Kind_syntax )
-    | "float64" ->
+    | Lident "float64" ->
       Some
         ( "The layout of types represented by a 64-bit machine float.",
           Unboxed_types )
-    | "float32" ->
+    | Lident "float32" ->
       Some
         ( "The layout of types represented by a 32-bit machine float.",
           Unboxed_types )
-    | "word" ->
+    | Lident "word" ->
       Some
         ( "The layout of types represented by a native-width machine word.",
           Unboxed_types )
-    | "bits8" ->
+    | Lident "bits8" ->
       Some
         ( "The layout of types represented by an 8-bit machine word.",
           Unboxed_types )
-    | "bits16" ->
+    | Lident "bits16" ->
       Some
         ( "The layout of types represented by a 16-bit machine word.",
           Unboxed_types )
-    | "bits32" ->
+    | Lident "bits32" ->
       Some
         ( "The layout of types represented by a 32-bit machine word.",
           Unboxed_types )
-    | "bits64" ->
+    | Lident "bits64" ->
       Some
         ( "The layout of types represented by a 64-bit machine word.",
           Unboxed_types )
-    | "vec128" ->
+    | Lident "vec128" ->
       Some
         ( "The layout of types represented by a 128-bit machine vector.",
           Unboxed_types )
-    | "vec256" ->
+    | Lident "vec256" ->
       Some
         ( "The layout of types represented by a 256-bit machine vector.",
           Unboxed_types )
-    | "vec512" ->
+    | Lident "vec512" ->
       Some
         ( "The layout of types represented by a 512-bit machine vector.",
           Unboxed_types )
-    | "immutable_data" ->
+    | Lident "immutable_data" ->
       Some
         ( "The kind of types that contain no mutable parts and no functions.",
           Kind_syntax )
-    | "sync_data" ->
+    | Lident "sync_data" ->
       Some
         ( "The kind of types that contain no mutable parts (except possibly \
            for atomic fields) and no functions.",
           Kind_syntax )
-    | "mutable_data" ->
+    | Lident "mutable_data" ->
       Some
         ( "The kind of types that may have mutable parts but contain no \
            functions.",
@@ -170,22 +171,6 @@ let get_mod_bound_doc mod_bound =
          the OCaml heap"
     | Axis_pair (Nonmodal Externality, External) ->
       Some "Values of types of this kind are never pointers to the OCaml heap"
-    | Axis_pair (Nonmodal Nullability, Maybe_null) ->
-      Some
-        "Values of types of this kind might be the bit pattern containing all \
-         0s"
-    | Axis_pair (Nonmodal Nullability, Non_null) ->
-      Some
-        "Values of types of this kind that are also a subkind of `value` are \
-         never the bit pattern containing all 0s"
-    | Axis_pair (Nonmodal Separability, Non_float) ->
-      Some "Values of types of this kind are never pointers to floats."
-    | Axis_pair (Nonmodal Separability, Separable) ->
-      Some
-        "No type of this kind includes both pointers to a float and other \
-         values."
-    | Axis_pair (Nonmodal Separability, Maybe_separable) ->
-      Some "Types of this kind may mix pointers to floats with other values."
     | Everything ->
       Some
         "Synonym for \"global aliased many contended portable unyielding \
@@ -200,13 +185,8 @@ let get_mod_bound_doc mod_bound =
      }
     : syntax_info)
 
-let get_mode_doc mode =
+let get_mode_doc (Atom (axis, mode) : Mode.Alloc.atom) =
   let open Option.Infix in
-  let* (P (axis, mode)) =
-    match Typemode.Mode_axis_pair.of_string mode with
-    | exception Not_found -> None
-    | res -> Some res
-  in
   let* description =
     match (axis, mode) with
     | Comonadic Areality, Local ->
@@ -221,8 +201,16 @@ let get_mode_doc mode =
       Some
         "The mutable parts of values with this mode can be read, but not \
          written (unless they are atomic)"
+    | Monadic Contention, Corrupted ->
+      Some
+        "The mutable parts of values with this mode can be written, but not \
+         read (unless they are atomic)"
     | Monadic Contention, Uncontended ->
       Some "The mutable parts of values with this mode can be fully accessed"
+    | Comonadic Portability, Corruptible ->
+      Some
+        "Values with this mode can be written to (but not read from) by other \
+         threads without causing data races"
     | Comonadic Portability, Nonportable ->
       Some
         "Values with this mode cannot be sent to or shared with other threads, \
@@ -255,14 +243,20 @@ let get_mode_doc mode =
       Some
         "The mutable parts of values with this mode can be read, but not \
          written"
+    | Monadic Visibility, Write ->
+      Some
+        "The mutable parts of values with this mode can be written, but not \
+         read"
     | Monadic Visibility, Read_write ->
       Some "The mutable parts of values with this mode can be fully accessed"
     | Comonadic Statefulness, Stateful ->
       Some "Functions with this mode can read and write mutable data"
-    | Comonadic Statefulness, Observing ->
+    | Comonadic Statefulness, Reading ->
       Some "Functions with this mode can read but not write mutable data"
     | Comonadic Statefulness, Stateless ->
       Some "Functions with this mode cannot access mutable data"
+    | Comonadic Statefulness, Writing ->
+      Some "Functions with this mode can write but not read mutable data"
     | Comonadic Forkable, Forkable ->
       Some "Functions with this mode may be executed concurrently."
     | Comonadic Forkable, Unforkable ->
@@ -291,33 +285,63 @@ let get_mode_doc mode =
      { name = "Mode"; description; documentation = doc_url; level = Advanced }
     : syntax_info)
 
-let get_modality_doc modality =
-  let open Option.Infix in
-  let* (P (axis, _)) =
-    match Typemode.Modality_axis_pair.of_string modality with
-    | exception Not_found -> None
-    | res -> Some res
-  in
+let get_modality_doc (Atom (axis, modality) : Mode.Modality.atom) =
   let description =
     (* CR-someday: Detect the context that the modality is within to make this message
        more detailed. Ex: "This field is always stronger than _, even if the record has a
        weaker mode." *)
     match axis with
     | Comonadic _ ->
-      Format.asprintf
-        "The annotated value's mode is always at least as strong as `%s`, even \
+      Format_doc.asprintf
+        "The annotated value's mode is always at least as strong as `%a`, even \
          if its container's mode is weaker."
+        (Mode.Modality.Per_axis.print axis)
         modality
     | Monadic _ ->
-      Format.asprintf
-        "The annotated value's mode is always at least as weak as `%s`, even \
+      Format_doc.asprintf
+        "The annotated value's mode is always at least as weak as `%a`, even \
          if its container's mode is a stronger."
+        (Mode.Modality.Per_axis.print axis)
         modality
   in
   (Some
      { name = "Modality";
        description;
        documentation = syntax_doc_url Oxcaml "modes/syntax/";
+       level = Advanced
+     }
+    : syntax_info)
+
+let get_scannable_axis_annotation_doc annot =
+  let open Option.Infix in
+  let* description =
+    match annot with
+    | "non_pointer" -> Some "Values of types of this kind are never pointers."
+    | "non_pointer64" ->
+      Some
+        "Values of types of this kind are never pointers on 64-bit platforms."
+    | "non_float" ->
+      Some "Values of types of this kind are never pointers to floats."
+    | "separable" ->
+      Some
+        "No type of this kind includes both pointers to a float and other \
+         values."
+    | "maybe_separable" ->
+      Some "Types of this kind may mix pointers to floats with other values."
+    | "non_null" ->
+      Some
+        "Values of types of this kind are never the bit pattern containing all \
+         0s."
+    | "maybe_null" ->
+      Some
+        "Values of types of this kind might be the bit pattern containing all \
+         0s."
+    | _ -> None
+  in
+  (Some
+     { name = "Kind Modifier";
+       description;
+       documentation = syntax_doc_url Oxcaml "kinds/syntax/";
        level = Advanced
      }
     : syntax_info)
@@ -644,27 +668,30 @@ let get_oxcaml_syntax_doc cursor_loc nodes : syntax_info =
   in
   match nodes with
   (* Modes and modalities *)
-  | Mode { txt = Mode mode; _ } :: ancestors -> (
-    match ancestors with
-    | Jkind_annotation _ :: _ -> get_mod_bound_doc mode
-    | _ -> get_mode_doc mode)
-  | Modality { txt = Modality modality; _ } :: ancestors -> (
+  | Mode { txt = mode; _ } :: _ -> get_mode_doc mode
+  | Modality { txt = modality; _ } :: ancestors -> (
     match ancestors with
     | Jkind_annotation _ :: _ ->
       (* CR-someday: Provide separate documatation for modalities within a jkind *)
       get_modality_doc modality
     | _ -> get_modality_doc modality)
   (* Jkinds *)
-  | Jkind_annotation { pjkind_desc = Pjk_abbreviation abbrev; _ } :: _ ->
-    get_jkind_abbrev_doc abbrev
-  | Jkind_annotation { pjkind_desc = Pjk_mod _; _ } :: _ ->
+  | Mod_bound { txt = Mode mod_bound; _ } :: _ -> get_mod_bound_doc mod_bound
+  | Scannable_axis_annotation { txt = annot; _ } :: _ ->
+    get_scannable_axis_annotation_doc annot
+  | Jkind_annotation { pjka_desc = Pjk_abbreviation (abbrev, _); _ } :: _ ->
+    (* CR-someday: It isn't ideal that this is based on the parsetree, as this will result
+       in an incorrect hint in the presence of shadowing. To properly fix, the compiler
+       should introduce a typed jkind into the typedtree. Internal ticket 6600. *)
+    get_jkind_abbrev_doc abbrev.txt
+  | Jkind_annotation { pjka_desc = Pjk_mod _; _ } :: _ ->
     Some
       { name = "`mod` keyword (in a kind)";
         description = "Types of this kind will cross the following modes";
         documentation = syntax_doc_url Oxcaml "kinds/intro/";
         level = Advanced
       }
-  | Jkind_annotation { pjkind_desc = Pjk_with (_, with_type, _); _ } :: _ -> (
+  | Jkind_annotation { pjka_desc = Pjk_with (_, with_type, _); _ } :: _ -> (
     match compare_cursor_to_loc with_type.ptyp_loc with
     | Before ->
       Some
@@ -726,7 +753,8 @@ let get_oxcaml_syntax_doc cursor_loc nodes : syntax_info =
              match extra with
              | Typedtree.Texp_stack -> true
              | _ -> false)
-         && (* In this case, [exp_loc] differs from the location returned by
+         &&
+         (* In this case, [exp_loc] differs from the location returned by
                [Browse_raw.node_merlin_loc] (which is whats used to determine [nodes]).
                The [Browse_raw.node_merlin_loc] one includes the stack_, whereas [exp_loc]
                doesn't. Since we already know that the cursor is in the
@@ -813,7 +841,8 @@ let get_syntax_doc cursor_loc node : syntax_info =
     :: ( _,
          Module_type_constraint
            (Tmodtype_explicit
-             { mty_desc = Tmty_with (_, [ (_, _, Twith_modtype _) ]); _ }) )
+              ({ mty_desc = Tmty_with (_, [ (_, _, Twith_modtype _) ]); _ }, _))
+       )
     :: _ ->
     Some
       { name = "Module substitution";

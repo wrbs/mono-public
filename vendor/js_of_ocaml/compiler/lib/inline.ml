@@ -189,7 +189,7 @@ type info =
 type context =
   { profile : Profile.t  (** Aggressive inlining? *)
   ; p : program
-  ; live_vars : int array  (** Occurence count of all variables *)
+  ; live_vars : int array  (** Occurrence count of all variables *)
   ; inline_count : int ref  (** Inlining statistics *)
   ; env : info Var.Map.t  (** Functions that are candidate for inlining *)
   ; in_loop : bool Lazy.t  (** Whether the current block is in a loop *)
@@ -454,7 +454,7 @@ and should_inline ~context info args =
         || (not (Lazy.force !(context.has_closures)))
            && Option.equal Var.equal info.enclosing_function context.enclosing_function
     | `Wasm, _ | `JavaScript, `Double_translation -> true
-    | `JavaScript, `Jspi -> assert false)
+    | `JavaScript, (`Jspi | `Native) -> assert false)
   && (functor_like ~context info
      || (context.live_vars.(Var.idx info.f) = 1
         &&
@@ -620,7 +620,12 @@ let rec inline_recursively ~context ~info p params (pc, _) args =
                      this call. In particular, this function is
                      applied only once. *)
                   let f = Var.Map.find f subst in
-                  inline_function ~context i x f args rem state
+                  (* Force duplication: the actual argument [f] is
+                     still referenced in the block arguments that
+                     pass it to the formal parameter. Without
+                     duplication, the closure's params would conflict
+                     with the intermediate block's params. *)
+                  inline_function ~context ~force_duplicate:true i x f args rem state
               | _ -> i :: rem, state)
             ~init:([], (block.branch, p))
             block.body
@@ -630,7 +635,7 @@ let rec inline_recursively ~context ~info p params (pc, _) args =
       p.blocks
       p
 
-and inline_function ~context i x f args rem state =
+and inline_function ~context ~force_duplicate i x f args rem state =
   let info = Var.Map.find f context.env in
   let { params; cont; _ } = info in
   trace_inlining ~context info x args;
@@ -641,14 +646,17 @@ and inline_function ~context i x f args rem state =
     if closure_count ~context info > 0 then context.has_closures := lazy true;
     context.live_vars.(Var.idx f) <- context.live_vars.(Var.idx f) - 1;
     let p, params, cont =
-      if context.live_vars.(Var.idx f) > 0
-      then (
+      if force_duplicate || context.live_vars.(Var.idx f) > 0
+      then
         let p, _f, params, cont =
           Duplicate.closure p ~f ~params ~cont context.live_vars
         in
-        (* It's ok to ignore the [_f] because the function is not recursive *)
-        assert (not info.recursive);
-        p, params, cont)
+        (* It's ok to ignore [_f]: self-recursive functions never
+           reach this point (live_vars >= 2 due to the self-reference,
+           so should_inline returns false). Mutually-recursive
+           functions are fine since their body does not reference
+           themselves. *)
+        p, params, cont
       else p, params, cont
     in
     let p = inline_recursively ~context ~info p params cont args in
@@ -661,7 +669,7 @@ let inline_in_block ~context pc block p =
       ~f:(fun i (rem, state) ->
         match i with
         | Let (x, Apply { f; args; exact = true; _ }) when Var.Map.mem f context.env ->
-            inline_function ~context i x f args rem state
+            inline_function ~context ~force_duplicate:false i x f args rem state
         | _ -> i :: rem, state)
       ~init:([], (block.branch, p))
       block.body

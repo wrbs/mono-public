@@ -27,6 +27,8 @@ let pg_hba =
   [ "# TYPE  DATABASE        USER                 ADDRESS      METHOD"
   ; "local   all             postgres                          trust"
   ; "host    all             postgres             127.0.0.1/32 trust"
+  ; "local   all             +role_scram_login                 scram-sha-256"
+  ; "host    all             +role_scram_login    127.0.0.1/32 scram-sha-256"
   ; "local   all             +role_password_login              md5"
   ; "host    all             +role_password_login 127.0.0.1/32 md5"
   ; ""
@@ -42,12 +44,14 @@ let socket_dir =
 let tempfiles_dir = Filename.temp_dir_name
 
 let fork_redirect_exec ~prog ~args ~stdouterr_file =
-  match Unix.fork () with
-  | `In_the_parent pid -> pid
-  | `In_the_child ->
-    Unix.dup2 ~src:stdouterr_file ~dst:Unix.stdout ();
-    Unix.dup2 ~src:stdouterr_file ~dst:Unix.stderr ();
-    never_returns (Unix.exec ~prog ~argv:(prog :: args) ())
+  Unix.fork_exec
+    ~prog
+    ~argv:(prog :: args)
+    ~preexec:
+      [ Unix.Pre_exec_command.Fd_dup2 { src = stdouterr_file; dst = Unix.stdout }
+      ; Unix.Pre_exec_command.Fd_dup2 { src = stdouterr_file; dst = Unix.stderr }
+      ]
+    ()
 ;;
 
 let create ?(extra_server_args = []) () =

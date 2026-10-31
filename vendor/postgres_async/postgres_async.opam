@@ -6,6 +6,7 @@ bug-reports: "https://github.com/janestreet/postgres_async/issues"
 dev-repo: "git+https://github.com/janestreet/postgres_async.git"
 doc: "https://ocaml.janestreet.com/ocaml-core/latest/doc/postgres_async/index.html"
 license: "MIT"
+x-maintenance-intent: ["(latest)"]
 build: [
   ["dune" "build" "-p" name "-j" jobs]
 ]
@@ -18,9 +19,16 @@ depends: [
   "core"
   "core_kernel"
   "ppx_jane"
+  "base64"       {>= "3.4.0"}
+  "cryptokit"    {>= "1.16" & < "1.17"}
+  "cstruct"      {>= "6.0.0"}
   "dune"         {>= "3.17.0"}
+  "pbkdf"
 ]
-available: arch != "arm32" & arch != "x86_32"
+available: arch != "x86_32"
+conflicts: [
+  "oxcaml-compiler" {< "5.2.0minus39"}
+]
 synopsis: "OCaml/async implementation of the postgres protocol (i.e., does not use C-bindings to libpq)"
 description: "
 postgres_async is an OCaml PostgreSQL client that implements the PostgreSQL

@@ -26,4 +26,6 @@ val to_dyn : t -> Dyn.t
 
 val test : t -> Path.t -> bool
 val test_basename : t -> basename:string -> bool
-val digest : t -> Digest.t
+
+(** Raises on non-serialisable globs, just like most other functions above. *)
+val digest_exn : t -> Digest.t

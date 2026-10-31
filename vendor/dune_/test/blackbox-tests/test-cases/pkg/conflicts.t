@@ -17,9 +17,8 @@ The solver should say no solution rather than just ignoring the conflict.
   >  (conflicts foo)
   >  (depends bar))
   > EOF
-  Error:
-  Unable to solve dependencies while generating lock directory: dune.lock
-  
+  Error: Unable to solve dependencies for the following lock directories:
+  Lock directory dune.lock:
   Couldn't solve the package dependency formula.
   Selected candidates: bar.0.0.1 x.dev
   - foo -> (problem)
@@ -43,9 +42,8 @@ There could be more than one conflict and they can have version constraints:
   >  (conflicts (foo (< 0.2)) (foo2 (< 0.2)))
   >  (depends bar bar2))
   > EOF
-  Error:
-  Unable to solve dependencies while generating lock directory: dune.lock
-  
+  Error: Unable to solve dependencies for the following lock directories:
+  Lock directory dune.lock:
   Couldn't solve the package dependency formula.
   Selected candidates: bar.0.0.1 bar2.0.0.1 x.dev
   - foo -> (problem)
@@ -71,9 +69,8 @@ disjunction, either package is problematic:
 
   $ mkpkg dune 3.11
   $ echo '(lang dune 3.11)' | solve_project 2>&1 | sed -E 's/3.[0-9]+/3.XX/'
-  Error:
-  Unable to solve dependencies while generating lock directory: dune.lock
-  
+  Error: Unable to solve dependencies for the following lock directories:
+  Lock directory dune.lock:
   Couldn't solve the package dependency formula.
   Selected candidates: bar.0.0.1 bar2.0.0.1 x.dev
   - dune -> dune.3.XX
@@ -89,9 +86,8 @@ Adding a new version of `foo` only resolves one conflict:
 
   $ mkpkg foo 0.2
   $ echo '(lang dune 3.11)' | solve_project 2>&1 | sed -E 's/3.[0-9]+/3.XX/'
-  Error:
-  Unable to solve dependencies while generating lock directory: dune.lock
-  
+  Error: Unable to solve dependencies for the following lock directories:
+  Lock directory dune.lock:
   Couldn't solve the package dependency formula.
   Selected candidates: bar.0.0.1 bar2.0.0.1 foo.0.2 x.dev
   - dune -> dune.3.XX

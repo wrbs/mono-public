@@ -8,7 +8,7 @@ Build a package with make
   > foo: ; @echo running makefile
   > EOF
   $ make_lockdir
-  $ make_lockpkg foo <<EOF
+  $ cat >dune.lock/foo.pkg <<EOF
   > (version 0.0.1)
   > (build (run %{make}))
   > (source (copy $PWD/foo))

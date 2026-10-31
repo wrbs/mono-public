@@ -24,14 +24,6 @@ documentation for each command is available through ``dune COMMAND --help``.
 
    Clean the project.
 
-.. describe:: dune rocq
-
-   Command group related to Rocq.
-
-   .. describe:: dune rocq top
-
-      Execute a Rocq toplevel with the local configuration.
-
 .. describe:: dune coq
 
    Command group related to Coq.

@@ -185,9 +185,16 @@ module Mangle = struct
                |> Module_name.of_string
            ; public = main_module_name
            })
-    | Exe -> Module_name.of_string "dune__exe" |> Visibility.Map.make_both |> Option.some
+    | Exe ->
+      sprintf "dune__exe"
+      |> Module_name.of_string
+      |> Visibility.Map.make_both
+      |> Option.some
     | Melange ->
-      Module_name.of_string "melange" |> Visibility.Map.make_both |> Option.some
+      sprintf "melange"
+      |> Module_name.of_string
+      |> Visibility.Map.make_both
+      |> Option.some
     | Unwrapped -> None
   ;;
 
@@ -220,8 +227,9 @@ module Mangle = struct
       then None
       else
         Some
-          (List.map ~f:Module_name.uncapitalize path
-           |> Path.Local.L.relative Path.Local.root
+          (Path.Local.L.relative
+             Path.Local.root
+             (List.map ~f:Module_name.uncapitalize path)
            |> Path.Local.set_extension ~ext:".ml")
     in
     Module.generated ?install_as path ~obj_name ~kind ~src_dir:obj_dir
@@ -410,9 +418,7 @@ module Group = struct
     fun acc modules m -> loop acc modules (Module.path m)
   ;;
 
-  (* [parents acc modules m] returns [acc] followed by all parent groups of 
-     module [m], ordered from innermost to outermost parent. *)
-  let parents (t : t) m = parents_modules [ t ] t.modules m |> List.rev
+  let parents (t : t) m = parents_modules [ t ] t.modules m
 
   module Memo_traversals = struct
     let rec parallel_map ({ alias; modules; name = _ } as t) ~f =
@@ -455,11 +461,8 @@ module Group = struct
         (* XXX ocamldep can't currently give us precise dependencies for
            modules under [(include_subdirs qualified)] directories. For that
            reason we currently depend on everything under the sub-directory. *)
-        let closure =
-          Module_name.Map.values g.modules |> List.concat_map ~f:closure_node
-        in
-        lib_interface :: closure
-      | _ -> [ g.alias; lib_interface ]
+        Module_name.Map.values g.modules |> List.concat_map ~f:closure_node
+      | _ -> [ lib_interface ]
 
     and closure_node = function
       | Module m -> [ m ]
@@ -487,10 +490,7 @@ module Group = struct
       Ok (if Module_name.equal name (Module.name li) then [ li ] else [])
     | _ ->
       (* TODO don't recompute this *)
-      let parents =
-        parents_modules [ t ] t.modules of_
-        |> List.map ~f:(fun g -> g.modules, Some g.name)
-      in
+      let parents = parents t of_ |> List.map ~f:(fun g -> g.modules, Some g.name) in
       Find_dep.find_dep_of_parents parents name
   ;;
 
@@ -792,16 +792,7 @@ let to_dyn t =
   | Stdlib s -> variant "Stdlib" [ Stdlib.to_dyn s ]
 ;;
 
-let lib
-      ~obj_dir
-      ~main_module_name
-      ~wrapped
-      ~stdlib
-      ~lib_name
-      ~implements
-      ~has_instances
-      ~modules
-  =
+let lib ~obj_dir ~main_module_name ~wrapped ~stdlib ~lib_name ~implements ~modules =
   let make_wrapped main_module_name =
     Wrapped
       (Wrapped.make ~obj_dir ~lib_name ~implements ~modules ~main_module_name ~wrapped)
@@ -819,7 +810,7 @@ let lib
          let mangle = Mangle.Unwrapped in
          Unwrapped (Unwrapped.of_trie modules ~mangle ~obj_dir)
        | (Yes_with_transition _ | Simple true), Some main_module_name, Some m ->
-         if Module.name m = main_module_name && (not implements) && not has_instances
+         if Module.name m = main_module_name && not implements
          then Singleton m
          else make_wrapped main_module_name
        | (Yes_with_transition _ | Simple true), Some main_module_name, None ->
@@ -846,15 +837,15 @@ let exe_unwrapped modules ~obj_dir =
   with_obj_map modules
 ;;
 
-let make_wrapped ~obj_dir ~modules ~has_instances kind =
+let make_wrapped ~obj_dir ~modules kind =
   let mangle : Mangle.t =
     match kind with
     | `Exe -> Exe
     | `Melange -> Melange
   in
   match Module_trie.as_singleton modules with
-  | Some m when not has_instances -> make_singleton m mangle
-  | _ ->
+  | Some m -> make_singleton m mangle
+  | None ->
     let modules = Wrapped (Wrapped.make_exe_or_melange ~obj_dir ~modules mangle) in
     with_obj_map modules
 ;;
@@ -1036,6 +1027,19 @@ module With_vlib = struct
     function
     | Modules t -> lib_interface t
     | Impl { impl = _; vlib; _ } -> lib_interface vlib
+  ;;
+
+  let main_module_name =
+    let main_module_name t =
+      match t.modules with
+      | Singleton m -> Some (Module.name m)
+      | Unwrapped _ -> None
+      | Wrapped w -> Some w.group.name
+      | Stdlib w -> Some w.main_module_name
+    in
+    function
+    | Modules t -> main_module_name t
+    | Impl { vlib; impl = _; _ } -> main_module_name vlib
   ;;
 
   let impl =

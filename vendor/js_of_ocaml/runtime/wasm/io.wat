@@ -50,17 +50,14 @@
    (import "bindings" "unregister_channel"
       (func $unregister_channel (param (ref eq))))
    (import "bindings" "channel_list" (func $channel_list (result anyref)))
+   (import "jslib" "caml_js_fun_call"
+      (func $caml_js_fun_call
+         (param (ref eq)) (param (ref eq)) (result (ref eq))))
+   (import "jslib" "caml_jsbytes_of_string"
+      (func $caml_jsbytes_of_string (param (ref eq)) (result (ref eq))))
    (import "bindings" "ta_new" (func $ta_new (param i32) (result (ref extern))))
    (import "bindings" "ta_copy"
       (func $ta_copy (param (ref extern)) (param i32) (param i32) (param i32)))
-   (import "bindings" "ta_blit_from_bytes"
-      (func $ta_blit_from_bytes
-         (param (ref $bytes)) (param i32) (param (ref extern)) (param i32)
-         (param i32)))
-   (import "bindings" "ta_blit_to_bytes"
-      (func $ta_blit_to_bytes
-         (param (ref extern)) (param i32) (param (ref $bytes)) (param i32)
-         (param i32)))
    (import "bindings" "ta_subarray"
       (func $ta_subarray
          (param (ref extern)) (param i32) (param i32) (result (ref extern))))
@@ -76,8 +73,6 @@
       (tag $javascript_exception (param externref)))
    (import "sys" "caml_handle_sys_error"
       (func $caml_handle_sys_error (param externref)))
-   (import "fail" "caml_invalid_argument"
-      (func $caml_invalid_argument (param (ref eq))))
    (import "custom" "custom_compare_id"
       (func $custom_compare_id
         (param (ref eq)) (param (ref eq)) (param i32) (result i32)))
@@ -88,6 +83,12 @@
       (func $caml_copy_int64 (param i64) (result (ref eq))))
    (import "int64" "Int64_val"
       (func $Int64_val (param (ref eq)) (result i64)))
+   (import "bigarray" "caml_blit_dataview_to_bytes"
+      (func $caml_blit_dataview_to_bytes
+         (param (ref extern) i32 (ref $bytes) i32 i32)))
+   (import "bigarray" "caml_blit_bytes_to_dataview"
+      (func $caml_blit_bytes_to_dataview
+         (param (ref $bytes) i32 (ref extern) i32 i32)))
    (import "bigarray" "caml_ba_get_data"
       (func $caml_ba_get_data (param (ref eq)) (result (ref extern))))
 
@@ -172,7 +173,9 @@
             (field $curr (mut i32))
             (field $max (mut i32))
             (field $size (mut i32))
-            (field $unbuffered (mut i32)))))
+            (field $unbuffered (mut i32))
+            (field $output (mut (ref null eq)))
+            (field $refill (mut (ref null eq))))))
 
    (type $fd_offset
       (struct (field $offset (mut i64)) (field $seeked (mut i32))))
@@ -266,7 +269,7 @@
                      (call $caml_jsstring_of_string (local.get $path)))
                   (local.get $flags)
                   (i31.get_u (ref.cast (ref i31) (local.get $perm)))))
-            (if (i32.and (local.get $flags) (i32.const 4)) ;; O_APPEND
+            (if (i32.and (local.get $flags) (i32.const 8)) ;; O_APPEND
                (then (local.set $offset (call $file_size (local.get $fd))))))
          (catch $javascript_exception
             (call $caml_handle_sys_error (pop externref))))
@@ -291,6 +294,20 @@
       (param (ref eq)) (param (ref eq)) (result (ref eq))
       (ref.i31 (i32.const 0)))
 
+   (func (export "caml_ml_set_channel_output")
+      (param $ch (ref eq)) (param $f (ref eq)) (result (ref eq))
+      (struct.set $channel $output
+         (ref.cast (ref $channel) (local.get $ch))
+         (local.get $f))
+      (ref.i31 (i32.const 0)))
+
+   (func (export "caml_ml_set_channel_refill")
+      (param $ch (ref eq)) (param $f (ref eq)) (result (ref eq))
+      (struct.set $channel $refill
+         (ref.cast (ref $channel) (local.get $ch))
+         (local.get $f))
+      (ref.i31 (i32.const 0)))
+
    (func (export "caml_ml_out_channels_list")
       (param (ref eq)) (result (ref eq))
       (return_call $caml_list_of_js_array (call $wrap (call $channel_list))))
@@ -308,7 +325,9 @@
          (i32.const 0)
          (i32.const 0)
          (global.get $IO_BUFFER_SIZE)
-         (i32.const 0)))
+         (i32.const 0)
+         (ref.null eq)
+         (ref.null eq)))
 
    (global $caml_stderr (export "caml_stderr")
       (mut (ref eq)) (ref.i31 (i32.const 0)))
@@ -328,7 +347,9 @@
             (i32.const 0)
             (i32.const -1)
             (global.get $IO_BUFFER_SIZE)
-            (i32.const 0)))
+            (i32.const 0)
+            (ref.null eq)
+            (ref.null eq)))
       (call $register_channel (local.get $res))
       (if (ref.eq (local.get $fd) (ref.i31 (i32.const 2)))
          (then
@@ -413,12 +434,42 @@
          (i64.add (local.get $offset) (i64.extend_i32_u (local.get $n))))
       (local.get $n))
 
+   (func $caml_do_read_or_refill
+      (param $ch (ref $channel)) (param $pos i32) (param $len i32) (result i32)
+      (local $f (ref null eq))
+      (local $str (ref $bytes))
+      (local $str_len i32)
+      (local $n i32)
+      (local.set $f (struct.get $channel $refill (local.get $ch)))
+      (if (ref.is_null (local.get $f))
+         (then
+            (return (call $caml_do_read
+               (local.get $ch) (local.get $pos) (local.get $len)))))
+      (local.set $str
+         (ref.cast (ref $bytes)
+            (call $caml_js_fun_call
+               (ref.as_non_null (local.get $f))
+               (array.new_fixed $block 1 (ref.i31 (i32.const 0))))))
+      (local.set $str_len (array.len (local.get $str)))
+      (if (i32.eqz (local.get $str_len))
+         (then
+            (struct.set $channel $refill (local.get $ch) (ref.null eq))
+            (return (i32.const 0))))
+      (local.set $n (local.get $len))
+      (if (i32.gt_u (local.get $n) (local.get $str_len))
+         (then (local.set $n (local.get $str_len))))
+      (call $caml_blit_bytes_to_dataview
+         (local.get $str) (i32.const 0)
+         (struct.get $channel $buffer_view (local.get $ch)) (local.get $pos)
+         (local.get $n))
+      (local.get $n))
+
    (func $caml_refill (param $ch (ref $channel)) (result i32)
       (local $n i32)
       (local $view (ref extern))
       (local.set $view (struct.get $channel $buffer_view (local.get $ch)))
       (local.set $n
-         (call $caml_do_read (local.get $ch)
+         (call $caml_do_read_or_refill (local.get $ch)
             (i32.const 0) (struct.get $channel $size (local.get $ch))))
       (if (i32.eqz (local.get $n))
          (then (call $caml_raise_end_of_file)))
@@ -443,8 +494,8 @@
          (then
             (if (i32.gt_u (local.get $len) (local.get $avail))
                (then (local.set $len (local.get $avail))))
-            (call $ta_blit_to_bytes
-               (struct.get $channel $buffer (local.get $ch))
+            (call $caml_blit_dataview_to_bytes
+               (struct.get $channel $buffer_view (local.get $ch))
                (struct.get $channel $curr (local.get $ch))
                (local.get $s) (local.get $pos)
                (local.get $len))
@@ -453,13 +504,13 @@
                   (local.get $len)))
             (return (local.get $len))))
       (local.set $nread
-         (call $caml_do_read (local.get $ch)
+         (call $caml_do_read_or_refill (local.get $ch)
             (i32.const 0) (struct.get $channel $size (local.get $ch))))
       (struct.set $channel $max (local.get $ch) (local.get $nread))
       (if (i32.gt_u (local.get $len) (local.get $nread))
          (then (local.set $len (local.get $nread))))
-      (call $ta_blit_to_bytes
-         (struct.get $channel $buffer (local.get $ch))
+      (call $caml_blit_dataview_to_bytes
+         (struct.get $channel $buffer_view (local.get $ch))
          (i32.const 0)
          (local.get $s) (local.get $pos)
          (local.get $len))
@@ -494,7 +545,7 @@
                   (local.get $len)))
             (return (local.get $len))))
       (local.set $nread
-         (call $caml_do_read (local.get $ch)
+         (call $caml_do_read_or_refill (local.get $ch)
             (i32.const 0) (struct.get $channel $size (local.get $ch))))
       (struct.set $channel $max (local.get $ch) (local.get $nread))
       (if (i32.gt_u (local.get $len) (local.get $nread))
@@ -538,7 +589,7 @@
       (local.set $s (ref.cast (ref $bytes) (local.get $vs)))
       (local.set $pos (i31.get_u (ref.cast (ref i31) (local.get $vpos))))
       (local.set $len (i31.get_u (ref.cast (ref i31) (local.get $vlen))))
-      (local.set $buf (struct.get $channel $buffer (local.get $ch)))
+      (local.set $buf (struct.get $channel $buffer_view (local.get $ch)))
       (local.set $curr (struct.get $channel $curr (local.get $ch)))
       (local.set $avail
          (i32.sub (struct.get $channel $max (local.get $ch)) (local.get $curr)))
@@ -549,14 +600,14 @@
                   (local.set $len (local.get $avail)))
                (else
                   (local.set $nread
-                     (call $caml_do_read (local.get $ch)
+                     (call $caml_do_read_or_refill (local.get $ch)
                         (i32.const 0)
                         (struct.get $channel $size (local.get $ch))))
                   (struct.set $channel $max (local.get $ch) (local.get $nread))
                   (local.set $curr (i32.const 0))
                   (if (i32.gt_u (local.get $len) (local.get $nread))
                      (then (local.set $len (local.get $nread))))))))
-      (call $ta_blit_to_bytes
+      (call $caml_blit_dataview_to_bytes
          (local.get $buf) (local.get $curr)
          (local.get $s) (local.get $pos) (local.get $len))
       (struct.set $channel $curr (local.get $ch)
@@ -736,7 +787,7 @@
                            (i32.sub (struct.get $channel $curr (local.get $ch))
                               (struct.get $channel $size (local.get $ch)))))))
                (local.set $n
-                  (call $caml_do_read
+                  (call $caml_do_read_or_refill
                      (local.get $ch)
                      (struct.get $channel $max (local.get $ch))
                      (i32.sub
@@ -787,47 +838,68 @@
       (local $towrite i32) (local $written i32) (local $fd i32)
       (local $fd_offset (ref $fd_offset))
       (local $offset i64) (local $buf (ref extern))
+      (local $tmp (ref $bytes))
       (local.set $towrite (struct.get $channel $curr (local.get $ch)))
       (if (i32.gt_u (local.get $towrite) (i32.const 0))
          (then
             (local.set $buf (struct.get $channel $buffer (local.get $ch)))
-            (local.set $fd (struct.get $channel $fd (local.get $ch)))
-            (local.set $fd_offset (call $get_fd_offset (local.get $fd)))
-            (local.set $offset
-               (struct.get $fd_offset $offset (local.get $fd_offset)))
-            (try
-               (do
-                  (local.set $written
-                     (if (result i32)
-                         (struct.get $fd_offset $seeked (local.get $fd_offset))
-                        (then
-                           (call $write
-                              (local.get $fd)
-                              (local.get $buf)
-                              (i32.const 0)
-                              (local.get $towrite)
-                              (local.get $offset)))
-                        (else
-                           (call $write'
-                              (local.get $fd)
-                              (local.get $buf)
-                              (i32.const 0)
-                              (local.get $towrite)
-                              (ref.null noextern))))))
-               (catch $javascript_exception
-                  (call $caml_handle_sys_error (pop externref))))
-            (struct.set $fd_offset $offset
-               (local.get $fd_offset)
-               (i64.add
-                  (local.get $offset)
-                  (i64.extend_i32_u (local.get $written))))
-            (if (i32.gt_u (local.get $towrite) (local.get $written))
+            (if (ref.is_null (struct.get $channel $output (local.get $ch)))
                (then
-                  (call $ta_copy (local.get $buf)
-                     (i32.const 0) (local.get $written) (local.get $towrite))))
-            (local.set $towrite
-               (i32.sub (local.get $towrite) (local.get $written)))
-            (struct.set $channel $curr (local.get $ch) (local.get $towrite))))
+                  (local.set $fd (struct.get $channel $fd (local.get $ch)))
+                  (local.set $fd_offset (call $get_fd_offset (local.get $fd)))
+                  (local.set $offset
+                     (struct.get $fd_offset $offset (local.get $fd_offset)))
+                  (try
+                     (do
+                        (local.set $written
+                           (if (result i32)
+                               (struct.get $fd_offset $seeked
+                                  (local.get $fd_offset))
+                              (then
+                                 (call $write
+                                    (local.get $fd)
+                                    (local.get $buf)
+                                    (i32.const 0)
+                                    (local.get $towrite)
+                                    (local.get $offset)))
+                              (else
+                                 (call $write'
+                                    (local.get $fd)
+                                    (local.get $buf)
+                                    (i32.const 0)
+                                    (local.get $towrite)
+                                    (ref.null noextern))))))
+                     (catch $javascript_exception
+                        (call $caml_handle_sys_error (pop externref))))
+                  (struct.set $fd_offset $offset
+                     (local.get $fd_offset)
+                     (i64.add
+                        (local.get $offset)
+                        (i64.extend_i32_u (local.get $written))))
+                  (if (i32.gt_u (local.get $towrite) (local.get $written))
+                     (then
+                        (call $ta_copy (local.get $buf)
+                           (i32.const 0) (local.get $written)
+                           (local.get $towrite))))
+                  (local.set $towrite
+                     (i32.sub (local.get $towrite) (local.get $written)))
+                  (struct.set $channel $curr (local.get $ch)
+                     (local.get $towrite)))
+               (else
+                  (local.set $tmp
+                     (array.new $bytes (i32.const 0) (local.get $towrite)))
+                  (call $caml_blit_dataview_to_bytes
+                     (struct.get $channel $buffer_view (local.get $ch))
+                     (i32.const 0)
+                     (local.get $tmp) (i32.const 0) (local.get $towrite))
+                  (drop (call $caml_js_fun_call
+                     (ref.as_non_null
+                        (struct.get $channel $output (local.get $ch)))
+                     (array.new_fixed $block 2
+                        (ref.i31 (i32.const 0))
+                        (call $caml_jsbytes_of_string (local.get $tmp)))))
+                  (struct.set $channel $curr (local.get $ch) (i32.const 0))
+                  (local.set $towrite (i32.const 0))))))
       (i32.eqz (local.get $towrite)))
 
    (func $caml_putblock
@@ -840,8 +912,8 @@
          (i32.sub (struct.get $channel $size (local.get $ch)) (local.get $curr)))
       (if (i32.ge_u (local.get $len) (local.get $free))
          (then (local.set $len (local.get $free))))
-      (local.set $buf (struct.get $channel $buffer (local.get $ch)))
-      (call $ta_blit_from_bytes
+      (local.set $buf (struct.get $channel $buffer_view (local.get $ch)))
+      (call $caml_blit_bytes_to_dataview
          (local.get $s) (local.get $pos)
          (local.get $buf) (local.get $curr) (local.get $len))
       (struct.set $channel $curr (local.get $ch)
@@ -1022,13 +1094,4 @@
       (ref.i31
          (call $caml_getblock_typed_array
             (local.get $ch) (local.get $d) (local.get $pos) (local.get $len))))
-
-   (@string $caml_ml_set_channel_refill
-      "caml_ml_set_channel_refill not implemented")
-
-   (func (export "caml_ml_set_channel_refill")
-      (param (ref eq)) (param (ref eq)) (result (ref eq))
-      (call $caml_invalid_argument
-         (global.get $caml_ml_set_channel_refill))
-      (ref.i31 (i32.const 0)))
 )

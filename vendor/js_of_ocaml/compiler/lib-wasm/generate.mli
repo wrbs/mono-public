@@ -26,7 +26,7 @@ val f :
   -> Code.program
   -> live_vars:int array
   -> in_cps:Effects.in_cps
-  -> deadcode_sentinal:Code.Var.t
+  -> deadcode_sentinel:Code.Var.t
   -> global_flow_data:Global_flow.state * Global_flow.info
   -> Wasm_ast.var * (string * Javascript.expression) list
 
@@ -41,3 +41,15 @@ val wasm_output :
   -> opt_source_map_file:string option
   -> context:Code_generation.context
   -> unit
+
+val compile :
+     unit_name:string option
+  -> Code.program
+  -> string * (string * Javascript.expression) list
+
+val from_string :
+     prims:string array
+  -> debug:Instruct.debug_event list array
+  -> unit_name:string option
+  -> string
+  -> string * (string * Javascript.expression) list

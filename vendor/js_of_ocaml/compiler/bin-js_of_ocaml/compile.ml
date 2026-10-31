@@ -26,7 +26,8 @@ let debug_mem = Debug.find "mem"
 let () = Sys.catch_break true
 
 let gen_unit_filename dir u =
-  Filename.concat dir (Printf.sprintf "%s.js" (Ocaml_compiler.Cmo_format.name u))
+  let (Global_name.Compunit name) = Ocaml_compiler.Cmo_format.name u in
+  Filename.concat dir (Printf.sprintf "%s.js" name)
 
 let header formatter ~custom_header =
   match custom_header with
@@ -35,7 +36,7 @@ let header formatter ~custom_header =
 
 let jsoo_header formatter build_info =
   Pretty_print.string formatter (Printf.sprintf "%s\n" Global_constant.header);
-  Pretty_print.string formatter (Build_info.to_string build_info)
+  Pretty_print.string formatter (Build_info.to_comment build_info)
 
 let source_map_enabled : Source_map.Encoding_spec.t option -> bool = function
   | None -> false
@@ -146,7 +147,6 @@ let run
     ; dynlink
     ; linkall
     ; target_env
-    ; toplevel
     ; no_cmis
     ; include_dirs
     ; fs_files
@@ -157,15 +157,22 @@ let run
     ; include_runtime
     ; effects
     ; shape_files
+    ; build_config
+    ; apply_build_config
     } =
   let source_map_base =
     Option.map ~f:(fun spec -> spec.Source_map.Encoding_spec.source_map) source_map
   in
-  let include_cmis = toplevel && not no_cmis in
   let custom_header = common.Jsoo_cmdline.Arg.custom_header in
   Config.set_target `JavaScript;
   Jsoo_cmdline.Arg.eval common;
   Config.set_effects_backend effects;
+  Jsoo_cmdline.Build_config.process
+    `JavaScript
+    ~apply:apply_build_config
+    ~print_and_exit:build_config;
+  let toplevel = Config.Flag.toplevel () in
+  let include_cmis = toplevel && not no_cmis in
   Linker.reset ();
   (match output_file with
   | `Stdout, _ -> ()
@@ -407,10 +414,14 @@ let run
   | (`Stdin | `File _) as bytecode ->
       let kind, ic, close_ic, include_dirs =
         match bytecode with
-        | `Stdin -> Parse_bytecode.from_channel stdin, stdin, (fun () -> ()), include_dirs
+        | `Stdin ->
+            let res = Parse_bytecode.from_channel stdin in
+            Gc.compact ();
+            res, stdin, (fun () -> ()), include_dirs
         | `File fn ->
             let ch = open_in_bin fn in
             let res = Parse_bytecode.from_channel ch in
+            Gc.compact ();
             let include_dirs = Filename.dirname fn :: include_dirs in
             res, ch, (fun () -> close_in ch), include_dirs
       in
@@ -434,6 +445,7 @@ let run
               ~debug:need_debug
               ic
           in
+          Gc.compact ();
           if times () then Format.eprintf "  parsing: %a@." Timer.print t1;
           output_gen
             ~write_shape:false
@@ -474,6 +486,7 @@ let run
               cmo
               ic
           in
+          Gc.compact ();
           if times () then Format.eprintf "  parsing: %a@." Timer.print t1;
           output_gen
             ~write_shape:true
@@ -539,13 +552,15 @@ let run
                   cmo
                   ic
               in
+              Gc.compact ();
               if times ()
               then
                 Format.eprintf
                   "  parsing: %a (%s)@."
                   Timer.print
                   t1
-                  (Ocaml_compiler.Cmo_format.name cmo);
+                  (let (Global_name.Compunit name) = Ocaml_compiler.Cmo_format.name cmo in
+                   name);
               output_gen
                 ~write_shape:true
                 ~standalone:false
@@ -577,13 +592,17 @@ let run
                       cmo
                       ic
                   in
+                  Gc.compact ();
                   if times ()
                   then
                     Format.eprintf
                       "  parsing: %a (%s)@."
                       Timer.print
                       t1
-                      (Ocaml_compiler.Cmo_format.name cmo);
+                      (let (Global_name.Compunit name) =
+                         Ocaml_compiler.Cmo_format.name cmo
+                       in
+                       name);
                   output_partial ~standalone ~shapes ~source_map cmo code output)
             in
             let sm =

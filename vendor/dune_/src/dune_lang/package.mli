@@ -1,12 +1,19 @@
 (** Information about a package defined in the workspace *)
 
 open Import
-module Id : module type of Package_id with type t = Package_id.t
 
 module Name : sig
   type t = Package_name.t
 
   include module type of Package_name with type t := t
+end
+
+module Id : sig
+  type t
+
+  val name : t -> Name.t
+
+  include Comparable_intf.S with type key := t
 end
 
 type opam_file =
@@ -20,7 +27,6 @@ val deprecated_package_names : t -> Loc.t Name.Map.t
 val sites : t -> Section.t Site.Map.t
 val name : t -> Name.t
 val dir : t -> Path.Source.t
-val exclusive_dir : t -> (Loc.t * Path.Source.t) option
 val set_inside_opam_dir : t -> dir:Path.Source.t -> t
 val encode : Name.t -> t Encoder.t
 val decode : dir:Path.Source.t -> t Decoder.t
@@ -70,7 +76,6 @@ val create
   -> tags:string list
   -> original_opam_file:original_opam_file option
   -> deprecated_package_names:Loc.t Name.Map.t
-  -> contents_basename:(Loc.t * Filename.t) option
   -> t
 
 val original_opam_file : t -> original_opam_file option

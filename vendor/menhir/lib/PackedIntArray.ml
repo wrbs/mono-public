@@ -151,41 +151,18 @@ let pack (a : int array) : t =
 
 (* Access to a string. *)
 
-let[@inline] read (s : string) (i : int) : int =
+let read (s : string) (i : int) : int =
   Char.code (String.unsafe_get s i)
 
-let[@inline] get1 (s : string) (i : int) : int =
+(* [get1 t i] returns the integer stored in the packed array [t] at index [i].
+   It assumes (and does not check) that the array's bit width is [1]. The
+   parameter [t] is just a string. *)
+
+let get1 (s : string) (i : int) : int =
   let c = read s (i lsr 3) in
   let c = c lsr ((lnot i) land 0b111) in
   let c = c land 0b1 in
   c
-
-let[@inline] get2 (s : string) (i : int) : int =
-  let c = read s (i lsr 2) in
-  let c = c lsr (2 * ((lnot i) land 0b11)) in
-  let c = c land 0b11 in
-  c
-
-let[@inline] get4 (s : string) (i : int) : int =
-  let c = read s (i lsr 1) in
-  let c = c lsr (4 * ((lnot i) land 0b1)) in
-  let c = c land 0b1111 in
-  c
-
-let get8 =
-  read
-
-let[@inline] get16 (s : string) (i : int) : int =
-  let j = 2 * i in
-  (read s j) lsl 8 + read s (j + 1)
-
-let[@inline] get32 (s : string) (i : int) : int =
-  let j = 4 * i in
-  (((read s j lsl 8) + read s (j + 1)) lsl 8 + read s (j + 2)) lsl 8 + read s (j + 3)
-
-(* [get] is now commented out, as it is no longer used. Only its specialized
-   variants are used. This is in principle faster (though we have not found
-   a significant difference in practice).
 
 (* [get t i] returns the integer stored in the packed array [t] at index [i]. *)
 
@@ -197,15 +174,31 @@ let get ((k, s) : t) (i : int) : int =
   | 1 ->
       get1 s i
   | 2 ->
-      get2 s i
+      let c = read s (i lsr 2) in
+      let c = c lsr (2 * ((lnot i) land 0b11)) in
+      let c = c land 0b11 in
+      c
   | 4 ->
-      get4 s i
+      let c = read s (i lsr 1) in
+      let c = c lsr (4 * ((lnot i) land 0b1)) in
+      let c = c land 0b1111 in
+      c
   | 8 ->
-      get8 s i
+      read s i
   | 16 ->
-      get16 s i
+      let j = 2 * i in
+      (read s j) lsl 8 + read s (j + 1)
   | _ ->
       assert (k = 32); (* 64 bits unlikely, not supported *)
-      get32 s i
+      let j = 4 * i in
+      (((read s j lsl 8) + read s (j + 1)) lsl 8 + read s (j + 2)) lsl 8 + read s (j + 3)
 
- *)
+(* [unflatten1 (n, data) i j] accesses the two-dimensional bitmap
+   represented by [(n, data)] at indices [i] and [j]. The integer
+   [n] is the width of the bitmap; the string [data] is the second
+   component of the packed array obtained by encoding the table as
+   a one-dimensional array. *)
+
+let unflatten1 (n, data) i j =
+   get1 data (n * i + j)
+

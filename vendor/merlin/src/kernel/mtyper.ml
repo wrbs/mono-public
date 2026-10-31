@@ -37,7 +37,7 @@ type typedtree_items =
   | Interface_items of
       { items : (Parsetree.signature_item, Typedtree.signature_item) item list;
         psig_modalities : Parsetree.modalities;
-        sig_modalities : Mode.Modality.Const.t;
+        sig_modalities : Typedtree.modalities;
         sig_sloc : Location.t
       }
   | Implementation_items of
@@ -218,7 +218,7 @@ let type_interface config caught (parsetree : Parsetree.signature) =
     match cached_value with
     | Some
         (Interface_items
-          { items; psig_modalities; sig_modalities = _; sig_sloc = _ })
+           { items; psig_modalities; sig_modalities = _; sig_sloc = _ })
     (* only use the cached items if they were typed using the same modalities on the sig *)
       when List.equal
              ~eq:(fun
@@ -372,7 +372,8 @@ let get_index t =
 
 let get_stamp t = t.stamp
 
-let node_at ?(skip_recovered = false) ?let_pun_behavior t pos_cursor =
+let node_at ?(skip_recovered = false) ?let_pun_behavior
+    ?record_pattern_pun_behavior t pos_cursor =
   let node = Mbrowse.of_typedtree (get_typedtree t) in
   log ~title:"node_at" "Node: %s" (Mbrowse.print () node);
   let rec select = function
@@ -382,7 +383,10 @@ let node_at ?(skip_recovered = false) ?let_pun_behavior t pos_cursor =
       -> select ancestors
     | l -> l
   in
-  match Mbrowse.deepest_before ?let_pun_behavior pos_cursor [ node ] with
+  match
+    Mbrowse.deepest_before ?let_pun_behavior ?record_pattern_pun_behavior
+      pos_cursor [ node ]
+  with
   | [] -> [ (get_env t, Browse_raw.Dummy) ]
   | path when skip_recovered -> select path
   | path ->

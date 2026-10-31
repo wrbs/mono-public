@@ -72,7 +72,7 @@ let help_cmd pkg =
   pr "%a@." pp_help ();
   Ok 0
 
-let version_cmd pkg = print_endline "topkg v1.0.8"; Ok 0
+let version_cmd pkg = print_endline "topkg v1.1.1"; Ok 0
 
 let build_cmd pkg kind args =
   let log_conf c =
@@ -238,7 +238,7 @@ let check_log ret =
 
 let setup_log_level level =
   Topkg_log.set_level level;
-  Topkg_log.info (fun m -> m "topkg v1.0.8, running main");
+  Topkg_log.info (fun m -> m "topkg v1.1.1, running main");
   Ok ()
 
 let main pkg =

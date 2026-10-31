@@ -69,7 +69,7 @@ We'll use the mock repository as source and depend on `bar`:
 
 We should be able to successfully solve the project with `foo` and `bar`:
 
-  $ dune_pkg_lock_normalized
+  $ dune pkg lock
   Solution for dune.lock:
   - bar.0.0.1
   - foo.0.0.1

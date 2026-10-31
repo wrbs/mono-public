@@ -310,7 +310,7 @@ let main_cmd =
           documentation for more details); in this case your GitHub
           password will be prompted twice on the command line by curl (ugh).")]
   in
-  let version = "v1.0.8" in
+  let version = "v1.1.1" in
   let default = Term.(ret (const main_cmd $ const ())) in
   let info =
     Cmd.info "toy-github-topkg-delegate" ~version ~doc ~envs ~man ~man_xrefs

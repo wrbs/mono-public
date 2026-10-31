@@ -10,24 +10,68 @@ let range ~source start stop =
   Range.create ~source (Byte_index.of_int start) (Byte_index.of_int stop)
 ;;
 
-let pr_diagnostics diagnostics =
-  let open Grace_ansi_renderer in
-  (* Disable colors for tests (since expect tests don't support ANSI colors) *)
-  let config = Config.{ default with use_ansi = Some false } in
-  Fmt.(
-    list
-      ~sep:(fun ppf () -> pf ppf "@.@.@.")
-      (fun ppf diagnostic ->
-         pp_diagnostic ~config ppf diagnostic;
-         pf ppf "@.@.";
-         pp_compact_diagnostic ~config ppf diagnostic))
-    Fmt.stdout
-    diagnostics
+(* Useful for testing, since we want to be able to show that turning on ANSI
+ doesn't break the alignment of other things! *)
+(* This code is Copyright (c) 2017 The b0 programmers.
+  SPDX-License-Identifier: ISC *)
+let strip_ansi_escapes s =
+  let len = String.length s in
+  let b = Buffer.create len in
+  let max = len - 1 in
+  let flush start stop =
+    if start < 0 || start > max
+    then ()
+    else Stdlib.Buffer.add_substring b s start (stop - start + 1)
+  in
+  let rec skip_esc i =
+    if i > max
+    then loop i i
+    else (
+      let k = i + 1 in
+      if Char.equal s.[i] 'm' then loop k k else skip_esc k)
+  and loop start i =
+    match i > max with
+    | true ->
+      if Buffer.length b = len
+      then s
+      else (
+        flush start max;
+        Buffer.contents b)
+    | false ->
+      (match s.[i] with
+       | '\x1B' ->
+         flush start (i - 1);
+         skip_esc (i + 1)
+       | _ -> loop start (i + 1))
+  in
+  loop 0 0
 ;;
 
-let pr_bad_diagnostics diagnostics =
+let pr_diagnostics
+      ?(config = Grace_ansi_renderer.Config.default)
+      ?(ansi = false)
+      diagnostics
+  =
   let open Grace_ansi_renderer in
-  let config = Config.{ default with use_ansi = Some false } in
+  let config = { config with use_ansi = Some ansi } in
+  let output =
+    Fmt.(str_like stdout)
+      "%a"
+      Fmt.(
+        list
+          ~sep:(fun ppf () -> pf ppf "@.@.@.")
+          (fun ppf diagnostic ->
+             pp_diagnostic ~config ppf diagnostic;
+             pf ppf "@.@.";
+             pp_compact_diagnostic ~config ppf diagnostic))
+      diagnostics
+  in
+  print_endline (strip_ansi_escapes output)
+;;
+
+let pr_bad_diagnostics ?(config = Grace_ansi_renderer.Config.default) diagnostics =
+  let open Grace_ansi_renderer in
+  let config = { config with use_ansi = Some false } in
   Fmt.(
     list
       ~sep:(fun ppf () -> pf ppf "@.@.")
@@ -85,7 +129,7 @@ let%expect_test "same_line" =
   let source =
     source
       "one_line.rs"
-      {|  
+      {|
       > fn main() {
       >     let mut v = vec![Some("foo"), Some("bar")];
       >     v.push(v.pop().unwrap());
@@ -154,7 +198,7 @@ let%expect_test "overlapping" =
       "typeck_type_placeholder_item.rs"
       {|
       > fn fn_test1() -> _ { 5 }
-      > fn fn_test2(x: i32) -> (_, _) { (x, x) }  
+      > fn fn_test2(x: i32) -> (_, _) { (x, x) }
       |}
   in
   let s3 =
@@ -514,7 +558,8 @@ let%expect_test "unicode" =
        - unadjusted
        - vectorcall
        - win64
-       - x86-interrupt |}]
+       - x86-interrupt
+    |}]
 ;;
 
 let%expect_test "unicode spans" =
@@ -560,13 +605,26 @@ let%expect_test "unicode spans" =
   pr_bad_diagnostics diagnostics;
   [%expect
     {|
-    Raised: (Invalid_argument "invalid UTF-8")
+    error: Cow may not jump during new moon.
+        ┌─ moon_jump.rs:1:2
+      1 │  🐄🌑🐄🌒🐄🌓🐄🌔🐄🌕🐄🌖🐄🌗🐄🌘🐄
+        │   ^^ Invalid jump
 
-    Raised: (Invalid_argument "invalid UTF-8")
+    note: Invalid unicode range
+        ┌─ moon_jump.rs:1:2
+      1 │  🐄🌑🐄🌒🐄🌓🐄🌔🐄🌕🐄🌖🐄🌗🐄🌘🐄
+        │   --- Cow range does not start at boundary.
 
-    Raised: (Invalid_argument "invalid UTF-8")
+    note: Invalid unicode range
+        ┌─ moon_jump.rs:1:3
+      1 │  🐄🌑🐄🌒🐄🌓🐄🌔🐄🌕🐄🌖🐄🌗🐄🌘🐄
+        │    - Cow range does not end at boundary
 
-    Raised: (Invalid_argument "invalid UTF-8") |}]
+    note: Invalid unicode range
+        ┌─ moon_jump.rs:1:2
+      1 │  🐄🌑🐄🌒🐄🌓🐄🌔🐄🌕🐄🌖🐄🌗🐄🌘🐄
+        │   ----- Cow does not start or end at boundary.
+    |}]
 ;;
 
 let%expect_test "empty range" =
@@ -651,8 +709,8 @@ let%expect_test "multi-line empty messages" =
     source
       "rigid_variable_escape.ml"
       {|
-      > let escape = fun f -> 
-      >   fun (type a) -> 
+      > let escape = fun f ->
+      >   fun (type a) ->
       >     (f : a -> a)
       > ;;
       |}
@@ -736,4 +794,432 @@ let%expect_test "multi-label on large file" =
 
     inputs/snippet.ml:7:6: error: Some dramatic error
     |}]
+;;
+
+let num_contextual_lines_test num_contextual_lines =
+  let config = Grace_ansi_renderer.Config.{ default with num_contextual_lines } in
+  let source =
+    source
+      "context.ml"
+      {|
+      > line 1
+      > line 2
+      > line 3
+      > line 4
+      > line 5
+      > line 6
+      > line 7
+      > line 8
+      > line 9
+      > line 10
+      |}
+  in
+  let diagnostics =
+    Diagnostic.
+      [ createf
+          ~labels:
+            [ Label.primaryf ~range:(range ~source 7 13) "error on line 2"
+            ; Label.primaryf ~range:(range ~source 38 44) "error on line 6"
+            ]
+          Error
+          "Testing %d contextual lines"
+          num_contextual_lines
+      ]
+  in
+  pr_diagnostics ~config diagnostics
+;;
+
+let%expect_test "num_contextual_lines = 0" =
+  num_contextual_lines_test 0;
+  [%expect
+    {|
+    error: Testing 0 contextual lines
+        ┌─ context.ml:6:4
+      2 │    line 2
+        │    ^^^^^^ error on line 2
+        ·
+      6 │    line 6
+        │ ╭─────^
+      7 │ │  line 7
+        │ ╰───^ error on line 6
+
+    context.ml:6:4: error: Testing 0 contextual lines
+    |}]
+;;
+
+let%expect_test "num_contextual_lines = 2" =
+  num_contextual_lines_test 2;
+  [%expect
+    {|
+    error: Testing 2 contextual lines
+        ┌─ context.ml:6:4
+      2 │    line 2
+        │    ^^^^^^ error on line 2
+      3 │    line 3
+      4 │    line 4
+      5 │    line 5
+      6 │    line 6
+        │ ╭─────^
+      7 │ │  line 7
+        │ ╰───^ error on line 6
+      8 │    line 8
+      9 │    line 9
+
+    context.ml:6:4: error: Testing 2 contextual lines
+    |}]
+;;
+
+let%expect_test "num_contextual_lines = 3" =
+  num_contextual_lines_test 3;
+  [%expect
+    {|
+    error: Testing 3 contextual lines
+        ┌─ context.ml:6:4
+      2 │    line 2
+        │    ^^^^^^ error on line 2
+      3 │    line 3
+      4 │    line 4
+      5 │    line 5
+      6 │    line 6
+        │ ╭─────^
+      7 │ │  line 7
+        │ ╰───^ error on line 6
+      8 │    line 8
+      9 │    line 9
+     10 │    line 10
+
+    context.ml:6:4: error: Testing 3 contextual lines
+    |}]
+;;
+
+let enable_inline_contextual_lines_test
+      ~enable_inline_contextual_lines
+      ~num_contextual_lines
+  =
+  let source =
+    source
+      "inline.ml"
+      {|
+      > line 1
+      > line 2
+      > line 3
+      > line 4
+      > line 5
+      |}
+  in
+  let diagnostics =
+    Diagnostic.
+      [ createf
+          ~labels:
+            [ Label.primaryf ~range:(range ~source 7 9) "inline"
+            ; Label.secondaryf ~range:(range ~source 10 13) "label"
+            ]
+          Error
+          "Testing inline labels without contextual lines"
+      ]
+  in
+  let open Grace_ansi_renderer in
+  let config =
+    Config.{ default with enable_inline_contextual_lines; num_contextual_lines }
+  in
+  pr_diagnostics ~config diagnostics
+;;
+
+let%expect_test "enable_inline_contextual_lines = false (default)" =
+  enable_inline_contextual_lines_test
+    ~enable_inline_contextual_lines:false
+    ~num_contextual_lines:1;
+  [%expect
+    {|
+    error: Testing inline labels without contextual lines
+        ┌─ inline.ml:2:1
+      2 │  line 2
+        │  ^^ --- label
+        │  │
+        │  inline
+
+    inline.ml:2:1: error: Testing inline labels without contextual lines
+    |}]
+;;
+
+let%expect_test "enable_inline_contextual_lines = true" =
+  enable_inline_contextual_lines_test
+    ~enable_inline_contextual_lines:true
+    ~num_contextual_lines:1;
+  [%expect
+    {|
+    error: Testing inline labels without contextual lines
+        ┌─ inline.ml:2:1
+      1 │  line 1
+      2 │  line 2
+        │  ^^ --- label
+        │  │
+        │  inline
+      3 │  line 3
+
+    inline.ml:2:1: error: Testing inline labels without contextual lines
+    |}]
+;;
+
+let%expect_test "num_contextual_lines = 2 and enable_inline_contextual_lines = true" =
+  enable_inline_contextual_lines_test
+    ~enable_inline_contextual_lines:true
+    ~num_contextual_lines:2;
+  [%expect
+    {|
+    error: Testing inline labels without contextual lines
+        ┌─ inline.ml:2:1
+      1 │  line 1
+      2 │  line 2
+        │  ^^ --- label
+        │  │
+        │  inline
+      3 │  line 3
+      4 │  line 4
+
+    inline.ml:2:1: error: Testing inline labels without contextual lines
+|}]
+;;
+
+let%expect_test "label with multiple lines and ansi formatting" =
+  (* Bug #71: https://github.com/johnyob/grace/issues/71*)
+  let compare diagnostic =
+    pr_diagnostics ~ansi:true [ diagnostic ];
+    (* check consistency with non-unicode, non-ansi *)
+    pr_diagnostics
+      ~ansi:false
+      ~config:Grace_ansi_renderer.Config.{ default with chars = Chars.ascii }
+      [ diagnostic ]
+  in
+  let content = "foo\n\nbar {\n};\nbaz" in
+  let source : Source.t = `String { name = None; content } in
+  let diagnostic =
+    Diagnostic.(
+      createf
+        ~labels:
+          [ Label.primaryf
+              ~range:(range ~source 0 3)
+              "@[<v2>e1:@ new line of error1@]@ unboxed new line of error 1"
+          ; Label.secondaryf
+              ~range:(range ~source 5 14)
+              "@[<v2>e2:@ new line of error 2@]@ unboxed new line of error 2"
+          ]
+        Error
+        "err")
+  in
+  compare diagnostic;
+  [%expect
+    {|
+    error: err
+        ┌─ unknown:1:1
+      1 │    foo
+        │    ^^^ e1:
+        │          new line of error1
+        │        unboxed new line of error 1
+      2 │
+      3 │ ╭  bar {
+      4 │ │  };
+        │ ╰────' e2:
+        │          new line of error 2
+        │        unboxed new line of error 2
+      5 │    baz
+
+    unknown:1:1: error: err
+    error: err
+        --> unknown:1:1
+      1 |    foo
+        |    ^^^ e1:
+        |          new line of error1
+        |        unboxed new line of error 1
+      2 |
+      3 | /  bar {
+      4 | |  };
+        | \----' e2:
+        |          new line of error 2
+        |        unboxed new line of error 2
+      5 |    baz
+
+    unknown:1:1: error: err
+    |}];
+  compare
+    { diagnostic with
+      labels =
+        Diagnostic.Label.secondaryf
+          ~range:(range ~source 0 17)
+          "e3: encapsulates everything"
+        :: diagnostic.labels
+    };
+  [%expect
+    {|
+    error: err
+        ┌─ unknown:1:1
+      1 │ ╭    foo
+        │ │    ^^^ e1:
+        │ │          new line of error1
+        │ │        unboxed new line of error 1
+      2 │ │
+      3 │ │ ╭  bar {
+      4 │ │ │  };
+        │ │ ╰────' e2:
+        │ │          new line of error 2
+        │ │        unboxed new line of error 2
+      5 │ │    baz
+        │ ╰──────' e3: encapsulates everything
+
+    unknown:1:1: error: err
+    error: err
+        --> unknown:1:1
+      1 | /    foo
+        | |    ^^^ e1:
+        | |          new line of error1
+        | |        unboxed new line of error 1
+      2 | |
+      3 | | /  bar {
+      4 | | |  };
+        | | \----' e2:
+        | |          new line of error 2
+        | |        unboxed new line of error 2
+      5 | |    baz
+        | \------' e3: encapsulates everything
+
+    unknown:1:1: error: err
+    |}]
+;;
+
+let%expect_test "single-line labels with vbox breaks - trailing label" =
+  (* Test trailing labels (single-line, last label, no overlap) with vbox message formatting *)
+  let content = "let x = foo + bar + baz" in
+  let source : Source.t = `String { name = None; content } in
+  let diagnostic =
+    Diagnostic.(
+      createf
+        ~labels:
+          [ Label.primaryf
+              ~range:(range ~source 8 21)
+              "@[<v2>trailing label:@ continuation line 1@]@ unboxed continuation"
+          ]
+        Error
+        "test trailing label indentation")
+  in
+  pr_diagnostics ~ansi:true [ diagnostic ];
+  [%expect
+    {|
+    error: test trailing label indentation
+        ┌─ unknown:1:9
+      1 │  let x = foo + bar + baz
+        │          ^^^^^^^^^^^^^ trailing label:
+        │                          continuation line 1
+        │                        unboxed continuation
+
+    unknown:1:9: error: test trailing label indentation
+    |}]
+;;
+
+let%expect_test "single-line labels with vbox breaks - hanging label" =
+  (* Test hanging labels (single-line, has overlap) with vbox message formatting *)
+  let content = "let result = foo + bar" in
+  let source : Source.t = `String { name = None; content } in
+  let diagnostic =
+    Diagnostic.(
+      createf
+        ~labels:
+          [ Label.primaryf
+              ~range:(range ~source 13 16)
+              "@[<v2>label1:@ continuation 1@]@ unboxed 1"
+          ; Label.secondaryf
+              ~range:(range ~source 19 22)
+              "@[<v2>label2:@ continuation 2@]@ unboxed 2"
+          ]
+        Error
+        "test hanging label indentation")
+  in
+  pr_diagnostics ~ansi:true [ diagnostic ];
+  [%expect
+    {|
+    error: test hanging label indentation
+        ┌─ unknown:1:14
+      1 │  let result = foo + bar
+        │               ^^^   --- label2:
+        │               │           continuation 2
+        │               │         unboxed 2
+        │               │
+        │               label1:
+        │                 continuation 1 unboxed 1
+
+    unknown:1:14: error: test hanging label indentation
+    |}]
+;;
+
+let%expect_test "single-line labels with vbox breaks - multiple on same line" =
+  (* Test multiple single-line labels with different positions on same line *)
+  let content = "    foo(bar, baz)" in
+  let source : Source.t = `String { name = None; content } in
+  let diagnostic =
+    Diagnostic.(
+      createf
+        ~labels:
+          [ Label.primaryf
+              ~range:(range ~source 4 7)
+              "@[<v2>fn name:@ should be different@]@. extra note"
+          ; Label.secondaryf
+              ~range:(range ~source 8 11)
+              "@[<v2>arg1:@ wrong type@]@. see docs"
+          ; Label.secondaryf
+              ~range:(range ~source 13 16)
+              "@[<v2>arg2:@ also wrong@]@. check here"
+          ]
+        Error
+        "test multiple labels alignment")
+  in
+  pr_diagnostics ~ansi:true [ diagnostic ];
+  [%expect
+    {|
+    error: test multiple labels alignment
+        ┌─ unknown:1:5
+      1 │      foo(bar, baz
+        │      ^^^ ---  --- arg2:
+        │      │   │          also wrong
+        │      │   │         check here
+        │      │   │
+        │      │   arg1:
+        │      │     wrong type
+        │      │    see docs
+        │      fn name:
+        │        should be different
+        │       extra note
+
+    unknown:1:5: error: test multiple labels alignment
+    |}]
+;;
+
+let%expect_test "error at the end of a long line" =
+  let content =
+    "fn main() {\n\
+    \  println!(\"What happens when I have an error at a really high column? Let's find \
+     out by trying to print something that doesn't exist {}\", missing);\n\
+     }"
+  in
+  let source : Source.t = `String { name = Some "foo.rs"; content } in
+  let diagnostic =
+    Diagnostic.(
+      createf
+        ~labels:
+          [ Label.primaryf
+              ~range:(range ~source 151 158)
+              "@[not found in this scope.@ did you mean 'missingo'?@]"
+          ]
+        Error
+        "cannot find value `missing` in this scope")
+  in
+  pr_diagnostics [ diagnostic ];
+  [%expect
+ {|
+    error: cannot find value `missing` in this scope
+        ┌─ foo.rs:2:140
+      2 │    println!("What happens when I have an error at a really high column? Let's find out by trying to print something that doesn't exist {}", missing);
+        │                                                                                                                                             ^^^^^^^ not found in this scope.
+        │                                                                                                                                                     did you mean 'missingo'?
+
+    foo.rs:2:140: error: cannot find value `missing` in this scope
+    |}] [@ocamlformat "disable"]
 ;;

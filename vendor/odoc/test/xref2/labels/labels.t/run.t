@@ -45,7 +45,7 @@ There are two references in N, one should point to a local label and the other t
   <html xmlns="http://www.w3.org/1999/xhtml">
    <head><title>N (test.Test.N)</title><meta charset="utf-8"/>
     <link rel="stylesheet" href="../../../odoc.css"/>
-    <meta name="generator" content="odoc %%VERSION%%"/>
+    <meta name="generator" content="odoc 3.2.2"/>
     <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
     <script src="../../../highlight.pack.js"></script>
     <script>hljs.initHighlightingOnLoad();</script>
@@ -81,7 +81,7 @@ The second occurence of 'B' in the main page should be disambiguated
   <html xmlns="http://www.w3.org/1999/xhtml">
    <head><title>Test (test.Test)</title><meta charset="utf-8"/>
     <link rel="stylesheet" href="../../odoc.css"/>
-    <meta name="generator" content="odoc %%VERSION%%"/>
+    <meta name="generator" content="odoc 3.2.2"/>
     <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
     <script src="../../highlight.pack.js"></script>
     <script>hljs.initHighlightingOnLoad();</script>
