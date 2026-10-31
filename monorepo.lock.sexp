@@ -2102,9 +2102,9 @@
     base (
       Http (
         (urls (
-          https://github.com/oxcaml/oxcaml/archive/f10f14fb514ccb9035fc899961cc24c2958bcba6.tar.gz))
+          https://github.com/oxcaml/oxcaml/archive/refs/tags/5.2.0minus-40.tar.gz))
         (hashes (
-          sha256=23669e367d5f0ce021800456bdae3d4ff0e0d555a6c49cf1b60757dd0a212053)))))))
+          sha256=c051836f1c84dc359dc0bca4590c2e93a8a609094d13c8edcdb0ec579caced11)))))))
   (extra ((
     merlin-minus39-standalone.patch (
       (urls (

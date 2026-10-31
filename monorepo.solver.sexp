@@ -103,6 +103,19 @@
     (ocamlc-loc      stdune)
     (ordering        stdune)
     (xdg             stdune)))
+  ;; replace a package's upstream source (keeping its own patches)
+  (source_overrides (
+    ;; merlin-lib/ocaml-index+ox2 are built from external/merlin of a post-minus39
+    ;; oxcaml commit, which can't read minus40's .cmi files: use the minus40 tag
+    ;; (same tarball as oxcaml-compiler)
+    (merlin-lib
+     ((urls (https://github.com/oxcaml/oxcaml/archive/refs/tags/5.2.0minus-40.tar.gz))
+      (hashes (
+        sha256=c051836f1c84dc359dc0bca4590c2e93a8a609094d13c8edcdb0ec579caced11))))
+    (ocaml-index
+     ((urls (https://github.com/oxcaml/oxcaml/archive/refs/tags/5.2.0minus-40.tar.gz))
+      (hashes (
+        sha256=c051836f1c84dc359dc0bca4590c2e93a8a609094d13c8edcdb0ec579caced11))))))
   ;; exclude source dirs, no matter what packages provided them
   (exclude_dirs (ocaml bytes))
   ;; custom commands in the opam file that need to run before the build

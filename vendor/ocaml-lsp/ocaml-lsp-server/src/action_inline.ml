@@ -303,7 +303,12 @@ let inline_edits pipeline task =
               Texp_construct
                 ( _
                 , _
-                , [ { exp_desc = Texp_ident { path = Pident id; lid = { loc; _ }; _ }; _ } ]
+                , _
+                , [ ( _
+                    , { exp_desc = Texp_ident { path = Pident id; lid = { loc; _ }; _ }
+                      ; _
+                      } )
+                  ]
                 , _ )
           ; _
           } )

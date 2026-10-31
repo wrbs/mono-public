@@ -729179,7 +729179,7 @@ return caml_exact_trampoline_cps_call
     runtime = globalThis.jsoo_runtime,
     caml_string_of_jsbytes = runtime.caml_string_of_jsbytes,
     s = caml_string_of_jsbytes("6.4.0~alpha~dev"),
-    git_version = caml_string_of_jsbytes("d3b208af4");
+    git_version = caml_string_of_jsbytes("27a633cc1-dirty");
    runtime.caml_register_global
     ([0, s, git_version], "Jsoo_runtime__Runtime_version");
    return;
