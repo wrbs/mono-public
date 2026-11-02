@@ -1,0 +1,6 @@
+(library
+ (name wisc)
+ (libraries core hardcaml fixed_list unstring unstring_id expectree)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane ppx_hardcaml unstring.ppx)))

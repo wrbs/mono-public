@@ -1,0 +1,6 @@
+(library
+ (name unstring_id)
+ (libraries core unstring)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane)))
